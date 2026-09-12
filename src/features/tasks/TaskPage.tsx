@@ -141,7 +141,15 @@ export default function TaskPage() {
         ) : (
           <div className="space-y-3">
             {todayInstances.map((inst) => (
-              <TaskCard key={inst.id} inst={inst} onOpen={() => setDetailId(inst.id)} />
+              <TaskCard
+                key={inst.id}
+                inst={inst}
+                onOpen={() => setDetailId(inst.id)}
+                onEdit={(task) => {
+                  setEditTask(task)
+                  setEditorOpen(true)
+                }}
+              />
             ))}
           </div>
         )}
@@ -352,9 +360,19 @@ function ProgressCard({
    任务卡
    ============================================================ */
 
-function TaskCard({ inst, onOpen }: { inst: TaskInstance; onOpen: () => void }) {
+function TaskCard({
+  inst,
+  onOpen,
+  onEdit,
+}: {
+  inst: TaskInstance
+  onOpen: () => void
+  onEdit: (task: Task) => void
+}) {
   const startTimer = useApp((s) => s.startTimer)
+  const tasks = useApp((s) => s.tasks)
   const cat = CATEGORY[inst.category]
+  const taskDef = useMemo(() => tasks.find((t) => t.id === inst.taskId), [tasks, inst.taskId])
   const running = inst.status === 'pending' && !!inst.startedAt
   const seconds = useLiveSeconds(inst.startedAt, running)
 
@@ -411,6 +429,15 @@ function TaskCard({ inst, onOpen }: { inst: TaskInstance; onOpen: () => void }) 
                 {inst.allowLateNoPenalty && <span title="超期不扣分">🕊️</span>}
                 {inst.qualityRated && <span title="有质量加分">✨</span>}
               </span>
+            )}
+            {taskDef && (
+              <button
+                onClick={() => onEdit(taskDef)}
+                aria-label="编辑任务"
+                className="min-h-[28px] shrink-0 rounded-pill border-2 border-ink-100 bg-white px-2 text-[11px] font-bold text-ink-500 active:scale-95"
+              >
+                ✏️
+              </button>
             )}
           </div>
 
