@@ -1,0 +1,21 @@
+/* 农场模块专用动画 —— 不能改动 src/styles/theme.css，故独立一份 */
+
+@keyframes kqf-drift {
+  from {
+    transform: translateX(-8vw);
+  }
+  to {
+    transform: translateX(108vw);
+  }
+}
+
+.kqf-cloud {
+  animation: kqf-drift 30s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kqf-cloud {
+    animation: none;
+    transform: translateX(10vw);
+  }
+}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./favicon.svg" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#FFFAF2" />
+    <meta name="description" content="小任务农场 —— 完成每日任务赚积分，经营自己的卡通农场" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>小任务农场 · 完成小任务，经营大农场</title>
+
+    <!--
+      字体策略：不引用任何外部字体服务。
+      这是一个离线优先的 App（APK / 无网环境都是主要场景），
+      外链不只拖慢首屏，还会在离线时产生一堆网络错误。
+      卡通感改由「系统自带圆体」承担：中文优先圆体/苹方，
+      西文优先 Verdana/Trebuchet，都是各平台默认安装、零下载。
+    -->
+    <style>
+      :root {
+        --font-cartoon-cn: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI',
+          'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+        --font-cartoon-en: 'Trebuchet MS', 'Verdana', 'Segoe UI', system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
