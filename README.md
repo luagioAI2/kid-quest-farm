@@ -231,7 +231,7 @@ node scripts/e2e-upgrade.mjs             # 12 项：老库升级路径（不丢�
 ### 界面走查图集（只出图，不断言）
 
 ```bash
-node scripts/capture.mjs                 # → screenshots/redesign/，20 张
+node scripts/capture.mjs                 # → screenshots/redesign/，21 张
 ```
 
 `capture.mjs` 只负责「好不好看」，和 `e2e-*.mjs` 的「对不对」分工不同，互不覆盖。
@@ -297,5 +297,15 @@ src/
 - **不惩罚**：0 分时给鼓励文案而非责备；未到阈值至少 1 分；
   出错时 ErrorBoundary 兜底提示"数据都还在"
 - **卡通质感**：粗描边、大圆角、实体按钮下沉手感、暖色纸感背景
+- **入场页比主界面暗一档，并且会「天亮」**：主界面是干净白纸（实测平均亮度
+  任务 239 / 兑换 243 / 积分 244），入场页要是也白，切进去就**没有换场景**的感觉。
+  所以入场页走暖金，并做了日出 —— 太阳**从山后升起来**（它的 `<g>` 画在山丘 path
+  **之前**，由山真实遮挡，不是淡入），同时一层暖色暗罩淡出：
+  首帧 **168.6** → 末帧 **212.0**（比主界面仍暗 31，即「先暗 74、最后暗 31」）。
+  动画 1.5s，必须**短于** `SPLASH_MIN_MS = 1900`（在 `App.tsx`），且用 ease-in-out
+  而不是 ease-out，否则「还暗着」的那一帧根本看不见。
+  ⚠️ 改这里的颜色要同步 `capacitor.config.json` 的 `SplashScreen.backgroundColor`，
+  否则 Android 上原生启动图与网页首帧对不上，会闪一下。
+  （`capture.mjs` 会拍两张：`01a-splash-dawn` / `01-splash`，并断言当时暗罩的 opacity。）
 - **减少动画偏好**：全局支持 `prefers-reduced-motion`
 - **安全区适配**：`env(safe-area-inset-*)`，刘海屏与手势条不遮挡内容

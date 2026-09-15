@@ -366,6 +366,32 @@
   }
 }
 
+/* 日出：太阳从远山背后升上来。
+   起点要**足够低**，让整颗太阳连同最上面那道光芒都被山挡住 ——
+   否则一开头会露出一小截，看着像贴纸没贴正。
+   （山脊在 x=190 处约 y=108，最上面那道光芒的端点 y=12，
+    差值 96，所以位移要 >96 才藏得住；取 104 留余量。） */
+@keyframes kqf-sunrise {
+  from {
+    transform: translateY(104px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* 天光：整页压一层暖色暗罩，随太阳升起淡出（太阳升到位 = 天光全开）。
+   暗罩用**纯色**不用渐变 —— 原生启动图（capacitor.config.json）只能填一个颜色，
+   纯色才能和首帧严格对上；渐变的话首帧那个颜色得手算，迟早算错。 */
+@keyframes kqf-dawn-lift {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 @utility anim-bounce-in {
   animation: kqf-bounce-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
@@ -396,6 +422,22 @@
 }
 @utility anim-spin-slow {
   animation: kqf-spin-slow 26s linear infinite;
+}
+
+/* 日出 + 天光：**必须同一个时长和同一条缓动**，否则太阳升到位了天还没亮，
+   看着像两件互不相干的事。
+
+   时长 1.5s 是照着 `SPLASH_MIN_MS = 1900`（App.tsx）定的 ——
+   必须明显短于它，否则「天全亮」那一帧还没出现就切进主界面了，
+   等于这个效果白做。留 400ms 让人看见亮起来的样子。
+
+   缓动用 ease-in-out 而不是 ease-out：日出是「先微微泛白、再亮起来」，
+   ease-out 一上来就把暗罩撤掉大半，暗的那一段几乎看不到。 */
+@utility anim-sunrise {
+  animation: kqf-sunrise 1.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@utility anim-dawn-lift {
+  animation: kqf-dawn-lift 1.5s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 /* 入场元素依次浮现。

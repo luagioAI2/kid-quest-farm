@@ -58,8 +58,6 @@ try {
     if (m.type() === 'error') errors.push(m.text())
   })
 
-  await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 })
-
   /** 按文字点一个按钮（DOM click，不走坐标 —— 坐标会被 sticky 底栏截胡） */
   const clickByText = (text, scope = 'body') =>
     page.evaluate(
@@ -137,8 +135,53 @@ try {
     return i
   }
 
-  /* 1. 入场页：趁它还在（最短 1.9s），早点抓 */
-  await wait(700)
+  /* 0. 空跑一次：**入场页那 1.5s 日出动画是从页面挂载开始跑的**，
+     而「第一次导航 + 第一次截图」本身要 1 秒多（捕获通道初始化 + 冷编译
+     570KB bundle）。先跑一趟把这笔开销花掉，下面按时间点抓的入场图才准。
+
+     ⚠️ 只预热截图**不够**：试过，`wait(250)` 之后读到的暗罩 opacity 是
+     0.019（天已经亮完了）。预热确实让截图变快了，但那 1 秒是从动画里扣走的。 */
+  await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 })
+  await page.screenshot({ type: 'png' })
+
+  /* 1. 入场页：趁它还在（最短 1.9s），早点抓。
+
+     拍**两张**：日出前那张（t≈250ms）才看得到「压暗 + 太阳还在山后面」，
+     到 700ms 天已经亮了大半 —— 只拍一张的话，这次日出改动在图集里
+     根本看不出来（图集看不出改了什么 = 没走查过）。 */
+  await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 })
+  await wait(250)
+  // 拍之前先确认「此刻天确实还没亮」—— 不然拍晚了也不知道，图照样存下来。
+  const dawnOpacity = await page.evaluate(() => {
+    const veil = document.querySelector('.anim-dawn-lift')
+    return veil ? Number(getComputedStyle(veil).opacity) : -1
+  })
+  console.log(
+    `  日出前暗罩 opacity=${dawnOpacity.toFixed(3)}` +
+      (dawnOpacity > 0.5 ? '  ✓ 天还暗着' : '  ← ⚠️ 这张拍晚了，拍到的是天亮之后'),
+  )
+  await shot('01a-splash-dawn')
+
+  // 第二张**等日出真的结束**再拍（暗罩淡到几乎透明）。
+  // 用轮询而不是猜时间 —— 这样「拍到的是不是最终样子」本身就是可验证的，
+  // 而不是"我算着 700ms 应该差不多了"。日出 1.5s 结束，入场页最短 1.9s，来得及。
+  await page
+    .waitForFunction(
+      () => {
+        const v = document.querySelector('.anim-dawn-lift')
+        return !v || Number(getComputedStyle(v).opacity) < 0.02
+      },
+      { timeout: 5000 },
+    )
+    .catch(() => {})
+  const noonOpacity = await page.evaluate(() => {
+    const v = document.querySelector('.anim-dawn-lift')
+    return v ? Number(getComputedStyle(v).opacity) : -1
+  })
+  console.log(
+    `  日出后暗罩 opacity=${noonOpacity.toFixed(3)}` +
+      (noonOpacity < 0.05 ? '  ✓ 天亮了' : '  ← ⚠️ 还没亮完，这张不是最终样子'),
+  )
   await shot('01-splash')
 
   /* 2. 任务首页 */

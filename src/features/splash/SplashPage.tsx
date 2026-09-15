@@ -12,10 +12,29 @@
    3. **整体比主界面暗一档**（暖金 / 黄昏前的阳光）。主界面是干净的白纸，
       入场页要是也白，从入场切进任务页就「没有换场景」的感觉。
       暗是**暖着暗**，不是做成夜景 —— 这是给小孩用的，别整深色。
-      实测平均亮度：入场页 212，任务页 239 / 兑换页 243 / 积分页 244。
-      ⚠️ 改这里的颜色时，`capacitor.config.json` 里 SplashScreen 的
-      `backgroundColor` 要跟着改，否则原生启动图会和这一页闪一下。
-      （已对齐：`#efc463` = 下面那条渐变的第一站。）
+   4. **太阳升起来，天跟着亮。** 太阳从远山背后升起（起始位移低到被山完全
+      挡住，是「真的被遮住」而不是淡入），同时整页那层暖色暗罩淡出。
+      两者**同一个时长、同一条缓动**（theme.css 的 anim-sunrise / anim-dawn-lift），
+      否则太阳升到位了天还没亮，看着像两件互不相干的事。
+
+   实测平均亮度（Rec.709，390×844）：
+
+   | 时刻 | 亮度 |
+   | --- | --- |
+   | 日出前（t≈90ms） | **168.6** |
+   | 日出后（t≈1.5s） | **212.0** |
+   | 任务 / 兑换 / 积分页（对照） | 242.8 |
+
+   也就是：**先比主界面暗 74，最后暗 31** —— 天确实亮起来了（+43），
+   但结尾仍然明显比主界面暗，切进任务页那一下的「换场景」对比没被吃掉。
+   ⚠️ 动画时长必须明显短于 `SPLASH_MIN_MS = 1900`（App.tsx），
+   否则「全亮」那一帧还没出现就切走了，这个效果等于白做。
+   ⚠️ 改暗罩的颜色或透明度时，`capacitor.config.json` 里 SplashScreen 的
+   `backgroundColor` 要跟着改（现为 `#c29b4d` = 渐变第一站 `#efc463`
+   叠上这层暗罩的结果），否则原生启动图会和这一页闪一下。
+   ⚠️ 量亮度时**每个采样点要重新开一次页面**。同一个页面里连续采样的话，
+   一次截图 + 解码要几百毫秒，「打算等到的时刻」和「真实时刻」能差出一倍，
+   量到的其实是已经切走之后的主界面（三个读数一模一样就是铁证）。
    ============================================================ */
 
 import { useMemo } from 'react'
@@ -103,23 +122,32 @@ function FarmArt() {
       {/* 天空 */}
       <rect x="0" y="0" width="240" height="200" fill="url(#splash-sky)" />
 
-      {/* 太阳：光芒慢慢转，整颗太阳轻轻上下浮 */}
-      <g className="anim-float">
-        <g className="anim-spin-slow" style={{ transformOrigin: '190px 46px' }}>
-          {RAYS.map(([x1, y1, x2, y2], i) => (
-            <line
-              key={i}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke="#f59e0b"
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-          ))}
+      {/* 太阳：从远山背后升上来；升到位之后光芒慢慢转、整颗轻轻上下浮。
+
+          三层 <g> 各管一件事（升 / 浮 / 转），别合并成一条 animation ——
+          合并就得手写关键帧把位移和旋转乘在一起，改一个参数要重算一遍。
+
+          为什么是「真的被挡住」而不是淡入：山是在**这之后**画的，
+          所以太阳升到山脊线以下时确实被山的填充盖住，
+          看着就是「从山后面出来」。调起始位移时记住这一点（见 theme.css）。 */}
+      <g className="anim-sunrise">
+        <g className="anim-float">
+          <g className="anim-spin-slow" style={{ transformOrigin: '190px 46px' }}>
+            {RAYS.map(([x1, y1, x2, y2], i) => (
+              <line
+                key={i}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke="#f59e0b"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+            ))}
+          </g>
+          <circle cx="190" cy="46" r="17" fill="#fbbf24" />
         </g>
-        <circle cx="190" cy="46" r="17" fill="#fbbf24" />
       </g>
 
       {/* 云：两朵，一高一低错开 */}
@@ -267,6 +295,22 @@ export function SplashPage() {
           ))}
         </div>
       </div>
+
+      {/* 天光：一层暖色暗罩，随太阳升起淡出（keyframes 见 theme.css）。
+
+          ⚠️ 它盖在**所有内容之上**（连白卡和文字一起压暗）。只压背景的话
+          白卡纹丝不动，看着像「背景色改了」，不像「天亮了」——
+          而日出本来就该是整个场景一起亮起来。
+
+          ⚠️ 用纯色不用渐变：原生启动图（capacitor.config.json 的
+          SplashScreen.backgroundColor）只能填一个颜色，纯色才能和这一帧严格对上。
+          **改这里的颜色或透明度，必须同步那个值**（现为 `#c29b4d`
+          = 渐变第一站 `#efc463` 叠上这层暗罩的结果）。 */}
+      <div
+        className="anim-dawn-lift pointer-events-none absolute inset-0"
+        style={{ background: 'rgba(88, 60, 26, 0.3)' }}
+        aria-hidden
+      />
     </div>
   )
 }
