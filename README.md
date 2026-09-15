@@ -96,6 +96,21 @@
 - 家长设置：孩子昵称头像、积分规则开关、**自定义一天从几点开始**（孩子熬夜到 1 点
   做的作业仍算"昨天"）、家长密码锁
 
+### 四、新手引导（首次启动）
+
+分两段，一次走完：
+
+1. **家长设置向导**：给宝贝起小名、选头像、设家长密码。密码输两遍（项目没有找回
+   入口，输错一位就进不去家长区了），也可以「以后再说」，保持默认的 `0000`。
+2. **给孩子的功能导览**：四个 tab 各讲一句，整屏压暗、把当前那个 tab 挖亮，
+   一步一步跟着看。
+
+走完写一个 `onboardingDone` 标记，之后不再弹；设置 →「孩子」页里有「重看新手引导」。
+
+⚠️ **重看模式下没有密码那一步。** 重看入口在不锁密码的页面里，而密码步骤会直接
+覆盖 `parentPin` —— 留着它，孩子点一下「重看引导」就能把家长密码改成自己设的，
+家长区从此形同虚设。（回归测试见 `src/features/onboarding/onboarding.test.tsx`。）
+
 ---
 
 ## 技术栈
@@ -203,7 +218,7 @@ python scripts/make-icons.py
 
 ```bash
 npm run preview &                        # 先起预览服务
-node scripts/e2e-check.mjs               # 45 项：渲染 / 导航 / 溢出 / 顶栏 / 长期任务孩子端 / 音效开关 / 币种只在一处显示 / 导出
+node scripts/e2e-check.mjs               # 59 项：新手引导 / 渲染 / 导航 / 溢出 / 顶栏 / 长期任务孩子端 / 音效开关 / 币种只在一处显示 / 导出
 node scripts/e2e-gameplay.mjs            # 46 项：结算规则 / 账本 / 农场 / 签到 / 收获二选一 / 脏数据
 node scripts/e2e-upgrade.mjs             # 12 项：老库升级路径（不丢数据、不炸索引）
 ```
@@ -216,7 +231,7 @@ node scripts/e2e-upgrade.mjs             # 12 项：老库升级路径（不丢�
 ### 界面走查图集（只出图，不断言）
 
 ```bash
-node scripts/capture.mjs                 # → screenshots/redesign/，14 张
+node scripts/capture.mjs                 # → screenshots/redesign/，20 张
 ```
 
 `capture.mjs` 只负责「好不好看」，和 `e2e-*.mjs` 的「对不对」分工不同，互不覆盖。
@@ -224,6 +239,12 @@ node scripts/capture.mjs                 # → screenshots/redesign/，14 张
 ⚠️ **新加的界面必须加进 `capture.mjs`**，否则走查图里根本看不到它 ——
 打开 `screenshots/redesign/` 却看不出改过什么，等于没走查过。
 （2026-09-15 踩过：加了三处新界面，但图集里 8 张有 6 张和改版前**逐字节相同**。）
+
+⚠️ **`capture.mjs` / `e2e-gameplay.mjs` 都跑在全新的 Chrome profile 上**，
+所以一定会撞上新手引导，而它**盖住整个主界面**。这两个脚本用的是 DOM 的
+`.click()`，它**绕过命中测试** —— 被盖住照样点得到，于是脚本继续全绿、
+界面其实根本不能用。要测主界面的脚本一律先调
+`scripts/lib/onboarding.mjs` 的 `dismissOnboarding(page)` 把引导走完。
 
 ---
 
@@ -238,6 +259,7 @@ src/
     farm.ts           作物与动物的时间推进
     catalog.ts        作物 / 动物 / 道具内容表
     seedTasks.ts      首次启动的示例任务
+    avatars.ts        可选头像（设置页与引导向导共用，防两边漂移）
     time.ts           逻辑日、周期键、时长格式化
   db/db.ts          Dexie schema 与原子写操作
   store/useApp.ts   全局状态与所有业务动作
@@ -245,8 +267,10 @@ src/
     tasks/          任务板块
     farm/           农场板块
     settings/       家长设置 / 数据导入导出
-  platform/files.ts 浏览器与 APK 的文件导出适配
-  components/       ErrorBoundary 等通用组件
+    onboarding/     新手引导（家长设置向导 + 孩子功能导览）
+    parent/         家长确认与打分
+  platform/files.ts 浏览器与 APK 的文件导出适配 / 合成音效
+  components/       Portal（弹层挂 body）、ErrorBoundary 等通用组件
   styles/theme.css  设计令牌（颜色 / 圆角 / 阴影 / 动画）
 ```
 

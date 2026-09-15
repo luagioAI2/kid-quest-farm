@@ -655,6 +655,14 @@ export interface AppSettings {
   hapticsEnabled: boolean
 
   /**
+   * 新手引导是否走完过（家长设置向导 + 孩子功能导览）。
+   *
+   * 只在**整条引导结束时**才置 true —— 家长中途关掉 App，
+   * 下次打开还得从向导重来，否则孩子会落在「名字还没设」的半个状态里。
+   */
+  onboardingDone: boolean
+
+  /**
    * 家长审核开关。
    * true  = 宝贝点「完成」后进入「等爸爸妈妈看」，家长输密码打分确认才发积分
    * false = 老流程，点完成立刻结算（方便家长自己试玩）

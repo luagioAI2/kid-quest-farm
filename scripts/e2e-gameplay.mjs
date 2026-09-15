@@ -8,6 +8,7 @@
  */
 import puppeteer from 'puppeteer-core'
 import { existsSync } from 'node:fs'
+import { dismissOnboarding } from './lib/onboarding.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME_CANDIDATES = [
@@ -53,6 +54,10 @@ try {
   // 等 store 就绪
   await page.waitForFunction(() => !!window.__kqf__, { timeout: 20000 })
   await new Promise((r) => setTimeout(r, 1500))
+
+  // 全新 profile 会弹新手引导，盖住主界面。本脚本验的是玩法，
+  // 先把它走完（理由见 scripts/lib/onboarding.mjs 顶部）。
+  await dismissOnboarding(page)
 
   /* ============ 1. 结算规则：三种典型场景，直接验证入库积分 ============ */
   console.log('\n【1】结算规则 → 提交 → 家长审核 → 积分入账')

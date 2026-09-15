@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, BackupFile } from '../../domain/types'
 import { useApp } from '../../store/useApp'
 import { DEFAULT_PROFIT_RATIO } from '../../domain/catalog'
+import { AVATAR_CHOICES } from '../../domain/avatars'
 import { humanizeAgo } from '../../domain/time'
 import { saveBlob, shareOrDownload } from '../../platform/files'
 // 复用家长端同一个 PinPad，不要在这里再抄一份 —— 之前抄出来的副本
@@ -16,7 +17,14 @@ import { PinPad, ParentPinPanel } from '../parent/ParentGate'
 
 type Tab = 'child' | 'rules' | 'data'
 
-export default function SettingsPage({ onBack }: { onBack: () => void }) {
+export default function SettingsPage({
+  onBack,
+  onReplayGuide,
+}: {
+  onBack: () => void
+  /** 「重看新手引导」。不传就不渲染这个入口（老调用点无需改动） */
+  onReplayGuide?: () => void
+}) {
   const settings = useApp((s) => s.settings)
   const updateSettings = useApp((s) => s.updateSettings)
   const exportBackup = useApp((s) => s.exportBackup)
@@ -133,22 +141,20 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
 
             <Card title="选一个头像" emoji="🎭">
               <div className="flex flex-wrap gap-2">
-                {['🐻', '🐰', '🐱', '🐶', '🦊', '🐼', '🐨', '🦁', '🐯', '🐸', '🐵', '🦄'].map(
-                  (a) => (
-                    <button
-                      key={a}
-                      onClick={() => void updateSettings({ avatar: a })}
-                      className={
-                        'btn h-14 w-14 rounded-2xl text-3xl shadow-flat transition ' +
-                        (settings.avatar === a
-                          ? 'scale-110 bg-sun-300 ring-4 ring-sun-400'
-                          : 'bg-white')
-                      }
-                    >
-                      {a}
-                    </button>
-                  ),
-                )}
+                {AVATAR_CHOICES.map((a) => (
+                  <button
+                    key={a}
+                    onClick={() => void updateSettings({ avatar: a })}
+                    className={
+                      'btn h-14 w-14 rounded-2xl text-3xl shadow-flat transition ' +
+                      (settings.avatar === a
+                        ? 'scale-110 bg-sun-300 ring-4 ring-sun-400'
+                        : 'bg-white')
+                    }
+                  >
+                    {a}
+                  </button>
+                ))}
               </div>
             </Card>
 
@@ -171,6 +177,25 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                 ))}
               </div>
             </Card>
+
+            {/* 重看引导放在「孩子」页（不锁），而不是「规则」页（锁密码）。
+                因为向导在重看模式下**没有密码那一步**（见 SetupWizard 文件头第 4 条），
+                重看不会改到任何凭据 —— 所以放哪儿都安全，那就放孩子最容易
+                被家长翻到的地方。 */}
+            {onReplayGuide && (
+              <Card title="新手引导" emoji="🧭">
+                <p className="mb-3 text-sm text-ink-500">
+                  重看一遍家长设置向导，以及给孩子的四个页面导览。
+                  重看时不会动家长密码，想改密码请到「规则」页。
+                </p>
+                <button
+                  onClick={onReplayGuide}
+                  className="btn w-full rounded-2xl bg-white py-3 font-extrabold text-ink-900 shadow-flat"
+                >
+                  🧭 重看新手引导
+                </button>
+              </Card>
+            )}
           </>
         )}
 

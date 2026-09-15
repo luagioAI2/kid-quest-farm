@@ -394,6 +394,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   streakBonusCap: 20,
   soundEnabled: true,
   hapticsEnabled: true,
+  onboardingDone: false,
   parentReviewEnabled: true,
   protectParentActions: true,
   redeemEnabled: true,

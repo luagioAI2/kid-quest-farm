@@ -4,9 +4,12 @@ import {
   currentBalance,
   currentHarvestBalance,
   db,
+  DEFAULT_SETTINGS,
+  loadSettings,
   postHarvest,
   postLedger,
   savePlots,
+  setMeta,
 } from '../db/db'
 import {
   selectCheckInTasks,
@@ -828,5 +831,49 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
       useApp.getState().plots[0].crop,
       '一次性作物收完地块必须变空（否则一棵能收到天荒地老）',
     ).toBeUndefined()
+  })
+})
+
+/* ============================================================
+   新手引导的落库标记（onboardingDone）
+   ------------------------------------------------------------
+   这一条守的是「**别为了加一个设置字段去动 Dexie 版本**」。
+
+   `loadSettings()` 是 `{...DEFAULT_SETTINGS, ...stored}` ——
+   老库里没有的字段自动回落到默认值，所以加设置字段**不需要迁移**，
+   也就没有「老用户升级后引导标记是 undefined」这一档事。
+
+   危险动作是有人「顺手」把它改成 `return stored`（或者只挑几个字段拼），
+   那时候老库读出来就是 `undefined` —— 标记是 falsy，老用户每次打开
+   都会被重新问一遍名字和头像。下面第 2 条专门盯着这个。
+   ============================================================ */
+describe('新手引导：落库标记', () => {
+  beforeEach(async () => {
+    await db.delete()
+    await db.open()
+  })
+
+  it('默认状态是「没走过引导」', async () => {
+    expect(DEFAULT_SETTINGS.onboardingDone).toBe(false)
+    expect((await loadSettings()).onboardingDone).toBe(false)
+  })
+
+  it('老库缺这个字段 → 读出来是 false，不报错（加字段不需要迁移）', async () => {
+    // 模拟「装过旧版本」的库：settings 里根本没有 onboardingDone 这个键
+    const old: Record<string, unknown> = { ...DEFAULT_SETTINGS }
+    delete old.onboardingDone
+    await setMeta('settings', old)
+
+    const loaded = await loadSettings()
+    expect(loaded.onboardingDone, '缺字段必须回落到默认值 false').toBe(false)
+    // 合并不能把别的字段冲掉
+    expect(loaded.childName).toBe(DEFAULT_SETTINGS.childName)
+  })
+
+  it('写完能读回来（updateSettings 走的就是这条路）', async () => {
+    await useApp.getState().updateSettings({ onboardingDone: true })
+
+    expect((await loadSettings()).onboardingDone).toBe(true)
+    expect(useApp.getState().settings.onboardingDone).toBe(true)
   })
 })

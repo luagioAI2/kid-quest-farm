@@ -83,6 +83,146 @@ try {
   check('页面渲染出内容', bodyText.length > 20, `${bodyText.length} 字符`)
   check('无启动报错', errors.length === 0, errors.slice(0, 3).join(' | '))
 
+  /* ---------- 1b. 新手引导（全新 profile 必经） ----------
+     ⚠️ 这一段**必须跑在最前面，而且必须真的把引导走完**。
+
+     全新 profile 里 IndexedDB 是空的、`onboardingDone` 还是 false，
+     向导会盖住整个主界面。而下面那些 Tab 检查用的是 DOM 的 `.click()` ——
+     它**绕过命中测试**，被盖住也照样点得到，于是所有检查会继续变绿，
+     而界面其实根本不能用。所以这里不只看「向导在不在」，
+     还要用 elementFromPoint 证明它**真的**挡住了导航，
+     走完引导之后再证明导航**真的**回到了最上层。
+  */
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+  /** 点一个「文字正好等于 label」的按钮 */
+  const clickByText = (label) =>
+    page.evaluate((t) => {
+      const b = [...document.querySelectorAll('button')].find(
+        (x) => (x.textContent ?? '').trim() === t,
+      )
+      if (!b) return false
+      b.click()
+      return true
+    }, label)
+
+  /** 等某个选择器出现（超时返回 false，不抛） */
+  const waitFor = (sel, timeout = 8000) =>
+    page
+      .waitForFunction((s) => !!document.querySelector(s), { timeout }, sel)
+      .then(() => true, () => false)
+
+  /**
+   * 命中测试：某个元素**中心点**上最顶层的元素是不是它自己。
+   * 判「有没有被盖住」只能靠这个 —— z-index 和肉眼都不算数
+   * （页面外壳那层 anim-fade-in 的隐式层叠上下文就查不出来）。
+   */
+  const isReachable = (sel) =>
+    page.evaluate((s) => {
+      const el = document.querySelector(s)
+      if (!el) return { found: false, ok: false, hit: 'null' }
+      const r = el.getBoundingClientRect()
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+      return {
+        found: true,
+        ok: hit === el || el.contains(hit),
+        hit: hit ? hit.tagName + (hit.className ? '.' + String(hit.className).split(' ')[0] : '') : 'null',
+      }
+    }, sel)
+
+  check('首次启动弹出家长设置向导', await waitFor('[data-step="welcome"]'))
+
+  const wizardBlocksNav = await isReachable('[data-tour="tab-tasks"]')
+  check(
+    '向导期间底部导航点不到（命中测试，不是靠 z-index 猜）',
+    wizardBlocksNav.found && !wizardBlocksNav.ok,
+    `该点最顶层是 ${wizardBlocksNav.hit}`,
+  )
+
+  await clickByText('开始设置')
+  check('向导第二步：问名字和头像', await waitFor('input[aria-label="孩子的小名"]'))
+
+  await clickByText('下一步')
+  check('向导第三步：设家长密码', await waitFor('[data-step="pin"]'))
+
+  // 走「以后再说」而不是真设密码 —— 后面第 6 节要用默认密码 0000 走家长确认
+  await clickByText('以后再说')
+  check('跳过密码后进到完成页', await waitFor('[data-step="done"]'))
+
+  await clickByText('带宝贝看一遍')
+  check('接着弹出给孩子的功能导览', await waitFor('[data-tour-bubble="tasks"]'))
+
+  const tourBlocksNav = await isReachable('[data-tour="tab-tasks"]')
+  check(
+    '导览期间底部导航点不到',
+    tourBlocksNav.found && !tourBlocksNav.ok,
+    `该点最顶层是 ${tourBlocksNav.hit}`,
+  )
+
+  // 高亮框要真的套在「任务」那一格上，气泡要在它上方 ——
+  // 否则孩子看到的只是一块压暗的屏幕，不知道在讲哪儿。
+  const hole = await page.evaluate(() => {
+    const tab = document.querySelector('[data-tour="tab-tasks"]')
+    const bubble = document.querySelector('[data-tour-bubble]')
+    if (!tab || !bubble) return null
+    // 挖洞层是唯一一个带 9999px 外阴影的元素（见 ChildTour 的注释）
+    const holeEl = [...document.querySelectorAll('div')].find((d) =>
+      (d.getAttribute('style') ?? '').includes('9999px'),
+    )
+    if (!holeEl) return null
+    const t = tab.getBoundingClientRect()
+    const h = holeEl.getBoundingClientRect()
+    return {
+      covers:
+        h.left <= t.left + 1 && h.right >= t.right - 1 && h.top <= t.top + 1 && h.bottom >= t.bottom - 1,
+      bubbleAbove: bubble.getBoundingClientRect().bottom <= h.top + 1,
+    }
+  })
+  check(
+    '高亮框正好套住「任务」那一格，且气泡在它上方',
+    !!hole && hole.covers && hole.bubbleAbove,
+    hole ? `covers=${hole.covers} bubbleAbove=${hole.bubbleAbove}` : '没找到挖洞层',
+  )
+
+  const restSteps = ['farm', 'redeem', 'points']
+  for (let n = 0; n < restSteps.length; n++) {
+    await clickByText('下一步')
+    await sleep(250)
+    const k = restSteps[n]
+    const ok = await page.evaluate(
+      (key) => !!document.querySelector(`[data-tour-bubble="${key}"]`),
+      k,
+    )
+    check(`导览第 ${n + 2} 步切到「${k}」`, ok)
+  }
+
+  await clickByText('知道啦')
+  await sleep(400)
+  check(
+    '导览收尾后弹层消失',
+    !(await page.evaluate(() => !!document.querySelector('[data-tour-bubble]'))),
+  )
+
+  // ★ 这一条才是这一段真正的重点：引导走完，导航必须**真的**能用
+  const navOk = await isReachable('[data-tour="tab-tasks"]')
+  check(
+    '引导走完后底部导航恢复可点（命中测试）',
+    navOk.found && navOk.ok,
+    `该点最顶层是 ${navOk.hit}`,
+  )
+
+  // 引导标记要落库：重开一次不能再弹
+  await sleep(600)
+  await page.reload({ waitUntil: 'networkidle2' })
+  await page
+    .waitForFunction(() => !!document.querySelector('nav button'), { timeout: 20000 })
+    .catch(() => {})
+  await sleep(1200)
+  check(
+    '重开 App 不再弹引导（onboardingDone 已落库）',
+    !(await page.evaluate(() => !!document.querySelector('[data-step]'))),
+  )
+
   /* ---------- 2. 四个主 Tab ---------- */
   const tabs = ['任务', '农场', '兑换', '积分']
   for (const t of tabs) {

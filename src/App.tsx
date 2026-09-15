@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { selectPendingCheckIns, selectPendingReview, useApp } from './store/useApp'
 import TaskPage from './features/tasks/TaskPage'
 import PointsPage from './features/tasks/PointsPage'
@@ -7,6 +7,8 @@ import RedeemPage from './features/redeem/RedeemPage'
 import SettingsPage from './features/settings/SettingsPage'
 import { ReviewSheetModal } from './features/parent/ReviewSheet'
 import { SplashPage } from './features/splash/SplashPage'
+import { SetupWizard } from './features/onboarding/SetupWizard'
+import { ChildTour } from './features/onboarding/ChildTour'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { isNative, playTone } from './platform/files'
 import './features/farm/farm.css'
@@ -44,6 +46,12 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [splashMinElapsed, setSplashMinElapsed] = useState(false)
+  /** 家长设置向导：null = 关着，'first' = 首次引导，'replay' = 设置页点「重看」 */
+  const [wizardMode, setWizardMode] = useState<'first' | 'replay' | null>(null)
+  /** 给孩子的功能导览开着吗 */
+  const [tourOpen, setTourOpen] = useState(false)
+  /** 首次进入只自动决定一次，之后靠设置页的「重看」入口手动开 */
+  const gateDecided = useRef(false)
 
   // 入场页最短停留（理由见 SPLASH_MIN_MS 的注释）
   useEffect(() => {
@@ -71,6 +79,46 @@ export default function App() {
     if (!entered) return
     playTone(settings.soundEnabled, 'entry')
   }, [entered])
+
+  /**
+   * 新手引导的闸门：进入主界面**之后**决定一次，没走过就弹家长设置向导。
+   *
+   * 用 `useLayoutEffect` 而不是 `useEffect`：`entered` 翻 true 的那一帧，
+   * DOM 里已经画出了主界面。effect 在**绘制后**跑，孩子会看见主界面闪一下
+   * 再被向导盖住；layoutEffect 在绘制前跑，同一帧里就把向导盖上，看不到闪。
+   *
+   * `gateDecided` 保证只决定一次 —— 否则引导走完把 `onboardingDone` 写成 true，
+   * 这个 effect 会因为依赖变化再跑一遍。
+   */
+  const onboardingDone = settings.onboardingDone
+  useLayoutEffect(() => {
+    if (!entered || gateDecided.current) return
+    gateDecided.current = true
+    if (!onboardingDone) setWizardMode('first')
+  }, [entered, onboardingDone])
+
+  /** 向导走完 → 紧接着给孩子看导览（引导是「两段」的，见 SetupWizard 注释） */
+  const finishWizard = () => {
+    setWizardMode(null)
+    setTourOpen(true)
+  }
+
+  /** 导览结束或跳过 → 整条引导才算走完，这时候才落 `onboardingDone` */
+  const finishTour = () => {
+    setTourOpen(false)
+    if (!onboardingDone) void useApp.getState().updateSettings({ onboardingDone: true })
+  }
+
+  /**
+   * 设置页里的「重看新手引导」。
+   *
+   * 用 `'replay'` 而不是 `'first'`：重看模式下向导**不含密码步骤**，
+   * 否则孩子点一下这个入口就能把家长密码改成自己的（详见 SetupWizard 文件头第 4 条）。
+   */
+  const replayGuide = () => {
+    setShowSettings(false)
+    setWizardMode('replay')
+  }
 
   // 待审核数量 —— 订阅 instances 与 checkInProgress，数据一变就重算，红点才不会卡住。
   // 签到不产生任务实例，所以必须单独把待审签到算进来，否则孩子交了签到、
@@ -130,7 +178,7 @@ export default function App() {
   return (
     <div className="relative mx-auto flex min-h-screen max-w-2xl flex-col">
       {showSettings ? (
-        <SettingsPage onBack={() => setShowSettings(false)} />
+        <SettingsPage onBack={() => setShowSettings(false)} onReplayGuide={replayGuide} />
       ) : (
         <>
           {/* 顶部状态条：两种币常驻可见，让孩子随时看到自己的收获 */}
@@ -207,6 +255,8 @@ export default function App() {
                   <button
                     key={t.key}
                     onClick={() => setTab(t.key)}
+                    /* 新手导览靠这个属性定位，不靠「第几个 button」（见 ChildTour 注释） */
+                    data-tour={`tab-${t.key}`}
                     className={
                       'btn flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 ' +
                       (active
@@ -227,6 +277,15 @@ export default function App() {
 
       {/* 家长确认弹层：挂在最外层，切 Tab / 进设置都不影响它 */}
       <ReviewSheetModal open={reviewOpen} onClose={() => setReviewOpen(false)} />
+
+      {/* 新手引导。**盖在主界面之上**而不是替换主界面 ——
+          这样切外观不需要另起一棵树（子页面不会被重挂载，`tab` 这些状态还在），
+          而且导览本来就必须能量到主界面里那排 tab 的位置。
+          两个组件内部都 Portal 到 body（项目硬约束，见 components/Portal.tsx）。 */}
+      {wizardMode && (
+        <SetupWizard replay={wizardMode === 'replay'} onFinish={finishWizard} />
+      )}
+      {tourOpen && <ChildTour onFinish={finishTour} onStepChange={setTab} />}
 
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </div>

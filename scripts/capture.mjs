@@ -146,6 +146,64 @@ try {
   // （别再拿「你好，宝贝」当信号 —— 那行已经被删掉了，等它会直接超时。）
   await page.waitForFunction(() => !!document.querySelector('nav button'), { timeout: 20000 })
   await wait(600)
+
+  /* 1b. 新手引导（全新 profile 必经）
+     ⚠️ 两个坑：
+     1. 必须在**进来之后**才检查。入场页有 1.9s 最短停留，
+        在 01-splash 那一刻主界面还没渲染，向导自然也不在
+        （第一版就写在那儿了，结果是静默跳过、7 张图全缺）。
+     2. 引导是**盖住整个主界面**的，所以必须在这里先拍完再走掉，
+        不然下面每一张截图里都会压着一层向导/导览。 */
+  const wizardUp = await page.evaluate(() => !!document.querySelector('[data-step]'))
+  if (wizardUp) {
+    await shot('01b-guide-welcome')
+
+    await clickByText('开始设置')
+    await wait(600)
+    await shot('01c-guide-profile')
+
+    await clickByText('下一步')
+    await wait(600)
+    await shot('01d-guide-pin')
+
+    await clickByText('以后再说')
+    await wait(600)
+    await shot('01e-guide-done')
+
+    // 给孩子看的功能导览：拍两张，看高亮框有没有真的跟着 tab 走
+    await clickByText('带宝贝看一遍')
+    await page
+      .waitForFunction(() => !!document.querySelector('[data-tour-bubble]'), { timeout: 8000 })
+      .catch(() => {})
+    await wait(700)
+    await shot('01f-tour-tasks')
+
+    await clickByText('下一步')
+    await wait(800)
+    await shot('01g-tour-farm')
+
+    await clickByText('跳过')
+    await page
+      .waitForFunction(() => !document.querySelector('[data-tour-bubble]'), { timeout: 8000 })
+      .catch(() => {})
+    await wait(600)
+
+    // ⚠️ 导览每一步都会把底部 tab 切过去，跳过时停在「农场」。
+    // 不切回「任务」的话，下面从 02-tasks 开始的每一张截图都会拍错页 ——
+    // 而且不会报错，只是图全不对（第一版就是这么错的）。
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(
+        (x) => x.innerText.trim().split('\n').pop().trim() === '任务',
+      )
+      b?.click()
+    })
+    await wait(700)
+
+    console.log('  引导截图：01b~01g（6 张）')
+  } else {
+    console.log('  ! 没弹新手引导（profile 里已经有 onboardingDone 标记，这 6 张会缺）')
+  }
+
   await shot('02-tasks')
 
   /* 3. 任务详情弹层滚到底 —— 验底部按钮没被导航盖住 */
