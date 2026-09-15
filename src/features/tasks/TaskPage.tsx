@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
+import { Portal } from '@/components/Portal'
 import { humanizeMinutes, CYCLE_HINT } from '@/domain/time'
 import { claimableTiers } from '@/domain/recurrence'
 import { previewPoints } from '@/domain/settlement'
-import type { QualityGrade, Task, TaskInstance } from '@/domain/types'
+import type { Task, TaskInstance } from '@/domain/types'
 import { STATUS_KID_LABEL } from '@/domain/types'
 import {
   selectCheckInTasks,
@@ -17,7 +18,7 @@ import { TaskDetail } from './TaskDetail'
 import { TaskEditor } from './TaskEditor'
 import {
   Btn,
-  CATEGORY,
+  categoryOf,
   CycleBadge,
   EmptyHint,
   RewardChips,
@@ -37,7 +38,6 @@ import {
 
 export default function TaskPage() {
   const settings = useApp((s) => s.settings)
-  const balance = useApp((s) => s.balance)
   const todayKey = useApp((s) => s.todayKey)
   const instances = useApp((s) => s.instances)
   const tasks = useApp((s) => s.tasks)
@@ -84,60 +84,47 @@ export default function TaskPage() {
 
   return (
     <div className="mx-auto w-full max-w-[430px] px-4 pb-32">
-      {/* ================= 头部 ================= */}
-      <header className="pt-safe pt-4">
-        <div className="flex items-center gap-3">
-          <span className="anim-float flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-sun-300 bg-sun-100 text-3xl shadow-cartoon-sm">
-            {settings.avatar}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-xl font-extrabold leading-tight text-ink-900">
-              你好，{settings.childName}！
-            </p>
-            <p className="text-xs font-bold text-ink-500">
-              {dateLabel} · {weekday}
-            </p>
-          </div>
-          {streak > 0 && (
-            <span className="anim-pop flex shrink-0 items-center gap-1 rounded-pill border-2 border-tangerine-300 bg-tangerine-100 px-3 py-1.5">
-              <span aria-hidden>🔥</span>
-              <span className="tnum font-display text-sm font-extrabold text-tangerine-500">
-                {streak} 天
-              </span>
-            </span>
-          )}
-        </div>
-
-        {/* 积分余额 */}
-        <div className="card-cartoon mt-4 flex items-center gap-3 border-[3px] border-sun-300 bg-gradient-to-r from-sun-100 to-sun-50 p-4">
-          <span className="anim-sway text-4xl">🪙</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-ink-500">我的积分</p>
-            <p className="tnum font-display text-4xl font-extrabold leading-none text-sun-600">
-              {balance}
-            </p>
-          </div>
-          <span className="text-right text-[11px] font-bold leading-snug text-ink-500">
-            完成小任务
-            <br />
-            就能种地养动物
-          </span>
-        </div>
-      </header>
-
-      {/* ================= 今日进度 ================= */}
+      {/* ================= 今日进度 =================
+          原来这里还有一大块「头部」：熊头 + 你好宝贝 + 我的积分卡。
+          三样东西全在顶栏重复了一遍（头像、名字、🪙），却把「今日任务」
+          整整推下去一屏。现在删掉，日期和连续天数收进这张卡里 ——
+          打开 App 第一眼就是「还剩几个任务」。 */}
       <ProgressCard
         done={todayStats.done}
         total={todayStats.total}
         points={todayStats.points}
         perfect={todayStats.perfect}
         rate={todayStats.rate}
+        dateText={`${dateLabel} · ${weekday}`}
+        streak={streak}
       />
 
       {/* ================= 今日任务 ================= */}
-      <Section title="今日任务" emoji="📝" count={todayInstances.length}>
+      <Section
+        title="今日任务"
+        emoji="📝"
+        count={todayInstances.length}
+        action={
+          // 「加任务」是家长动作，入口收进区块标题栏。
+          // 以前是个常驻右下角的悬浮球（64px 高、带文字），
+          // 会一直压在任务列表上，翻到哪都挡着一块 —— 现在不再有悬浮层。
+          <button
+            onClick={() => {
+              if (needsPin) setFabNudge(true)
+              else openNew()
+            }}
+            aria-label="新建任务"
+            className="btn active:btn-press flex min-h-[44px] items-center gap-1 rounded-pill bg-grass-100 px-3 text-xs font-extrabold text-grass-700"
+          >
+            <span aria-hidden className="text-base leading-none">
+              {needsPin ? '🔒' : '＋'}
+            </span>
+            加任务
+          </button>
+        }
+      >
         {todayInstances.length === 0 ? (
-          <EmptyHint emoji="🌤️" title="今天还没有任务" detail="点右下角的 ＋ 加一个吧" />
+          <EmptyHint emoji="🌤️" title="今天还没有任务" detail="点上面的「加任务」就能加一个" />
         ) : (
           <div className="space-y-3">
             {todayInstances.map((inst) => (
@@ -205,55 +192,44 @@ export default function TaskPage() {
         </Section>
       )}
 
-      {/* ================= 新建任务 FAB ================= */}
-      <button
-        onClick={() => {
-          if (needsPin) setFabNudge(true)
-          else openNew()
-        }}
-        aria-label="新建任务"
-        className="btn-3d active:btn-3d-press fixed bottom-28 right-4 z-30 flex h-16 min-w-[64px] items-center justify-center gap-2 rounded-full border-[3px] border-grass-600 bg-grass-400 px-5 shadow-[0_5px_0_0_var(--color-grass-600)]"
-        style={{ right: 'max(1rem, calc(50vw - 215px + 1rem))' }}
-      >
-        <span className="text-2xl leading-none">{needsPin ? '🔒' : '➕'}</span>
-        <span className="font-display text-base font-extrabold text-white">新任务</span>
-      </button>
-
-      {/* 孩子点到「新任务」时的软性提示：不弹密码盘，免得孩子乱试 */}
+      {/* 孩子点到「加任务」时的软性提示：不弹密码盘，免得孩子乱试。
+          套 Portal —— 理由同 Sheet：页面外壳的 anim-fade-in 是层叠上下文。 */}
       {fabNudge && (
-        <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-ink-900/40 p-4 pb-24"
-          onClick={() => setFabNudge(false)}
-        >
+        <Portal>
           <div
-            className="anim-bounce-in card-cartoon w-full max-w-[400px] border-[3px] border-sun-300 bg-white p-5"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-40 flex items-center justify-center bg-ink-900/35 p-5 backdrop-blur-[2px]"
+            onClick={() => setFabNudge(false)}
           >
-            <p className="text-center text-4xl">📌</p>
-            <p className="mt-2 text-center font-display text-lg font-extrabold text-ink-900">
-              这里要爸爸妈妈来弄
-            </p>
-            <p className="mt-1 text-center text-sm font-bold text-ink-500">
-              任务和固定任务都是爸爸妈妈设的。想加什么，去跟爸爸妈妈说一声吧 😊
-            </p>
-            <div className="mt-4 flex gap-2">
-              <Btn tone="white" size="md" full onClick={() => setFabNudge(false)}>
-                好的
-              </Btn>
-              <Btn
-                tone="sun"
-                size="md"
-                full
-                onClick={() => {
-                  setFabNudge(false)
-                  openNew()
-                }}
-              >
-                我是家长 🔑
-              </Btn>
+            <div
+              className="anim-bounce-in surface w-full max-w-[400px] p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-center text-4xl">📌</p>
+              <p className="mt-2 text-center font-display text-lg font-extrabold text-ink-900">
+                这里要爸爸妈妈来弄
+              </p>
+              <p className="mt-1 text-center text-sm font-bold text-ink-600">
+                任务和固定任务都是爸爸妈妈设的。想加什么，去跟爸爸妈妈说一声吧 😊
+              </p>
+              <div className="mt-4 flex gap-2">
+                <Btn tone="white" size="md" full onClick={() => setFabNudge(false)}>
+                  好的
+                </Btn>
+                <Btn
+                  tone="sun"
+                  size="md"
+                  full
+                  onClick={() => {
+                    setFabNudge(false)
+                    openNew()
+                  }}
+                >
+                  我是家长 🔑
+                </Btn>
+              </div>
             </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       <TaskDetail instance={detail} onClose={() => setDetailId(null)} />
@@ -279,12 +255,17 @@ function ProgressCard({
   points,
   perfect,
   rate,
+  dateText,
+  streak,
 }: {
   done: number
   total: number
   points: number
   perfect: number
   rate: number
+  /** 「9月14日 · 星期一」—— 原来挂在被删掉的大头部上，现在收进这张卡 */
+  dateText: string
+  streak: number
 }) {
   const R = 42
   const C = 2 * Math.PI * R
@@ -292,64 +273,81 @@ function ProgressCard({
   const allDone = total > 0 && done >= total
 
   return (
-    <section className="card-cartoon mt-4 flex items-center gap-4 border-[3px] border-grass-300 bg-gradient-to-br from-grass-50 to-sky-50 p-4">
-      {/* 进度环 */}
-      <div className="relative h-[104px] w-[104px] shrink-0">
-        <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-          <circle cx="50" cy="50" r={R} fill="none" stroke="#ffffff" strokeWidth="12" />
-          <circle
-            cx="50"
-            cy="50"
-            r={R}
-            fill="none"
-            stroke="var(--color-grass-400)"
-            strokeWidth="12"
-            strokeLinecap="round"
-            strokeDasharray={`${dash} ${C}`}
-            style={{ transition: 'stroke-dasharray .5s ease' }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="tnum font-display text-2xl font-extrabold leading-none text-ink-900">
-            {done}
-            <span className="text-sm text-ink-500">/{total}</span>
+    <section className="surface mt-4 border border-grass-300 bg-gradient-to-br from-grass-50 to-sky-50 p-4">
+      {/* 日期 + 连续天数：压成窄窄一条，不跟「还剩几个任务」抢位置 */}
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-xs font-bold text-ink-600">{dateText}</span>
+        {streak > 0 && (
+          <span className="ml-auto flex shrink-0 items-center gap-1 rounded-pill bg-tangerine-100 px-2.5 py-1">
+            <span aria-hidden>🔥</span>
+            <span className="tnum font-display text-xs font-extrabold text-tangerine-500">
+              连续 {streak} 天
+            </span>
           </span>
-          <span className="text-[10px] font-bold text-ink-500">今天做完</span>
-        </div>
-        {allDone && total > 0 && (
-          <span className="anim-sparkle absolute -right-1 -top-1 text-2xl">🎉</span>
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
-        <p className="font-display text-base font-extrabold text-ink-900">
-          {total === 0
-            ? '今天还没有任务'
-            : allDone
-              ? '全部完成啦，太棒了！'
-              : `还有 ${total - done} 个任务，加油！`}
-        </p>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="flex items-center gap-1 rounded-pill bg-sun-200 px-2.5 py-1">
-            <span aria-hidden>🪙</span>
-            <span className="tnum font-display text-sm font-extrabold text-sun-700">
-              今天 +{points}
+      <div className="flex items-center gap-4">
+        {/* 进度环 */}
+        <div className="relative h-[104px] w-[104px] shrink-0">
+          <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+            <circle cx="50" cy="50" r={R} fill="none" stroke="#ffffff" strokeWidth="12" />
+            <circle
+              cx="50"
+              cy="50"
+              r={R}
+              fill="none"
+              stroke="var(--color-grass-400)"
+              strokeWidth="12"
+              // 进度为 0 时用 butt 收口：round 会给一段零长度弧画出个圆点，
+              // 看着像渲染坏了的一个绿点。元素保持挂载，出现时才还有过渡动画。
+              strokeLinecap={rate > 0 ? 'round' : 'butt'}
+              strokeDasharray={`${dash} ${C}`}
+              style={{ transition: 'stroke-dasharray .5s ease' }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="tnum font-display text-2xl font-extrabold leading-none text-ink-900">
+              {done}
+              <span className="text-sm text-ink-500">/{total}</span>
             </span>
-          </span>
-          {perfect > 0 && (
-            <span className="flex items-center gap-1 rounded-pill bg-white px-2.5 py-1">
-              <span aria-hidden>⚡</span>
-              <span className="tnum text-sm font-extrabold text-grass-600">{perfect}</span>
-              <span className="text-[11px] font-bold text-ink-500">准时</span>
-            </span>
+            <span className="text-[10px] font-bold text-ink-500">今天做完</span>
+          </div>
+          {allDone && total > 0 && (
+            <span className="anim-sparkle absolute -right-1 -top-1 text-2xl">🎉</span>
           )}
         </div>
-        {/* 条形进度，环形之外再给一层直观反馈 */}
-        <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full border-2 border-white bg-white/70">
-          <div
-            className="h-full rounded-full bg-grass-400 transition-all duration-500"
-            style={{ width: `${rate}%` }}
-          />
+
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-base font-extrabold text-ink-900">
+            {total === 0
+              ? '今天还没有任务'
+              : allDone
+                ? '全部完成啦，太棒了！'
+                : `还有 ${total - done} 个任务，加油！`}
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="flex items-center gap-1 rounded-pill bg-sun-200 px-2.5 py-1">
+              <span aria-hidden>🪙</span>
+              <span className="tnum font-display text-sm font-extrabold text-sun-700">
+                今天 +{points}
+              </span>
+            </span>
+            {perfect > 0 && (
+              <span className="flex items-center gap-1 rounded-pill bg-white px-2.5 py-1">
+                <span aria-hidden>⚡</span>
+                <span className="tnum text-sm font-extrabold text-grass-600">{perfect}</span>
+                <span className="text-[11px] font-bold text-ink-500">准时</span>
+              </span>
+            )}
+          </div>
+          {/* 条形进度，环形之外再给一层直观反馈 */}
+          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full border border-white bg-white/70">
+            <div
+              className="h-full rounded-full bg-grass-400 transition-all duration-500"
+              style={{ width: `${rate}%` }}
+            />
+          </div>
         </div>
       </div>
     </section>
@@ -371,7 +369,7 @@ function TaskCard({
 }) {
   const startTimer = useApp((s) => s.startTimer)
   const tasks = useApp((s) => s.tasks)
-  const cat = CATEGORY[inst.category]
+  const cat = categoryOf(inst.category)
   const taskDef = useMemo(() => tasks.find((t) => t.id === inst.taskId), [tasks, inst.taskId])
   const running = inst.status === 'pending' && !!inst.startedAt
   const seconds = useLiveSeconds(inst.startedAt, running)
@@ -384,7 +382,7 @@ function TaskCard({
   return (
     <div
       className={clsx(
-        'card-cartoon relative overflow-hidden border-[3px] p-3.5 transition-transform',
+        'surface relative overflow-hidden border p-3.5 transition-transform',
         inst.status === 'pending' && 'border-ink-100',
         done && 'border-grass-300',
         submitted && 'border-sun-400',
@@ -434,7 +432,7 @@ function TaskCard({
               <button
                 onClick={() => onEdit(taskDef)}
                 aria-label="编辑任务"
-                className="min-h-[28px] shrink-0 rounded-pill border-2 border-ink-100 bg-white px-2 text-[11px] font-bold text-ink-500 active:scale-95"
+                className="min-h-[28px] shrink-0 rounded-pill border border-ink-100 bg-white px-2 text-[11px] font-bold text-ink-500 active:scale-95"
               >
                 ✏️
               </button>
@@ -452,7 +450,7 @@ function TaskCard({
           {(inst.status === 'pending' || rejected) && (
             <div className="mt-2.5">
               {rejected && inst.rejectNote ? (
-                <div className="mb-2 rounded-2xl border-2 border-berry-200 bg-berry-50 px-3 py-2">
+                <div className="mb-2 rounded-2xl border border-berry-200 bg-berry-50 px-3 py-2">
                   <p className="text-[11px] font-bold text-berry-600">
                     👨‍👩‍👧 爸爸妈妈说：
                   </p>
@@ -463,7 +461,7 @@ function TaskCard({
                 <div className="flex items-center gap-2">
                   <span
                     className={clsx(
-                      'tnum flex-1 rounded-pill border-2 px-3 py-2 text-center font-display text-lg font-extrabold',
+                      'tnum flex-1 rounded-pill border px-3 py-2 text-center font-display text-lg font-extrabold',
                       TONE_TEXT[timerTone(seconds / 60, inst.plannedMinutes)],
                       timerTone(seconds / 60, inst.plannedMinutes) === 'grass'
                         ? 'border-grass-300 bg-grass-100'
@@ -492,7 +490,7 @@ function TaskCard({
                   </Btn>
                   <button
                     onClick={onOpen}
-                    className="min-h-[44px] flex-1 rounded-2xl border-2 border-dashed border-ink-300 px-2 text-xs font-bold text-ink-500"
+                    className="min-h-[44px] flex-1 rounded-2xl border border-dashed border-ink-300 px-2 text-xs font-bold text-ink-500"
                   >
                     没用计时器 · 直接填时间
                   </button>
@@ -585,9 +583,9 @@ function TaskCard({
    ============================================================ */
 
 function FixedTaskChip({ task, onEdit }: { task: Task; onEdit: () => void }) {
-  const cat = CATEGORY[task.category]
+  const cat = categoryOf(task.category)
   return (
-    <div className="flex items-center gap-2.5 rounded-2xl border-[3px] border-ink-100 bg-white px-3 py-2.5">
+    <div className="flex items-center gap-2.5 rounded-2xl border border-ink-100 bg-white px-3 py-2.5">
       <span className={clsx('grid size-9 shrink-0 place-items-center rounded-xl text-lg', cat.soft)}>
         {cat.emoji}
       </span>
@@ -602,7 +600,7 @@ function FixedTaskChip({ task, onEdit }: { task: Task; onEdit: () => void }) {
         type="button"
         onClick={onEdit}
         aria-label="编辑固定任务"
-        className="min-h-[36px] shrink-0 rounded-pill border-2 border-ink-100 bg-paper-2 px-2.5 text-[11px] font-bold text-ink-500"
+        className="min-h-[36px] shrink-0 rounded-pill border border-ink-100 bg-paper-2 px-2.5 text-[11px] font-bold text-ink-500"
       >
         ✏️ 改
       </button>
@@ -622,23 +620,32 @@ function PeriodCard({ task, onEdit }: { task: Task; onEdit: () => void }) {
 
   const units = periodUnitsFor(task)
   const doneCount = units.filter((u) => u.done).length
+  const pendingCount = units.filter((u) => u.pending).length
   const total = units.length
   const pct = total > 0 ? (doneCount / total) * 100 : 0
-  const cat = CATEGORY[task.category]
+  const cat = categoryOf(task.category)
   const allDone = doneCount >= total
+  // 已确认 + 待确认把格子占满了，就不该再让提交 ——
+  // 否则家长那边会攒出一串一模一样的待办。
+  const full = doneCount + pendingCount >= total
 
-  async function handleOnce(minutes: number, quality: QualityGrade | undefined) {
-    if (busy || allDone) return
+  async function handleOnce(minutes: number) {
+    if (busy || full) return
     setBusy(true)
-    // 关键：把真实用时和质量传进去，让周期任务也走同一套结算规则。
-    // 之前固定传 plannedMinutes + 'ok' 会让周期任务永远"按时"且永远拿质量分。
-    await submitPeriodTask(task.id, minutes, task.qualityRated ? quality : undefined)
+    // ⚠️ 质量**固定传 undefined**：孩子不自评质量，质量分由家长在审核时给。
+    //
+    // 以前这里传的是 `OnceSubmitSheet` 里选的那个 quality ——
+    // 等于让孩子自己给自己打分，而且那张表还把「+N 分」的预览直接摆在
+    // 提交按钮上面，点一下就知道自己能拿多少分。
+    // 和普通任务（`TaskDetail` 里 `submitInstance(inst.id, mins, undefined, …)`）
+    // 保持同一个口径。
+    await submitPeriodTask(task.id, minutes, undefined)
     setBusy(false)
     setOnceOpen(false)
   }
 
   return (
-    <div className={clsx('card-cartoon relative overflow-hidden border-[3px] p-3.5', cat.border)}>
+    <div className={clsx('surface relative overflow-hidden border p-3.5', cat.border)}>
       <span className={clsx('absolute inset-y-0 left-0 w-2', cat.solid)} />
       <div className="pl-1.5">
         <div className="flex items-start gap-3">
@@ -658,7 +665,7 @@ function PeriodCard({ task, onEdit }: { task: Task; onEdit: () => void }) {
               <button
                 onClick={onEdit}
                 aria-label="编辑任务"
-                className="min-h-[32px] shrink-0 rounded-pill border-2 border-ink-100 bg-white px-2 text-[11px] font-bold text-ink-500"
+                className="min-h-[32px] shrink-0 rounded-pill border border-ink-100 bg-white px-2 text-[11px] font-bold text-ink-500"
               >
                 ✏️
               </button>
@@ -681,7 +688,7 @@ function PeriodCard({ task, onEdit }: { task: Task; onEdit: () => void }) {
             {doneCount}
             <span className="text-sm text-ink-500">/{total}</span>
           </span>
-          <div className="h-3 flex-1 overflow-hidden rounded-full border-2 border-white bg-ink-100">
+          <div className="h-3 flex-1 overflow-hidden rounded-full border border-white bg-ink-100">
             <div
               className={clsx('h-full rounded-full transition-all duration-500', cat.solid)}
               style={{ width: `${pct}%` }}
@@ -694,26 +701,42 @@ function PeriodCard({ task, onEdit }: { task: Task; onEdit: () => void }) {
           {units.map((u) => (
             <span
               key={u.index}
-              title={u.label}
+              title={u.pending ? `${u.label} · 等爸爸妈妈确认` : u.label}
               className={clsx(
-                'flex h-7 w-7 items-center justify-center rounded-lg border-2 text-xs',
-                u.done ? clsx(cat.soft, 'border-transparent') : 'border-dashed border-ink-300',
+                'flex h-7 w-7 items-center justify-center rounded-lg border text-xs',
+                u.done
+                  ? clsx(cat.soft, 'border-transparent')
+                  : u.pending
+                    ? 'border-sun-400 bg-sun-100'
+                    : 'border-dashed border-ink-300',
               )}
             >
-              {u.done ? '✅' : '⬜'}
+              {u.done ? '✅' : u.pending ? '📮' : '⬜'}
             </span>
           ))}
         </div>
 
+        {pendingCount > 0 && !allDone && (
+          <p className="mt-2 text-[11px] font-bold text-sun-700">
+            有 {pendingCount} 次等爸爸妈妈确认 📮
+          </p>
+        )}
+
         <div className="mt-3">
           <Btn
-            tone={allDone ? 'white' : 'grass'}
+            tone={allDone || full ? 'white' : 'grass'}
             size="md"
             full
-            disabled={busy || allDone}
+            disabled={busy || full}
             onClick={() => setOnceOpen(true)}
           >
-            {allDone ? '这个周期的目标完成啦 🎉' : busy ? '记录中…' : '完成一次 ＋'}
+            {allDone
+              ? '这个周期的目标完成啦 🎉'
+              : full
+                ? '都交上去了，等爸爸妈妈确认 📮'
+                : busy
+                  ? '记录中…'
+                  : '完成一次 ＋'}
           </Btn>
         </div>
       </div>
@@ -730,23 +753,39 @@ function PeriodCard({ task, onEdit }: { task: Task; onEdit: () => void }) {
 }
 
 /* ============================================================
-   周期任务单次提交：让「本周做一次」也走真实用时 + 质量评分
+   周期任务单次提交：孩子只报「用了多久」，质量分交给家长
+   ------------------------------------------------------------
+   ⚠️ 这里**不能有质量自评**。
+
+   普通任务早就改成了「孩子只提交，质量分由家长给」
+   （`TaskDetail.handleSubmit` 里那句 `submitInstance(inst.id, mins, undefined, …)`），
+   但周期任务这张表漏了：孩子能自己选「一般 / 不错 / 特别棒」，
+   而且下面直接把「+N 分」摆出来 —— 等于自己给自己打分，
+   家长审核就成了走个过场。
+
+   现在对齐普通任务：只有用时输入 + 一个「完成确认」，
+   分数是**大约**（家长会按质量调整），并明说要去等爸爸妈妈看一眼。
+
+   ⚠️ `export` 是给回归测试用的（`PeriodSubmit.test.tsx`）。
+   这个组件不对外复用 —— 它只为「长期任务卡」服务。
    ============================================================ */
 
-function OnceSubmitSheet({
+export function OnceSubmitSheet({
   task,
   onCancel,
   onConfirm,
 }: {
   task: Task
   onCancel: () => void
-  onConfirm: (minutes: number, quality: QualityGrade | undefined) => void
+  onConfirm: (minutes: number) => void
 }) {
   const [minutes, setMinutes] = useState(task.plannedMinutes)
-  const [quality, setQuality] = useState<QualityGrade>('ok')
+  const parentReviewEnabled = useApp((s) => s.settings.parentReviewEnabled)
 
   // previewPoints 期望 TaskInstance 形状；周期任务只有 Task 定义，
   // 这里补齐结算真正会用到的字段（其余字段结算引擎不读）。
+  //
+  // 质量传 `undefined`（**不是** 'ok'）—— 理由见本组件顶部的注释。
   const preview = previewPoints(
     {
       id: `preview_${task.id}`,
@@ -768,7 +807,7 @@ function OnceSubmitSheet({
       qualityRated: task.qualityRated,
     },
     minutes,
-    quality,
+    undefined,
   )
 
   const step = (d: number) => setMinutes((m) => Math.max(1, Math.round(m + d)))
@@ -781,100 +820,87 @@ function OnceSubmitSheet({
           这次是「{task.title}」，计划 {task.plannedMinutes} 分钟
         </p>
 
-      {/* 用时 */}
-      <div className="mb-4">
-        <p className="mb-2 font-display text-base font-extrabold text-ink-900">用了多久？</p>
-        <div className="flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => step(-5)}
-            className="btn-3d h-12 w-12 rounded-2xl bg-white text-xl font-extrabold text-ink-700 shadow-cartoon-sm active:btn-3d-press"
-            aria-label="减少 5 分钟"
-          >
-            −5
-          </button>
-          <button
-            type="button"
-            onClick={() => step(-1)}
-            className="btn-3d h-12 w-12 rounded-2xl bg-white text-xl font-extrabold text-ink-700 shadow-cartoon-sm active:btn-3d-press"
-            aria-label="减少 1 分钟"
-          >
-            −
-          </button>
-          <span className="tnum min-w-[5.5rem] text-center font-display text-3xl font-extrabold text-ink-900">
-            {minutes}
-            <span className="ml-1 text-sm text-ink-500">分</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => step(1)}
-            className="btn-3d h-12 w-12 rounded-2xl bg-white text-xl font-extrabold text-ink-700 shadow-cartoon-sm active:btn-3d-press"
-            aria-label="增加 1 分钟"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            onClick={() => step(5)}
-            className="btn-3d h-12 w-12 rounded-2xl bg-white text-xl font-extrabold text-ink-700 shadow-cartoon-sm active:btn-3d-press"
-            aria-label="增加 5 分钟"
-          >
-            +5
-          </button>
-        </div>
-      </div>
-
-      {/* 质量 */}
-      {task.qualityRated ? (
+        {/* 用时 */}
         <div className="mb-4">
-          <p className="mb-2 font-display text-base font-extrabold text-ink-900">做得怎么样？</p>
-          <div className="flex gap-2">
-            {(
-              [
-                ['poor', '😞', '一般'],
-                ['ok', '🙂', '不错'],
-                ['great', '🤩', '特别棒'],
-              ] as [QualityGrade, string, string][]
-            ).map(([g, emoji, label]) => (
-              <button
-                key={g}
-                type="button"
-                onClick={() => setQuality(g)}
-                className={
-                  'btn-3d flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-3 shadow-cartoon-sm active:btn-3d-press ' +
-                  (quality === g ? 'bg-sun-300 ring-4 ring-sun-400' : 'bg-white')
-                }
-              >
-                <span className="text-2xl">{emoji}</span>
-                <span className="text-xs font-extrabold text-ink-900">{label}</span>
-              </button>
-            ))}
+          <p className="mb-2 font-display text-base font-extrabold text-ink-900">用了多久？</p>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => step(-5)}
+              className="btn h-12 w-12 rounded-2xl bg-white text-xl font-extrabold text-ink-700 shadow-flat active:btn-press"
+              aria-label="减少 5 分钟"
+            >
+              −5
+            </button>
+            <button
+              type="button"
+              onClick={() => step(-1)}
+              className="btn h-12 w-12 rounded-2xl bg-white text-xl font-extrabold text-ink-700 shadow-flat active:btn-press"
+              aria-label="减少 1 分钟"
+            >
+              −
+            </button>
+            <span className="tnum min-w-[5.5rem] text-center font-display text-3xl font-extrabold text-ink-900">
+              {minutes}
+              <span className="ml-1 text-sm text-ink-500">分</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => step(1)}
+              className="btn h-12 w-12 rounded-2xl bg-white text-xl font-extrabold text-ink-700 shadow-flat active:btn-press"
+              aria-label="增加 1 分钟"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => step(5)}
+              className="btn h-12 w-12 rounded-2xl bg-white text-xl font-extrabold text-ink-700 shadow-flat active:btn-press"
+              aria-label="增加 5 分钟"
+            >
+              +5
+            </button>
           </div>
         </div>
-      ) : null}
 
-      {/* 得分预览 */}
-      <div className="mb-3 rounded-2xl bg-paper-2 p-3">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">🪙</span>
-          <span className="font-display text-2xl font-extrabold text-ink-900">
-            +{preview.points}
-          </span>
-          <span className="ml-auto text-xs font-bold text-ink-500">
-            {preview.overtime ? '超时结算' : '按时完成'}
-          </span>
+        {/* ⚠️ 这里以前有「做得怎么样？」三个自评按钮（一般 / 不错 / 特别棒）——
+            已删除，理由见组件顶部注释。孩子只报用时；质量分由家长在审核时给。
+            别再加回来：`TaskDetail` 那边早就没这个了。 */}
+
+        {/* 得分预览 —— 家长审核开着时只能说「大约」，因为质量分还没定 */}
+        <div className="mb-3 rounded-2xl bg-paper-2 p-3">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🪙</span>
+            <span className="font-display text-2xl font-extrabold text-ink-900">
+              +{preview.points}
+            </span>
+            <span className="ml-auto text-xs font-bold text-ink-500">
+              {preview.overtime ? '超时结算' : '按时完成'}
+            </span>
+          </div>
+          <p className="mt-1 text-xs font-bold text-ink-500">
+            {parentReviewEnabled ? '确认后大约能拿到' : '提交后能拿到'} · {preview.reason}
+          </p>
         </div>
-        <p className="mt-1 text-xs font-bold text-ink-500">{preview.reason}</p>
-      </div>
 
-      <div className="flex gap-2">
-        <Btn tone="white" size="md" onClick={onCancel}>
-          取消
-        </Btn>
-        <Btn tone="grass" size="md" full onClick={() => onConfirm(minutes, quality)}>
-          记下这次
-        </Btn>
-      </div>
+        {parentReviewEnabled && (
+          <p className="mb-3 text-center text-[11px] font-bold text-ink-500">
+            爸爸妈妈看一眼确认之后，积分才到你的小金库 🪙
+          </p>
+        )}
+
+        {/* ⚠️ 两个按钮都要 `full`，各占一半。
+            只给右边加 `full`（w-full）会把左边挤成竖排的「取 / 消」——
+            「提交」两个字时还看不出来，换成「完成确认」四个字就露馅了。
+            两键并排的写法跟 `TaskDetail` / `ReviewSheet` 保持一致。 */}
+        <div className="flex gap-2">
+          <Btn tone="white" size="md" full onClick={onCancel}>
+            取消
+          </Btn>
+          <Btn tone="grass" size="md" full onClick={() => onConfirm(minutes)}>
+            完成确认
+          </Btn>
+        </div>
       </div>
     </Sheet>
   )
@@ -900,8 +926,22 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
     return p?.claimedTiers ?? []
   }, [checkInProgress, task.id])
 
-  const cat = CATEGORY[task.category]
+  const cat = categoryOf(task.category)
   const signedToday = days.includes(todayKey)
+  /**
+   * 今天已经交上去、还在等家长确认。
+   *
+   * 「没签」「已交待审」「已确认」是三个不同状态，必须分开表达 ——
+   * 少一个，孩子就会看到按钮还能点、于是重复交，家长那边冒出一串重复待办。
+   * 注意要扫全部 progress 行：日签的周期键每天变，只 find 第一行会漏。
+   */
+  const pendingToday = useMemo(
+    () =>
+      checkInProgress.some(
+        (p) => p.taskId === task.id && (p.pendingDays ?? []).includes(todayKey),
+      ),
+    [checkInProgress, task.id, todayKey],
+  )
   const claimable = claimableTiers(tiers, days.length, claimed)
   const target = task.checkInTargetCount ?? 5
 
@@ -909,7 +949,7 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
   const cells = useMemo(() => buildCells(task.cycle, todayKey, days), [task.cycle, todayKey, days])
 
   async function handleCheckIn() {
-    if (busy || signedToday) return
+    if (busy || signedToday || pendingToday) return
     setBusy(true)
     await doCheckIn(task.id)
     setBusy(false)
@@ -923,7 +963,7 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
   }
 
   return (
-    <div className={clsx('card-cartoon relative overflow-hidden border-[3px] p-3.5', cat.border)}>
+    <div className={clsx('surface relative overflow-hidden border p-3.5', cat.border)}>
       <span className={clsx('absolute inset-y-0 left-0 w-2', cat.solid)} />
       <div className="pl-1.5">
         <div className="flex items-center gap-3">
@@ -944,6 +984,11 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
               <span className="tnum font-extrabold text-ink-900">{days.length}</span>
               <span className="text-ink-500"> / {target} 天</span>
             </p>
+            {pendingToday && (
+              <p className="text-[11px] font-bold text-sun-700">
+                今天已交，等爸爸妈妈看一眼 📮
+              </p>
+            )}
           </div>
         </div>
 
@@ -963,7 +1008,7 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
               <span
                 key={c.key}
                 className={clsx(
-                  'flex h-8 min-w-8 items-center justify-center rounded-lg border-2 px-1 text-[10px] font-extrabold',
+                  'flex h-8 min-w-8 items-center justify-center rounded-lg border px-1 text-[10px] font-extrabold',
                   cells.length > 7 && 'min-w-0',
                   c.signed
                     ? 'border-grass-400 bg-grass-200 text-grass-700'
@@ -975,7 +1020,7 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
                 )}
                 title={c.key}
               >
-                {c.signed ? '✅' : c.label}
+                {c.signed ? '✅' : c.today && pendingToday ? '📮' : c.label}
               </span>
             ),
           )}
@@ -992,11 +1037,11 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
                 disabled={!can || busy}
                 onClick={() => handleClaim(t.days)}
                 className={clsx(
-                  'flex w-full items-center gap-2 rounded-xl border-2 px-3 py-2 text-left transition-colors',
+                  'flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors',
                   got
                     ? 'border-grass-300 bg-grass-100'
                     : can
-                      ? 'btn-3d active:btn-3d-press anim-wiggle border-sun-400 bg-sun-200'
+                      ? 'btn active:btn-press anim-wiggle border-sun-400 bg-sun-200'
                       : 'border-ink-100 bg-white',
                 )}
               >
@@ -1026,13 +1071,19 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
 
         <div className="mt-3">
           <Btn
-            tone={signedToday ? 'white' : 'sun'}
+            tone={signedToday || pendingToday ? 'white' : 'sun'}
             size="lg"
             full
-            disabled={busy || signedToday}
+            disabled={busy || signedToday || pendingToday}
             onClick={handleCheckIn}
           >
-            {signedToday ? '今天已经签过啦 ✅' : busy ? '签到中…' : '📅 今天签到'}
+            {signedToday
+              ? '今天已经签过啦 ✅'
+              : pendingToday
+                ? '已交，等爸爸妈妈看 📮'
+                : busy
+                  ? '签到中…'
+                  : '📅 今天签到'}
           </Btn>
         </div>
       </div>
@@ -1109,11 +1160,14 @@ function Section({
   title,
   emoji,
   count,
+  action,
   children,
 }: {
   title: string
   emoji: string
   count: number
+  /** 区块右上角的小动作（比如「加任务」）。不给就不占位。 */
+  action?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
@@ -1128,6 +1182,7 @@ function Section({
             {count}
           </span>
         )}
+        {action && <div className="ml-auto">{action}</div>}
       </div>
       {children}
     </section>

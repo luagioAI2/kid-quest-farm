@@ -22,6 +22,7 @@ const MOOD_FACE: Record<AnimalMood, string> = {
   hungry: '😫',
   sick: '🤒',
   old: '🧓',
+  spent: '💤',
 }
 
 const MOOD_LABEL: Record<AnimalMood, string> = {
@@ -29,7 +30,9 @@ const MOOD_LABEL: Record<AnimalMood, string> = {
   normal: '还不错',
   hungry: '饿了',
   sick: '生病了',
-  old: '年纪大了',
+  old: '快产完了',
+  // 产够次数就停产，但动物还在 —— 用户 2026-09-15：「虽然鸡还在」
+  spent: '已经产完了',
 }
 
 /** 动物小屋：领养 + 我的动物 */
@@ -57,7 +60,7 @@ export function AnimalHouse({
       title="动物小屋"
       headerRight={<CoinPill amount={balance} />}
     >
-      <div className="mb-3 flex gap-2 rounded-full border-[3px] border-ink-900/10 bg-white p-1">
+      <div className="mb-3 flex gap-2 rounded-full border border-ink-900/10 bg-white p-1">
         <TabButton active={tab === 'mine'} onClick={() => setTab('mine')}>
           🐾 我的动物
           {animals.length > 0 ? (
@@ -118,12 +121,12 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
   return (
     <li
       className={clsx(
-        'card-cartoon overflow-hidden',
+        'surface overflow-hidden',
         locked ? 'opacity-60' : !affordable && 'opacity-60 grayscale',
       )}
     >
       <div className="flex items-center gap-3 p-3">
-        <div className="grid size-16 shrink-0 place-items-center rounded-2xl border-[3px] border-ink-900/10 bg-sun-50">
+        <div className="grid size-16 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-sun-50">
           <span className="flex items-center text-2xl">
             {def.babyEmoji}
             <span className="mx-0.5 text-xs text-ink-500">→</span>
@@ -174,12 +177,12 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
               value={name}
               onChange={(e) => setName(e.target.value.slice(0, 8))}
               placeholder={def.name}
-              className="min-h-[44px] min-w-0 flex-1 rounded-2xl border-[3px] border-ink-900/10 bg-white px-3 font-display font-bold text-ink-900 outline-none focus:border-grass-400"
+              className="min-h-[44px] min-w-0 flex-1 rounded-2xl border border-ink-900/10 bg-white px-3 font-display font-bold text-ink-900 outline-none focus:border-grass-400"
             />
             <button
               type="button"
               onClick={() => void confirm()}
-              className="btn-3d min-h-[44px] shrink-0 rounded-2xl border-[3px] border-grass-600/30 bg-grass-400 px-4 text-white active:btn-3d-press"
+              className="btn min-h-[44px] shrink-0 rounded-2xl border border-grass-600/30 bg-grass-400 px-4 text-white active:btn-press"
             >
               带回家 🏡
             </button>
@@ -192,9 +195,9 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
             disabled={!affordable}
             onClick={() => setNaming(true)}
             className={clsx(
-              'btn-3d flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border-[3px] font-display font-extrabold',
+              'btn flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border font-display font-extrabold',
               affordable
-                ? 'border-grape-500/30 bg-grape-400 text-white active:btn-3d-press'
+                ? 'border-grape-500/30 bg-grape-400 text-white active:btn-press'
                 : 'cursor-not-allowed border-ink-900/10 bg-ink-100 text-ink-300',
             )}
           >
@@ -227,9 +230,9 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
   // ---- 已经离世 ----
   if (animal.deceased) {
     return (
-      <li className="card-cartoon overflow-hidden opacity-80">
+      <li className="surface overflow-hidden opacity-80">
         <div className="flex items-center gap-3 p-4">
-          <div className="grid size-[68px] shrink-0 place-items-center rounded-3xl border-[3px] border-ink-900/10 bg-ink-100">
+          <div className="grid size-[68px] shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-ink-100">
             <span className="text-4xl">🕊️</span>
           </div>
           <div className="min-w-0 flex-1">
@@ -245,7 +248,7 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
           <button
             type="button"
             onClick={() => void removeAnimal(animal.id)}
-            className="btn-3d flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink-900/10 bg-white font-display font-extrabold text-ink-500 active:btn-3d-press"
+            className="btn flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-500 active:btn-press"
           >
             好好道别 🕯️
           </button>
@@ -255,11 +258,11 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
   }
 
   return (
-    <li className="card-cartoon overflow-hidden">
+    <li className="surface overflow-hidden">
       <div className="flex items-center gap-3 p-3">
         <div
           className={clsx(
-            'relative grid size-[68px] shrink-0 place-items-center rounded-3xl border-[3px] border-ink-900/10',
+            'relative grid size-[68px] shrink-0 place-items-center rounded-2xl border border-ink-900/10',
             sick ? 'bg-berry-50' : mature ? 'bg-grass-50' : 'bg-sun-50',
           )}
         >
@@ -272,7 +275,7 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
             {mature ? (def?.emoji ?? '🐾') : (def?.babyEmoji ?? '🐣')}
           </span>
           <span
-            className="absolute -bottom-1 -right-1 grid size-7 place-items-center rounded-full border-2 border-white bg-white text-lg shadow-cartoon-sm"
+            className="absolute -bottom-1 -right-1 grid size-7 place-items-center rounded-full border border-white bg-white text-lg shadow-flat"
             aria-label={`状态：${MOOD_LABEL[mood]}`}
           >
             {MOOD_FACE[mood]}
@@ -329,7 +332,7 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
           <button
             type="button"
             onClick={() => void collectAnimal(animal.id)}
-            className="btn-3d anim-float flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-grape-500/30 bg-gradient-to-b from-grape-300 to-grape-500 font-display text-lg font-extrabold text-white shadow-cartoon active:btn-3d-press"
+            className="btn anim-float flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl border border-grape-500/30 bg-gradient-to-b from-grape-300 to-grape-500 font-display text-lg font-extrabold text-white shadow-flat active:btn-press"
           >
             <span className="text-2xl">{def?.produceEmoji ?? '🎁'}</span>
             收下产出 +{animal.pendingProduce}
@@ -342,7 +345,7 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
           type="button"
           onClick={() => void feedAnimal(animal.id)}
           className={clsx(
-            'btn-3d flex min-h-[48px] flex-1 items-center justify-center gap-1 rounded-2xl border-[3px] font-display font-extrabold active:btn-3d-press',
+            'btn flex min-h-[48px] flex-1 items-center justify-center gap-1 rounded-2xl border font-display font-extrabold active:btn-press',
             sick
               ? 'anim-pop border-berry-500/40 bg-berry-300 text-white'
               : 'border-tangerine-400/40 bg-tangerine-300 text-ink-900',
@@ -353,7 +356,7 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
         <button
           type="button"
           onClick={() => void shearAnimal(animal.id)}
-          className="btn-3d flex min-h-[48px] flex-1 items-center justify-center gap-1 rounded-2xl border-[3px] border-berry-400/40 bg-berry-200 font-display font-extrabold text-ink-900 active:btn-3d-press"
+          className="btn flex min-h-[48px] flex-1 items-center justify-center gap-1 rounded-2xl border border-berry-400/40 bg-berry-200 font-display font-extrabold text-ink-900 active:btn-press"
         >
           🤗 摸摸它
         </button>
@@ -366,7 +369,7 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
 
 function EmptyBarn({ onAdopt }: { onAdopt: () => void }) {
   return (
-    <div className="card-cartoon mb-4 flex flex-col items-center gap-3 px-6 py-10 text-center">
+    <div className="surface mb-4 flex flex-col items-center gap-3 px-6 py-10 text-center">
       <div className="relative grid size-28 place-items-center">
         <span className="absolute inset-0 rounded-full bg-gradient-to-b from-sky-100 to-grass-100" />
         <span className="anim-float relative text-6xl">🏚️</span>
@@ -377,7 +380,7 @@ function EmptyBarn({ onAdopt }: { onAdopt: () => void }) {
       <button
         type="button"
         onClick={onAdopt}
-        className="btn-3d mt-1 flex min-h-[52px] items-center justify-center gap-2 rounded-3xl border-[3px] border-grape-500/30 bg-grape-400 px-6 font-display text-lg font-extrabold text-white active:btn-3d-press"
+        className="btn mt-1 flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-grape-500/30 bg-grape-400 px-6 font-display text-lg font-extrabold text-white active:btn-press"
       >
         🐤 去领养
       </button>
@@ -399,8 +402,8 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={clsx(
-        'btn-3d flex min-h-[44px] flex-1 items-center justify-center rounded-full text-[15px] active:btn-3d-press',
-        active ? 'bg-grape-400 text-white shadow-cartoon-sm' : 'bg-transparent text-ink-500',
+        'btn flex min-h-[44px] flex-1 items-center justify-center rounded-full text-[15px] active:btn-press',
+        active ? 'bg-grape-400 text-white shadow-flat' : 'bg-transparent text-ink-500',
       )}
     >
       {children}

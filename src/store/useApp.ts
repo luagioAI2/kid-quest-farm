@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import type {
@@ -7,9 +8,12 @@ import type {
   CheckInRecord,
   FarmEvent,
   FarmState,
+  HarvestEntry,
+  HarvestMode,
   InventorySlot,
   LedgerEntry,
   MarketState,
+  PendingCheckIn,
   Plot,
   QualityGrade,
   RedeemItem,
@@ -21,24 +25,30 @@ import {
   addItem,
   consumeItem,
   currentBalance,
+  currentHarvestBalance,
   db,
   DEFAULT_SETTINGS,
   loadAllRedeemItems,
   loadFarm,
   loadFarmEvents,
   loadMarket,
+  loadQuotaCarry,
   loadRedeemItems,
   loadRedeemRecords,
+  ledgerTip,
   loadSettings,
   logFarmEvents,
+  postHarvest,
   postLedger,
   saveFarmDay,
   saveFarmTotals,
   saveMarket,
   savePlots,
+  saveQuotaCarry,
   saveSettings,
   wipeAll,
 } from '../db/db'
+import { hapticLight, playTone, type ToneKind } from '../platform/files'
 import { settleInstance, type SettleParams } from '../domain/settlement'
 import {
   appDayKey,
@@ -58,6 +68,13 @@ import {
   isCropMature,
 } from '../domain/farm'
 import {
+  applyCapDeduction,
+  capTargetsFor,
+  leftoverCapFor,
+  maxSellable,
+  remainingCapFor,
+} from '../domain/economy'
+import {
   buildPeriodUnits,
   claimableTiers,
   computeStreak,
@@ -73,6 +90,7 @@ import {
   ANIMALS,
   CROP_BY_ID,
   CROPS,
+  DEFAULT_PROFIT_RATIO,
   ITEM_BY_ID,
   MARKET_GOODS,
   PRODUCE_BASE_PRICE,
@@ -115,6 +133,11 @@ interface AppState {
   tasks: Task[]
   instances: TaskInstance[]
   ledger: LedgerEntry[]
+  /**
+   * 丰收币流水。与 `ledger` 分开放 —— 见 `HarvestEntry` 的两条不可逆约束。
+   * 界面上「积分」页只看 `ledger`，「丰收币」页只看 `harvestLedger`，两边不串。
+   */
+  harvestLedger: HarvestEntry[]
   inventory: InventorySlot[]
   animals: Animal[]
   plots: Plot[]
@@ -129,7 +152,10 @@ interface AppState {
   farmEvents: FarmEvent[]
   /** 市场行情 */
   market: MarketState
+  /** 积分余额 —— **农场投入只认它**（`plant` / 买幼崽 / 开地块） */
   balance: number
+  /** 丰收币余额 —— 只能花在兑换商城的丰收档，**不能回流农场、不能换积分** */
+  harvestBalance: number
   todayKey: string
 
   toasts: Toast[]
@@ -138,6 +164,15 @@ interface AppState {
   /** 农场累计统计（收获 / 种植 / 互动） */
   farmTotals: { harvests: number; planted: number; sheared: number }
   bumpFarmTotals: (patch: Partial<AppState['farmTotals']>) => Promise<void>
+
+  /**
+   * 从**已经收掉的地块**上结转过来、还没用掉的额度（按产出物 id）。
+   *
+   * 一次性作物（小萝卜 / 胡萝卜）收完地块就变空地，标的消失，
+   * 没用完的额度必须搬到这里，否则背包里的产出永远卖不掉。
+   * 口径与计算见 `domain/economy.ts` 的 `leftoverCapFor`。
+   */
+  quotaCarry: Record<string, number>
 
   /* ---- 生命周期 ---- */
   boot: () => Promise<void>
@@ -171,7 +206,16 @@ interface AppState {
   giveUpInstance: (instanceId: string) => Promise<void>
 
   /* ---- 签到 ---- */
+  /** 宝贝点「今天签到」——开启审核时只进入待审，不发分 */
   doCheckIn: (taskId: string) => Promise<{ gained: number; bonus: number; tierLabel?: string }>
+  /**
+   * 家长确认一次签到。必须显式带上 `periodKey` ——
+   * 日签的周期键每天都会变，用「当前时间」重算会定位到今天那一行，
+   * 昨天挂起的待审就永远没人处理。
+   */
+  approveCheckIn: (taskId: string, periodKey: string, date: string) => Promise<number>
+  /** 家长打回一次签到，孩子可以重签 */
+  rejectCheckIn: (taskId: string, periodKey: string, date: string) => Promise<void>
   claimCheckInTier: (taskId: string, days: number) => Promise<number>
   tiersFor: (task: Task) => CheckInTier[]
   checkInDays: (taskId: string) => string[]
@@ -186,15 +230,26 @@ interface AppState {
 
   /* ---- 农场 ---- */
   plant: (plotIndex: number, cropId: string) => Promise<boolean>
-  harvest: (plotIndex: number) => Promise<number>
+  /**
+   * 收获。**产出物进背包，钱在卖出时才结算。**
+   *
+   * @param mode `'sell'` = 立刻按当日市价卖掉；`'store'` = 只收进背包，等好价再卖。
+   *             用户 2026-09-15：「可以直接卖出，也可以存储自己市场卖出。提供选择。」
+   * @returns 本次到手的丰收币（`'store'` 时为 0）
+   */
+  harvest: (plotIndex: number, mode?: HarvestMode) => Promise<number>
   unlockPlot: (plotIndex: number) => Promise<boolean>
   water: (plotIndex: number) => Promise<void>
   buyAnimal: (animalId: string, name: string) => Promise<boolean>
   feedAnimal: (animalId: string) => Promise<boolean>
   collectAnimal: (animalId: string) => Promise<number>
   shearAnimal: (animalId: string) => Promise<boolean>
-  /** 到市场卖出产出（走浮动价，会砸盘） */
-  sellProduce: (itemId: string, count: number) => Promise<number>
+  /** 到市场卖出产出（走浮动价，会砸盘，并受**卖出闸门**限制） */
+  sellProduce: (
+    itemId: string,
+    count: number,
+    opts?: { quiet?: boolean },
+  ) => Promise<number>
   /** 当前现价（用于 UI 预览） */
   priceFor: (itemId: string) => number
   /** 卖出 n 个能拿多少分（走浮动价，含砸盘影响） */
@@ -205,7 +260,15 @@ interface AppState {
   /* ---- 兑换商城 ---- */
   addRedeemItem: (input: NewRedeemInput) => Promise<RedeemItem>
   updateRedeemItem: (id: string, patch: Partial<RedeemItem>) => Promise<void>
-  archiveRedeemItem: (id: string) => Promise<void>
+  /**
+   * 兑换品上架 / 下架。
+   *
+   * 是**双向**的：下架只是从孩子看到的列表里隐藏（`loadRedeemItems` 会过滤掉
+   * `archived`），记录和历史都还在，随时可以再上架。
+   * 以前的 `archiveRedeemItem` 只会写 `archived: true`，一旦下架就只能删掉重加。
+   */
+  setRedeemItemArchived: (id: string, archived: boolean) => Promise<void>
+  /** 永久删除。不可逆，调用方必须先做二次确认。 */
   deleteRedeemItem: (id: string) => Promise<void>
   /** 兑换：扣积分 + 生成记录 */
   redeem: (itemId: string) => Promise<boolean>
@@ -262,11 +325,14 @@ async function seedIfEmpty(): Promise<void> {
 
   const taskCount = await db.tasks.count()
   if (taskCount === 0) {
-    const rows: Task[] = SEED_TASKS.map((t) => ({
+    // createdAt 逐条 +1ms：把「种子里的顺序」真正记下来。
+    // 全部用同一个 now 的话，按时间排序会全部打平，顺序就退化成
+    // 「按随机主键排」—— 每台设备看到的任务先后都不一样。
+    const rows: Task[] = SEED_TASKS.map((t, i) => ({
       ...t,
       id: uid('tk'),
-      createdAt: now,
-      updatedAt: now,
+      createdAt: now + i,
+      updatedAt: now + i,
     }))
     await db.tasks.bulkPut(rows)
     await postLedger({
@@ -310,6 +376,7 @@ const BACKUP_ARRAY_FIELDS = [
   'tasks',
   'taskInstances',
   'ledger',
+  'harvestLedger',
   'inventory',
   'animals',
   'checkIns',
@@ -324,6 +391,7 @@ const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
   'tasks',
   'taskInstances',
   'ledger',
+  'harvestLedger',
   'animals',
   'checkIns',
   'checkInProgress',
@@ -356,6 +424,24 @@ function validateBackup(d: Record<string, unknown>): string | null {
 }
 
 /** refresh 的实际实现（从 store 中抽出，便于串行包装） */
+/**
+ * 任务排序：先按创建时间，再按 id 兜底。
+ *
+ * 为什么非排不可：`db.tasks.toArray()` 是按**主键**返回的，而主键是
+ * 随机生成的 uid —— 不排的话，「今日任务」里那几项的先后顺序是任意的，
+ * 每台设备、每次全新安装都不一样（实测跑三次三个顺序）。
+ *
+ * 种子里一次性写入的任务 createdAt 又完全相同，只按时间排会全部打平，
+ * 所以 `seedIfEmpty` 给每个任务 +1ms 的递增时间，让种子顺序真正被记下来，
+ * 这里再按 (createdAt, id) 排就能复现家长排的顺序。
+ */
+function sortTasks(rows: Task[]): Task[] {
+  return [...rows].sort((a, b) => {
+    if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  })
+}
+
 async function doRefresh(
   set: (partial: Partial<AppState>) => void,
   get: () => AppState,
@@ -363,8 +449,8 @@ async function doRefresh(
   const { settings } = get()
   const today = currentDayKey(settings.dayStartHour)
 
-  const tasks = await db.tasks.filter((t) => !t.archived).toArray()
-  const allTasks = await db.tasks.toArray()
+  const tasks = sortTasks(await db.tasks.filter((t) => !t.archived).toArray())
+  const allTasks = sortTasks(await db.tasks.toArray())
   const existing = await db.taskInstances.toArray()
 
   // 1) 惰性补齐：从最早的实例日到今天，逐日生成缺失实例
@@ -458,36 +544,44 @@ async function doRefresh(
   const [
     instances,
     ledger,
+    harvestLedger,
     inventory,
     animals,
     checkIns,
     checkInProgress,
     balance,
+    harvestBalance,
     redeemItems,
     allRedeemItems,
     redeemRecords,
     farmEvents,
+    quotaCarry,
   ] = await Promise.all([
     db.taskInstances.orderBy('date').reverse().toArray(),
     // 全量加载流水。这里曾经 limit(500)，导致孩子用久了以后
     // 早期的记录从「积分」页凭空消失，而导出却还在 —— 对不上账。
     // 单机场景下流水量级很小（一年也就几千条），全量读没有压力。
     db.ledger.orderBy('createdAt').reverse().toArray(),
+    // 丰收币流水同理，全量读。
+    db.harvestLedger.orderBy('createdAt').reverse().toArray(),
     db.inventory.toArray(),
     db.animals.toArray(),
     db.checkIns.toArray(),
     db.checkInProgress.toArray(),
     currentBalance(),
+    currentHarvestBalance(),
     loadRedeemItems(),
     loadAllRedeemItems(),
     loadRedeemRecords(),
     loadFarmEvents(40),
+    loadQuotaCarry(),
   ])
 
   set({
     tasks,
     instances,
     ledger,
+    harvestLedger,
     inventory,
     animals,
     plots: farm.plots,
@@ -496,6 +590,7 @@ async function doRefresh(
       planted: farm.totalPlanted,
       sheared: farm.totalSheared,
     },
+    quotaCarry,
     checkIns,
     checkInProgress,
     redeemItems,
@@ -504,6 +599,7 @@ async function doRefresh(
     farmEvents,
     market,
     balance,
+    harvestBalance,
     todayKey: today,
   })
 }
@@ -580,16 +676,17 @@ async function settleNow(
       updatedAt: now,
     })
     if (result.points > 0) {
-      const last = await db.ledger.orderBy('createdAt').last()
-      const balance = last?.balanceAfter ?? 0
+      // 走 ledgerTip 而不是自己读 last()：时间戳必须严格递增，
+      // 否则同一毫秒的两笔会在 createdAt 索引里并列、余额接错（见 db.ts）
+      const tip = await ledgerTip()
       await db.ledger.put({
         id: `lg_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
         delta: result.points,
-        balanceAfter: balance + result.points,
+        balanceAfter: tip.balance + result.points,
         source: 'task',
         refId: instanceId,
         memo: `${inst.title}（${minutes != null ? humanizeMinutes(minutes) : '未计时'}）`,
-        createdAt: now,
+        createdAt: tip.createdAt,
       })
     }
   })
@@ -625,6 +722,123 @@ async function settleNow(
   return result.points + streakBonus
 }
 
+/* ============================================================
+   签到核心（内部）
+   ------------------------------------------------------------
+   doCheckIn（家长关掉审核时的直接发放）与 approveCheckIn（家长审核）
+   共用这一段，保证两条路径的发放规则完全一致 ——
+   和 settleNow 之于 submitInstance / reviewInstance 是同一个道理。
+   ============================================================ */
+
+/** 取（或构造）某个签到任务在某个周期的进度行。不落盘，由调用方决定何时写。 */
+async function ensureCheckInProgress(
+  taskId: string,
+  periodKey: string,
+): Promise<CheckInProgress> {
+  const found = await db.checkInProgress
+    .where('[taskId+periodKey]')
+    .equals([taskId, periodKey])
+    .first()
+  if (found) return found
+  return {
+    id: uid('cp'),
+    taskId,
+    periodKey,
+    days: [],
+    pendingDays: [],
+    claimedTiers: [],
+    updatedAt: Date.now(),
+  }
+}
+
+/**
+ * 真正把一次签到「兑现」：记日期 → 写签到记录 → 发积分 → 自动结算阶梯奖励。
+ *
+ * 幂等：日期已在 `days` 里就直接返回，避免重复发分。
+ * 注意 `date` 与 `periodKey` 都由调用方传入，不在这里用「当前时间」重算 ——
+ * 补审昨天的签到时，重算会写到今天的进度行上。
+ */
+async function grantCheckIn(
+  get: () => AppState,
+  task: Task,
+  progress: CheckInProgress,
+  date: string,
+  periodKey: string,
+): Promise<{ gained: number; bonus: number; tierLabel?: string }> {
+  if (progress.days.includes(date)) return { gained: 0, bonus: 0 }
+
+  const gained = Math.max(0, Math.round(task.basePoints))
+  progress.days = [...progress.days, date].sort()
+  progress.updatedAt = Date.now()
+  await db.checkInProgress.put(progress)
+
+  const record: CheckInRecord = {
+    id: uid('ci'),
+    taskId: task.id,
+    date,
+    periodKey,
+    points: gained,
+    createdAt: Date.now(),
+  }
+  await db.checkIns.put(record)
+
+  if (gained > 0) {
+    await postLedger({
+      delta: gained,
+      source: 'checkin',
+      refId: record.id,
+      memo: `签到：${task.title}`,
+    })
+  }
+
+  // 自动结算已达成的阶梯奖励
+  const tiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5)
+  const claimable = claimableTiers(tiers, progress.days.length, progress.claimedTiers)
+  let bonus = 0
+  let tierLabel: string | undefined
+  for (const tier of claimable) {
+    progress.claimedTiers = [...progress.claimedTiers, tier.days]
+    bonus += tier.points
+    tierLabel = tier.label
+    if (tier.points > 0) {
+      await postLedger({
+        delta: tier.points,
+        source: 'checkin_bonus',
+        refId: `${task.id}:${periodKey}:${tier.days}`,
+        memo: `签到奖励 · ${tier.label}`,
+      })
+    }
+    if (tier.itemId) await addItem(tier.itemId, 1)
+  }
+  if (claimable.length > 0) {
+    progress.claimedTiers = Array.from(new Set(progress.claimedTiers))
+    await db.checkInProgress.put(progress)
+  }
+
+  get().pushToast({
+    kind: 'reward',
+    title: `签到成功 +${gained + bonus} 分`,
+    detail: tierLabel ? `达成「${tierLabel}」！` : `已坚持 ${progress.days.length} 天`,
+    emoji: '📅',
+  })
+
+  return { gained, bonus, tierLabel }
+}
+
+/**
+ * toast 类型 → 音效。
+ *
+ * `info` 刻意是 `null`：它表示「只是告诉你一声」（已下架 / 已经交上去啦 /
+ * 备份已导出），出声反而吵。`reward`（+N 分）用 `coin`，
+ * 和「完成任务」的 `success` 分开 —— 孩子听得出「分到手了」和「做完了」是两件事。
+ */
+const TOAST_TONE: Record<Toast['kind'], ToneKind | null> = {
+  success: 'success',
+  reward: 'coin',
+  warn: 'fail',
+  info: null,
+}
+
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
   loading: true,
@@ -632,6 +846,7 @@ export const useApp = create<AppState>((set, get) => ({
   tasks: [],
   instances: [],
   ledger: [],
+  harvestLedger: [],
   inventory: [],
   animals: [],
   plots: createInitialFarm().plots,
@@ -643,10 +858,12 @@ export const useApp = create<AppState>((set, get) => ({
   farmEvents: [],
   market: createInitialMarket(PRODUCE_BASE_PRICE),
   balance: 0,
+  harvestBalance: 0,
   todayKey: appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour),
   toasts: [],
   settleFlash: null,
   farmTotals: { harvests: 0, planted: 0, sheared: 0 },
+  quotaCarry: {},
 
   /* ================= 生命周期 ================= */
 
@@ -902,6 +1119,15 @@ export const useApp = create<AppState>((set, get) => ({
     return checkInProgress.find((p) => p.taskId === taskId && p.periodKey === key)?.days ?? []
   },
 
+  /**
+   * 宝贝点了「今天签到」。
+   *
+   * 和普通任务一样分两条路：
+   *  * parentReviewEnabled（默认开）→ 只把今天挂进 `pendingDays`（等爸爸妈妈看）。
+   *    **不发积分、不写签到记录、不计入坚持天数、不触发阶梯奖励** ——
+   *    否则孩子自己点一下就给自己发奖，等于自评自奖。
+   *  * 家长关掉审核 → 直接发放（老行为，方便家长自己试玩）。
+   */
   doCheckIn: async (taskId) => {
     const task = get().tasks.find((t) => t.id === taskId)
     if (!task) return { gained: 0, bonus: 0 }
@@ -909,83 +1135,81 @@ export const useApp = create<AppState>((set, get) => ({
     const today = currentDayKey(settings.dayStartHour)
     const pk = periodKeyFor(task.cycle, Date.now(), settings.dayStartHour)
 
-    let progress = await db.checkInProgress
-      .where('[taskId+periodKey]')
-      .equals([taskId, pk])
-      .first()
+    const progress = await ensureCheckInProgress(taskId, pk)
 
-    if (!progress) {
-      progress = {
-        id: uid('cp'),
-        taskId,
-        periodKey: pk,
-        days: [],
-        claimedTiers: [],
-        updatedAt: Date.now(),
-      }
-    }
     if (progress.days.includes(today)) {
       get().pushToast({ kind: 'info', title: '今天已经签过啦', emoji: '✅' })
       return { gained: 0, bonus: 0 }
     }
+    if ((progress.pendingDays ?? []).includes(today)) {
+      get().pushToast({
+        kind: 'info',
+        title: '今天已经交上去啦',
+        detail: '等爸爸妈妈看一眼',
+        emoji: '📮',
+      })
+      return { gained: 0, bonus: 0 }
+    }
 
-    const gained = Math.max(0, Math.round(task.basePoints))
-    progress.days = [...progress.days, today].sort()
+    if (settings.parentReviewEnabled) {
+      progress.pendingDays = [...(progress.pendingDays ?? []), today].sort()
+      progress.updatedAt = Date.now()
+      await db.checkInProgress.put(progress)
+      get().pushToast({
+        kind: 'success',
+        title: '交上去啦！等爸爸妈妈看一眼',
+        detail: '他们确认后积分就到账咯',
+        emoji: '📮',
+      })
+      await get().refresh()
+      return { gained: 0, bonus: 0 }
+    }
+
+    const r = await grantCheckIn(get, task, progress, today, pk)
+    await get().refresh()
+    return r
+  },
+
+  /**
+   * 家长确认一次签到 —— 发积分 + 计入坚持天数 + 结算已达成的阶梯奖励。
+   *
+   * `periodKey` 必须由调用方带上：日签的周期键每天都会变，
+   * 用「当前时间」重算会定位到今天那一行，昨天挂起的待审就永远没人处理。
+   */
+  approveCheckIn: async (taskId, periodKey, date) => {
+    const task = get().tasks.find((t) => t.id === taskId)
+    if (!task) return 0
+    const progress = await db.checkInProgress
+      .where('[taskId+periodKey]')
+      .equals([taskId, periodKey])
+      .first()
+    if (!progress) return 0
+    if (progress.days.includes(date)) {
+      get().pushToast({ kind: 'info', title: '这天已经确认过了', emoji: '✅' })
+      return 0
+    }
+    if (!(progress.pendingDays ?? []).includes(date)) return 0
+
+    progress.pendingDays = (progress.pendingDays ?? []).filter((d) => d !== date)
+    const r = await grantCheckIn(get, task, progress, date, periodKey)
+    await get().refresh()
+    return r.gained + r.bonus
+  },
+
+  /** 家长打回一次签到：从待审里摘掉，孩子可以重签 */
+  rejectCheckIn: async (taskId, periodKey, date) => {
+    const progress = await db.checkInProgress
+      .where('[taskId+periodKey]')
+      .equals([taskId, periodKey])
+      .first()
+    if (!progress) return
+    const before = progress.pendingDays ?? []
+    if (!before.includes(date)) return
+    progress.pendingDays = before.filter((d) => d !== date)
     progress.updatedAt = Date.now()
     await db.checkInProgress.put(progress)
-
-    const record: CheckInRecord = {
-      id: uid('ci'),
-      taskId,
-      date: today,
-      periodKey: pk,
-      points: gained,
-      createdAt: Date.now(),
-    }
-    await db.checkIns.put(record)
-
-    if (gained > 0) {
-      await postLedger({
-        delta: gained,
-        source: 'checkin',
-        refId: record.id,
-        memo: `签到：${task.title}`,
-      })
-    }
-
-    // 自动结算已达成的阶梯奖励
-    const tiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5)
-    const claimable = claimableTiers(tiers, progress.days.length, progress.claimedTiers)
-    let bonus = 0
-    let tierLabel: string | undefined
-    for (const tier of claimable) {
-      progress.claimedTiers = [...progress.claimedTiers, tier.days]
-      bonus += tier.points
-      tierLabel = tier.label
-      if (tier.points > 0) {
-        await postLedger({
-          delta: tier.points,
-          source: 'checkin_bonus',
-          refId: `${taskId}:${pk}:${tier.days}`,
-          memo: `签到奖励 · ${tier.label}`,
-        })
-      }
-      if (tier.itemId) await addItem(tier.itemId, 1)
-    }
-    if (claimable.length > 0) {
-      progress.claimedTiers = Array.from(new Set(progress.claimedTiers))
-      await db.checkInProgress.put(progress)
-    }
-
-    get().pushToast({
-      kind: 'reward',
-      title: `签到成功 +${gained + bonus} 分`,
-      detail: tierLabel ? `达成「${tierLabel}」！` : `已坚持 ${progress.days.length} 天`,
-      emoji: '📅',
-    })
-
+    get().pushToast({ kind: 'info', title: '已让孩子重新签到', emoji: '🔁' })
     await get().refresh()
-    return { gained, bonus, tierLabel }
   },
 
   claimCheckInTier: async (taskId, days) => {
@@ -1028,22 +1252,46 @@ export const useApp = create<AppState>((set, get) => ({
     if (!task) return 0
     const { settings } = get()
     const pk = periodKeyFor(task.cycle, Date.now(), settings.dayStartHour)
-    const done = await db.taskInstances
-      .where('[taskId+periodKey]')
-      .equals([taskId, pk])
-      .filter((i) => (i.status === 'completed' || i.status === 'failed') && i.settledAt != null)
-      .count()
-    if (done >= (task.checkInTargetCount ?? 1)) {
+    const target = task.checkInTargetCount ?? 1
+    const rows = await db.taskInstances.where('[taskId+periodKey]').equals([taskId, pk]).toArray()
+    const settled = rows.filter(
+      (i) => (i.status === 'completed' || i.status === 'failed') && i.settledAt != null,
+    ).length
+    if (settled >= target) {
       get().pushToast({ kind: 'info', title: '这个周期的目标已经完成啦', emoji: '✅' })
+      return 0
+    }
+    // 待审核的也要占位。否则家长还没确认时孩子连点几下，
+    // 家长那边会冒出一串一模一样的待办 —— 审核一遍等于白审。
+    const pending = rows.filter((i) => i.status === 'submitted').length
+    if (settled + pending >= target) {
+      get().pushToast({
+        kind: 'info',
+        title: '都交上去啦',
+        detail: '等爸爸妈妈确认',
+        emoji: '📮',
+      })
       return 0
     }
 
     const now = Date.now()
+    const day = currentDayKey(settings.dayStartHour)
+    // 同一天不能重复记一次 —— 唯一键是 [taskId+periodKey+date]。
+    // 提前拦是为了给人话提示，而不是抛 ConstraintError 把按钮卡死。
+    if (rows.some((i) => i.date === day)) {
+      get().pushToast({
+        kind: 'info',
+        title: '今天已经记过一次啦',
+        detail: '明天再来吧',
+        emoji: '📅',
+      })
+      return 0
+    }
     const inst: TaskInstance = {
       id: uid('ti'),
       taskId,
       periodKey: pk,
-      date: currentDayKey(settings.dayStartHour),
+      date: day,
       title: task.title,
       category: task.category,
       cycle: task.cycle,
@@ -1061,7 +1309,15 @@ export const useApp = create<AppState>((set, get) => ({
       createdAt: now,
       updatedAt: now,
     }
-    await db.taskInstances.put(inst)
+    try {
+      await db.taskInstances.put(inst)
+    } catch {
+      // 并发窗口的兜底：另一路刚写进去了。
+      // 以前这里的异常会一路抛到 handleOnce，`setBusy(false)` 永远执行不到，
+      // 按钮就永远停在「记录中…」——孩子只能杀掉 App。
+      get().pushToast({ kind: 'info', title: '刚刚已经记过一次啦', emoji: '✅' })
+      return 0
+    }
     await get().refresh()
     return get().submitInstance(inst.id, actualMinutes, quality)
   },
@@ -1116,7 +1372,7 @@ export const useApp = create<AppState>((set, get) => ({
     return true
   },
 
-  harvest: async (plotIndex) => {
+  harvest: async (plotIndex, mode = 'store') => {
     const { plots, settings } = get()
     const plot = plots.find((p) => p.index === plotIndex)
     if (!plot?.crop) return 0
@@ -1128,7 +1384,7 @@ export const useApp = create<AppState>((set, get) => ({
 
     // ---- 随机事件 + 周末/节假日加成 ----
     // 事件在「收获」这一刻结算，而不是后台悄悄扣 ——
-    // 孩子必须亲眼看到损失，才学得到"务农有风险"。
+    // 孩子必须亲眼看到损失，才学得到"务农风险"。
     const roll = rollHarvestEvent(
       plot,
       def,
@@ -1141,24 +1397,26 @@ export const useApp = create<AppState>((set, get) => ({
     // 孩子会自己发现"周末收成特别好"，这正是我们要的效果。
     const bonus = seasonalBonus(now)
 
-    const base = def.harvestPoints
-    const raw = base * roll.multiplier * bonus
-    const earned = roll.wipedOut ? 0 : Math.max(1, Math.round(raw))
+    // ---- 产量：灾害倍率作用在**数量**上 ----
+    //
+    // 为什么单次产量是 4 而不是 1：倍率区间是 0.45~1.2，每次只产 1 个的话
+    // `round(1 × 0.7) = 1` —— 灾害就完全看不见了。4 个才表达得出 2/3/4/5。
+    // 放大单次产量**不改变经济数值**（产量 × 单价 恒定），只改变颗粒度。
+    const perHarvest = def.produceAmount ?? 1
+    const amount = roll.wipedOut
+      ? 0
+      : Math.max(0, Math.round(perHarvest * roll.multiplier * bonus))
 
-    const remaining = def.regrowCount - plot.crop.harvestedCount
-    const isPerennial = def.kind === 'perennial'
-
-    if (earned > 0) {
-      await postLedger({
-        delta: earned,
-        source: 'farm_harvest',
-        refId: `plot:${plotIndex}`,
-        memo: `收获 ${def.name}${remaining > 1 ? `（还能再收 ${remaining - 1} 次）` : ''}`,
-      })
+    // ---- 产出进背包。**钱不在这一步结算** ----
+    // 「直接卖」和「存储」的差别只在于**什么时候定价**：
+    //   sell  → 立刻按当日市价结算
+    //   store → 留在背包，之后按卖出日市价结算
+    if (amount > 0) {
+      await addItem(def.produceItemId, amount)
     }
 
-    // 道具掉落：歉收/绝收时不给掉落（损失要真实）
-    if (earned > 0 && def.harvestItemId) {
+    // 收藏品掉落：歉收/绝收时不给掉落（损失要真实）
+    if (amount > 0 && def.harvestItemId) {
       await addItem(def.harvestItemId, def.harvestItemCount ?? 1)
     }
 
@@ -1166,6 +1424,8 @@ export const useApp = create<AppState>((set, get) => ({
     if (roll.event) {
       await logFarmEvents([roll.event])
     }
+
+    const isPerennial = def.kind === 'perennial'
 
     const nextPlots = plots.map((p) => {
       if (p.index !== plotIndex || !p.crop) return p
@@ -1208,8 +1468,46 @@ export const useApp = create<AppState>((set, get) => ({
         },
       }
     })
+    // ---- 额度结转：作物离场时，把这一轮没用完的额度搬走 ----
+    //
+    // 闸门是挂在**活着的**标的上的（`capTargetsFor` 只看 plots / animals）。
+    // 一次性作物收完地块就变空地，标的消失，剩下那点额度会跟着地块一起蒸发 ——
+    // 背包里刚收的这批产出就再也卖不掉了，而「收进背包」按钮上明写着
+    // 「先存着，等市场上价格好的时候自己卖」。所以必须把它结转出去。
+    //
+    // 只在**作物真的离开地块**时结转：多年生收满次数后还留在地里，
+    // 它那个标的还在，额度不用搬。
+    const r = settings.profitRatio ?? DEFAULT_PROFIT_RATIO
+    const cleared = !nextPlots.find((p) => p.index === plotIndex)?.crop
+    let nextCarry = get().quotaCarry
+    if (cleared) {
+      const leftover = leftoverCapFor(plot.crop.cropId, plot.crop.earnedSoFar ?? 0, r)
+      if (leftover > 0) {
+        nextCarry = {
+          ...nextCarry,
+          [def.produceItemId]: (nextCarry[def.produceItemId] ?? 0) + leftover,
+        }
+        await saveQuotaCarry(nextCarry)
+      }
+    }
+
+    // ⚠️ `nextPlots` 必须**写回 store**，不能只写 DB。
+    //
+    // 只写 DB 的话，下面 `sellProduce` 读到的是「作物还在」的旧快照，
+    // 它会拿这份旧快照再调一次 `savePlots`，把刚才清干净的地块**覆盖回去** ——
+    // 一次性作物的地永远收不干净，`harvestedCount` 也不前进，
+    // 同一棵能反复收（2026-09-15 探针实测：收完仍是
+    // `{cropId:'radish', harvestedCount:0}`）。
+    set({ plots: nextPlots, quotaCarry: nextCarry })
     await savePlots(nextPlots)
     await get().bumpFarmTotals({ harvests: get().farmTotals.harvests + 1 })
+
+    // ---- 「直接卖」：收获完立刻走一次卖出，用当日市价 ----
+    // 走 sellProduce 是为了共用同一套闸门与卖压逻辑，不另开一条结算通道。
+    let earned = 0
+    if (mode === 'sell' && amount > 0) {
+      earned = await get().sellProduce(def.produceItemId, amount, { quiet: true })
+    }
 
     // ---- 反馈 ----
     if (roll.event) {
@@ -1222,7 +1520,7 @@ export const useApp = create<AppState>((set, get) => ({
       })
       get().pushToast({
         kind: roll.wipedOut ? 'warn' : roll.multiplier > 1.1 ? 'reward' : 'info',
-        title: roll.wipedOut ? '这次没收到东西…' : `收获 ${def.name} +${earned} 分`,
+        title: roll.wipedOut ? '这次没收到东西…' : `收获 ${def.name} +${amount} 个`,
         detail: roll.event.message,
         emoji: roll.event.emoji,
       })
@@ -1232,7 +1530,11 @@ export const useApp = create<AppState>((set, get) => ({
       })
       get().pushToast({
         kind: 'reward',
-        title: `收获 ${def.name}，+${earned} 分`,
+        title: `收获 ${def.name} +${amount} 个`,
+        detail:
+          mode === 'sell'
+            ? `当场卖掉，+${earned} 丰收币`
+            : '已经放进背包，去市场卖个好价钱吧',
         emoji: def.emoji,
       })
     }
@@ -1467,47 +1769,120 @@ export const useApp = create<AppState>((set, get) => ({
    * 这是刻意设计的市场教育 —— 一次全卖光，单价就下来了，
    * 孩子会自己总结出「分批卖更划算」。
    */
-  sellProduce: async (itemId, count) => {
+  sellProduce: async (itemId, count, opts) => {
     if (!MARKET_GOODS.includes(itemId) || count <= 0) return 0
 
-    const { market } = get()
+    const { market, plots, animals, settings } = get()
     const current = priceOf(market, itemId)
     if (current == null) return 0
 
-    const ok = await consumeItem(itemId, count)
+    const name = ITEM_BY_ID.get(itemId)?.name ?? itemId
+
+    // ---- 闸门：这一轮还能卖多少 ----
+    // 「直接卖」和「存储后市场卖」走的是**同一个闸门**，
+    // 所以「先存起来」不能绕过上限。
+    const r = settings.profitRatio ?? DEFAULT_PROFIT_RATIO
+    const carry = get().quotaCarry[itemId] ?? 0
+    const targets = capTargetsFor(itemId, plots, animals, r)
+    const liveRemaining = targets.reduce((s, t) => s + t.remaining, 0)
+    // 活着的标的 + 已经从收掉的地块上结转过来的，一起算额度
+    const remaining = liveRemaining + carry
+
+    if (remaining <= 0) {
+      if (!opts?.quiet) {
+        get().pushToast({
+          kind: 'warn',
+          title: '这一轮已经卖满啦',
+          detail: '再卖就不给钱了。换点别的种吧 —— 种子随时都能买',
+          emoji: '🚧',
+        })
+      }
+      return 0
+    }
+
+    // ⚠️ **先按背包里实际有的夹一次，再算闸门。**
+    //
+    // UI 传的是「全卖」（99 / Infinity 之类）。如果直接把它交给 maxSellable，
+    // 它会按 99 个去算能卖几个（比如 11 个），而背包只有 4 个 →
+    // `consumeItem` 失败 → **整笔卖不出去，连那 4 个也卖不掉**。
+    // 2026-09-15 由 E2E 第 4 层抓出来（`e2e-gameplay.mjs` 第 7 段）。
+    //
+    // 注意要从 **DB** 读，不能读 `get().inventory`：
+    // `addItem` 只写 Dexie 不写 store，`harvest()` 里刚收进来的产出
+    // 在 store 快照里还是旧的，读快照会得到 0。
+    const heldRow = await db.inventory.get(itemId)
+    const want = Math.min(count, heldRow?.count ?? 0)
+    if (want <= 0) {
+      if (!opts?.quiet) {
+        get().pushToast({ kind: 'warn', title: '背包里没有这个', emoji: '📦' })
+      }
+      return 0
+    }
+
+    // 在闸门内最多能卖几个。**不是把多出来的白扔掉** ——
+    // 卖不掉的留在背包里，等下一轮或者别的对象腾出额度。
+    const { count: sellCount, total } = maxSellable(want, remaining, (n) =>
+      sellQuote(market, itemId, n),
+    )
+    if (sellCount <= 0 || total <= 0) return 0
+
+    const ok = await consumeItem(itemId, sellCount)
     if (!ok) {
       get().pushToast({ kind: 'warn', title: '背包里没有这么多', emoji: '📦' })
       return 0
     }
 
-    const total = sellQuote(market, itemId, count)
-    if (total <= 0) return 0
-
-    const name = ITEM_BY_ID.get(itemId)?.name ?? itemId
-    await postLedger({
+    // 市场是农场产出的唯一出口，结的是**丰收币**，不是积分。
+    await postHarvest({
       delta: total,
       source: 'farm_market',
       refId: itemId,
-      memo: `市场卖出 ${count} 个${name}（单价 ${current}）`,
+      memo: `市场卖出 ${sellCount} 个${name}（单价 ${current}）`,
     })
 
+    // ---- 扣闸门 ----
+    const deducted = applyCapDeduction(targets, total, plots, animals)
+    await savePlots(deducted.plots)
+
+    // 活着的标的先扣，**没扣完的从结转额度里扣**。
+    // 不扣结转的话，一笔卖出会被记两次账：作物已经离场、targets 为空，
+    // 于是「结转过来的额度」永远不减，同一批产出能反复卖。
+    const fromLive = Math.min(total, liveRemaining)
+    const fromCarry = Math.max(0, total - fromLive)
+    if (fromCarry > 0) {
+      const nextCarry = { ...get().quotaCarry }
+      const left = (nextCarry[itemId] ?? 0) - fromCarry
+      if (left > 1e-9) nextCarry[itemId] = left
+      else delete nextCarry[itemId]
+      await saveQuotaCarry(nextCarry)
+      set({ quotaCarry: nextCarry })
+    }
+    const changedAnimals = deducted.animals.filter(
+      (a, i) => a.earnedSoFar !== animals[i]?.earnedSoFar,
+    )
+    if (changedAnimals.length) await db.animals.bulkPut(changedAnimals)
+
     // 更新行情（价格被卖压打下来）
-    const nextMarket = applySell(market, itemId, count)
+    const nextMarket = applySell(market, itemId, sellCount)
     await saveMarket(nextMarket)
     set({ market: nextMarket })
 
     const newPrice = priceOf(nextMarket, itemId) ?? current
     const dropPct = Math.round(((newPrice - current) / (current || 1)) * 100)
 
-    get().pushToast({
-      kind: 'reward',
-      title: `卖出 ${count} 个${name}，+${total} 分`,
-      detail:
-        dropPct < -1
-          ? `卖得多了，价格跌到 ${newPrice} 分（${dropPct}%）`
-          : `当前单价 ${current} 分`,
-      emoji: '🪙',
-    })
+    if (!opts?.quiet) {
+      get().pushToast({
+        kind: 'reward',
+        title: `卖出 ${sellCount} 个${name}，+${total} 丰收币`,
+        detail:
+          sellCount < want
+            ? `这一轮只剩 ${Math.round(remaining)} 丰收币的额度了，先卖了 ${sellCount} 个`
+            : dropPct < -1
+              ? `卖得多了，价格跌到 ${newPrice} 丰收币（${dropPct}%）`
+              : `当前单价 ${current} 丰收币`,
+        emoji: '🌾',
+      })
+    }
     await get().refresh()
     return total
   },
@@ -1533,12 +1908,14 @@ export const useApp = create<AppState>((set, get) => ({
     await get().refresh()
   },
 
-  archiveRedeemItem: async (id) => {
-    await db.redeemItems.update(id, { archived: true, updatedAt: Date.now() })
+  setRedeemItemArchived: async (id, archived) => {
+    await db.redeemItems.update(id, { archived, updatedAt: Date.now() })
     await get().refresh()
   },
 
   deleteRedeemItem: async (id) => {
+    // 只删兑换品本身。兑换记录（redeemRecords）是独立的表，且自带 name/emoji/cost
+    // 快照 —— 所以已经换过的历史不会因为删掉商品而变成空白，待兑现的愿望也还在。
     await db.redeemItems.delete(id)
     await get().refresh()
   },
@@ -1595,13 +1972,13 @@ export const useApp = create<AppState>((set, get) => ({
     let balanceAfter = balance - item.cost
 
     await db.transaction('rw', [db.ledger, db.redeemRecords], async () => {
-      const last = await db.ledger.orderBy('createdAt').last()
-      const cur = last?.balanceAfter ?? 0
-      if (cur < item.cost) {
+      // 余额以「delta 之和」为准，时间戳严格递增 —— 见 db.ts 的 ledgerTip
+      const tip = await ledgerTip()
+      if (tip.balance < item.cost) {
         ok = false
         return
       }
-      balanceAfter = cur - item.cost
+      balanceAfter = tip.balance - item.cost
       await db.ledger.put({
         id: `lg_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
         delta: -item.cost,
@@ -1609,7 +1986,7 @@ export const useApp = create<AppState>((set, get) => ({
         source: 'redeem',
         refId: item.id,
         memo: `兑换：${item.name}`,
-        createdAt: now,
+        createdAt: tip.createdAt,
       })
       await db.redeemRecords.put({
         id: uid('rr'),
@@ -1663,6 +2040,7 @@ export const useApp = create<AppState>((set, get) => ({
       tasks,
       taskInstances,
       ledger,
+      harvestLedger,
       inventory,
       animals,
       checkIns,
@@ -1678,6 +2056,7 @@ export const useApp = create<AppState>((set, get) => ({
       db.tasks.toArray(),
       db.taskInstances.toArray(),
       db.ledger.toArray(),
+      db.harvestLedger.toArray(),
       db.inventory.toArray(),
       db.animals.toArray(),
       db.checkIns.toArray(),
@@ -1698,6 +2077,7 @@ export const useApp = create<AppState>((set, get) => ({
         tasks,
         taskInstances,
         ledger,
+        harvestLedger,
         inventory,
         animals,
         checkIns,
@@ -1741,6 +2121,8 @@ export const useApp = create<AppState>((set, get) => ({
         tasks: pickArray<Task>(d.tasks) ?? [],
         taskInstances: pickArray<TaskInstance>(d.taskInstances) ?? [],
         ledger: pickArray<LedgerEntry>(d.ledger) ?? [],
+        // 老备份里没有这个字段，`pickArray(undefined)` 返回 null，落到空数组。
+        harvestLedger: pickArray<HarvestEntry>(d.harvestLedger) ?? [],
         inventory: pickArray<InventorySlot>(d.inventory) ?? [],
         animals: pickArray<Animal>(d.animals) ?? [],
         checkIns: pickArray<CheckInRecord>(d.checkIns) ?? [],
@@ -1764,6 +2146,7 @@ export const useApp = create<AppState>((set, get) => ({
           db.redeemItems,
           db.redeemRecords,
           db.farmEvents,
+          db.harvestLedger,
           db.meta,
         ],
         async () => {
@@ -1771,6 +2154,7 @@ export const useApp = create<AppState>((set, get) => ({
             db.tasks.clear(),
             db.taskInstances.clear(),
             db.ledger.clear(),
+            db.harvestLedger.clear(),
             db.inventory.clear(),
             db.animals.clear(),
             db.checkIns.clear(),
@@ -1783,6 +2167,7 @@ export const useApp = create<AppState>((set, get) => ({
           await db.tasks.bulkPut(rows.tasks)
           await db.taskInstances.bulkPut(rows.taskInstances)
           await db.ledger.bulkPut(rows.ledger)
+          if (rows.harvestLedger.length > 0) await db.harvestLedger.bulkPut(rows.harvestLedger)
           await db.inventory.bulkPut(rows.inventory)
           await db.animals.bulkPut(rows.animals)
           await db.checkIns.bulkPut(rows.checkIns)
@@ -1841,6 +2226,16 @@ export const useApp = create<AppState>((set, get) => ({
     const id = uid('ts')
     set({ toasts: [...get().toasts, { ...t, id }] })
     setTimeout(() => get().dismissToast(id), 3400)
+    // 音效 / 震动**统一挂在这里**，不散到几十个调用点去加。
+    // 理由：toast 是「发生了一件值得告诉孩子的事」的唯一收口 ——
+    // 任务结算、签到、农场收获、兑换、家长操作全都会经过它。
+    // 散着加必然漏掉几个，而且以后新增事件又会忘。
+    const s = get().settings
+    const tone = TOAST_TONE[t.kind]
+    if (tone) playTone(s.soundEnabled, tone)
+    // `info` 是纯告知（「已下架」「已经交上去啦」），不出声也不震 ——
+    // 家长连着点几下不该被震到手麻。
+    if (t.kind !== 'info') void hapticLight(s.hapticsEnabled)
   },
 
   dismissToast: (id) => {
@@ -1862,12 +2257,22 @@ export const useApp = create<AppState>((set, get) => ({
 
 /** 今日实例：每日任务 + 今天创建的单次任务 */
 export function selectTodayInstances(s: AppState): TaskInstance[] {
+  // 排序：① 待完成在前 ② 同一组里按「任务定义」的顺序（家长排的顺序）
+  // ③ 最后用实例 id 兜底，保证结果稳定。
+  //
+  // 第 ② 步以前是按实例的 createdAt 排的，但种子实例是同一毫秒批量
+  // 写进去的，createdAt 全一样 → 排序退化成「按随机主键」，于是每次
+  // 全新安装看到的任务先后都不一样（实测跑三次三个顺序）。
+  const orderOf = new Map(s.tasks.map((t, i) => [t.id, i]))
   return s.instances
     .filter((i) => i.date === s.todayKey && i.cycle !== 'weekly' && i.cycle !== 'monthly' && i.cycle !== 'yearly')
     .sort((a, b) => {
       const rank = (i: TaskInstance) => (i.status === 'pending' ? 0 : 1)
       if (rank(a) !== rank(b)) return rank(a) - rank(b)
-      return a.createdAt - b.createdAt
+      const oa = orderOf.get(a.taskId) ?? Number.MAX_SAFE_INTEGER
+      const ob = orderOf.get(b.taskId) ?? Number.MAX_SAFE_INTEGER
+      if (oa !== ob) return oa - ob
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
     })
 }
 
@@ -1930,6 +2335,31 @@ export function selectPendingReview(s: AppState): TaskInstance[] {
     .sort((a, b) => (a.submittedAt ?? a.updatedAt) - (b.submittedAt ?? b.updatedAt))
 }
 
+/**
+ * 待家长审核的签到。
+ *
+ * 签到没有任务实例 —— `taskInstances` 上有 `&[taskId+periodKey]` 唯一索引，
+ * 一个周期只能有一行，装不下「一个周期内多天」。所以待审队列直接从
+ * `CheckInProgress.pendingDays` 派生。
+ *
+ * 按日期升序排：先处理拖得最久的那一天。
+ */
+export function selectPendingCheckIns(
+  s: Pick<AppState, 'checkInProgress' | 'tasks'>,
+): PendingCheckIn[] {
+  const titleOf = new Map(s.tasks.map((t) => [t.id, t.title]))
+  const out: PendingCheckIn[] = []
+  for (const p of s.checkInProgress) {
+    const title = titleOf.get(p.taskId)
+    // 任务被删掉了就丢弃这条待审，否则审核面板会卡在一个点不开的条目上
+    if (!title) continue
+    for (const date of p.pendingDays ?? []) {
+      out.push({ taskId: p.taskId, title, date, periodKey: p.periodKey })
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date))
+}
+
 /** 需要家长处理的兑换（已扣分但还没兑现） */
 export function selectPendingRedeems(s: AppState): RedeemRecord[] {
   return s.redeemRecords
@@ -1975,6 +2405,12 @@ declare global {
       catalog: {
         cropSeedCost: (cropId: string) => number | undefined
         animalCost: (animalId: string) => number | undefined
+        /**
+         * 闸门：这个产出物现在还能卖出多少丰收币。
+         * 给 E2E 对账用 —— 断言「界面上显示的数 == 领域函数算出来的数」，
+         * 比在脚本里手算「成本 × 1.6 × 地块数」稳得多。
+         */
+        remainingCap: (itemId: string) => number
       }
     }
   }
@@ -1989,6 +2425,16 @@ if (typeof window !== 'undefined') {
     catalog: {
       cropSeedCost: (cropId) => CROPS.find((c) => c.id === cropId)?.seedCost,
       animalCost: (animalId) => ANIMALS.find((a) => a.id === animalId)?.cost,
+      remainingCap: (itemId) => {
+        const s = useApp.getState()
+        return remainingCapFor(
+          itemId,
+          s.plots,
+          s.animals,
+          s.settings.profitRatio ?? DEFAULT_PROFIT_RATIO,
+          s.quotaCarry[itemId] ?? 0,
+        )
+      },
     },
   }
 }
@@ -2037,6 +2483,26 @@ export function useFarmLevel(): ReturnType<typeof selectFarmLevel> {
 /** 待家长审核的任务 */
 export function usePendingReview(): TaskInstance[] {
   return useApp(useShallow((s) => selectPendingReview(s)))
+}
+
+/**
+ * 待家长审核的签到。
+ *
+ * ⚠️ 这里**不能**用 `useShallow(selectPendingCheckIns)`。
+ * `selectPendingCheckIns` 每次调用都 new 一批对象出来，而 useShallow 是拿
+ * `Object.is` 逐个比数组元素的 —— 新建的对象永远判不等，于是快照每次都在变，
+ * `useSyncExternalStore` 判定"又变了"→ 重渲染 → 再算一次又变 → **无限循环**
+ * （现场表现就是 React #185 / Maximum update depth exceeded）。
+ *
+ * 正确做法：只订阅两个稳定的原始切片，再用 useMemo 派生。
+ */
+export function usePendingCheckIns(): PendingCheckIn[] {
+  const checkInProgress = useApp((s) => s.checkInProgress)
+  const tasks = useApp((s) => s.tasks)
+  return useMemo(
+    () => selectPendingCheckIns({ checkInProgress, tasks }),
+    [checkInProgress, tasks],
+  )
 }
 
 /** 待家长兑现的兑换记录 */

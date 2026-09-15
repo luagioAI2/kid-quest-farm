@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
+import { Portal } from '@/components/Portal'
 import type { TaskCategory, TaskCycle, QualityGrade } from '@/domain/types'
 import type { SettleParams } from '@/domain/settlement'
 
@@ -83,6 +84,53 @@ export const CATEGORY: Record<TaskCategory, CatStyle> = {
   },
 }
 
+/**
+ * 兜底分类样式：**分类认不出来时用它，绝不返回 `undefined`**。
+ *
+ * 为什么必须有：`Task.category` 在**类型**上是联合类型，运行时却不是 ——
+ * 导入备份（`importBackup` 只校验结构，不逐个校验任务的 category）、
+ * 或者更老版本留下的数据，都可能带着一个现在已经不存在的分类。
+ * 那时 `CATEGORY[unknown]` 是 `undefined`，紧接着的 `cat.solid` 直接抛
+ * TypeError → ErrorBoundary 把**整个任务页**换成崩溃页。
+ * 一个字段不认识，代价是整页打不开。
+ *
+ * 2026-09-15：`ReviewSheet` 里已经有人手写过 `cat ? … : …` 兜底，
+ * 说明这个坑踩过。这里把它收成统一入口，别处不用再各写各的。
+ *
+ * ⚠️ 颜色只用 `theme.css` 里真实存在的档位：`ink` 只有
+ * 100/200/300/500/600/700/900，**没有 400**（写 `bg-ink-400` 会被静默丢弃、
+ * 一个字节 CSS 都不生成）。
+ */
+export const FALLBACK_CATEGORY: CatStyle = {
+  label: '其他',
+  emoji: '📌',
+  solid: 'bg-ink-500',
+  soft: 'bg-ink-100',
+  ink: 'text-ink-600',
+  border: 'border-ink-300',
+  ring: 'ring-ink-300',
+}
+
+/**
+ * 取分类样式。**渲染一律走这里，不要直接写 `CATEGORY[x]`。**
+ *
+ * 参数故意收宽到 `string`：调用方拿到的可能是从 IndexedDB / 备份里读出来的
+ * 任意字符串，类型系统在这里帮不上忙，必须自己兜。
+ *
+ * ⚠️ 用 `Map` 而不是 `CATEGORY[x] ?? 兜底`。
+ * 普通对象**会从原型链上取值**：`CATEGORY['constructor']` 拿到的是 `Object`
+ * 构造函数、`CATEGORY['__proto__']` 拿到的是原型对象 ——
+ * 两者都**不是 undefined**，于是 `?? 兜底` 不会触发，
+ * 结果 `cat.label` / `cat.emoji` 全是 undefined，渲染出一片空白。
+ * `Map` 没有原型链可查，脏字符串一律干净地 miss。
+ * （2026-09-15 由 `ui.test.ts` 里那组「骗过朴素实现」的输入当场抓出来的。）
+ */
+const CATEGORY_BY_KEY = new Map<string, CatStyle>(Object.entries(CATEGORY))
+
+export function categoryOf(category: TaskCategory | string): CatStyle {
+  return CATEGORY_BY_KEY.get(category) ?? FALLBACK_CATEGORY
+}
+
 export const CATEGORY_ORDER: TaskCategory[] = [
   'study',
   'chore',
@@ -153,15 +201,15 @@ export function Btn({
   ariaLabel?: string
 }) {
   const tones: Record<string, string> = {
-    sun: 'bg-sun-400 text-ink-900 border-sun-600 shadow-[0_4px_0_0_var(--color-sun-600)]',
-    grass: 'bg-grass-400 text-white border-grass-600 shadow-[0_4px_0_0_var(--color-grass-600)]',
-    sky: 'bg-sky-400 text-white border-sky-500 shadow-[0_4px_0_0_var(--color-sky-500)]',
-    berry: 'bg-berry-400 text-white border-berry-500 shadow-[0_4px_0_0_var(--color-berry-500)]',
-    grape: 'bg-grape-400 text-white border-grape-500 shadow-[0_4px_0_0_var(--color-grape-500)]',
+    sun: 'bg-sun-400 text-ink-900 border-sun-600',
+    grass: 'bg-grass-400 text-white border-grass-600',
+    sky: 'bg-sky-400 text-white border-sky-500',
+    berry: 'bg-berry-400 text-white border-berry-500',
+    grape: 'bg-grape-400 text-white border-grape-500',
     tangerine:
-      'bg-tangerine-400 text-white border-tangerine-500 shadow-[0_4px_0_0_var(--color-tangerine-500)]',
-    ink: 'bg-ink-700 text-white border-ink-900 shadow-[0_4px_0_0_var(--color-ink-900)]',
-    white: 'bg-white text-ink-900 border-ink-100 shadow-[0_4px_0_0_var(--color-ink-100)]',
+      'bg-tangerine-400 text-white border-tangerine-500',
+    ink: 'bg-ink-700 text-white border-ink-900',
+    white: 'bg-white text-ink-900 border-ink-100',
   }
   const sizes: Record<BtnSize, string> = {
     sm: 'min-h-[44px] px-3 text-sm',
@@ -176,7 +224,7 @@ export function Btn({
       disabled={disabled}
       onClick={onClick}
       className={clsx(
-        'btn-3d active:btn-3d-press inline-flex items-center justify-center gap-1.5 border-2',
+        'btn active:btn-press inline-flex items-center justify-center gap-1.5 border',
         tones[tone],
         sizes[size],
         full && 'w-full',
@@ -212,17 +260,27 @@ export function Sheet({
   }, [open, onClose])
 
   if (!open) return null
+  // ⚠️ 必须 Portal 到 body。App 外壳的 <main className="anim-fade-in">
+  // 因为 opacity 动画成了层叠上下文，弹层被关在里面就永远压不过底部导航
+  // —— 底部按钮会被导航整个盖掉，孩子点不到。详见 components/Portal.tsx。
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
-      <button
-        aria-label="关闭"
-        onClick={onClose}
-        className="anim-fade-in absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
-      />
-      <div className="anim-sheet-up pb-safe relative max-h-[92vh] w-full max-w-[430px] overflow-y-auto overscroll-contain rounded-t-[2rem] border-t-[3px] border-ink-900/10 bg-paper">
-        {children}
+    <Portal>
+      <div
+        className="fixed inset-0 z-50 flex items-end justify-center"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+      >
+        <button
+          aria-label="关闭"
+          onClick={onClose}
+          className="anim-fade-in absolute inset-0 bg-ink-900/35 backdrop-blur-[2px]"
+        />
+        <div className="anim-sheet-up pb-safe relative max-h-[92vh] w-full max-w-[430px] overflow-y-auto overscroll-contain rounded-t-2xl bg-paper shadow-float">
+          {children}
+        </div>
       </div>
-    </div>
+    </Portal>
   )
 }
 
@@ -254,7 +312,7 @@ export function SheetHead({
         <button
           onClick={onClose}
           aria-label="关闭"
-          className="btn-3d active:btn-3d-press flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-ink-100 bg-white text-lg shadow-[0_3px_0_0_var(--color-ink-100)]"
+          className="btn active:btn-press flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-ink-100 bg-white text-lg"
         >
           ✕
         </button>
@@ -347,7 +405,7 @@ export function EmptyHint({
   detail?: string
 }) {
   return (
-    <div className="card-paper flex items-center gap-3 p-4">
+    <div className="surface-paper flex items-center gap-3 p-4">
       <span className="anim-float text-3xl">{emoji}</span>
       <div>
         <p className="font-display text-sm font-extrabold text-ink-900">{title}</p>

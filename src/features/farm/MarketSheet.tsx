@@ -55,7 +55,7 @@ export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => v
       headerRight={<CoinPill amount={balance} />}
     >
       {/* ---- 大盘情绪 ---- */}
-      <div className="card-paper mb-3 flex items-center gap-3 p-3">
+      <div className="surface-paper mb-3 flex items-center gap-3 p-3">
         <span className="text-3xl">{indexDelta >= 0 ? '📈' : '📉'}</span>
         <div className="flex-1">
           <p className="font-display text-base font-extrabold text-ink-900">
@@ -86,7 +86,7 @@ export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => v
       </div>
 
       {totalValue > 0 && (
-        <div className="mb-3 rounded-2xl border-[3px] border-dashed border-sun-400/50 bg-sun-50 px-4 py-2 text-center">
+        <div className="mb-3 rounded-2xl border border-dashed border-sun-400/50 bg-sun-50 px-4 py-2 text-center">
           <p className="text-sm text-ink-700">
             背包里的产出大约值{' '}
             <span className="tnum font-display text-lg font-extrabold text-ink-900">
@@ -99,7 +99,7 @@ export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => v
 
       {/* ---- 商品列表 ---- */}
       {rows.every((r) => r.count === 0) ? (
-        <div className="card-cartoon flex flex-col items-center gap-2 px-6 py-10 text-center">
+        <div className="surface flex flex-col items-center gap-2 px-6 py-10 text-center">
           <span className="text-6xl anim-float">🧺</span>
           <p className="font-display text-lg font-extrabold text-ink-900">背包还是空的</p>
           <p className="text-sm text-ink-500">
@@ -177,9 +177,9 @@ function MarketRow({
   }
 
   return (
-    <li className="card-cartoon overflow-hidden">
+    <li className="surface overflow-hidden">
       <button type="button" onClick={onToggle} className="flex w-full items-center gap-3 p-3 text-left">
-        <div className="grid size-14 shrink-0 place-items-center rounded-2xl border-[3px] border-ink-900/10 bg-sun-50 text-2xl">
+        <div className="grid size-14 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-sun-50 text-2xl">
           {emoji}
         </div>
 
@@ -235,7 +235,7 @@ function MarketRow({
               type="button"
               disabled={count <= 0 || busy}
               onClick={() => void doSell(1)}
-              className="btn-3d min-h-[46px] flex-1 rounded-2xl border-[3px] border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-3d-press disabled:opacity-40"
+              className="btn min-h-[46px] flex-1 rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
             >
               卖 1 个 +{Math.round(unit)}
             </button>
@@ -243,7 +243,7 @@ function MarketRow({
               type="button"
               disabled={count < 5 || busy}
               onClick={() => void doSell(5)}
-              className="btn-3d min-h-[46px] flex-1 rounded-2xl border-[3px] border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-3d-press disabled:opacity-40"
+              className="btn min-h-[46px] flex-1 rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
             >
               卖 5 个 +{Math.round(quoteFor(itemId, 5))}
             </button>
@@ -251,7 +251,7 @@ function MarketRow({
               type="button"
               disabled={count <= 0 || busy}
               onClick={() => void doSell(count)}
-              className="btn-3d min-h-[46px] flex-[1.4] rounded-2xl border-[3px] border-sun-500/40 bg-gradient-to-b from-sun-300 to-sun-500 font-display font-extrabold text-ink-900 active:btn-3d-press disabled:opacity-40"
+              className="btn min-h-[46px] flex-[1.4] rounded-2xl border border-sun-500/40 bg-gradient-to-b from-sun-300 to-sun-500 font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
             >
               全卖 {count} 个 +{Math.round(sellAll)}
             </button>
@@ -287,7 +287,7 @@ function PriceChart({
 }) {
   if (series.length < 2) {
     return (
-      <div className="grid h-24 place-items-center rounded-2xl border-[3px] border-dashed border-ink-900/10 text-xs text-ink-500">
+      <div className="grid h-24 place-items-center rounded-2xl border border-dashed border-ink-900/10 text-xs text-ink-500">
         明天开始就能看到价格走势啦
       </div>
     )
@@ -321,7 +321,7 @@ function PriceChart({
         <span className="text-[11px] text-ink-500">上限 {ceiling.toFixed(0)} / 下限 {floor.toFixed(0)}</span>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl border-[3px] border-ink-900/10 bg-white">
+      <div className="relative overflow-hidden rounded-2xl border border-ink-900/10 bg-white">
         {/* 上限线 */}
         <div
           className="absolute inset-x-0 border-t-2 border-dashed border-berry-300"

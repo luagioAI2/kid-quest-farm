@@ -34,7 +34,7 @@ export function FarmLog({ open, onClose }: { open: boolean; onClose: () => void 
   return (
     <BottomSheet open={open} onClose={onClose} emoji="📖" title="农场日志">
       {farmEvents.length === 0 ? (
-        <div className="card-cartoon mb-4 flex flex-col items-center gap-2 px-6 py-10 text-center">
+        <div className="surface mb-4 flex flex-col items-center gap-2 px-6 py-10 text-center">
           <span className="text-6xl anim-float">🌤️</span>
           <p className="font-display text-lg font-extrabold text-ink-900">农场一切正常</p>
           <p className="text-sm text-ink-500">
@@ -47,7 +47,7 @@ export function FarmLog({ open, onClose }: { open: boolean; onClose: () => void 
           {farmEvents.map((e) => {
             const style = KIND_STYLE[e.kind] ?? { label: '事件', tone: 'bg-ink-100' }
             return (
-              <li key={e.id} className="card-cartoon flex items-start gap-3 p-3">
+              <li key={e.id} className="surface flex items-start gap-3 p-3">
                 <span
                   className={`grid size-11 shrink-0 place-items-center rounded-2xl text-xl ${style.tone}`}
                 >

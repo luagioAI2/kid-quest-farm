@@ -98,14 +98,42 @@ const BAD_EVENTS: Array<{ kind: FarmEvent['kind']; msg: string; emoji: string }>
 ]
 
 /**
- * 结算一次收获的随机事件。
+ * 产量档位表（2026-09-15 重写，用户锁定口径）。
  *
- * @param plot      当前地块
- * @param crop      作物定义
- * @param now       当前时间戳
- * @param enabled   farmEventsEnabled，关掉就是风调雨顺
- * @param salt      额外盐值（比如收获次数），保证同一块地多次收获结果不同
+ * **两处关键改动，改回去会直接退回「恒定 1.6 倍」那个 bug：**
+ *
+ * 1. **中性档从 1.00 降到 0.92。**
+ *    基准单价 = `上限回收 ÷ 总产出量`（按最高产量算），所以
+ *    `产量 100% × 基准价` **正好等于上限回收** —— 也就是说「什么都没发生」
+ *    本身就已经顶到闸门了。孩子十次有九次看到同一个数字。
+ *    压到 0.92 才留出 8% 的浮动空间，价格波动才有意义。
+ *
+ * 2. **每档乘数取区间，不再是定值。**
+ *    只收 1 次的标的（小萝卜、胡萝卜）等于只掷一次骰子，
+ *    定值会让结局只剩两三种；取区间把离散性抹掉。
+ *
+ * ⚠️ **新口径下 `E[产量倍率] ≈ 0.87`，故意小于 1，不要去「修」。**
+ * 旧的注释写着「保证期望 > 1」，那是**旧口径**的要求（当时基准价按无灾产出反推，
+ * 所以期望必须 > 1 才不亏）。现在 60% 的浮盈已经算进基准单价里了，
+ * 产量端**本来就该打折**。实测期望浮盈 +31%~+41%，见 §5.6。
  */
+const HARVEST_TIERS: Array<{
+  kind: FarmEvent['kind'] | 'none'
+  p: number
+  lo: number
+  hi: number
+}> = [
+  { kind: 'weather_good', p: 0.1, lo: 1.1, hi: 1.2 }, // 🌈 风调雨顺
+  { kind: 'pest', p: 0.15, lo: 0.7, hi: 0.8 }, // 🐛 虫灾
+  { kind: 'disease', p: 0.06, lo: 0.55, hi: 0.65 }, // 🦠 病毒
+  { kind: 'weather_bad', p: 0.04, lo: 0.45, hi: 0.55 }, // 🌪️ 风灾
+  { kind: 'none', p: 0.64, lo: 0.92, hi: 0.92 }, // 什么都没发生
+]
+
+/** 枯萎病：直接绝收，多年生还可能整棵枯死 */
+const WITHER_P = 0.01
+
+/** 结算一次收获的随机事件。 */
 export function rollHarvestEvent(
   plot: Plot,
   crop: CropDef,
@@ -115,79 +143,15 @@ export function rollHarvestEvent(
 ): HarvestEventResult {
   if (!enabled) return { multiplier: 1, wipedOut: false, died: false }
 
-  const fragility = crop.fragility ?? 1
+  // 种子必须**幂等**：同一块地、同一次收获，刷新多少次都是同一个结果。
+  // 千万不要改成 Math.random()。
   const seed = seedOf(`${plot.index}|${crop.id}|${plot.crop?.harvestedCount ?? 0}|${salt}`)
-
-  // 风险基准：一年生 12%，多年生更高（因为它要"撑住"多次收获）
   const isPerennial = crop.kind === 'perennial'
-  const baseRisk = isPerennial ? 0.16 : 0.12
-  const risk = Math.min(0.55, baseRisk * fragility)
-
-  // 关键设计（踩过的坑，别改回去）：
-  //
-  // 1) 大丰收的**概率是固定的 20%**，不随脆弱度缩小。
-  //    早先的写法是 `pGood / fragility`，看起来"娇气就少走运"很合理，
-  //    但它会同时压低收益和抬高期望值缺口，实测最娇气的多年生作物
-  //    期望只有 0.92 —— 越种越穷。孩子一旦发现就再也不碰它了，
-  //    那不是"下注感"而是"劝退"。风险应该体现在**方差**上，
-  //    而不是体现在**负期望**上。
-  //
-  // 2) 脆弱度带来的超额风险，全部换成**更大的丰收倍率**（luckBonus）。
-  //    于是 fragile 作物的真实含义变成：
-  //      「更容易白干，但一旦丰收就赚得特别多」
-  //    这才是家长要的「像赌场下注一样」——高风险高回报。
-  //
-  // ⚠️ 改任何系数前先验算期望值，保证从 fragility 0.5 到 2.2 全都 > 1。
-  const pGood = 0.2
-  const pBad = risk * 0.75
-
-  // 超出基准风险的部分，用来放大丰收的手气（0 → 不放大）
-  const extraRisk = Math.max(0, risk - baseRisk)
-  const luckBonus = extraRisk * 2.4
-
   const roll = hashRandom(seed)
 
-  // --- 大丰收 ---
-  if (roll < pGood) {
-    const e = GOOD_EVENTS[Math.floor(hashRandom(seed + 1) * GOOD_EVENTS.length)]
-    return {
-      multiplier: round2(1.35 + luckBonus + hashRandom(seed + 2) * (0.55 + luckBonus)), // 1.35+ ~ 1.90+
-      wipedOut: false,
-      died: false,
-      event: {
-        id: `ev-${seed}-g`,
-        kind: e.kind,
-        message: e.msg,
-        emoji: e.emoji,
-        createdAt: now,
-        refId: String(plot.index),
-      },
-    }
-  }
-
-  // --- 减产 ---
-  if (roll < pGood + pBad) {
-    const e = BAD_EVENTS[Math.floor(hashRandom(seed + 3) * BAD_EVENTS.length)]
-    const mult = round2(0.35 + hashRandom(seed + 4) * 0.35) // 0.35 ~ 0.70
-    return {
-      multiplier: mult,
-      wipedOut: false,
-      died: false,
-      event: {
-        id: `ev-${seed}-b`,
-        kind: e.kind,
-        message: `${e.msg}（只剩 ${Math.round(mult * 100)}%）`,
-        emoji: e.emoji,
-        multiplier: mult,
-        createdAt: now,
-        refId: String(plot.index),
-      },
-    }
-  }
-
-  // --- 颗粒无收 / 死亡（剩下的小概率，但它是"赌场感"的来源） ---
-  if (roll < pGood + risk) {
-    const died = isPerennial && hashRandom(seed + 5) < 0.45 // 多年生才可能整棵死掉
+  // --- 枯萎病：绝收 ---
+  if (roll < WITHER_P) {
+    const died = isPerennial && hashRandom(seed + 5) < 0.45
     if (died) {
       return {
         multiplier: 0,
@@ -220,12 +184,41 @@ export function rollHarvestEvent(
     }
   }
 
-  // --- 正常 ---
-  return {
-    multiplier: round2(0.95 + hashRandom(seed + 6) * 0.12), // 0.95 ~ 1.07，小幅抖动
-    wipedOut: false,
-    died: false,
+  // --- 按档位抽产量倍率 ---
+  let acc = WITHER_P
+  for (const t of HARVEST_TIERS) {
+    acc += t.p
+    if (roll >= acc) continue
+
+    // 区间内取一个稳定值（同一个 seed → 同一个倍率）
+    const mult = round2(t.lo + hashRandom(seed + 7) * (t.hi - t.lo))
+
+    // 中性档：不生成事件、不给提示 —— 大部分时候就该是「什么都没发生」
+    if (t.kind === 'none') return { multiplier: mult, wipedOut: false, died: false }
+
+    const pool = t.lo >= 1 ? GOOD_EVENTS : BAD_EVENTS
+    const e = pool[Math.floor(hashRandom(seed + 3) * pool.length)]
+    return {
+      multiplier: mult,
+      wipedOut: false,
+      died: false,
+      event: {
+        id: `ev-${seed}-${t.kind}`,
+        kind: t.kind,
+        message:
+          t.lo >= 1
+            ? e.msg
+            : `${e.msg}（这次只剩 ${Math.round(mult * 100)}%）`,
+        emoji: e.emoji,
+        multiplier: mult,
+        createdAt: now,
+        refId: String(plot.index),
+      },
+    }
   }
+
+  // 兜底（概率表加起来应该是 1，走到这里说明表写错了）
+  return { multiplier: 0.92, wipedOut: false, died: false }
 }
 
 /* ---------------- 动物事件 ---------------- */

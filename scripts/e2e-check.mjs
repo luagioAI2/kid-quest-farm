@@ -68,11 +68,15 @@ try {
 
   /* ---------- 1. 启动与渲染 ---------- */
   await page.waitForSelector('#root > *', { timeout: 20000 })
-  // 等闪屏过去
-  await page.waitForFunction(
-    () => !document.body.innerText.includes('小任务农场') || document.body.innerText.includes('任务'),
-    { timeout: 20000 },
-  ).catch(() => {})
+  // 等入场页过去。
+  // 判据是「底部导航出现了」—— 导航只存在于主界面，入场页没有它。
+  // 以前这里写的是 `!includes('小任务农场') || includes('任务')`，
+  // 而入场页里就有「小任务农场」、主界面里到处是「任务」，
+  // 两个分支必然有一个成立 → 这个条件**恒为真**，等于没等。
+  // 入场页现在有 1.9s 最短停留，靠后面那句固定 1200ms 是等不过去的。
+  await page
+    .waitForFunction(() => !!document.querySelector('nav button'), { timeout: 20000 })
+    .catch(() => {})
   await new Promise((r) => setTimeout(r, 1200))
 
   const bodyText = await page.evaluate(() => document.body.innerText)
@@ -115,6 +119,74 @@ try {
     overflow.scrollW <= overflow.clientW + 2,
     `scrollW=${overflow.scrollW} clientW=${overflow.clientW}`,
   )
+
+  /* ---------- 3b. 顶栏：两个币种都在，且塞得下长名字 ----------
+     顶栏现在有 头像 + 名字 + 🪙 + 🌾 + 两个按钮，是全局最挤的一行。
+     名字那个 span 上的 `truncate` **必须配 `min-w-0` 才会真的收缩** ——
+     flex 子项默认 `min-width: auto`，不会小于内容宽度，
+     于是长名字把整行顶出去；而桌面浏览器会用横向滚动条兜住，
+     在手机上就是**直接被裁掉**（看不出来，除非专门量）。 */
+  const headerProbe = await page.evaluate(async () => {
+    const s = () => window.__kqf__.getState()
+    const header = () => document.querySelector('header')
+    const measure = () => {
+      const h = header()
+      const nameEl = h?.children?.[1]
+      return {
+        h: h ? Math.round(h.getBoundingClientRect().height) : -1,
+        nameW: nameEl ? Math.round(nameEl.getBoundingClientRect().width) : -1,
+        nameContentW: nameEl ? Math.round(nameEl.scrollWidth) : -1,
+      }
+    }
+
+    const prev = s().settings.childName
+    const short = measure() // 先量短名字当基准
+    await s().updateSettings({ childName: '小明明的超级无敌长名字测试' })
+    await new Promise((r) => setTimeout(r, 400))
+    const long = measure()
+
+    const labels = [...(header()?.querySelectorAll('[aria-label]') ?? [])].map((e) =>
+      e.getAttribute('aria-label'),
+    )
+    return {
+      prev,
+      short,
+      long,
+      scrollW: document.documentElement.scrollWidth,
+      clientW: document.documentElement.clientWidth,
+      labels,
+    }
+  })
+  check(
+    '长名字不会把顶栏顶出屏幕',
+    headerProbe.scrollW <= headerProbe.clientW + 2,
+    `scrollW=${headerProbe.scrollW} clientW=${headerProbe.clientW}，` +
+      `名字容器 ${headerProbe.long.nameW}（内容 ${headerProbe.long.nameContentW}）`,
+  )
+  check(
+    '长名字真的被省略号截断了',
+    headerProbe.long.nameContentW > headerProbe.long.nameW && headerProbe.long.nameW > 0,
+    `容器 ${headerProbe.long.nameW} < 内容 ${headerProbe.long.nameContentW}`,
+  )
+  /* 顶栏必须**始终一行高**。
+     名字要是没被截断而是折行，横向溢出查不出来（`scrollW` 照样等于 `clientW`），
+     但整行会被撑高、把下面的内容顶下去 —— 所以直接比高度。 */
+  check(
+    '长名字不会把顶栏撑高（仍然是一行）',
+    headerProbe.long.h === headerProbe.short.h && headerProbe.short.h > 0,
+    `短名字 ${headerProbe.short.h}px → 长名字 ${headerProbe.long.h}px`,
+  )
+  check(
+    '顶栏同时显示积分和丰收币',
+    headerProbe.labels.some((c) => c?.startsWith('积分')) &&
+      headerProbe.labels.some((c) => c?.startsWith('丰收币')),
+    headerProbe.labels.join(' / ') || '一个都没找到',
+  )
+  // 还原名字：后面几项会打印顶栏文字，改着名字会把输出搞乱
+  await page.evaluate(async (prev) => {
+    await window.__kqf__.getState().updateSettings({ childName: prev })
+    await new Promise((r) => setTimeout(r, 300))
+  }, headerProbe.prev)
 
   /* ---------- 4. 任务结算：开始计时 → 完成 → 积分入账 ---------- */
   const balanceBefore = await page.evaluate(() => {
@@ -159,6 +231,89 @@ try {
     }
   }
 
+  /* ---------- 4b. 长期任务：孩子端不许自评质量 ----------
+     用户报的事故：「长期任务 孩子 做完确认时 为啥能自己评价和打分。」
+     普通任务早就只让家长打分，长期任务那张表漏了 ——
+     孩子能选「一般 / 不错 / 特别棒」，还能看见「+N 分」。
+     这里在真浏览器里确认那张表真的干净（jsdom 的版本见
+     src/features/tasks/PeriodSubmit.test.tsx）。 */
+  await page.keyboard.press('Escape')
+  await new Promise((r) => setTimeout(r, 400))
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(
+      (x) => x.innerText.trim().split('\n').pop().trim() === '任务',
+    )
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 800))
+
+  const periodOpened = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(
+      (x) => /完成一次/.test(x.innerText) && x.offsetParent,
+    )
+    if (!b) return null
+    b.scrollIntoView({ block: 'center' })
+    b.click()
+    return b.innerText.replace(/\s+/g, ' ').trim()
+  })
+  check('长期任务卡有「完成一次 ＋」按钮', !!periodOpened, periodOpened ?? '未找到')
+
+  if (periodOpened) {
+    await new Promise((r) => setTimeout(r, 700))
+    const probe = await page.evaluate(() => {
+      const btns = [...document.querySelectorAll('button')].filter((b) => b.offsetParent)
+      return {
+        text: document.body.innerText,
+        buttons: btns.map((b) => (b.innerText || '').replace(/\s+/g, ' ').trim()),
+      }
+    })
+    const dirty = probe.buttons.filter((t) => /一般|不错|特别棒/.test(t))
+    check('孩子端没有质量自评按钮', dirty.length === 0, dirty.join(' / ') || '干净')
+    check('没有「做得怎么样？」这一问', !probe.text.includes('做得怎么样？'))
+    check('确认按钮是「完成确认」', probe.buttons.some((t) => t === '完成确认'))
+
+    /* 底部两键的排布。
+       ⚠️ 这是真踩过的：原来只有右边那个带 `full`（w-full），
+       左边「取消」被挤成竖排的「取 / 消」。两个字时看不出来，
+       改成四个字的「完成确认」才露馅 —— 所以必须量，不能靠肉眼。
+       量法：Range 的行盒数量。换行的文字会产出多个 rect。 */
+    const pair = await page.evaluate(() => {
+      const btns = [...document.querySelectorAll('[role="dialog"] button')].filter(
+        (b) => b.offsetParent,
+      )
+      const cancel = btns.find((b) => (b.innerText || '').trim() === '取消')
+      const ok = btns.find((b) => (b.innerText || '').trim() === '完成确认')
+      if (!cancel || !ok) return null
+      const lineBoxes = (el) => {
+        const r = document.createRange()
+        r.selectNodeContents(el)
+        return r.getClientRects().length
+      }
+      const a = cancel.getBoundingClientRect()
+      const b = ok.getBoundingClientRect()
+      return {
+        sameTop: Math.abs(a.top - b.top) < 2,
+        topGap: Math.round(Math.abs(a.top - b.top)),
+        cancelLines: lineBoxes(cancel),
+        okLines: lineBoxes(ok),
+        widths: [Math.round(a.width), Math.round(b.width)],
+      }
+    })
+    check(
+      '底部两键并排（同一行）',
+      pair?.sameTop === true,
+      pair ? `top 差 ${pair.topGap}px，宽 ${pair.widths.join(' / ')}` : '未找到这两个按钮',
+    )
+    check(
+      '底部两键各自只占一行（没被挤成竖排）',
+      pair?.cancelLines === 1 && pair?.okLines === 1,
+      pair ? `行盒 取消=${pair.cancelLines} 完成确认=${pair.okLines}` : '未找到这两个按钮',
+    )
+    // 关掉，别把弹层留给后面几节
+    await page.keyboard.press('Escape')
+    await new Promise((r) => setTimeout(r, 400))
+  }
+
   /* ---------- 5. 农场：种植流程 ---------- */
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find(
@@ -169,6 +324,52 @@ try {
   await new Promise((r) => setTimeout(r, 1200))
   const farmText = await page.evaluate(() => document.body.innerText)
   check('农场页渲染', /种子|农场|地块|收获|🌱|🌾/.test(farmText), farmText.replace(/\s+/g, ' ').slice(0, 70))
+
+  /* 币种不重复：全局顶栏（sticky）已经常驻显示 🪙 / 🌾，**页面正文里不该再放一遍**。
+     ⚠️ 判据要按「**叶子节点、且整段文字就是一个图标**」来数，不能拿 innerText 数 ——
+     「40 🪙」（地块解锁价）、「+7 🪙」（结算飘字）、「还能卖 2.8 🌾」（收获弹层）
+     里也有图标，那些是**上下文**，不是重复。
+     ⚠️ 必须**排除 `header` 和 `nav`**：
+       · `header` 就是被比对的基准本身；
+       · `nav` 是底部 TabBar，🪙 / 🌾 在那里是**导航图标**（积分 / 农场），
+         不是币种展示 —— 探针实测：不排除的话会数出 2 个，误判成「还在重复」。
+     可见性用 rect 而不是 offsetParent：顶栏是 sticky，别赌 offsetParent 的语义。 */
+  const glyphCount = await page.evaluate(() => {
+    const count = (g) =>
+      [...document.querySelectorAll('span')].filter((el) => {
+        const r = el.getBoundingClientRect()
+        return (
+          el.children.length === 0 &&
+          r.width > 0 &&
+          r.height > 0 &&
+          (el.textContent ?? '').trim() === g &&
+          !el.closest('header') &&
+          !el.closest('nav')
+        )
+      }).length
+    return { coin: count('🪙'), grain: count('🌾') }
+  })
+  check(
+    '农场页正文里没有 🪙（不再和全局顶栏重复）',
+    glyphCount.coin === 0,
+    `正文里 🪙 x${glyphCount.coin}`,
+  )
+  check(
+    '农场页正文里没有 🌾（不再和全局顶栏重复）',
+    glyphCount.grain === 0,
+    `正文里 🌾 x${glyphCount.grain}`,
+  )
+  // 反向保证：顶栏那两个确实还在（否则上面两条可以靠「把顶栏也删了」蒙过去）
+  const headerCurrencies = await page.evaluate(() =>
+    [...document.querySelectorAll('header [aria-label]')]
+      .map((el) => el.getAttribute('aria-label') ?? '')
+      .filter((l) => l.startsWith('积分') || l.startsWith('丰收币')),
+  )
+  check(
+    '全局顶栏仍然显示积分和丰收币（上面两条不是因为顶栏被删才通过的）',
+    headerCurrencies.length === 2,
+    headerCurrencies.join(' / ') || '顶栏里一个都没找到',
+  )
 
   // 打开种子商店
   const shopOpened = await page.evaluate(() => {
@@ -184,6 +385,21 @@ try {
     await new Promise((r) => setTimeout(r, 1000))
     const shopText = await page.evaluate(() => document.body.innerText)
     check('种子商店列出作物', /胡萝卜|草莓|玉米|番茄/.test(shopText))
+
+    // 开局死锁回归（2026-09-15）：种子商店曾经拿 `unlockLevel` 跟**收获次数**比，
+    // 于是 0 收获时 `1 > 0` 恒真 —— 12 个种子全锁，而没种子就种不了、
+    // 种不了就永远没收获。这里直接盯「至少有一个能点」。
+    const seedPick = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('button')].filter((x) =>
+        /选择.+种子/.test(x.getAttribute('aria-label') ?? ''),
+      )
+      return { total: rows.length, enabled: rows.filter((x) => !x.disabled).length }
+    })
+    check(
+      '新农场至少有一个种子能买（否则开局即死锁）',
+      seedPick.total > 0 && seedPick.enabled > 0,
+      `${seedPick.enabled}/${seedPick.total} 个可点`,
+    )
   }
 
   /* ---------- 6. 家长确认：必须要求密码，且输对后能进入打分 ---------- */
@@ -305,7 +521,187 @@ try {
     check('导出数据', false, '未拿到导出结果')
   }
 
-  /* ---------- 8. 截图留档 ---------- */
+  /* ---------- 7b. 设置页的「音效 / 震动」开关 ---------- */
+  // `soundEnabled` / `hapticsEnabled` 一直在 settings 里、默认都开着，
+  // 但设置页**没有对应的开关** —— 也就是说家长根本关不掉。
+  // 这条守的是「开关存在、能点、而且真的落库」。
+  //
+  // 前置：先把家长密码清掉，让「规则」页签里的开关可用。
+  // 不去模拟 1-2-3-4 的键盘 —— 数字按钮在别的页签也会出现，选择器不稳。
+  const soundToggle = await page.evaluate(async () => {
+    await window.__kqf__.getState().updateSettings({ parentPin: '' })
+    await new Promise((r) => setTimeout(r, 600))
+    const tabBtn = [...document.querySelectorAll('button')].find((x) => /规则/.test(x.innerText))
+    tabBtn?.click()
+    await new Promise((r) => setTimeout(r, 600))
+    const el = document.querySelector('button[role="switch"][aria-label="音效"]')
+    const hz = document.querySelector('button[role="switch"][aria-label="震动"]')
+    const s = window.__kqf__.getState().settings
+    return {
+      hasSound: !!el,
+      hasHaptics: !!hz,
+      soundChecked: el?.getAttribute('aria-checked') ?? null,
+      hapticsChecked: hz?.getAttribute('aria-checked') ?? null,
+      storeSound: s.soundEnabled,
+      storeHaptics: s.hapticsEnabled,
+    }
+  })
+  check('设置页有「音效」开关', soundToggle.hasSound)
+  check('设置页有「震动」开关', soundToggle.hasHaptics)
+  check(
+    '两个开关的初始状态和 settings 一致',
+    soundToggle.soundChecked === String(soundToggle.storeSound) &&
+      soundToggle.hapticsChecked === String(soundToggle.storeHaptics),
+    `音效 aria=${soundToggle.soundChecked}/store=${soundToggle.storeSound}；` +
+      `震动 aria=${soundToggle.hapticsChecked}/store=${soundToggle.storeHaptics}`,
+  )
+
+  // 真的点一下 —— 只看"界面动了"不够，要确认**落库了**
+  const flipped = await page.evaluate(async () => {
+    const el = document.querySelector('button[role="switch"][aria-label="音效"]')
+    if (!el) return { skipped: true }
+    if (el.hasAttribute('disabled')) return { disabled: true }
+    const before = window.__kqf__.getState().settings.soundEnabled
+    el.click()
+    await new Promise((r) => setTimeout(r, 700))
+    return {
+      before,
+      after: window.__kqf__.getState().settings.soundEnabled,
+      ariaAfter: document
+        .querySelector('button[role="switch"][aria-label="音效"]')
+        ?.getAttribute('aria-checked'),
+    }
+  })
+  check(
+    '点「音效」能真的关掉（落库 + 界面同步）',
+    !flipped.skipped &&
+      !flipped.disabled &&
+      flipped.before === true &&
+      flipped.after === false &&
+      flipped.ariaAfter === 'false',
+    flipped.skipped
+      ? '没找到开关'
+      : flipped.disabled
+        ? '开关是禁用的（家长锁没开）'
+        : `${flipped.before} → ${flipped.after}（aria=${flipped.ariaAfter}）`,
+  )
+
+  // 还原：音效拨回去、家长密码复原（默认是 '0000'），别影响后面的断言与截图
+  await page.evaluate(async () => {
+    const el = document.querySelector('button[role="switch"][aria-label="音效"]')
+    if (el && !el.hasAttribute('disabled') && el.getAttribute('aria-checked') === 'false') el.click()
+    await new Promise((r) => setTimeout(r, 400))
+    await window.__kqf__.getState().updateSettings({ parentPin: '0000' })
+    await new Promise((r) => setTimeout(r, 400))
+  })
+
+  /* ---------- 8. 同一个数只显示一次（兑换页 / 积分页） ---------- */
+  // 用户报的：「兑换页有重复的积分显示，还有『你有 xx 积分』这句不需要；
+  // 我的积分页也是一样。」
+  // 规矩：余额只在全局顶栏（App.tsx 的 sticky header）说一次，
+  // 页面正文不许再报一遍同一个数。
+  //
+  // ⚠️ 判据**不能**写成「页面里没有 🪙 这个字形」——
+  //    兑换页每件商品的价签（farmUi.tsx 的 CoinPill）就带 🪙，
+  //    那是**单价**，不是余额。按字形数会把价签全算成"重复显示"。
+  //    真正的余额牌有个特征：🪙 图标**不带 aria-hidden**，且同一个容器里
+  //    还有一个「整段文字就是余额数字」的叶子节点。价签的 🪙 恰好是
+  //    aria-hidden 的，于是天然被排除 —— 判据锚在图标上，不锚在数字上。
+  //
+  // ⚠️ 判据**也不能**写成「整页只有一个元素的文字 == 余额」——
+  //    e2e 跑的是全新档案，所有收入都发生在"今天"，于是积分页 7 日柱状图里
+  //    "今天"那根柱子的数字**必然等于余额**（两者本来就是同一个和）。
+  //    拿数字裸比一定误报，且误报得像"真发现了 bug"。
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => /←|返回/.test(x.innerText))
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 700))
+
+  const probeBalanceChips = async (tabLabel) => {
+    await page.evaluate((l) => {
+      const b = [...document.querySelectorAll('button')].find(
+        (x) => x.innerText.trim().split('\n').pop().trim() === l,
+      )
+      b?.click()
+    }, tabLabel)
+    await new Promise((r) => setTimeout(r, 1000))
+    return page.evaluate(() => {
+      const bal = String(window.__kqf__.getState().balance)
+      /**
+       * 找「余额牌」：一个容器，里面同时有
+       *   (a) 一个**不带 aria-hidden** 的 🪙 图标叶子节点，和
+       *   (b) 一个整段文字就是余额数字的叶子节点。
+       *
+       * ⚠️ 向上找祖先时必须**卡在 root 里**（`root.contains(a)`）。
+       *    否则会爬出页面内容区、一路爬到 App 外壳 ——
+       *    外壳里同时装着顶栏和正文，于是底栏那个 🪙 导航图标
+       *    会"找到"顶栏里的余额数字，把顶栏本身报成正文里的重复。
+       *    （这条判据第一次就是这么做错的：报出来的"命中"文本是整个页面。）
+       */
+      const findChips = (root) => {
+        const out = []
+        for (const ic of root.querySelectorAll('*')) {
+          const r = ic.getBoundingClientRect()
+          if (ic.children.length !== 0 || r.width <= 0 || r.height <= 0) continue
+          if ((ic.textContent ?? '').trim() !== '🪙') continue
+          if (ic.hasAttribute('aria-hidden')) continue // 价签的图标，跳过
+          for (let a = ic.parentElement, i = 0; a && i < 5 && root.contains(a); a = a.parentElement, i++) {
+            const hasBalance = [...a.querySelectorAll('*')].some(
+              (e) =>
+                e.children.length === 0 &&
+                (e.textContent ?? '').trim() === bal &&
+                e.getBoundingClientRect().width > 0,
+            )
+            if (hasBalance) {
+              out.push(a)
+              break
+            }
+          }
+        }
+        return out
+      }
+      // 正文 = <main>（App.tsx 里顶栏 <header> 与 <main> 是兄弟节点，
+      // 所以"在 main 里"就等于"不在顶栏里"，比 closest 过滤更不易漏）。
+      const main = document.querySelector('main')
+      const header = document.querySelector('header')
+      const inBody = main ? findChips(main) : []
+      return {
+        bodyChips: inBody.length,
+        sample: inBody.slice(0, 3).map((el) =>
+          (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40),
+        ),
+        headerChips: header ? findChips(header).length : 0,
+        headerText: (header?.innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 60),
+        text: document.body.innerText,
+      }
+    })
+  }
+
+  for (const [tab, pageName] of [['兑换', '兑换页'], ['积分', '积分页']]) {
+    const p = await probeBalanceChips(tab)
+    check(
+      `${pageName}正文里没有余额牌（余额只在全局顶栏）`,
+      p.bodyChips === 0,
+      p.bodyChips === 0 ? '' : `命中 ${p.bodyChips} 处：${p.sample.join(' ｜ ')}`,
+    )
+    check(
+      `${pageName}不再写「你有 N 分」/「现在一共有 N」`,
+      !/你有/.test(p.text) && !/现在一共有/.test(p.text),
+      `你有=${/你有/.test(p.text)} 现在一共有=${/现在一共有/.test(p.text)}`,
+    )
+  }
+
+  // 反向保证：顶栏必须**还在**显示余额。
+  // 否则"页面正文里没有余额牌"就成了"整屏都没有"，那是把功能删了而不是去重。
+  const headerChip = await probeBalanceChips('任务')
+  check(
+    '全局顶栏仍然显示积分和丰收币',
+    headerChip.headerChips >= 1 && /🪙/.test(headerChip.headerText) && /🌾/.test(headerChip.headerText),
+    headerChip.headerText,
+  )
+
+  /* ---------- 9. 截图留档 ---------- */
   mkdirSync('screenshots', { recursive: true })
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find((x) => /←|返回/.test(x.innerText))

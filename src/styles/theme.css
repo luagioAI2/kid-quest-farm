@@ -2,7 +2,18 @@
 
 /* ============================================================
    Kid Quest Farm — 设计令牌
-   卡通 / 手绘 / 低龄友好  |  圆角大、描边粗、颜色饱和但柔
+   扁平 / 精致 / 低龄友好  |  小圆角、发丝边线、柔和投影
+   ------------------------------------------------------------
+   2026-09-14 改版说明：
+   上一版是「粗描边 + 硬阴影」的贴纸卡通风（3px 描边 + `0 4px 0 0`
+   的实心投影）。看久了显脏、显乱，而且满屏都是「凸出来的块」，
+   孩子找不到重点。这一版改成扁平：
+     · 描边 3px → 1px 发丝线（卡面用 inset 阴影画，不占布局盒）
+     · 实心投影 → 一层柔和的环境投影
+     · 圆角 28px → 20px，按钮 20px → 14px
+     · 背景去掉三团彩色光斑，只留一道很淡的暖光
+   命名也跟着改：card-cartoon → surface，btn-3d → btn。
+   （原来那套名字在新样式下是误导，留着以后一定有人踩坑。）
    ============================================================ */
 
 @theme {
@@ -50,14 +61,18 @@
   --color-tangerine-400: #fb923c;
   --color-tangerine-500: #f97316;
 
-  /* ---- 中性色：偏暖的纸感 ---- */
-  --color-ink-900: #3d2f24;
-  --color-ink-700: #5c4a3a;
-  --color-ink-500: #8b7a68;
-  --color-ink-300: #c9b8a5;
-  --color-ink-100: #ede3d6;
+  /* ---- 中性色：偏暖的纸感 ----
+     扁平风靠「文字的层次」而不是「描边的厚度」拉开层级，
+     所以中性色的跨度要比上一版更开：ink-900 压得更深。 */
+  --color-ink-900: #33281e;
+  --color-ink-700: #574838;
+  --color-ink-600: #7a6857;
+  --color-ink-500: #9a8875;
+  --color-ink-300: #cbbba8;
+  --color-ink-200: #e2d6c6;
+  --color-ink-100: #efe6d9;
   --color-paper: #fffaf2;
-  --color-paper-2: #fff5e6;
+  --color-paper-2: #fff6ea;
 
   /* ---- 语义色 ---- */
   --color-success: #22c55e;
@@ -74,15 +89,18 @@
   --font-body: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI',
     'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
 
-  /* ---- 圆角 ---- */
-  --radius-card: 1.75rem;
-  --radius-btn: 1.25rem;
+  /* ---- 圆角：扁平风用小圆角，大圆角会显幼稚 ---- */
+  --radius-card: 1.25rem;
+  --radius-btn: 0.875rem;
   --radius-pill: 999px;
 
-  /* ---- 阴影：柔和外投影 + 硬边卡通描边感 ---- */
-  --shadow-cartoon: 0 4px 0 0 rgb(61 47 36 / 0.16), 0 10px 24px -8px rgb(61 47 36 / 0.22);
-  --shadow-cartoon-sm: 0 2px 0 0 rgb(61 47 36 / 0.14), 0 6px 14px -6px rgb(61 47 36 / 0.2);
-  --shadow-float: 0 12px 32px -10px rgb(61 47 36 / 0.28);
+  /* ---- 投影：一层柔和的环境光，不再用「实心偏移」假装立体 ----
+     shadow-flat  —— 卡片/按钮常驻，几乎看不见，只是把元素从纸面「抬起 1px」
+     shadow-float —— 弹层/浮起物，明显一点但不脏 */
+  --shadow-flat: 0 1px 2px rgb(51 40 30 / 0.05), 0 6px 16px -10px rgb(51 40 30 / 0.18);
+  --shadow-float: 0 8px 28px -10px rgb(51 40 30 / 0.22), 0 2px 6px -2px rgb(51 40 30 / 0.08);
+  /* 卡面的发丝边线：用 inset 画，不占布局盒、也不会被半像素缩放糊掉 */
+  --hairline: inset 0 0 0 1px rgb(51 40 30 / 0.07);
 }
 
 /* ============================================================
@@ -100,15 +118,27 @@
     font-family: var(--font-body);
     color: var(--color-ink-900);
     background-color: var(--color-paper);
-    /* 纸感微纹理 */
-    background-image:
-      radial-gradient(circle at 12% 8%, rgb(253 230 138 / 0.4) 0, transparent 42%),
-      radial-gradient(circle at 88% 4%, rgb(186 230 253 / 0.38) 0, transparent 40%),
-      radial-gradient(circle at 50% 100%, rgb(187 247 208 / 0.42) 0, transparent 55%);
+    /* 扁平风：背景只留一道很淡的暖光，不再堆三团彩色光斑 */
+    background-image: radial-gradient(
+      120% 55% at 50% -8%,
+      rgb(253 230 138 / 0.42) 0,
+      transparent 62%
+    );
     background-attachment: fixed;
     overscroll-behavior-y: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* 默认边线颜色。
+     Tailwind v4 把 `border` 的默认色改成了 currentColor —— 一旦某处
+     只写了 `border` 没写颜色，就会沿袭文字色，出来一圈深色框。
+     在 base 里给个中性默认值兜底；具体的 `border-xxx` 工具类层级更靠后，
+     仍然会正常覆盖它。 */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-ink-100);
   }
 
   /* 防止移动端双击缩放，同时保留可访问性 */
@@ -149,43 +179,46 @@
    组件级工具类
    ============================================================ */
 
-@utility card-cartoon {
+/* 白卡：扁平风的「一张纸」——没有描边，只有发丝线和一层很淡的投影 */
+@utility surface {
   border-radius: var(--radius-card);
   background: #fff;
-  border: 3px solid rgb(61 47 36 / 0.1);
-  box-shadow: var(--shadow-cartoon);
+  box-shadow: var(--shadow-flat), var(--hairline);
 }
 
-@utility card-paper {
+/* 纸色卡：跟背景同色，靠发丝线和投影分层 */
+@utility surface-paper {
   border-radius: var(--radius-card);
   background: var(--color-paper);
-  border: 3px solid rgb(61 47 36 / 0.1);
-  box-shadow: var(--shadow-cartoon);
+  box-shadow: var(--shadow-flat), var(--hairline);
 }
 
-/* 按钮：按下时下沉，营造“实体按键”手感 */
-@utility btn-3d {
+/* 按钮底座：只负责圆角 / 字体 / 手感，配色由调用处的 bg-/text- 决定 */
+@utility btn {
   position: relative;
   border-radius: var(--radius-btn);
   font-family: var(--font-display);
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: 0;
+  box-shadow: var(--shadow-flat);
   transition:
-    transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.12s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease,
     filter 0.15s ease;
   user-select: none;
 }
 
-@utility btn-3d-press {
-  transform: translateY(3px) scale(0.985);
-  box-shadow: 0 1px 0 0 rgb(61 47 36 / 0.2);
-  filter: brightness(0.96);
+/* 按下：轻微缩小 + 压暗。不再用 translateY(3px) —— 那是在模仿实体按键的
+   行程，扁平风里没有「行程」这回事，位移反而会让人觉得按钮在抖。 */
+@utility btn-press {
+  transform: scale(0.97);
+  box-shadow: none;
+  filter: brightness(0.95);
 }
 
 @utility text-stroke {
   paint-order: stroke fill;
-  -webkit-text-stroke: 3px rgb(61 47 36 / 0.85);
+  -webkit-text-stroke: 3px rgb(51 40 30 / 0.85);
 }
 
 /* 数字滚动用等宽，避免跳动 */
@@ -324,6 +357,15 @@
   }
 }
 
+@keyframes kqf-spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @utility anim-bounce-in {
   animation: kqf-bounce-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
@@ -351,4 +393,27 @@
 }
 @utility anim-fade-in {
   animation: kqf-fade-in 0.25s ease-out both;
+}
+@utility anim-spin-slow {
+  animation: kqf-spin-slow 26s linear infinite;
+}
+
+/* 入场元素依次浮现。
+   注意用 animation-delay 而不是 Tailwind 自带的 delay-*（那个是
+   transition-delay，对动画完全无效），所以另起 anim-delay-* 名字，
+   免得跟内置工具类撞名。 */
+@utility anim-delay-1 {
+  animation-delay: 0.05s;
+}
+@utility anim-delay-2 {
+  animation-delay: 0.12s;
+}
+@utility anim-delay-3 {
+  animation-delay: 0.22s;
+}
+@utility anim-delay-4 {
+  animation-delay: 0.34s;
+}
+@utility anim-delay-5 {
+  animation-delay: 0.46s;
 }

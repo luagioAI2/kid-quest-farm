@@ -5,12 +5,21 @@ import type { Animal, CropDef, Plot } from './types'
 /* ============================================================
    农场随机事件引擎测试
    ------------------------------------------------------------
-   家长要的是「像赌场下注一样：可能损失，可能丰收」。
-   但这是给孩子的游戏，所以真正的护栏是：
-     1. 期望值为正 —— 长期一定赚，否则游戏变成惩罚
-     2. 有硬上限 —— 一次大丰收不能撑爆经济
-     3. 幂等 —— 刷新页面不能重新掷骰子
-   这三条都在下面被断言。
+   2026-09-15 口径变更（用户锁定）：
+
+     基准单价 = 上限回收 ÷ 总产出量（按最高产量算）
+
+   也就是说 60% 的浮盈**已经算进单价里了**，产量端本来就该打折。
+   `E[倍率] ≈ 0.87 < 1` 是设计，不是 bug。
+
+   ⚠️ 旧的「期望必须 > 1」是**旧口径**的要求（当时基准价按无灾产出反推，
+   期望 > 1 才不亏）。那批断言已经作废，不要因为「测试红了」就把它改回来。
+
+   现在真正要守住的四条：
+     1. **幂等** —— 刷新页面不能重新掷骰子
+     2. **有硬上限** —— 单次最多 1.2 倍，撑不爆经济
+     3. **分布是共享的** —— 期望倍率与作物 id 无关（没有「这作物更娇气」）
+     4. **两头都要有** —— 绝收 1% 的「赌场感」 + 风调雨顺 10% 的惊喜
    ============================================================ */
 
 function mkPlot(index: number, harvestedCount = 0): Plot {
@@ -31,12 +40,13 @@ function mkCrop(over: Partial<CropDef> = {}): CropDef {
     id: 'carrot',
     name: '胡萝卜',
     emoji: '🥕',
-    seedCost: 6,
-    growMinutes: 4,
-    harvestPoints: 13,
+    seedCost: 4,
+    growMinutes: 3,
+    harvestPoints: 6.4,
+    produceItemId: 'produce-carrot',
+    produceAmount: 4,
     regrowCount: 1,
     stageEmojis: ['🌱', '🌿', '🥕'],
-    fragility: 1,
     ...over,
   } as CropDef
 }
@@ -52,6 +62,15 @@ function mkAnimal(over: Partial<Animal> = {}): Animal {
     pending: 0,
     ...over,
   } as Animal
+}
+
+/** 采样若干次收获，返回平均倍率 */
+function meanMultiplier(crop: CropDef, n: number): number {
+  let sum = 0
+  for (let i = 0; i < n; i++) {
+    sum += rollHarvestEvent(mkPlot(i, i), crop, 1_700_000_000 + i, true, i).multiplier
+  }
+  return sum / n
 }
 
 /* ---------------- 节假日 / 周末加成 ---------------- */
@@ -137,32 +156,50 @@ describe('rollHarvestEvent —— 种植的下注感', () => {
 
   it('倍率永远非负 —— 绝不会算出负收成', () => {
     for (let i = 0; i < 300; i++) {
-      const r = rollHarvestEvent(mkPlot(i), mkCrop({ fragility: 1.5 }), 1_700_000_000 + i, true, i)
+      const r = rollHarvestEvent(mkPlot(i), mkCrop(), 1_700_000_000 + i, true, i)
       expect(r.multiplier).toBeGreaterThanOrEqual(0)
     }
   })
 
-  it('大丰收有硬上限（约 1.9 倍），不会撑爆经济', () => {
-    for (let i = 0; i < 500; i++) {
-      const r = rollHarvestEvent(mkPlot(i), mkCrop({ fragility: 0.5 }), 1_700_000_000 + i, true, i)
-      expect(r.multiplier).toBeLessThanOrEqual(1.91)
+  it('大丰收有硬上限（1.2 倍），不会撑爆经济', () => {
+    for (let i = 0; i < 3000; i++) {
+      const r = rollHarvestEvent(mkPlot(i), mkCrop(), 1_700_000_000 + i, true, i)
+      expect(r.multiplier).toBeLessThanOrEqual(1.2)
     }
   })
 
-  it('减产时倍率落在 0.35 ~ 0.70，是"少赚"而不是"白干"', () => {
-    for (let i = 0; i < 800; i++) {
+  it('减产档落在 0.45 ~ 0.80，是「少赚」而不是「白干」', () => {
+    let checked = 0
+    for (let i = 0; i < 4000; i++) {
       const r = rollHarvestEvent(mkPlot(i), mkCrop(), 1_700_000_000 + i, true, i)
-      if (!r.wipedOut && r.multiplier < 0.95) {
-        expect(r.multiplier).toBeGreaterThanOrEqual(0.34)
-        expect(r.multiplier).toBeLessThanOrEqual(0.71)
+      if (!r.wipedOut && r.multiplier < 0.9) {
+        checked++
+        expect(r.multiplier).toBeGreaterThanOrEqual(0.44)
+        expect(r.multiplier).toBeLessThanOrEqual(0.81)
       }
     }
+    // 减产档合计 25%（虫灾 15 + 病毒 6 + 风灾 4），不可能一次都没抽到
+    expect(checked).toBeGreaterThan(500)
+  })
+
+  it('「什么都没发生」是一个固定档：恰好 0.92，而且不生成事件', () => {
+    let neutral = 0
+    const N = 4000
+    for (let i = 0; i < N; i++) {
+      const r = rollHarvestEvent(mkPlot(i, i), mkCrop(), 1_700_000_000 + i, true, i)
+      if (!r.event && !r.wipedOut) {
+        neutral++
+        expect(r.multiplier).toBe(0.92)
+      }
+    }
+    // 中性档 p = 0.64，应该是绝对大头
+    expect(neutral / N).toBeGreaterThan(0.5)
   })
 
   it('颗粒无收时倍率是 0，并且一定会带一条事件消息', () => {
     let found = false
     for (let i = 0; i < 2000 && !found; i++) {
-      const r = rollHarvestEvent(mkPlot(i, i), mkCrop({ fragility: 1.5 }), 1_700_000_000 + i, true, i)
+      const r = rollHarvestEvent(mkPlot(i, i), mkCrop(), 1_700_000_000 + i, true, i)
       if (r.wipedOut) {
         found = true
         expect(r.multiplier).toBe(0)
@@ -170,7 +207,7 @@ describe('rollHarvestEvent —— 种植的下注感', () => {
         expect(r.event!.message.length).toBeGreaterThan(0)
       }
     }
-    // 高脆弱度下 2000 次都没出事反而不正常
+    // 枯萎病 1%，2000 次都没出事反而不正常
     expect(found).toBe(true)
   })
 
@@ -179,10 +216,7 @@ describe('rollHarvestEvent —— 种植的下注感', () => {
     let annualDied = false
     for (let i = 0; i < 4000; i++) {
       const t = 1_700_000_000 + i
-      if (
-        rollHarvestEvent(mkPlot(i, i), mkCrop({ kind: 'perennial', fragility: 1.6 }), t, true, i)
-          .died
-      )
+      if (rollHarvestEvent(mkPlot(i, i), mkCrop({ kind: 'perennial' }), t, true, i).died)
         perennialDied = true
       if (rollHarvestEvent(mkPlot(i, i), mkCrop({ kind: 'annual' }), t, true, i).died)
         annualDied = true
@@ -191,107 +225,68 @@ describe('rollHarvestEvent —— 种植的下注感', () => {
     expect(annualDied).toBe(false)
   })
 
-  it('正常年份也会有小幅抖动，让数字看起来"活的"', () => {
-    const rolls = new Set<number>()
-    for (let i = 0; i < 200; i++) {
-      const r = rollHarvestEvent(mkPlot(i), mkCrop({ fragility: 0.01 }), 1_700_000_000 + i, true, i)
-      if (!r.wipedOut && r.multiplier > 0.95 && r.multiplier < 1.1) rolls.add(r.multiplier)
-    }
-    expect(rolls.size).toBeGreaterThan(1)
+  /* ---------------- 新口径的核心断言 ---------------- */
+
+  it('期望倍率 ≈ 0.87，故意小于 1 —— 不要去「修」', () => {
+    // 旧口径要求 > 1（基准价按无灾产出反推，期望必须 > 1 才不亏）。
+    // 新口径下 60% 浮盈已经算进基准单价里，产量端本来就该打折。
+    const mean = meanMultiplier(mkCrop(), 20000)
+    expect(mean).toBeGreaterThan(0.85)
+    expect(mean).toBeLessThan(0.9)
   })
 
-  it('期望值为正：大量模拟下平均产量明显 > 1（农民不能越种越穷）', () => {
-    const N = 8000
-    let sum = 0
+  it('所有作物共用同一套分布 —— 期望倍率与作物 id 无关', () => {
+    // 一旦给某个作物单独调概率，§5.6 那张「期望浮盈 +31%~+41%」的表就作废了。
+    for (const id of ['radish', 'rose', 'pumpkin', 'magic-bean', 'apple-tree']) {
+      const mean = meanMultiplier(mkCrop({ id }), 8000)
+      expect(mean, `${id} 的期望倍率`).toBeGreaterThan(0.83)
+      expect(mean, `${id} 的期望倍率`).toBeLessThan(0.92)
+    }
+  })
+
+  it('档位频率与配置表一致（改表必须同步改这里）', () => {
+    const N = 30000
+    const counts: Record<string, number> = {}
+    let wiped = 0
     for (let i = 0; i < N; i++) {
-      sum += rollHarvestEvent(mkPlot(i, i), mkCrop(), 1_700_000_000 + i, true, i).multiplier
-    }
-    const mean = sum / N
-    // 不只是 ≥ 1，要留出安全边际，否则一次调参就可能滑向负期望
-    expect(mean).toBeGreaterThan(1.03)
-  })
-
-  it('多年生作物同样是正期望（长期果树不能是亏本买卖）', () => {
-    const N = 8000
-    let sum = 0
-    for (let i = 0; i < N; i++) {
-      sum += rollHarvestEvent(
-        mkPlot(i, i),
-        mkCrop({ kind: 'perennial', fragility: 1 }),
-        1_700_000_000 + i,
-        true,
-        i,
-      ).multiplier
-    }
-    expect(sum / N).toBeGreaterThan(1.0)
-  })
-
-  it('全参数空间都是正期望 —— 任何作物都值得种（防止调参调出负期望）', () => {
-    const N = 4000
-    const cases: Array<[CropDef['kind'], number]> = [
-      ['annual', 0.5],
-      ['annual', 1],
-      ['annual', 1.5],
-      ['annual', 2],
-      ['flower', 1],
-      ['perennial', 0.5],
-      ['perennial', 1],
-      ['perennial', 1.3],
-      ['perennial', 1.5],
-      ['perennial', 2.2],
-    ]
-    for (const [kind, fragility] of cases) {
-      let sum = 0
-      for (let i = 0; i < N; i++) {
-        sum += rollHarvestEvent(
-          mkPlot(i, i),
-          mkCrop({ kind, fragility }),
-          1_700_000_000 + i,
-          true,
-          i,
-        ).multiplier
+      const r = rollHarvestEvent(mkPlot(i, i), mkCrop(), 1_700_000_000 + i, true, i)
+      if (r.wipedOut) {
+        wiped++
+        continue
       }
-      const mean = sum / N
-      expect(mean, `${kind} fragility=${fragility} 的期望倍率`).toBeGreaterThan(1.0)
+      const k = r.event?.kind ?? 'none'
+      counts[k] = (counts[k] ?? 0) + 1
     }
+    const f = (k: string) => (counts[k] ?? 0) / N
+    expect(wiped / N).toBeCloseTo(0.01, 2)
+    expect(f('none')).toBeCloseTo(0.64, 1)
+    expect(f('weather_good')).toBeCloseTo(0.1, 1)
+    expect(f('pest')).toBeCloseTo(0.15, 1)
+    expect(f('disease')).toBeCloseTo(0.06, 1)
+    expect(f('weather_bad')).toBeCloseTo(0.04, 2)
   })
 
   it('方差足够大 —— 真的会出现「白干」和「大赚」两种极端', () => {
     let wiped = 0
     let bumper = 0
-    const N = 5000
+    const N = 8000
     for (let i = 0; i < N; i++) {
       const r = rollHarvestEvent(mkPlot(i, i), mkCrop(), 1_700_000_000 + i, true, i)
       if (r.wipedOut) wiped++
-      if (r.multiplier >= 1.35) bumper++
+      if (r.multiplier >= 1.1) bumper++
     }
     // 两头都要有：全都没有风险或全都没有惊喜，都说明参数坏了
     expect(wiped).toBeGreaterThan(0)
     expect(bumper).toBeGreaterThan(0)
-    expect(wiped / N).toBeLessThan(0.15) // 但白干不能太频繁，会打击积极性
-  })
-
-  it('皮实的作物长期收益更高 —— 风险有回报', () => {
-    const N = 6000
-    const avg = (fragility: number) => {
-      let sum = 0
-      for (let i = 0; i < N; i++) {
-        sum += rollHarvestEvent(
-          mkPlot(i, i),
-          mkCrop({ fragility }),
-          1_700_000_000 + i,
-          true,
-          i,
-        ).multiplier
-      }
-      return sum / N
-    }
-    expect(avg(0.5)).toBeGreaterThan(avg(1.5))
+    // 但绝收不能太频繁，会打击积极性（表里 1%）
+    expect(wiped / N).toBeLessThan(0.03)
+    // 风调雨顺 10%，是「下注赢了」的正反馈来源
+    expect(bumper / N).toBeGreaterThan(0.05)
   })
 
   it('事件带 refId 指向地块，孩子能看到是哪块地出事', () => {
     for (let i = 0; i < 400; i++) {
-      const r = rollHarvestEvent(mkPlot(9), mkCrop({ fragility: 1.5 }), 1_700_000_000 + i, true, i)
+      const r = rollHarvestEvent(mkPlot(9), mkCrop(), 1_700_000_000 + i, true, i)
       if (r.event) {
         expect(r.event.refId).toBe('9')
         expect(r.event.createdAt).toBe(1_700_000_000 + i)

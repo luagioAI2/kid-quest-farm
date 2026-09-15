@@ -60,13 +60,13 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="flex gap-2">
           <button
             onClick={this.handleRetry}
-            className="btn-3d rounded-2xl bg-sun-300 px-6 py-3 font-extrabold text-ink-900 shadow-cartoon"
+            className="btn rounded-2xl bg-sun-300 px-6 py-3 font-extrabold text-ink-900 shadow-flat"
           >
             再试一次
           </button>
           <button
             onClick={this.handleReload}
-            className="btn-3d rounded-2xl bg-white px-6 py-3 font-extrabold text-ink-500 shadow-cartoon"
+            className="btn rounded-2xl bg-white px-6 py-3 font-extrabold text-ink-500 shadow-flat"
           >
             重新打开
           </button>

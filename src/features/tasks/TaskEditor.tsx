@@ -206,7 +206,7 @@ export function TaskEditor({
       <div className="space-y-5 px-5 pb-10">
         {/* ---------- 家长门禁：任务的新增/编辑是家长动作 ---------- */}
         {needsPin && !unlocked ? (
-          <div className="anim-fade-in card-cartoon border-[3px] border-sun-300 bg-sun-50 p-4">
+          <div className="anim-fade-in surface border border-sun-300 bg-sun-50 p-4">
             <ParentPinPanel
               title="请爸爸妈妈来一下"
               hint="改任务、加固定任务，先输一下密码"
@@ -222,7 +222,7 @@ export function TaskEditor({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="比如：完成语文作业"
-            className="min-h-[56px] w-full rounded-2xl border-[3px] border-ink-100 bg-white px-4 font-display text-lg font-extrabold text-ink-900 outline-none placeholder:font-body placeholder:text-base placeholder:font-normal placeholder:text-ink-300 focus:border-sky-400"
+            className="min-h-[56px] w-full rounded-2xl border border-ink-100 bg-white px-4 font-display text-lg font-extrabold text-ink-900 outline-none placeholder:font-body placeholder:text-base placeholder:font-normal placeholder:text-ink-300 focus:border-sky-400"
           />
         </Field>
 
@@ -231,7 +231,7 @@ export function TaskEditor({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="比如：字要写工整哦"
-            className="min-h-[52px] w-full rounded-2xl border-[3px] border-ink-100 bg-white px-4 text-base text-ink-900 outline-none placeholder:text-ink-300 focus:border-sky-400"
+            className="min-h-[52px] w-full rounded-2xl border border-ink-100 bg-white px-4 text-base text-ink-900 outline-none placeholder:text-ink-300 focus:border-sky-400"
           />
         </Field>
 
@@ -246,10 +246,10 @@ export function TaskEditor({
                   key={c}
                   onClick={() => setCategory(c)}
                   className={clsx(
-                    'btn-3d active:btn-3d-press flex min-h-[64px] flex-col items-center justify-center gap-0.5 border-[3px]',
+                    'btn active:btn-press flex min-h-[64px] flex-col items-center justify-center gap-0.5 border',
                     on
                       ? clsx(s.border, s.soft, 'scale-[1.02]')
-                      : 'border-ink-100 bg-white shadow-[0_4px_0_0_var(--color-ink-100)]',
+                      : 'border-ink-100 bg-white',
                   )}
                   style={on ? { boxShadow: '0 4px 0 0 rgb(61 47 36 / 0.18)' } : undefined}
                 >
@@ -273,10 +273,10 @@ export function TaskEditor({
                   key={c}
                   onClick={() => setCycle(c)}
                   className={clsx(
-                    'btn-3d active:btn-3d-press min-h-[48px] shrink-0 rounded-pill border-[3px] px-4 font-display text-sm font-extrabold',
+                    'btn active:btn-press min-h-[48px] shrink-0 rounded-pill border px-4 font-display text-sm font-extrabold',
                     on
-                      ? 'border-grape-500 bg-grape-400 text-white shadow-[0_4px_0_0_var(--color-grape-500)]'
-                      : 'border-ink-100 bg-white text-ink-700 shadow-[0_4px_0_0_var(--color-ink-100)]',
+                      ? 'border-grape-500 bg-grape-400 text-white'
+                      : 'border-ink-100 bg-white text-ink-700',
                   )}
                 >
                   {CYCLE_LABEL[c]}
@@ -354,7 +354,7 @@ export function TaskEditor({
         </div>
 
         {/* ---------- 实时规则预览（由 settle() 计算） ---------- */}
-        <div className="card-cartoon overflow-hidden border-[3px] border-sky-300 bg-sky-50 p-4">
+        <div className="surface overflow-hidden border border-sky-300 bg-sky-50 p-4">
           <p className="font-display text-sm font-extrabold text-ink-900">
             📊 这条任务的算分方式
           </p>
@@ -422,7 +422,7 @@ export function TaskEditor({
           />
 
           {checkInEnabled && (
-            <div className="anim-fade-in space-y-3 rounded-2xl border-[3px] border-sun-300 bg-sun-50 p-3">
+            <div className="anim-fade-in space-y-3 rounded-2xl border border-sun-300 bg-sun-50 p-3">
               <Field label="一共要签到几天" emoji="🎯">
                 <NumberStepper
                   value={checkInTargetCount}
@@ -439,7 +439,7 @@ export function TaskEditor({
                   {tiers.map((t) => (
                     <div
                       key={t.days}
-                      className="flex items-center gap-2 rounded-xl border-2 border-white bg-white/80 px-3 py-2"
+                      className="flex items-center gap-2 rounded-xl border border-white bg-white/80 px-3 py-2"
                     >
                       <span className="tnum font-display text-lg font-extrabold text-sun-600">
                         {t.days}
@@ -475,10 +475,10 @@ export function TaskEditor({
                   }
                   title={`${it.name} · ${it.desc}`}
                   className={clsx(
-                    'btn-3d active:btn-3d-press flex min-h-[58px] flex-col items-center justify-center gap-0.5 border-[3px] px-1',
+                    'btn active:btn-press flex min-h-[58px] flex-col items-center justify-center gap-0.5 border px-1',
                     on
-                      ? 'border-grape-500 bg-grape-100 shadow-[0_4px_0_0_var(--color-grape-500)]'
-                      : 'border-ink-100 bg-white shadow-[0_4px_0_0_var(--color-ink-100)]',
+                      ? 'border-grape-500 bg-grape-100'
+                      : 'border-ink-100 bg-white',
                   )}
                 >
                   <span className={clsx('text-xl', on && 'anim-pop')}>{it.emoji}</span>
@@ -503,7 +503,7 @@ export function TaskEditor({
             offText="普通任务，做完就可以不管了"
           />
           {fixed && (
-            <p className="anim-fade-in rounded-2xl border-2 border-sun-300 bg-sun-50 px-3 py-2 text-xs font-bold leading-snug text-ink-700">
+            <p className="anim-fade-in rounded-2xl border border-sun-300 bg-sun-50 px-3 py-2 text-xs font-bold leading-snug text-ink-700">
               📌 固定任务建议选「每天 / 每周」这种周期，孩子打开 App 就能看到，
               不用你每天手动加一遍。
             </p>
@@ -511,7 +511,7 @@ export function TaskEditor({
         </div>
 
         {err && (
-          <p className="anim-bounce-in rounded-2xl border-2 border-berry-300 bg-berry-100 px-4 py-3 text-sm font-extrabold text-berry-500">
+          <p className="anim-bounce-in rounded-2xl border border-berry-300 bg-berry-100 px-4 py-3 text-sm font-extrabold text-berry-500">
             {err}
           </p>
         )}
@@ -574,11 +574,11 @@ function NumberStepper({
       <button
         onClick={() => onChange(clamp(value - step))}
         aria-label="减少"
-        className="btn-3d active:btn-3d-press flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-[3px] border-ink-100 bg-white shadow-[0_4px_0_0_var(--color-ink-100)]"
+        className="btn active:btn-press flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-ink-100 bg-white"
       >
         <span className="font-display text-lg font-extrabold text-ink-900">−</span>
       </button>
-      <div className="min-w-0 flex-1 rounded-2xl border-[3px] border-ink-100 bg-white px-2 py-1 text-center">
+      <div className="min-w-0 flex-1 rounded-2xl border border-ink-100 bg-white px-2 py-1 text-center">
         <input
           type="number"
           inputMode="numeric"
@@ -591,7 +591,7 @@ function NumberStepper({
       <button
         onClick={() => onChange(clamp(value + step))}
         aria-label="增加"
-        className="btn-3d active:btn-3d-press flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-[3px] border-ink-100 bg-white shadow-[0_4px_0_0_var(--color-ink-100)]"
+        className="btn active:btn-press flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-ink-100 bg-white"
       >
         <span className="font-display text-lg font-extrabold text-ink-900">＋</span>
       </button>
@@ -619,10 +619,10 @@ function SwitchRow({
       onClick={() => onChange(!on)}
       aria-pressed={on}
       className={clsx(
-        'btn-3d active:btn-3d-press flex w-full items-center gap-3 border-[3px] p-3 text-left',
+        'btn active:btn-press flex w-full items-center gap-3 border p-3 text-left',
         on
-          ? 'border-grass-400 bg-grass-100 shadow-[0_4px_0_0_var(--color-grass-400)]'
-          : 'border-ink-100 bg-white shadow-[0_4px_0_0_var(--color-ink-100)]',
+          ? 'border-grass-400 bg-grass-100'
+          : 'border-ink-100 bg-white',
       )}
     >
       <span className={clsx('text-2xl', on && 'anim-pop')}>{emoji}</span>
@@ -635,13 +635,13 @@ function SwitchRow({
       {/* 卡通拨杆 */}
       <span
         className={clsx(
-          'relative h-8 w-14 shrink-0 rounded-full border-[3px] transition-colors',
+          'relative h-8 w-14 shrink-0 rounded-full border transition-colors',
           on ? 'border-grass-600 bg-grass-400' : 'border-ink-300 bg-ink-100',
         )}
       >
         <span
           className={clsx(
-            'absolute top-[2px] h-[22px] w-[22px] rounded-full border-2 border-ink-900/10 bg-white shadow-sm transition-all',
+            'absolute top-[2px] h-[22px] w-[22px] rounded-full border border-ink-900/10 bg-white shadow-sm transition-all',
             on ? 'left-[26px]' : 'left-[2px]',
           )}
         />
@@ -668,7 +668,7 @@ function PreviewRow({
     ink: 'text-ink-500',
   }
   return (
-    <div className="flex items-center gap-2 rounded-xl border-2 border-white bg-white/80 px-3 py-2">
+    <div className="flex items-center gap-2 rounded-xl border border-white bg-white/80 px-3 py-2">
       <span aria-hidden className="text-base">{emoji}</span>
       <span className="min-w-0 flex-1 truncate text-xs font-bold text-ink-700">{label}</span>
       <span className={clsx('tnum font-display text-lg font-extrabold', tones[tone])}>

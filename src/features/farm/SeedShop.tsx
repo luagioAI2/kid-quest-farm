@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '@/store/useApp'
-import { CROPS, ITEM_BY_ID } from '@/domain/catalog'
+import { CROPS, ITEM_BY_ID, roundCap } from '@/domain/catalog'
+import { farmLevel } from '@/domain/farm'
 import { humanizeMinutes } from '@/domain/time'
 import type { CropDef } from '@/domain/types'
 import { BottomSheet, CoinPill } from './farmUi'
@@ -38,6 +39,11 @@ export function SeedShop({
   const inventory = useApp((s) => s.inventory)
   const market = useApp((s) => s.market)
   const farmHarvests = useApp((s) => s.farmTotals.harvests)
+  // ⚠️ 这里要的是**农场等级**，不是收获次数。
+  // 2026-09-15 修：以前传的是 `farmHarvests`，于是 `unlockLevel(1) > 收获次数(0)`
+  // 恒为真 —— **新农场 12 个种子全是锁的**，而没种子就种不了、种不了就永远没收获，
+  // 农场开局即死锁（E2E 探针实测 12/12 按钮 disabled）。
+  const farmLv = farmLevel(farmHarvests).level
   const [tab, setTab] = useState<Tab>('seeds')
 
   const seedCountOf = (cropId: string) =>
@@ -74,7 +80,7 @@ export function SeedShop({
       headerRight={<CoinPill amount={balance} />}
     >
       {/* --- 分栏 --- */}
-      <div className="mb-3 flex gap-2 rounded-full border-[3px] border-ink-900/10 bg-white p-1">
+      <div className="mb-3 flex gap-2 rounded-full border border-ink-900/10 bg-white p-1">
         <TabButton active={tab === 'seeds'} onClick={() => setTab('seeds')}>
           🌰 买种子
         </TabButton>
@@ -96,7 +102,7 @@ export function SeedShop({
               crop={crop}
               held={seedCountOf(crop.id)}
               balance={balance}
-              level={farmHarvests}
+              level={farmLv}
               selecting={pickedCropId === crop.id}
               onPick={() => onPickCrop(crop.id)}
             />
@@ -104,7 +110,7 @@ export function SeedShop({
         </ul>
       ) : (
         <div className="pb-4">
-          <div className="card-cartoon border-[3px] border-grass-300 bg-grass-50 p-4">
+          <div className="surface border border-grass-300 bg-grass-50 p-4">
             <p className="font-display text-base font-extrabold text-ink-900">
               🏪 现在去市场卖啦
             </p>
@@ -121,7 +127,7 @@ export function SeedShop({
             <button
               type="button"
               onClick={onOpenMarket}
-              className="btn-3d mt-3 flex min-h-[56px] w-full items-center justify-center gap-2 rounded-3xl border-[3px] border-grass-600/30 bg-gradient-to-b from-grass-300 to-grass-500 font-display text-lg font-extrabold text-white shadow-cartoon active:btn-3d-press"
+              className="btn mt-3 flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl border border-grass-600/30 bg-gradient-to-b from-grass-300 to-grass-500 font-display text-lg font-extrabold text-white shadow-flat active:btn-press"
             >
               🏪 去市场看看价格
             </button>
@@ -164,9 +170,9 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={clsx(
-        'btn-3d flex min-h-[44px] flex-1 items-center justify-center rounded-full text-[15px] active:btn-3d-press',
+        'btn flex min-h-[44px] flex-1 items-center justify-center rounded-full text-[15px] active:btn-press',
         active
-          ? 'bg-grass-400 text-white shadow-cartoon-sm'
+          ? 'bg-grass-400 text-white shadow-flat'
           : 'bg-transparent text-ink-500',
       )}
     >
@@ -198,13 +204,13 @@ function SeedRow({
   return (
     <li
       className={clsx(
-        'card-cartoon overflow-hidden transition',
+        'surface overflow-hidden transition',
         (!affordable || locked) && 'opacity-60 grayscale',
         selecting && 'ring-4 ring-grass-400',
       )}
     >
       <div className="flex items-center gap-3 p-3">
-        <span className="grid size-16 shrink-0 place-items-center rounded-2xl border-[3px] border-ink-900/10 bg-grass-50 text-4xl">
+        <span className="grid size-16 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-grass-50 text-4xl">
           {locked ? '🔒' : crop.emoji}
         </span>
 
@@ -238,8 +244,9 @@ function SeedRow({
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+            {/* 种子价是积分 🪙，卖出收入是丰收币 🌾 —— 两个币种不能混用图标 */}
             <CoinPill amount={crop.seedCost} tone={affordable ? 'sun' : 'danger'} />
-            <span className="tnum font-bold text-grass-600">→ 收 {crop.harvestPoints} 🪙</span>
+            <span className="tnum font-bold text-grass-600">→ 每次收 {crop.harvestPoints} 🌾</span>
             {perennial && crop.regrowMinutes ? (
               <span className="text-xs text-ink-500">
                 之后每 {humanizeMinutes(crop.regrowMinutes)} 再收一次
@@ -249,11 +256,10 @@ function SeedRow({
             ) : null}
           </div>
 
-          {(crop.fragility ?? 0) >= 0.5 ? (
-            <p className="mt-1 text-[11px] font-bold text-tangerine-500">
-              ⚠️ 有点娇气，照顾不好可能会减产
-            </p>
-          ) : null}
+          <p className="tnum mt-1 text-[11px] font-bold text-ink-500">
+            {/* ⚠️ 单位是丰收币 🌾，不是积分 🪙 —— 卖产出结的是丰收币 */}
+            这一轮最多能收回 {Number(roundCap(crop.seedCost).toFixed(1))} 🌾
+          </p>
         </div>
 
         <button
@@ -261,9 +267,9 @@ function SeedRow({
           disabled={!affordable}
           onClick={onPick}
           className={clsx(
-            'btn-3d grid size-14 shrink-0 place-items-center rounded-2xl border-[3px] text-2xl',
+            'btn grid size-14 shrink-0 place-items-center rounded-2xl border text-2xl',
             affordable
-              ? 'border-grass-600/30 bg-grass-400 text-white shadow-cartoon-sm active:btn-3d-press'
+              ? 'border-grass-600/30 bg-grass-400 text-white shadow-flat active:btn-press'
               : 'cursor-not-allowed border-ink-900/10 bg-ink-100 text-ink-300',
           )}
           aria-label={`选择${crop.name}种子`}
@@ -274,7 +280,7 @@ function SeedRow({
 
       {locked ? (
         <p className="tnum border-t-2 border-ink-900/5 bg-ink-100/50 px-3 py-1.5 text-center text-xs font-bold text-ink-500">
-          再收获 {crop.unlockLevel! - level} 次就能解锁啦 🌱
+          还差 {crop.unlockLevel! - level} 级农场就解锁啦 🌱
         </p>
       ) : !affordable ? (
         <p className="tnum border-t-2 border-ink-900/5 bg-ink-100/50 px-3 py-1.5 text-center text-xs font-bold text-ink-500">

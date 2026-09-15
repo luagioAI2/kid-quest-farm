@@ -89,7 +89,7 @@ export function RedeemBody() {
 
   return (
     <>
-      <div className="mb-3 flex gap-2 rounded-full border-[3px] border-ink-900/10 bg-white p-1">
+      <div className="mb-3 flex gap-2 rounded-full border border-ink-900/10 bg-white p-1">
         <TabBtn active={tab === 'shop'} onClick={() => setTab('shop')}>
           🎁 能换什么
         </TabBtn>
@@ -109,15 +109,17 @@ export function RedeemBody() {
       {tab === 'shop' && (
         <>
           {grouped.length === 0 ? (
-            <div className="card-cartoon flex flex-col items-center gap-2 px-6 py-10 text-center">
+            <div className="surface flex flex-col items-center gap-2 px-6 py-10 text-center">
               <span className="text-6xl">🛒</span>
               <p className="font-display text-lg font-extrabold text-ink-900">还没有可以换的东西</p>
               <p className="text-sm text-ink-500">请爸爸妈妈去「管理」里添加吧</p>
             </div>
           ) : (
             <div className="space-y-4 pb-4">
+              {/* ⚠️ 这里**不再写「🪙 你有 N 分」** —— 全局顶栏已经常驻显示余额，
+                  在正文里再报一遍同一个数只是噪音。留下的这句才是这里独有的信息：
+                  「点了就会扣」这个后果。 */}
               <p className="rounded-2xl bg-sun-50 px-3 py-2 text-xs font-bold text-ink-700">
-                🪙 你有 <span className="tnum text-base font-extrabold text-sun-600">{balance}</span> 分。
                 换完就扣分，想清楚再点哦～
               </p>
               {grouped.map((g) => (
@@ -140,14 +142,14 @@ export function RedeemBody() {
       {tab === 'records' && (
         <div className="space-y-3 pb-4">
           {redeemRecords.length === 0 ? (
-            <div className="card-cartoon flex flex-col items-center gap-2 px-6 py-10 text-center">
+            <div className="surface flex flex-col items-center gap-2 px-6 py-10 text-center">
               <span className="text-5xl">📜</span>
               <p className="font-display font-extrabold text-ink-900">还没有兑换过</p>
               <p className="text-sm text-ink-500">完成任务的积分，可以来这里换想要的东西</p>
             </div>
           ) : (
             redeemRecords.map((r) => (
-              <div key={r.id} className="card-cartoon flex items-center gap-3 p-3">
+              <div key={r.id} className="surface flex items-center gap-3 p-3">
                 <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sun-100 text-xl">
                   {r.emoji}
                 </span>
@@ -209,9 +211,9 @@ function RedeemRow({ item, balance }: { item: RedeemItem; balance: number }) {
   }
 
   return (
-    <li className={clsx('card-cartoon overflow-hidden', (!affordable || maxed) && 'opacity-70')}>
+    <li className={clsx('surface overflow-hidden', (!affordable || maxed) && 'opacity-70')}>
       <div className="flex items-center gap-3 p-3">
-        <div className="grid size-14 shrink-0 place-items-center rounded-2xl border-[3px] border-ink-900/10 bg-grape-50 text-2xl">
+        <div className="grid size-14 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-grape-100 text-2xl">
           {item.emoji}
         </div>
         <div className="min-w-0 flex-1">
@@ -245,7 +247,7 @@ function RedeemRow({ item, balance }: { item: RedeemItem; balance: number }) {
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              className="btn-3d min-h-[46px] flex-1 rounded-2xl border-[3px] border-ink-900/10 bg-white font-display font-extrabold text-ink-500 active:btn-3d-press"
+              className="btn min-h-[46px] flex-1 rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-500 active:btn-press"
             >
               再想想
             </button>
@@ -253,7 +255,7 @@ function RedeemRow({ item, balance }: { item: RedeemItem; balance: number }) {
               type="button"
               disabled={busy}
               onClick={() => void doRedeem()}
-              className="btn-3d min-h-[46px] flex-1 rounded-2xl border-[3px] border-grass-600/30 bg-grass-400 font-display font-extrabold text-white active:btn-3d-press disabled:opacity-50"
+              className="btn min-h-[46px] flex-1 rounded-2xl border border-grass-600/30 bg-grass-400 font-display font-extrabold text-white active:btn-press disabled:opacity-50"
             >
               换！🎉
             </button>
@@ -266,9 +268,9 @@ function RedeemRow({ item, balance }: { item: RedeemItem; balance: number }) {
             disabled={!affordable || maxed}
             onClick={() => setConfirming(true)}
             className={clsx(
-              'btn-3d flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border-[3px] font-display font-extrabold',
+              'btn flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border font-display font-extrabold',
               affordable && !maxed
-                ? 'border-grape-500/30 bg-grape-400 text-white active:btn-3d-press'
+                ? 'border-grape-500/30 bg-grape-400 text-white active:btn-press'
                 : 'cursor-not-allowed border-ink-900/10 bg-ink-100 text-ink-300',
             )}
           >
@@ -294,14 +296,35 @@ const EMOJI_CHOICES = [
 function ManagePanel() {
   const allRedeemItems = useApp((s) => s.allRedeemItems)
   const redeemRecords = useApp((s) => s.redeemRecords)
-  const archiveRedeemItem = useApp((s) => s.archiveRedeemItem)
+  const setRedeemItemArchived = useApp((s) => s.setRedeemItemArchived)
   const deleteRedeemItem = useApp((s) => s.deleteRedeemItem)
   const fulfillRedeem = useApp((s) => s.fulfillRedeem)
+  const pushToast = useApp((s) => s.pushToast)
 
   const [editing, setEditing] = useState<RedeemItem | null>(null)
   const [creating, setCreating] = useState(false)
+  /** 正在等二次确认的那一条 —— 删除不可逆，不能一点就没 */
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
   const pending = redeemRecords.filter((r) => !r.fulfilled)
+
+  /** 上架 / 下架。下架是可逆的，所以不做二次确认，只给个 toast 反馈。 */
+  const toggleArchived = async (it: RedeemItem) => {
+    const next = !it.archived
+    await setRedeemItemArchived(it.id, next)
+    pushToast({
+      kind: 'info',
+      title: next ? '已下架' : '已重新上架',
+      detail: next ? `${it.name} 从孩子的列表里藏起来了` : `${it.name} 又能换啦`,
+      emoji: next ? '⬇️' : '⬆️',
+    })
+  }
+
+  const doDelete = async (it: RedeemItem) => {
+    setConfirmingId(null)
+    await deleteRedeemItem(it.id)
+    pushToast({ kind: 'info', title: `已删除「${it.name}」`, emoji: '🗑' })
+  }
 
   if (creating || editing) {
     return (
@@ -319,7 +342,7 @@ function ManagePanel() {
     <div className="space-y-4 pb-4">
       {/* ---- 待兑现 ---- */}
       {pending.length > 0 && (
-        <section className="card-cartoon overflow-hidden border-[3px] border-sun-400/40">
+        <section className="surface overflow-hidden border border-sun-400/40">
           <div className="bg-sun-100 px-3 py-2">
             <p className="font-display text-sm font-extrabold text-ink-900">
               🔔 有 {pending.length} 个愿望等兑现
@@ -329,7 +352,7 @@ function ManagePanel() {
           <ul className="divide-y-2 divide-ink-900/5">
             {pending.map((r) => (
               <li key={r.id} className="flex items-center gap-3 p-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-white text-lg shadow-cartoon-sm">
+                <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-white text-lg shadow-flat">
                   {r.emoji}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -341,7 +364,7 @@ function ManagePanel() {
                 <button
                   type="button"
                   onClick={() => void fulfillRedeem(r.id)}
-                  className="btn-3d shrink-0 rounded-2xl border-[3px] border-grass-600/30 bg-grass-400 px-3 py-2 text-sm font-extrabold text-white active:btn-3d-press"
+                  className="btn shrink-0 rounded-2xl border border-grass-600/30 bg-grass-400 px-3 py-2 text-sm font-extrabold text-white active:btn-press"
                 >
                   已兑现 ✓
                 </button>
@@ -354,7 +377,7 @@ function ManagePanel() {
       <button
         type="button"
         onClick={() => setCreating(true)}
-        className="btn-3d flex min-h-[52px] w-full items-center justify-center gap-2 rounded-3xl border-[3px] border-grape-500/30 bg-gradient-to-b from-grape-300 to-grape-500 font-display text-base font-extrabold text-white shadow-cartoon active:btn-3d-press"
+        className="btn flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-grape-500/30 bg-gradient-to-b from-grape-300 to-grape-500 font-display text-base font-extrabold text-white shadow-flat active:btn-press"
       >
         ➕ 新增一个兑换品
       </button>
@@ -364,61 +387,107 @@ function ManagePanel() {
           全部兑换品（{allRedeemItems.length}）
         </h3>
         <ul className="space-y-2">
-          {allRedeemItems.map((it) => (
-            <li
-              key={it.id}
-              className={clsx(
-                'card-cartoon flex items-center gap-3 p-3',
-                it.archived && 'opacity-50',
-              )}
-            >
-              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-grape-50 text-xl">
-                {it.emoji}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-extrabold text-ink-900">
-                  {it.name}
-                  {it.archived ? <span className="ml-1 text-[11px] text-ink-400">已下架</span> : null}
-                </p>
-                <p className="truncate text-[11px] text-ink-500">
-                  {it.cost} 分 · {CATEGORY_META[it.category].label}
-                  {it.limitPerDay != null ? ` · 每天 ${it.limitPerDay} 次` : ''}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-1">
-                <button
-                  type="button"
-                  onClick={() => setEditing(it)}
-                  className="btn-3d rounded-xl border-[3px] border-ink-900/10 bg-white px-2.5 py-1.5 text-sm font-bold active:btn-3d-press"
+          {allRedeemItems.map((it) => {
+            const archived = !!it.archived
+
+            // 删除的二次确认就地展开，不另弹窗：
+            // 家长还在列表上下文里，一眼看得见自己点的是哪一条。
+            if (confirmingId === it.id) {
+              return (
+                <li
+                  key={it.id}
+                  className="surface flex items-center gap-2 border border-berry-400/40 p-3"
                 >
-                  ✏️
-                </button>
-                {it.archived ? (
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-extrabold text-ink-900">
+                      删除「{it.name}」？
+                    </p>
+                    <p className="text-[11px] leading-snug text-ink-500">
+                      删掉就找不回来了。换过的记录会留着。
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => void deleteRedeemItem(it.id)}
-                    className="btn-3d rounded-xl border-[3px] border-berry-400/40 bg-berry-100 px-2.5 py-1.5 text-sm font-bold active:btn-3d-press"
+                    onClick={() => setConfirmingId(null)}
+                    className="btn shrink-0 rounded-xl border border-ink-900/10 bg-white px-3 py-2 text-xs font-extrabold text-ink-700 active:btn-press"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void doDelete(it)}
+                    className="btn shrink-0 rounded-xl border border-berry-500/30 bg-berry-400 px-3 py-2 text-xs font-extrabold text-white active:btn-press"
+                  >
+                    删除
+                  </button>
+                </li>
+              )
+            }
+
+            return (
+              <li key={it.id} className="surface flex items-center gap-3 p-3">
+                <span
+                  className={clsx(
+                    'grid size-11 shrink-0 place-items-center rounded-2xl text-xl',
+                    archived ? 'bg-ink-100' : 'bg-grape-100',
+                  )}
+                >
+                  {it.emoji}
+                </span>
+                {/* 只把文字压暗，操作按钮保持原样 —— 整行 opacity 会让按钮看着像禁用了 */}
+                <div className={clsx('min-w-0 flex-1', archived && 'opacity-50')}>
+                  <p className="truncate text-sm font-extrabold text-ink-900">
+                    {it.name}
+                    {archived ? (
+                      <span className="ml-1 text-[11px] font-bold text-ink-500">已下架</span>
+                    ) : null}
+                  </p>
+                  <p className="truncate text-[11px] text-ink-500">
+                    {it.cost} 分 · {CATEGORY_META[it.category].label}
+                    {it.limitPerDay != null ? ` · 每天 ${it.limitPerDay} 次` : ''}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(it)}
+                    aria-label={`编辑 ${it.name}`}
+                    className="btn rounded-xl border border-ink-900/10 bg-white px-2.5 py-1.5 text-sm font-bold active:btn-press"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void toggleArchived(it)}
+                    aria-label={archived ? `上架 ${it.name}` : `下架 ${it.name}`}
+                    className={clsx(
+                      'btn rounded-xl border px-2.5 py-1.5 text-sm font-bold active:btn-press',
+                      archived
+                        ? 'border-grass-500/40 bg-grass-100'
+                        : 'border-ink-900/10 bg-white',
+                    )}
+                  >
+                    {archived ? '⬆️' : '⬇️'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingId(it.id)}
+                    aria-label={`删除 ${it.name}`}
+                    className="btn rounded-xl border border-berry-400/40 bg-berry-100 px-2.5 py-1.5 text-sm font-bold active:btn-press"
                   >
                     🗑
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void archiveRedeemItem(it.id)}
-                    className="btn-3d rounded-xl border-[3px] border-ink-900/10 bg-white px-2.5 py-1.5 text-sm font-bold active:btn-3d-press"
-                  >
-                    ⬇️
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
+                </div>
+              </li>
+            )
+          })}
         </ul>
       </section>
 
       <p className="px-2 text-center text-[11px] leading-relaxed text-ink-500">
-        下架（⬇️）只是从孩子看到的列表里隐藏，记录还在；
-        在「已下架」里再点一次 🗑 才会永久删除。
+        ⬇️ 下架只是从孩子看到的列表里藏起来，换过的记录都还在，⬆️ 可以随时重新上架。
+        <br />
+        🗑 是永久删除，会再问你一次。
       </p>
     </div>
   )
@@ -483,16 +552,16 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
         ← 返回管理
       </button>
 
-      <div className="card-cartoon p-4">
+      <div className="surface p-4">
         <div className="mb-4 flex items-center gap-3">
-          <span className="grid size-16 shrink-0 place-items-center rounded-3xl border-[3px] border-ink-900/10 bg-sun-50 text-3xl">
+          <span className="grid size-16 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-sun-50 text-3xl">
             {emoji}
           </span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value.slice(0, 16))}
             placeholder="叫什么？比如「玩 30 分钟平板」"
-            className="min-h-[48px] min-w-0 flex-1 rounded-2xl border-[3px] border-ink-900/10 bg-paper-2 px-3 font-display font-bold text-ink-900 outline-none focus:border-grape-400"
+            className="min-h-[48px] min-w-0 flex-1 rounded-2xl border border-ink-900/10 bg-paper-2 px-3 font-display font-bold text-ink-900 outline-none focus:border-grape-400"
           />
         </div>
 
@@ -504,7 +573,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
                 type="button"
                 onClick={() => setEmoji(e)}
                 className={clsx(
-                  'btn-3d grid size-10 place-items-center rounded-xl text-xl active:btn-3d-press',
+                  'btn grid size-10 place-items-center rounded-xl text-xl active:btn-press',
                   emoji === e ? 'scale-110 bg-sun-300 ring-2 ring-sun-400' : 'bg-white',
                 )}
               >
@@ -522,7 +591,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
                 type="button"
                 onClick={() => setCategory(c)}
                 className={clsx(
-                  'btn-3d rounded-pill px-3 py-2 text-sm font-bold active:btn-3d-press',
+                  'btn rounded-pill px-3 py-2 text-sm font-bold active:btn-press',
                   category === c ? 'bg-grape-400 text-white' : 'bg-white text-ink-500',
                 )}
               >
@@ -537,7 +606,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
             <button
               type="button"
               onClick={() => setCost((c) => Math.max(5, c - 10))}
-              className="btn-3d grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-xl font-extrabold active:btn-3d-press"
+              className="btn grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-xl font-extrabold active:btn-press"
             >
               −
             </button>
@@ -546,12 +615,12 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
               value={cost}
               min={1}
               onChange={(e) => setCost(Math.max(1, Number(e.target.value) || 0))}
-              className="tnum min-h-[48px] min-w-0 flex-1 rounded-2xl border-[3px] border-ink-900/10 bg-paper-2 px-3 text-center font-display text-xl font-extrabold text-ink-900 outline-none focus:border-grape-400"
+              className="tnum min-h-[48px] min-w-0 flex-1 rounded-2xl border border-ink-900/10 bg-paper-2 px-3 text-center font-display text-xl font-extrabold text-ink-900 outline-none focus:border-grape-400"
             />
             <button
               type="button"
               onClick={() => setCost((c) => c + 10)}
-              className="btn-3d grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-xl font-extrabold active:btn-3d-press"
+              className="btn grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-xl font-extrabold active:btn-press"
             >
               ＋
             </button>
@@ -563,7 +632,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
                 type="button"
                 onClick={() => setCost(v)}
                 className={clsx(
-                  'btn-3d rounded-pill px-2.5 py-1.5 text-xs font-bold active:btn-3d-press',
+                  'btn rounded-pill px-2.5 py-1.5 text-xs font-bold active:btn-press',
                   cost === v ? 'bg-sun-300 text-ink-900' : 'bg-white text-ink-500',
                 )}
               >
@@ -582,7 +651,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 40))}
             placeholder="比如「周末才能用哦」"
-            className="min-h-[46px] w-full rounded-2xl border-[3px] border-ink-900/10 bg-paper-2 px-3 text-sm font-bold text-ink-900 outline-none focus:border-grape-400"
+            className="min-h-[46px] w-full rounded-2xl border border-ink-900/10 bg-paper-2 px-3 text-sm font-bold text-ink-900 outline-none focus:border-grape-400"
           />
         </Field>
 
@@ -594,7 +663,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
                 type="button"
                 onClick={() => setLimitPerDay(v === 0 ? undefined : v)}
                 className={clsx(
-                  'btn-3d rounded-pill px-3 py-2 text-sm font-bold active:btn-3d-press',
+                  'btn rounded-pill px-3 py-2 text-sm font-bold active:btn-press',
                   (v === 0 ? limitPerDay == null : limitPerDay === v)
                     ? 'bg-sun-300 text-ink-900'
                     : 'bg-white text-ink-500',
@@ -611,7 +680,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
         <button
           type="button"
           onClick={() => void save()}
-          className="btn-3d mt-4 flex min-h-[54px] w-full items-center justify-center rounded-3xl border-[3px] border-grape-500/30 bg-gradient-to-b from-grape-300 to-grape-500 font-display text-lg font-extrabold text-white shadow-cartoon active:btn-3d-press"
+          className="btn mt-4 flex min-h-[54px] w-full items-center justify-center rounded-2xl border border-grape-500/30 bg-gradient-to-b from-grape-300 to-grape-500 font-display text-lg font-extrabold text-white shadow-flat active:btn-press"
         >
           {item ? '保存修改' : '加进商城 🎁'}
         </button>
@@ -643,8 +712,8 @@ function TabBtn({
       type="button"
       onClick={onClick}
       className={clsx(
-        'btn-3d flex min-h-[44px] flex-1 items-center justify-center rounded-full text-[14px] active:btn-3d-press',
-        active ? 'bg-grape-400 text-white shadow-cartoon-sm' : 'bg-transparent text-ink-500',
+        'btn flex min-h-[44px] flex-1 items-center justify-center rounded-full text-[14px] active:btn-press',
+        active ? 'bg-grape-400 text-white shadow-flat' : 'bg-transparent text-ink-500',
       )}
     >
       {children}

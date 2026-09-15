@@ -9,6 +9,7 @@ import type {
   CheckInRecord,
   FarmEvent,
   FarmState,
+  HarvestEntry,
   InventorySlot,
   LedgerEntry,
   MarketState,
@@ -34,6 +35,8 @@ class KidQuestFarmDB extends Dexie {
   tasks!: Table<Task, string>
   taskInstances!: Table<TaskInstance, string>
   ledger!: Table<LedgerEntry, string>
+  /** 丰收币账本。与 `ledger` 物理隔离，见 `HarvestEntry` 的注释。 */
+  harvestLedger!: Table<HarvestEntry, string>
   inventory!: Table<InventorySlot, string>
   animals!: Table<Animal, string>
   checkIns!: Table<CheckInRecord, string>
@@ -70,6 +73,29 @@ class KidQuestFarmDB extends Dexie {
       redeemItems: 'id, category, archived, cost, createdAt',
       redeemRecords: 'id, itemId, createdAt, fulfilled',
       farmEvents: 'id, kind, createdAt, refId',
+    })
+    // v4：v2 那条 `&[taskId+periodKey]` 对周期任务是错的。
+    //
+    // 周期任务的「本周/本月要做几次」靠 checkInTargetCount 表达，需要同一个
+    // (taskId, periodKey) 下存在多行 —— 于是第二次提交必然撞唯一索引、抛
+    // ConstraintError，`submitPeriodTask` 的 await 直接炸掉，按钮永远停在
+    // 「记录中…」。种子任务「读一本完整的故事书」（月度 4 次）开箱即踩。
+    //
+    // 把 date 也纳入唯一键：
+    //   * 自动补齐的日任务：periodKey 就等于当天 → 仍然一天一行，
+    //     v2 想堵的「并发 refresh 重复生成」依然堵得住
+    //   * 周期任务：同一天不能重复记一次（合理），跨天可以记满 N 次
+    this.version(4).stores({
+      taskInstances:
+        'id, taskId, periodKey, date, status, [date+status], [status+submittedAt], &[taskId+periodKey+date]',
+    })
+    // v5：丰收币独立账本。
+    //
+    // 为什么单开一张表，而不是给 ledger 加个 currency 字段 —— 见 `HarvestEntry` 的注释。
+    // 一句话：**要让「丰收币不算进积分」由表结构保证，而不是靠每个读余额的地方
+    // 都记得加过滤**。漏一个 filter 就静默算错，而且不报错。
+    this.version(5).stores({
+      harvestLedger: 'id, source, createdAt, refId',
     })
   }
 }
@@ -125,6 +151,36 @@ export async function savePlots(plots: FarmState['plots']): Promise<void> {
 
 export async function saveFarmDay(day: number): Promise<void> {
   await setMeta('farm.day', day)
+}
+
+/* ---------------- 额度结转（收掉的地块上没用完的那部分） ---------------- */
+
+/**
+ * 已收掉的地块上「没用完的额度」，按产出物 id 归集。
+ *
+ * 为什么需要它：卖出闸门是挂在**活着的**标的上的（`capTargetsFor` 只看
+ * plots / animals）。小萝卜、胡萝卜这类**一次性作物收完就变空地** →
+ * 那个标的消失了 → 存进背包的产出再也找不到额度 → **永远卖不掉**。
+ * 所以作物离场时把没用掉的额度结转到这里。
+ *
+ * 存 `meta` 而不是新开一张表：`meta` 本来就是 key-value，加一个 key
+ * **不需要动 Dexie 版本号**，也就不需要写迁移、不需要改老库升级用例。
+ * `wipeAll` 已经会清 `meta`，不用额外处理。
+ */
+const QUOTA_CARRY_KEY = 'farm.quotaCarry'
+
+export async function loadQuotaCarry(): Promise<Record<string, number>> {
+  const raw = await getMeta<Record<string, number>>(QUOTA_CARRY_KEY, {})
+  // 老库里可能是脏数据，这里顺手清掉非正数，免得 `remaining` 被负额度污染
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(raw ?? {})) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = v
+  }
+  return out
+}
+
+export async function saveQuotaCarry(carry: Record<string, number>): Promise<void> {
+  await setMeta(QUOTA_CARRY_KEY, carry)
 }
 
 /* ---------------- 市场行情 ---------------- */
@@ -206,9 +262,38 @@ export async function consumeItem(itemId: string, count = 1): Promise<boolean> {
 
 /* ---------------- 积分账本 ---------------- */
 
+/**
+ * 账本的权威余额 = **所有 delta 之和**。
+ *
+ * 不要用「最后一条的 balanceAfter」：ledger 的 `createdAt` 是**非唯一索引**，
+ * 同一毫秒内的两笔在索引里会按主键（随机 id）并列，`orderBy('createdAt').last()`
+ * 于是可能返回**先写的那条** —— 余额就少算了，而且不报任何错。
+ * 实测：签到的「基础分 8 + 阶梯奖 10」同毫秒入账时，余额只加了 8。
+ *
+ * 求和与顺序无关，天然免疫这个问题，也顺手修好历史数据里已经接错的链条。
+ */
 export async function currentBalance(): Promise<number> {
-  const last = await db.ledger.orderBy('createdAt').last()
-  return last?.balanceAfter ?? 0
+  const rows = await db.ledger.toArray()
+  return rows.reduce((sum, r) => sum + r.delta, 0)
+}
+
+/**
+ * 取「下一笔账」该用的时间戳与当前余额。
+ *
+ * 时间戳必须**严格递增**，理由同上：并列会让 `.last()` 挑错行。
+ * 余额用求和（见 `currentBalance`），这样即使历史数据里链条已经接错，
+ * 新写的一笔也能把余额扳回正确值。
+ *
+ * 给「需要自己在事务里写账本」的调用方用（比如结算、兑换 —— 它们要在
+ * 同一个事务里连着写实例/记录，不能调 `postLedger` 再开一个事务）。
+ */
+export async function ledgerTip(): Promise<{ createdAt: number; balance: number }> {
+  const rows = await db.ledger.toArray()
+  const maxAt = rows.reduce((m, r) => (r.createdAt > m ? r.createdAt : m), 0)
+  return {
+    createdAt: Math.max(Date.now(), maxAt + 1),
+    balance: rows.reduce((sum, r) => sum + r.delta, 0),
+  }
 }
 
 /**
@@ -226,18 +311,70 @@ export async function postLedger(
 ): Promise<LedgerEntry> {
   const delta = Math.round(entry.delta)
   return db.transaction('rw', db.ledger, async () => {
-    const last = await db.ledger.orderBy('createdAt').last()
-    const balance = last?.balanceAfter ?? 0
+    const tip = await ledgerTip()
     const row: LedgerEntry = {
       id: entry.id ?? `lg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
       delta,
-      balanceAfter: balance + delta,
+      balanceAfter: tip.balance + delta,
       source: entry.source,
       refId: entry.refId,
       memo: entry.memo,
-      createdAt: entry.createdAt ?? Date.now(),
+      // 显式传入的时间戳也照样抬到「比上一条大」，否则并列又会挑错行
+      createdAt: Math.max(entry.createdAt ?? tip.createdAt, tip.createdAt),
     }
     await db.ledger.put(row)
+    return row
+  })
+}
+
+/* ---------------- 丰收币账本 ---------------- */
+
+/**
+ * 丰收币余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
+ *
+ * **只读 `db.harvestLedger`，永远不碰 `db.ledger`** ——
+ * 这里就是「丰收币 ⇸ 积分」这条约束的落点。
+ */
+export async function currentHarvestBalance(): Promise<number> {
+  const rows = await db.harvestLedger.toArray()
+  return rows.reduce((sum, r) => sum + r.delta, 0)
+}
+
+/** 取「下一笔丰收币账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
+export async function harvestTip(): Promise<{ createdAt: number; balance: number }> {
+  const rows = await db.harvestLedger.toArray()
+  const maxAt = rows.reduce((m, r) => (r.createdAt > m ? r.createdAt : m), 0)
+  return {
+    createdAt: Math.max(Date.now(), maxAt + 1),
+    balance: rows.reduce((sum, r) => sum + r.delta, 0),
+  }
+}
+
+/**
+ * 记一笔丰收币。**唯一**允许改动丰收币余额的入口。
+ *
+ * 与 `postLedger` 完全对称，只是换了张表。
+ * **刻意不提供「丰收币 → 积分」的反向函数** —— 没有这个函数，就没有那条路。
+ */
+export async function postHarvest(
+  entry: Omit<HarvestEntry, 'id' | 'balanceAfter' | 'createdAt'> & {
+    id?: string
+    createdAt?: number
+  },
+): Promise<HarvestEntry> {
+  const delta = Math.round(entry.delta)
+  return db.transaction('rw', db.harvestLedger, async () => {
+    const tip = await harvestTip()
+    const row: HarvestEntry = {
+      id: entry.id ?? `hv_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+      delta,
+      balanceAfter: tip.balance + delta,
+      source: entry.source,
+      refId: entry.refId,
+      memo: entry.memo,
+      createdAt: Math.max(entry.createdAt ?? tip.createdAt, tip.createdAt),
+    }
+    await db.harvestLedger.put(row)
     return row
   })
 }
@@ -261,6 +398,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   protectParentActions: true,
   redeemEnabled: true,
   farmEventsEnabled: true,
+  /** 浮盈倍率 r。数值口径见 catalog.ts 的 `DEFAULT_PROFIT_RATIO` */
+  profitRatio: 0.6,
   farmClock: {
     timeScale: 1,
     showClock: true,
@@ -298,6 +437,7 @@ export async function wipeAll(): Promise<void> {
       db.redeemItems,
       db.redeemRecords,
       db.farmEvents,
+      db.harvestLedger,
       db.meta,
     ],
     async () => {
@@ -305,6 +445,7 @@ export async function wipeAll(): Promise<void> {
         db.tasks.clear(),
         db.taskInstances.clear(),
         db.ledger.clear(),
+        db.harvestLedger.clear(),
         db.inventory.clear(),
         db.animals.clear(),
         db.checkIns.clear(),

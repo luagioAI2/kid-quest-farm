@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, BackupFile } from '../../domain/types'
 import { useApp } from '../../store/useApp'
+import { DEFAULT_PROFIT_RATIO } from '../../domain/catalog'
 import { humanizeAgo } from '../../domain/time'
 import { saveBlob, shareOrDownload } from '../../platform/files'
 // 复用家长端同一个 PinPad，不要在这里再抄一份 —— 之前抄出来的副本
@@ -83,10 +84,10 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="pb-10">
-      <header className="sticky top-0 z-20 flex items-center gap-3 border-b-4 border-ink-900/10 bg-paper/95 px-4 py-3 backdrop-blur">
+      <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-ink-900/10 bg-paper/95 px-4 py-3 backdrop-blur">
         <button
           onClick={onBack}
-          className="btn-3d flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-cartoon-sm active:btn-3d-press"
+          className="btn flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-flat active:btn-press"
           aria-label="返回"
         >
           ←
@@ -106,10 +107,10 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
             key={k}
             onClick={() => setTab(k)}
             className={
-              'btn-3d shrink-0 rounded-full px-5 py-2.5 text-base font-bold ' +
+              'btn shrink-0 rounded-full px-5 py-2.5 text-base font-bold ' +
               (tab === k
-                ? 'bg-sun-300 text-ink-900 shadow-cartoon-sm'
-                : 'bg-white text-ink-500 shadow-cartoon-sm')
+                ? 'bg-sun-300 text-ink-900 shadow-flat'
+                : 'bg-white text-ink-500 shadow-flat')
             }
           >
             {label}
@@ -138,7 +139,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                       key={a}
                       onClick={() => void updateSettings({ avatar: a })}
                       className={
-                        'btn-3d h-14 w-14 rounded-2xl text-3xl shadow-cartoon-sm transition ' +
+                        'btn h-14 w-14 rounded-2xl text-3xl shadow-flat transition ' +
                         (settings.avatar === a
                           ? 'scale-110 bg-sun-300 ring-4 ring-sun-400'
                           : 'bg-white')
@@ -161,7 +162,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                     key={h}
                     onClick={() => void updateSettings({ dayStartHour: h })}
                     className={
-                      'btn-3d rounded-full px-4 py-2 font-bold shadow-cartoon-sm ' +
+                      'btn rounded-full px-4 py-2 font-bold shadow-flat ' +
                       (settings.dayStartHour === h ? 'bg-sky-300 text-ink-900' : 'bg-white text-ink-500')
                     }
                   >
@@ -223,7 +224,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                         disabled={!gateOpen}
                         onClick={() => void updateSettings({ qualityBonusThreshold: v })}
                         className={
-                          'btn-3d flex-1 rounded-2xl px-3 py-3 font-bold shadow-cartoon-sm disabled:opacity-50 ' +
+                          'btn flex-1 rounded-2xl px-3 py-3 font-bold shadow-flat disabled:opacity-50 ' +
                           (settings.qualityBonusThreshold === v
                             ? 'bg-grass-300 text-ink-900'
                             : 'bg-white text-ink-500')
@@ -279,9 +280,61 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                   disabled={!gateOpen}
                   onChange={(v) => void updateSettings({ farmEventsEnabled: v })}
                 />
+
+                {/* 音效 / 震动。这两个字段一直在 settings 里、默认开着，
+                    但之前**设置页没有开关** —— 也就是说家长根本关不掉。
+                    反馈统一挂在 store 的 pushToast 上（见 useApp.ts）。 */}
+                <Toggle
+                  label="音效"
+                  hint="完成任务、积分到账、有情况时会响一声（含进入 App 的欢迎音）"
+                  emoji="🔊"
+                  checked={settings.soundEnabled}
+                  disabled={!gateOpen}
+                  onChange={(v) => void updateSettings({ soundEnabled: v })}
+                />
+
+                <Toggle
+                  label="震动"
+                  hint="完成任务、积分到账时轻震一下。装到手机上才有效果"
+                  emoji="📳"
+                  checked={settings.hapticsEnabled}
+                  disabled={!gateOpen}
+                  onChange={(v) => void updateSettings({ hapticsEnabled: v })}
+                />
                 <p className="-mt-1 px-4 text-xs font-bold leading-snug text-ink-500">
                   💡 周末和节假日的收成会悄悄多一些，这个不用告诉孩子 —— 他自己会慢慢感觉到。
                 </p>
+
+                <Card title="每一轮最多能赚多少" emoji="📈">
+                  <p className="mb-3 text-sm text-ink-500">
+                    种子和动物的价格是定好的，孩子把产出卖完，总收入不会超过成本的这个比例。
+                    调低 = 细水长流；调高 = 回报更痛快，但农场币膨胀也更快。
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {([0.2, 0.4, 0.6, 0.8, 1.0, 1.2] as number[]).map((v) => {
+                      const cur = settings.profitRatio ?? DEFAULT_PROFIT_RATIO
+                      return (
+                        <button
+                          key={v}
+                          type="button"
+                          disabled={!gateOpen}
+                          onClick={() => void updateSettings({ profitRatio: v })}
+                          className={
+                            'btn rounded-full px-4 py-2 font-bold shadow-flat disabled:opacity-50 ' +
+                            (cur === v ? 'bg-grass-300 text-ink-900' : 'bg-white text-ink-500')
+                          }
+                        >
+                          {Math.round(v * 100)}%
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="tnum mt-2 text-xs font-bold leading-snug text-ink-500">
+                    当前：孩子每花 10 🪙 成本，最多能收回{' '}
+                    {(10 * (1 + (settings.profitRatio ?? DEFAULT_PROFIT_RATIO))).toFixed(0)} 🌾。
+                    改这个会同时改变所有种子和动物的上限，已经种下的也按新上限算。
+                  </p>
+                </Card>
 
                 <Card title="农场的时钟走得有多快" emoji="⏩">
                   <p className="mb-3 text-sm text-ink-500">
@@ -307,7 +360,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                           })
                         }
                         className={
-                          'btn-3d rounded-full px-4 py-2 font-bold shadow-cartoon-sm disabled:opacity-50 ' +
+                          'btn rounded-full px-4 py-2 font-bold shadow-flat disabled:opacity-50 ' +
                           (settings.farmClock.timeScale === v
                             ? 'bg-grass-300 text-ink-900'
                             : 'bg-white text-ink-500')
@@ -372,7 +425,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                   </p>
                   <button
                     onClick={() => void handleExport()}
-                    className="btn-3d w-full rounded-2xl bg-sky-300 py-4 text-lg font-extrabold text-ink-900 shadow-cartoon"
+                    className="btn w-full rounded-2xl bg-sky-300 py-4 text-lg font-extrabold text-ink-900 shadow-flat"
                   >
                     📤 导出到文件
                   </button>
@@ -395,7 +448,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                   />
                   <button
                     onClick={() => fileRef.current?.click()}
-                    className="btn-3d w-full rounded-2xl bg-white py-4 text-lg font-extrabold text-ink-900 shadow-cartoon"
+                    className="btn w-full rounded-2xl bg-white py-4 text-lg font-extrabold text-ink-900 shadow-flat"
                   >
                     📂 选择备份文件
                   </button>
@@ -408,7 +461,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                   </p>
                   <button
                     onClick={downloadSample}
-                    className="btn-3d mt-3 w-full rounded-2xl bg-paper-2 py-3 font-bold text-ink-500 shadow-cartoon-sm"
+                    className="btn mt-3 w-full rounded-2xl bg-paper-2 py-3 font-bold text-ink-500 shadow-flat"
                   >
                     下载一个空模板看看
                   </button>
@@ -422,7 +475,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                       </p>
                       <button
                         onClick={() => setConfirmReset(true)}
-                        className="btn-3d w-full rounded-2xl bg-berry-300 py-4 text-lg font-extrabold text-ink-900 shadow-cartoon"
+                        className="btn w-full rounded-2xl bg-berry-300 py-4 text-lg font-extrabold text-ink-900 shadow-flat"
                       >
                         🗑️ 清空全部数据
                       </button>
@@ -435,7 +488,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                       <div className="flex gap-2">
                         <button
                           onClick={() => setConfirmReset(false)}
-                          className="btn-3d flex-1 rounded-2xl bg-white py-3 font-bold text-ink-500 shadow-cartoon-sm"
+                          className="btn flex-1 rounded-2xl bg-white py-3 font-bold text-ink-500 shadow-flat"
                         >
                           我再想想
                         </button>
@@ -445,7 +498,7 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                             setConfirmReset(false)
                             pushToast({ kind: 'info', title: '已重新开始', emoji: '🌱' })
                           }}
-                          className="btn-3d flex-1 rounded-2xl bg-berry-500 py-3 font-bold text-white shadow-cartoon-sm"
+                          className="btn flex-1 rounded-2xl bg-berry-500 py-3 font-bold text-white shadow-flat"
                         >
                           确认清空
                         </button>
@@ -474,7 +527,7 @@ function Card({
   children: React.ReactNode
 }) {
   return (
-    <section className="card-cartoon p-4">
+    <section className="surface p-4">
       <h2 className="mb-3 font-display text-lg font-extrabold text-ink-900">
         {emoji} {title}
       </h2>
@@ -499,7 +552,7 @@ function Toggle({
   disabled?: boolean
 }) {
   return (
-    <section className="card-cartoon flex items-center gap-3 p-4">
+    <section className="surface flex items-center gap-3 p-4">
       <span className="text-2xl">{emoji}</span>
       <div className="min-w-0 flex-1">
         <div className="font-display text-base font-extrabold text-ink-900">{label}</div>
@@ -551,7 +604,7 @@ function PinSetting({
       <button
         disabled={!valid || disabled}
         onClick={() => onSave(draft)}
-        className="btn-3d w-full rounded-2xl bg-sun-300 py-3 font-extrabold text-ink-900 shadow-cartoon-sm disabled:opacity-50"
+        className="btn w-full rounded-2xl bg-sun-300 py-3 font-extrabold text-ink-900 shadow-flat disabled:opacity-50"
       >
         保存密码
       </button>

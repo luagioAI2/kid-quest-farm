@@ -205,6 +205,62 @@ export interface LedgerEntry {
   createdAt: number
 }
 
+/* ---------------- 丰收币账本 ---------------- */
+
+/**
+ * 丰收币的来源。
+ *
+ * **刻意比 `LedgerSource` 少** —— 这里不该出现 `task` / `checkin`，
+ * 因为丰收币只能从农场产出里来，任务和签到只发积分。
+ */
+export type HarvestSource =
+  | 'farm_harvest' // 作物收获
+  | 'farm_market' // 市场卖出产出
+  | 'harvest_redeem' // 用丰收币兑换（负数）
+  | 'manual_adjust' // 家长手工调整
+
+/**
+ * 丰收币账本条目。字段与 `LedgerEntry` 同形，但**存在另一张表里**。
+ *
+ * ## 两条不可逆约束（这是整个经济系统的地基）
+ *
+ * 1. **丰收币 ⇸ 积分** —— 丰收币永远不能换回积分。
+ * 2. **丰收币 ⇸ 农场投入** —— 丰收币不能买种子 / 幼崽 / 地块。
+ *
+ * ### 为什么用「另一张表」而不是「同一个表加 currency 字段」
+ *
+ * 因为要把约束做成**结构性**的，而不是**约定性**的。
+ *
+ * 同一张表加 `currency` 字段的话，`currentBalance()` 只要漏一个
+ * `.filter(r => r.currency === 'points')`，丰收币就悄悄算进积分余额 ——
+ * 而且**不报任何错**（本项目的 `ledgerTip` 注释里已经记过一次同类的静默事故）。
+ *
+ * 分成两张表之后，`currentBalance()` 只读 `db.ledger`，
+ * 它**在物理上不可能**看到丰收币。约束由表结构保证，不靠写代码的人记得住。
+ *
+ * ### 第 2 条为什么比第 1 条更要命
+ *
+ * 只堵第 1 条不够。只要农场产出能变回积分、积分又能买种子，就是闭环印钞机：
+ *
+ * ```
+ * 10 → 16 → 26 → 41 → 66 → 105 → 168 → 269 …（每轮 2 分钟，1 小时 30 轮 ≈ 1300 万）
+ * ```
+ *
+ * 所以 `plant` / 买幼崽 / 开地块**只认积分余额**（`state.balance`），
+ * 绝不能出现 `balance + harvestBalance` 这种写法。
+ */
+export interface HarvestEntry {
+  id: string
+  /** 正数为收入，负数为支出 */
+  delta: number
+  balanceAfter: number
+  source: HarvestSource
+  /** 关联对象 id（地块 / 产出物 id） */
+  refId?: string
+  memo: string
+  createdAt: number
+}
+
 /* ---------------- 道具与背包 ---------------- */
 
 export type ItemRarity = 'common' | 'rare' | 'epic'
@@ -243,9 +299,23 @@ export interface CropDef {
   growMinutes: number
   /** 种子成本（积分） */
   seedCost: number
-  /** 收获产出积分（基准值，实际按当日市价浮动） */
+  /**
+   * **每次收获的毛收入（只用于展示）** ≈ 上限回收 ÷ 收获次数。
+   *
+   * ⚠️ 收获时**不发钱**：产出物进背包（`produceItemId`），真正结算是在市场卖出时。
+   * 这个字段现在只喂给商店 / 地块的价格标签，别拿它当「收获即到账」的金额用。
+   */
   harvestPoints: number
-  /** 收获产出道具 */
+  /**
+   * 收获产出的**可卖物品** id。
+   *
+   * 「直接卖 / 存进背包」两条路都要（用户 2026-09-15 定），所以每次收获
+   * 都要产出一个真物品进背包，卖出时才结算钱 —— 这样「等好价再卖」才有意义。
+   */
+  produceItemId: string
+  /** 每次收获的产出数量 */
+  produceAmount?: number
+  /** 额外掉落的收藏品（**不可卖**，只是纪念） */
   harvestItemId?: string
   harvestItemCount?: number
   /** 每株产量（可重复收获次数，1 表示一次性） */
@@ -257,8 +327,6 @@ export interface CropDef {
   regrowMinutes?: number
   /** 多年生作物的预期总寿命（分钟）。超龄会自然衰老 */
   lifespanMinutes?: number
-  /** 死亡/减产概率倍率（1 = 基准，>1 更脆弱，<1 更皮实） */
-  fragility?: number
   /** 上市解锁的农场等级 */
   unlockLevel?: number
 }
@@ -282,6 +350,14 @@ export interface Plot {
     lastEvent?: string
     /** 累计因事件损失的收成次数 */
     lossCount?: number
+    /**
+     * **本轮已卖出的丰收币**。闸门 = `seedCost × (1 + r)`，卖满这一轮就结束。
+     *
+     * 记在**地块**上而不是作物类型上：闸门是「一轮」的，不是「终身」的
+     * （用户 2026-09-15：「种子肯定一直能买，一直能种哇」）。
+     * 重新种下时清零。
+     */
+    earnedSoFar?: number
   }
 }
 
@@ -303,8 +379,15 @@ export interface AnimalDef {
   produceIntervalMinutes: number
   /** 单次产出数量 */
   produceAmount: number
+  /**
+   * **总产出次数**。产够这么多次就停产，但动物本身**留在农场里**
+   * （用户 2026-09-15 定：「鸡也是到了周期就不生蛋了，虽然鸡还在」）。
+   *
+   * 它取代了原来「靠寿命一直产」的模型 —— 旧模型下小鸡成本 40 能换回约 20000。
+   */
+  produceTimes: number
 
-  /** 预期寿命（分钟）。到期后自然老去（会提前很久给出征兆） */
+  /** 预期寿命（分钟）。**已降级为纯展示**，不再决定产出（见 `produceTimes`） */
   lifespanMinutes?: number
   /** 生病/意外概率倍率（1 = 基准） */
   fragility?: number
@@ -312,7 +395,18 @@ export interface AnimalDef {
   unlockLevel?: number
 }
 
-export type AnimalMood = 'happy' | 'normal' | 'hungry' | 'sick' | 'old'
+export type AnimalMood = 'happy' | 'normal' | 'hungry' | 'sick' | 'old' | 'spent'
+
+/**
+ * 收获后的两种处置方式（用户 2026-09-15：「可以直接卖出，也可以存储自己市场卖出。提供选择。」）
+ *
+ * - `sell`  立刻按**当日市价**卖掉，钱当场到手
+ * - `store` 只收进背包，之后在市场按**卖出日市价**卖 —— 可以等好价
+ *
+ * 两条路走的是**同一个闸门**（见 `domain/economy.ts`），所以「存起来」不会绕过上限。
+ */
+export type HarvestMode = 'sell' | 'store'
+
 
 export interface Animal {
   id: string
@@ -330,6 +424,13 @@ export interface Animal {
   feedCount: number
   /** 剪毛/互动次数 */
   careCount: number
+  /**
+   * **已产出次数**。到 `AnimalDef.produceTimes` 就停产，但动物不消失。
+   * 旧的「靠 lifespanMinutes 一直产」模型已废弃。
+   */
+  produceCount?: number
+  /** **本轮已卖出的丰收币**（闸门 = `cost × (1 + r)`） */
+  earnedSoFar?: number
 
   /** 生病开始时间戳（生病期间不产出，喂食/照顾可治愈） */
   sickAt?: number
@@ -490,11 +591,36 @@ export interface CheckInProgress {
   id: string
   taskId: string
   periodKey: string
-  /** 已签到天数 */
+  /** 已签到天数（**已通过家长审核**的才算） */
   days: string[]
+  /**
+   * 已交上去、等家长审核的日期。
+   *
+   * 为什么要有这一层：签到以前是「孩子一点就发分」，等于自己给自己发奖。
+   * 开启家长审核后，点签到只把日期挪到这里 —— 不发积分、不写签到记录、
+   * 不计入坚持天数、不触发阶梯奖励。家长确认后才移到 `days`。
+   */
+  pendingDays?: string[]
   /** 已领取的阶梯奖励（天数阈值） */
   claimedTiers: number[]
   updatedAt: number
+}
+
+/**
+ * 一条「等家长审核」的签到。
+ *
+ * 签到没有自己的任务实例（`taskInstances` 上有 `&[taskId+periodKey]` 唯一索引，
+ * 一个周期只能有一行，装不下"一个周期内多天"），所以待审队列直接从
+ * `CheckInProgress.pendingDays` 派生。
+ */
+export interface PendingCheckIn {
+  taskId: string
+  /** 任务标题，列表直接展示用 */
+  title: string
+  /** 签到日期 yyyy-MM-dd */
+  date: string
+  /** 该日期所在的周期键 —— 审核时要靠它精确定位到哪一行 progress */
+  periodKey: string
 }
 
 /* ---------------- 设置 ---------------- */
@@ -547,6 +673,18 @@ export interface AppSettings {
   /** 农场随机事件开关（关掉就是风调雨顺） */
   farmEventsEnabled: boolean
 
+  /**
+   * **浮盈倍率 r**：`上限回收 = 成本 × (1 + r)`。
+   *
+   * 这是整套农场经济的**唯一总闸门**，也是家长唯一需要理解的旋钮：
+   * 「孩子投进去多少积分，最多就能多拿 r 倍回来」。
+   * 默认 0.6（= 最多多拿 60%）。可调范围见 `MIN/MAX_PROFIT_RATIO`。
+   *
+   * 改它会**同时改变所有标的的基准单价**（因为单价是按上限反推的），
+   * 所以不要写死任何数字，一律走 `roundCap()` / `PRODUCE_BASE_PRICE`。
+   */
+  profitRatio: number
+
   /** 农场时间流速设置 */
   farmClock: FarmClockSettings
 
@@ -564,6 +702,8 @@ export interface BackupFile {
     tasks: Task[]
     taskInstances: TaskInstance[]
     ledger: LedgerEntry[]
+    /** 丰收币账本。老备份里没有这个字段，导入时按空数组处理。 */
+    harvestLedger?: HarvestEntry[]
     inventory: InventorySlot[]
     farm: FarmState
     checkIns: CheckInRecord[]

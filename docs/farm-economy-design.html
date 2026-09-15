@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>农场经济系统设计 v3 · 已归档（数字作废，见 farm-economy-design.md）</title>
+<style>
+  :root{
+    --bg:#f6f6f3; --card:#ffffff; --ink:#1f1f1d; --ink2:#5b5b57; --ink3:#8a8a84;
+    --line:#e3e2dd; --line2:#efeee9;
+    --grass:#3b7d3f; --grass-bg:#eef5ec;
+    --sun:#a06a12; --sun-bg:#fbf3e2;
+    --sky:#2f6ba8; --sky-bg:#ecf3fa;
+    --rose:#a8434c; --rose-bg:#fbedee;
+    --plum:#7a4a8f; --plum-bg:#f4eefa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei",-apple-system,system-ui,sans-serif;
+    font-size:14px;line-height:1.75}
+  .wrap{max-width:1060px;margin:0 auto;padding:40px 28px 80px}
+  h1{font-size:26px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--ink2);margin:0 0 28px}
+  h2{font-size:18px;font-weight:600;margin:46px 0 4px;padding-top:20px;border-top:1px solid var(--line)}
+  h2 .n{color:var(--ink3);font-weight:400;margin-right:8px}
+  h3{font-size:15px;font-weight:600;margin:24px 0 8px}
+  p{margin:8px 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:16px 0}
+  .muted{color:var(--ink2)} .small{font-size:13px}
+  code{background:#f1f0ec;padding:1px 5px;border-radius:4px;font-size:12.5px;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+  .panel{position:sticky;top:0;z-index:10;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:16px 22px;margin:20px 0 8px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+  .panel label{font-weight:600;white-space:nowrap}
+  input[type=range]{width:230px;accent-color:var(--grass)}
+  .rval{font-family:ui-monospace,monospace;font-size:20px;font-weight:600;color:var(--grass);min-width:58px}
+  .panel .hint{color:var(--ink3);font-size:12.5px}
+
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12.5px;font-variant-numeric:tabular-nums}
+  th{text-align:right;font-weight:600;color:var(--ink2);padding:8px 7px;border-bottom:1.5px solid var(--line);white-space:nowrap;font-size:12px}
+  th:first-child,td:first-child{text-align:left}
+  td{text-align:right;padding:7px 7px;border-bottom:1px solid var(--line2)}
+  tbody tr:hover{background:#fafaf8}
+  td.name{font-weight:600}
+  td.name .e{margin-right:5px}
+  .cap{color:var(--sky)} .exp{color:var(--grass);font-weight:600} .loss{color:var(--rose)}
+  .lv{display:inline-block;min-width:20px;text-align:center;background:#f1f0ec;border-radius:5px;font-size:11px;padding:0 4px;color:var(--ink2)}
+
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;font-weight:600;vertical-align:1px}
+  .t-grass{background:var(--grass-bg);color:var(--grass)}
+  .t-sun{background:var(--sun-bg);color:var(--sun)}
+  .t-sky{background:var(--sky-bg);color:var(--sky)}
+  .t-rose{background:var(--rose-bg);color:var(--rose)}
+  .t-plum{background:var(--plum-bg);color:var(--plum)}
+
+  .warn{border-left:3px solid var(--rose);background:var(--rose-bg);padding:14px 18px;border-radius:0 10px 10px 0;margin:16px 0}
+  .ok{border-left:3px solid var(--grass);background:var(--grass-bg);padding:14px 18px;border-radius:0 10px 10px 0;margin:16px 0}
+  .note{border-left:3px solid var(--sun);background:var(--sun-bg);padding:14px 18px;border-radius:0 10px 10px 0;margin:16px 0}
+  ul{margin:8px 0;padding-left:22px} li{margin:5px 0}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:760px){.grid3{grid-template-columns:1fr}}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+  .kpi .k{font-size:12.5px;color:var(--ink3)}
+  .kpi .v{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+  svg{display:block;width:100%;height:auto}
+  .bar{height:18px;background:var(--grass);border-radius:4px;min-width:2px}
+  .barrow{display:flex;align-items:center;gap:10px;margin:5px 0;font-size:12.5px}
+  .barrow .nm{width:64px;text-align:right;color:var(--ink2)}
+  .barrow .bv{width:96px;font-variant-numeric:tabular-nums;color:var(--grass);font-weight:600}
+  .barrow .bt{flex:1;background:#f1f0ec;border-radius:4px;overflow:hidden;height:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>农场经济系统设计 <span style="color:var(--ink3);font-weight:400">v3 · 已归档</span></h1>
+  <p class="sub">正式文档见 <code>docs/farm-economy-design.md</code>。</p>
+  <div class="card" style="border-color:#d9b26a;background:#fbf3e2">
+    <strong>本页是 v3 探索稿，数字已作废。</strong>
+    <p class="small" style="margin:6px 0 0">
+      它按「口径 A（无灾产出 = 上限回收）」算 —— 那个口径下小萝卜的撞顶率是 <strong>90%</strong>，
+      也就是「总收益恒定 1.6 倍」的病根。最终采用的口径 C（上限回收 = P95）和重算后的数值表
+      <strong>只在 <code>farm-economy-design.md</code> §5</strong>。
+      本页的滑杆仍可用来理解 <code>r</code> 的作用，但<strong>不要引用这里的数字</strong>。
+    </p>
+  </div>
+
+  <div class="panel">
+    <label>浮盈上限 r</label>
+    <input id="ratio" type="range" min="0" max="1" step="0.05" value="0.6">
+    <span class="rval" id="rval">60%</span>
+    <span class="hint">上限回收 = 成本 × (1 + r)　·　r 是<b>顶</b>不是<b>值</b></span>
+  </div>
+
+  <h2><span class="n">一</span>本轮的三处调整</h2>
+  <div class="card">
+    <ul style="margin-bottom:0">
+      <li><b>预期收入随解锁等级递增。</b>L1 每分钟期望 0.47 ~ 0.57，到 L6 是 1.24 —— 约 2.6 倍。</li>
+      <li><b>波动同步递增。</b>L1 灾害吃掉 6%，L6 吃掉 38%。上限始终是 60%，但 L6 的最低收益可能直接归零。</li>
+      <li><b>r 是天花板。</b>只要不超过就行，孩子实际拿到多少由灾害决定。</li>
+    </ul>
+  </div>
+
+  <h2><span class="n">二</span>预期收入随解锁等级递增</h2>
+  <div class="card">
+    <p class="small muted" style="margin-top:0">每分钟期望浮盈（取每档最高）：</p>
+    <div id="ramp"></div>
+    <p class="small muted" style="margin-bottom:0">越晚解锁赚得越快，但<b>越看运气</b> —— 顺的时候摸到 60% 天花板，背的时候颗粒无收。</p>
+  </div>
+
+  <h2><span class="n">三</span>币制：单向黑盒子</h2>
+  <div class="card">
+    <svg viewBox="0 0 680 250" role="img" aria-label="币制结构">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+      <rect x="30" y="24" width="132" height="52" rx="10" fill="#eef5ec" stroke="#3b7d3f" stroke-width="0.5"/>
+      <text x="96" y="42" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#2b5e2e">任务 / 签到</text>
+      <text x="96" y="59" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#3b7d3f">唯一入口</text>
+
+      <line x1="164" y1="50" x2="196" y2="50" stroke="#8a8a84" stroke-width="1.5" marker-end="url(#a)"/>
+
+      <rect x="198" y="24" width="112" height="52" rx="10" fill="#fbf3e2" stroke="#a06a12" stroke-width="0.5"/>
+      <text x="254" y="42" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#7a4f0b">积分</text>
+      <text x="254" y="59" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#a06a12">能换真钱</text>
+
+      <line x1="312" y1="50" x2="352" y2="50" stroke="#8a8a84" stroke-width="1.5" marker-end="url(#a)"/>
+
+      <rect x="354" y="24" width="192" height="52" rx="10" fill="#fbedee" stroke="#a8434c" stroke-width="0.5"/>
+      <text x="450" y="42" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#7d2f37">兑换商城 · 真钱档</text>
+      <text x="450" y="59" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#a8434c">积分直接兑换</text>
+
+      <line x1="254" y1="76" x2="254" y2="106" stroke="#a06a12" stroke-width="1.5" marker-end="url(#a)"/>
+      <text x="246" y="92" text-anchor="end" dominant-baseline="central" font-size="11.5" fill="#8a6a2a">买种子 / 幼崽 / 地块</text>
+
+      <rect x="160" y="108" width="188" height="48" rx="10" fill="#f4eefa" stroke="#7a4a8f" stroke-width="0.5"/>
+      <text x="254" y="132" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#5c3670">农场（黑盒子）</text>
+
+      <line x1="254" y1="156" x2="254" y2="182" stroke="#7a4a8f" stroke-width="1.5" marker-end="url(#a)"/>
+
+      <rect x="160" y="184" width="188" height="48" rx="10" fill="#ecf3fa" stroke="#2f6ba8" stroke-width="0.5"/>
+      <text x="254" y="208" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#23527f">市场（价格浮动）</text>
+
+      <line x1="350" y1="208" x2="396" y2="208" stroke="#3b7d3f" stroke-width="1.5" marker-end="url(#a)"/>
+
+      <rect x="398" y="184" width="148" height="48" rx="10" fill="#eef5ec" stroke="#3b7d3f" stroke-width="0.5"/>
+      <text x="472" y="208" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#2b5e2e">丰收币</text>
+
+      <rect x="30" y="184" width="112" height="48" rx="10" fill="#fbedee" stroke="#a8434c" stroke-width="0.5" stroke-dasharray="3 3"/>
+      <text x="86" y="200" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#7d2f37">丰收币 ⇸ 积分</text>
+      <text x="86" y="216" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#7d2f37">⇸ 买农场投入</text>
+    </svg>
+    <p class="small muted" style="margin-bottom:0">左边虚线框那两条「不可逆」是关键 —— 丰收币回不去农场，复利链条在物理上就断了。副产品：<b>家长成本上限 = 任务积分 × (1 + r)</b>，天然封顶。</p>
+  </div>
+
+  <h2><span class="n">四</span>灾害系统</h2>
+  <table id="te">
+    <thead><tr><th>灾害</th><th>作用层</th><th>效果</th><th>基准概率</th><th>对总量</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="note">
+    <p style="margin:0" class="small">保留率 <code>k(f) = clamp(1 − 0.19 × f, 0.4, 0.97)</code>，f 是脆弱度。基准概率再乘以 f。
+    f = 0.3 时 k = 0.943，f = 2.0 时 k = 0.620。<b>贵的东西更娇气，这就是风险溢价的来源。</b></p>
+  </div>
+
+  <h2><span class="n">五</span>数值表</h2>
+  <p class="muted small">「上限」= 风调雨顺的天花板；「期望」= 把灾害算进去的平均值；「灾害损失」= 期望比上限少了多少，也就是波动幅度。</p>
+
+  <h3><span class="tag t-grass">主动经营</span> 作物 · 预期收入随解锁递增</h3>
+  <table id="tc">
+    <thead><tr>
+      <th>作物</th><th>解锁</th><th>成本</th><th>成熟</th><th>收次</th><th>总时长</th>
+      <th>上限回收</th><th>期望回收</th><th>期望浮盈</th><th>每分钟期望</th><th>灾害损失</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <h3><span class="tag t-sun">半挂机</span> 果树</h3>
+  <table id="tt">
+    <thead><tr>
+      <th>果树</th><th>解锁</th><th>成本</th><th>首熟</th><th>间隔</th><th>收次</th><th>总时长</th>
+      <th>上限回收</th><th>期望回收</th><th>期望浮盈</th><th>每分钟期望</th><th>灾害损失</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <h3><span class="tag t-sky">纯挂机</span> 动物</h3>
+  <table id="ta">
+    <thead><tr>
+      <th>动物</th><th>解锁</th><th>成本</th><th>成熟</th><th>间隔</th><th>次数</th><th>总时长</th>
+      <th>上限回收</th><th>期望回收</th><th>期望浮盈</th><th>每分钟期望</th><th>灾害损失</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>档位</th><th>每分钟期望浮盈</th><th>相对同级作物</th><th>孩子的付出</th></tr></thead>
+      <tbody>
+        <tr><td class="name"><span class="e">🥬</span>作物</td><td class="exp">0.47 ~ 1.24</td><td>1×</td><td>要盯着，几分钟点一次</td></tr>
+        <tr><td class="name"><span class="e">🍎</span>果树</td><td class="exp">0.54 ~ 0.62</td><td>约 0.6×</td><td>隔几小时回来收一次</td></tr>
+        <tr><td class="name"><span class="e">🐔</span>动物</td><td class="exp">0.14 ~ 0.22</td><td>约 0.25×</td><td>买完就不用管了</td></tr>
+      </tbody>
+    </table>
+    <p class="small muted" style="margin-bottom:0">三档必须拉开。如果一样高，孩子只会买最短周期的那个，果树和动物全成摆设。</p>
+  </div>
+
+  <h2><span class="n">六</span>待决策</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>#</th><th>问题</th><th>选项</th><th>倾向</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td class="name">丰收币能买什么</td><td>A 纯荣誉（装饰 / 图鉴 / 称号）<br>B 兑换商城所有真钱档奖励<br>C 混合</td><td><b>B</b></td></tr>
+        <tr><td>2</td><td class="name">名字</td><td>丰收币 / 谷仓币 / 市集币 / 阳光币 / 小金币</td><td><b>丰收币</b></td></tr>
+        <tr><td>3</td><td class="name">期望浮盈定多少</td><td>现值随等级 34% ~ 57%</td><td>调灾害概率即可</td></tr>
+        <tr><td>4</td><td class="name">农场投入只能用积分</td><td>确认？</td><td>副作用：必须先做任务才能种地</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+const EVENTS = [
+  { n:'虫灾',     e:'🐛', layer:'单次产量', eff:'本次产量 ×0.75', p:0.15, loss:0.25, kind:'mult' },
+  { n:'病毒',     e:'🦠', layer:'产量 + 节奏', eff:'本次 ×0.60，之后间隔 ×1.25', p:0.06, loss:0.40, kind:'mult' },
+  { n:'风灾',     e:'🌪️', layer:'单次产量', eff:'本次产量 ×0.50', p:0.04, loss:0.50, kind:'mult' },
+  { n:'暴雨',     e:'🌧️', layer:'产出次数', eff:'少收 1 次', p:0.06, loss:1, kind:'count' },
+  { n:'冰冻',     e:'❄️', layer:'产出次数', eff:'停摆 6 小时', p:0.03, loss:1, kind:'count' },
+  { n:'干旱',     e:'☀️', layer:'节奏', eff:'成熟 / 间隔 ×1.4', p:0.05, loss:0, kind:'time' },
+  { n:'枯萎病',   e:'🥀', layer:'整个标的', eff:'直接毕业，剩余全损', p:0.01, loss:1, kind:'count' },
+  { n:'风调雨顺', e:'🌈', layer:'单次产量', eff:'本次产量 ×1.15', p:0.10, loss:-0.15, kind:'mult' },
+]
+
+const CROPS = [
+  { n:'小萝卜', e:'🥬', lv:1, cost:2,   unit:2,   times:1, f:0.3 },
+  { n:'胡萝卜', e:'🥕', lv:1, cost:4,   unit:4,   times:1, f:0.4 },
+  { n:'玫瑰花', e:'🌹', lv:1, cost:16,  unit:6,   times:3, f:0.6 },
+  { n:'草莓',   e:'🍓', lv:2, cost:24,  unit:10,  times:2, f:0.8 },
+  { n:'玉米',   e:'🌽', lv:2, cost:44,  unit:18,  times:2, f:0.9 },
+  { n:'南瓜',   e:'🎃', lv:3, cost:60,  unit:40,  times:1, f:1.1 },
+  { n:'番茄',   e:'🍅', lv:3, cost:115, unit:25,  times:3, f:1.1 },
+  { n:'西瓜',   e:'🍉', lv:4, cost:240, unit:60,  times:2, f:1.3 },
+  { n:'向日葵', e:'🌻', lv:5, cost:500, unit:100, times:2, f:1.6 },
+  { n:'魔法豆', e:'🫘', lv:6, cost:800, unit:240, times:1, f:2.0 },
+]
+const TREES = [
+  { n:'苹果树', e:'🍎', lv:4, cost:305, first:45, interval:30, times:8,  f:1.3 },
+  { n:'柠檬树', e:'🍋', lv:5, cost:670, first:60, interval:45, times:10, f:1.5 },
+]
+const ANIMALS = [
+  { n:'小鸡', e:'🐔', lv:1, cost:78,   mature:15, interval:60,  times:5, f:0.3 },
+  { n:'小鸭', e:'🦆', lv:2, cost:130,  mature:20, interval:90,  times:5, f:0.5 },
+  { n:'绵羊', e:'🐑', lv:2, cost:270,  mature:30, interval:150, times:6, f:0.7 },
+  { n:'小猪', e:'🐷', lv:3, cost:550,  mature:40, interval:240, times:6, f:1.0 },
+  { n:'奶牛', e:'🐄', lv:4, cost:1400, mature:60, interval:360, times:8, f:1.2 },
+]
+
+const $ = (s) => document.querySelector(s)
+const kOf = (f) => Math.min(0.97, Math.max(0.4, 1 - 0.19 * f))
+const n0 = (n) => Math.round(n).toLocaleString('zh-CN')
+const n1 = (n) => (Math.round(n * 10) / 10).toLocaleString('zh-CN')
+const dur = (m) => m < 60 ? m + ' 分' : m < 1440 ? (Math.round(m / 6) / 10) + ' 小时' : (Math.round(m / 144) / 10) + ' 天'
+
+function render() {
+  const r = parseFloat($('#ratio').value)
+  $('#rval').textContent = Math.round(r * 100) + '%'
+
+  const mkRow = (label, e, lv, cost, mid, mins, times, f) => {
+    const kv = kOf(f)
+    const capOut = cost * (1 + r)
+    const expOut = cost * (1 + r * kv)
+    const profit = expOut - cost
+    const perMin = profit / mins
+    return `<tr>
+      <td class="name"><span class="e">${e}</span>${label}</td>
+      <td><span class="lv">L${lv}</span></td>
+      <td>${n0(cost)}</td>${mid}<td>${times}</td><td>${dur(mins)}</td>
+      <td class="cap">${n1(capOut)}</td>
+      <td class="exp">${n1(expOut)}</td>
+      <td class="exp">+${n1(profit)}</td>
+      <td class="exp">${perMin.toFixed(2)}</td>
+      <td class="loss">${Math.round((1 - kv) * 100)}%</td></tr>`
+  }
+
+  $('#tc tbody').innerHTML = CROPS.map(c =>
+    mkRow(c.n, c.e, c.lv, c.cost, `<td>${c.unit} 分</td>`, c.unit * c.times, c.times, c.f)).join('')
+  $('#tt tbody').innerHTML = TREES.map(t =>
+    mkRow(t.n, t.e, t.lv, t.cost, `<td>${t.first} 分</td><td>${t.interval} 分</td>`,
+      t.first + (t.times - 1) * t.interval, t.times, t.f)).join('')
+  $('#ta tbody').innerHTML = ANIMALS.map(a =>
+    mkRow(a.n, a.e, a.lv, a.cost, `<td>${a.mature} 分</td><td>${dur(a.interval)}</td>`,
+      a.mature + a.times * a.interval, a.times, a.f)).join('')
+
+  $('#te tbody').innerHTML = EVENTS.map(ev => {
+    const impact = ev.kind === 'time' ? '<span class="muted">不削减总量</span>'
+      : ev.loss < 0 ? `<span class="exp">总量 +${Math.round(-ev.loss * 100)}%</span>`
+      : ev.kind === 'count' ? '<span class="loss">总量 −1 次</span>'
+      : `<span class="loss">总量 −${Math.round(ev.loss * 100)}%</span>`
+    const cls = ev.loss < 0 ? 't-grass' : ev.kind === 'count' ? 't-rose' : ev.kind === 'time' ? 't-sky' : 't-sun'
+    return `<tr><td class="name"><span class="e">${ev.e}</span>${ev.n}</td>
+      <td><span class="tag ${cls}">${ev.layer}</span></td>
+      <td>${ev.eff}</td><td>${Math.round(ev.p * 100)}%</td><td>${impact}</td></tr>`
+  }).join('')
+
+  /* 递增条：每档取最高的每分钟期望 */
+  const byLv = {}
+  for (const c of CROPS) {
+    const v = (c.cost * r * kOf(c.f)) / (c.unit * c.times)
+    byLv[c.lv] = Math.max(byLv[c.lv] ?? 0, v)
+  }
+  const maxV = Math.max(...Object.values(byLv))
+  $('#ramp').innerHTML = Object.keys(byLv).map(Number).sort().map(lv => {
+    const v = byLv[lv]
+    return `<div class="barrow">
+      <span class="nm">L${lv}</span>
+      <span class="bt"><span class="bar" style="width:${(v / maxV) * 100}%"></span></span>
+      <span class="bv">${v.toFixed(2)}</span></div>`
+  }).join('')
+}
+
+$('#ratio').addEventListener('input', render)
+render()
+</script>
+</body>
+</html>

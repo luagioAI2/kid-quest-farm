@@ -89,7 +89,7 @@ export function PinPad({
               }
             }}
             className={
-              'btn-3d rounded-2xl py-4 text-xl font-extrabold shadow-cartoon-sm disabled:opacity-50 ' +
+              'btn rounded-2xl py-4 text-xl font-extrabold shadow-flat disabled:opacity-50 ' +
               (k === '确定' ? 'bg-grass-400 text-ink-900' : 'bg-white text-ink-900')
             }
           >

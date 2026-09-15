@@ -6,7 +6,7 @@ import type { QualityGrade, TaskInstance } from '@/domain/types'
 import { useApp } from '@/store/useApp'
 import {
   Btn,
-  CATEGORY,
+  categoryOf,
   RewardChips,
   Sheet,
   SheetHead,
@@ -68,7 +68,7 @@ export function TaskDetail({
 
   if (!inst) return null
 
-  const cat = CATEGORY[inst.category]
+  const cat = categoryOf(inst.category)
   const elapsedMin = effectiveMinutes
   const tone = timerTone(elapsedMin, inst.plannedMinutes)
   const pct = inst.plannedMinutes > 0 ? Math.min(200, (elapsedMin / inst.plannedMinutes) * 100) : 0
@@ -129,7 +129,7 @@ export function TaskDetail({
         ) : (
           <>
             {/* ---------- 计时 / 用时 ---------- */}
-            <div className={clsx('card-cartoon anim-bounce-in border-[3px] p-4', TONE_BG[tone])}>
+            <div className={clsx('surface anim-bounce-in border p-4', TONE_BG[tone])}>
               <div className="flex items-end justify-between">
                 <div>
                   <p className="text-xs font-bold text-ink-500">
@@ -151,7 +151,7 @@ export function TaskDetail({
 
               {/* 进度条：计划内 / 超时 / 超一倍 */}
               {!running && (
-                <div className="mt-3 h-3 w-full overflow-hidden rounded-full border-2 border-white/70 bg-white/60">
+                <div className="mt-3 h-3 w-full overflow-hidden rounded-full border border-white/70 bg-white/60">
                   <div
                     className={clsx(
                       'h-full rounded-full transition-all',
@@ -166,7 +166,7 @@ export function TaskDetail({
                 </div>
               )}
               {running && (
-                <div className="mt-3 h-3 w-full overflow-hidden rounded-full border-2 border-white/70 bg-white/60">
+                <div className="mt-3 h-3 w-full overflow-hidden rounded-full border border-white/70 bg-white/60">
                   <div
                     className={clsx(
                       'h-full rounded-full transition-all',
@@ -194,7 +194,7 @@ export function TaskDetail({
                 <div className="mt-4 flex items-center justify-center gap-3">
                   <StepBtn label="−5" onClick={() => setMinutes((m) => Math.max(0, m - 5))} />
                   <StepBtn label="−1" onClick={() => setMinutes((m) => Math.max(0, m - 1))} />
-                  <div className="min-w-[92px] rounded-2xl border-[3px] border-ink-100 bg-white px-3 py-1 text-center">
+                  <div className="min-w-[92px] rounded-2xl border border-ink-100 bg-white px-3 py-1 text-center">
                     <span className="tnum font-display text-3xl font-extrabold text-ink-900">
                       {Math.round(minutes)}
                     </span>
@@ -211,7 +211,7 @@ export function TaskDetail({
                     <button
                       key={i}
                       onClick={() => setMinutes(v)}
-                      className="btn-3d active:btn-3d-press min-h-[44px] rounded-pill border-2 border-ink-100 bg-white px-3 text-xs font-extrabold text-ink-700 shadow-[0_3px_0_0_var(--color-ink-100)]"
+                      className="btn active:btn-press min-h-[44px] rounded-pill border border-ink-100 bg-white px-3 text-xs font-extrabold text-ink-700"
                     >
                       {i === 0 ? `按计划 ${v} 分` : `两倍 ${v} 分`}
                     </button>
@@ -222,7 +222,7 @@ export function TaskDetail({
 
             {/* ---------- 质量评分：改由家长在审核时给 ---------- */}
             {inst.qualityRated && (
-              <div className="mt-4 rounded-2xl border-2 border-dashed border-sun-400/60 bg-sun-50 p-3.5">
+              <div className="mt-4 rounded-2xl border border-dashed border-sun-400/60 bg-sun-50 p-3.5">
                 <p className="text-sm font-extrabold text-ink-900">
                   ✨ 这项任务有质量加分
                 </p>
@@ -238,7 +238,7 @@ export function TaskDetail({
             {preview && (
               <div
                 className={clsx(
-                  'card-cartoon anim-bounce-in mt-4 overflow-hidden border-[3px] p-4',
+                  'surface anim-bounce-in mt-4 overflow-hidden border p-4',
                   preview.points > 0 ? 'border-grass-300 bg-grass-50' : 'border-ink-100 bg-white',
                 )}
               >
@@ -275,7 +275,7 @@ export function TaskDetail({
 
             {/* ---------- 奖励掉落预览 ---------- */}
             {inst.rewardItemIds.length > 0 && (
-              <div className="mt-3 flex items-center gap-2 rounded-2xl border-2 border-grape-200 bg-grape-100 px-3 py-2">
+              <div className="mt-3 flex items-center gap-2 rounded-2xl border border-grape-200 bg-grape-100 px-3 py-2">
                 <span className="text-sm font-extrabold text-grape-500">完成后掉落</span>
                 <RewardChips itemIds={inst.rewardItemIds} max={6} />
               </div>
@@ -305,7 +305,7 @@ export function TaskDetail({
                   我放弃了 🥲
                 </button>
               ) : (
-                <div className="anim-fade-in rounded-2xl border-2 border-ink-100 bg-white p-3 text-center">
+                <div className="anim-fade-in rounded-2xl border border-ink-100 bg-white p-3 text-center">
                   <p className="text-sm font-bold text-ink-700">
                     放弃就没积分啦，确定吗？（不会扣分的）
                   </p>
@@ -334,7 +334,7 @@ function StepBtn({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       onClick={onClick}
       aria-label={label.startsWith('−') ? `减少${label.slice(1)}分钟` : `增加${label.slice(1)}分钟`}
-      className="btn-3d active:btn-3d-press flex h-14 w-14 shrink-0 items-center justify-center border-[3px] border-ink-100 bg-white shadow-[0_4px_0_0_var(--color-ink-100)]"
+      className="btn active:btn-press flex h-14 w-14 shrink-0 items-center justify-center border border-ink-100 bg-white"
     >
       <span className="font-display text-base font-extrabold text-ink-900">{label}</span>
     </button>
@@ -355,7 +355,7 @@ function RuleSummary({ inst }: { inst: TaskInstance }) {
     lines.push(`✨ 做得好可以额外拿 ${inst.qualityBonusPoints} 分`)
   }
   return (
-    <ul className="mt-3 space-y-1 rounded-2xl border-2 border-ink-100 bg-white/70 p-3">
+    <ul className="mt-3 space-y-1 rounded-2xl border border-ink-100 bg-white/70 p-3">
       {lines.map((l) => (
         <li key={l} className="text-xs font-bold leading-snug text-ink-700">
           {l}
@@ -378,13 +378,13 @@ function Celebration({
   onDone: () => void
 }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border-[3px] border-sun-300 bg-sun-50 p-6 text-center">
+    <div className="relative overflow-hidden rounded-2xl border border-sun-300 bg-sun-50 p-6 text-center">
       {/* 飘落的小星星，纯 CSS */}
       <span className="anim-sparkle absolute left-4 top-4 text-2xl">✨</span>
       <span className="anim-sparkle absolute right-5 top-8 text-xl">⭐</span>
       <span className="anim-sparkle absolute bottom-6 left-8 text-xl">🌟</span>
 
-      <div className="anim-bounce-in mx-auto mb-2 flex h-24 w-24 items-center justify-center rounded-full border-[4px] border-sun-400 bg-white text-6xl shadow-cartoon">
+      <div className="anim-bounce-in mx-auto mb-2 flex h-24 w-24 items-center justify-center rounded-full border border-sun-400 bg-white text-6xl shadow-flat">
         {emoji}
       </div>
       <p className="font-display text-lg font-extrabold text-ink-900">
@@ -426,11 +426,11 @@ function SubmittedPanel({
   onDone: () => void
 }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border-[3px] border-sun-300 bg-gradient-to-b from-sun-50 to-sky-50 p-6 text-center">
+    <div className="relative overflow-hidden rounded-2xl border border-sun-300 bg-gradient-to-b from-sun-50 to-sky-50 p-6 text-center">
       <span className="anim-sparkle absolute left-4 top-4 text-2xl">✨</span>
       <span className="anim-sparkle absolute right-5 top-8 text-xl">💫</span>
 
-      <div className="anim-bounce-in mx-auto mb-2 flex h-24 w-24 items-center justify-center rounded-full border-[4px] border-sun-400 bg-white text-6xl shadow-cartoon">
+      <div className="anim-bounce-in mx-auto mb-2 flex h-24 w-24 items-center justify-center rounded-full border border-sun-400 bg-white text-6xl shadow-flat">
         📮
       </div>
       <p className="font-display text-xl font-extrabold text-ink-900">交上去啦！</p>

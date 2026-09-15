@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useShallow } from 'zustand/react/shallow'
 import { useApp, selectFarmLevel } from '@/store/useApp'
-import { CROP_BY_ID } from '@/domain/catalog'
+import { CROP_BY_ID, ITEM_BY_ID } from '@/domain/catalog'
 import {
   cropDefOf,
   cropProgress,
@@ -16,6 +16,7 @@ import type { Plot } from '@/domain/types'
 import { SeedShop } from './SeedShop'
 import { AnimalHouse } from './AnimalHouse'
 import { MarketSheet } from './MarketSheet'
+import { HarvestSheet } from './HarvestSheet'
 import { FarmLog } from './FarmLog'
 import { GrowthBar, countdownText } from './farmUi'
 import { useFarmTick } from './useFarmTick'
@@ -30,7 +31,6 @@ import './farm.css'
 
 export default function FarmPage() {
   const plots = useApp((s) => s.plots)
-  const balance = useApp((s) => s.balance)
   const animals = useApp((s) => s.animals)
   const farmEvents = useApp((s) => s.farmEvents)
   const farmClock = useApp((s) => s.settings.farmClock)
@@ -48,6 +48,8 @@ export default function FarmPage() {
   const [logOpen, setLogOpen] = useState(false)
   /** 正在等待「点一块地种下」的种子 */
   const [pendingCropId, setPendingCropId] = useState<string | null>(null)
+  /** 点开了哪块成熟的地 —— 让它在「当场卖 / 收背包」之间选一个 */
+  const [harvestPlot, setHarvestPlot] = useState<Plot | null>(null)
 
   const now = useFarmTick(1000)
   const pendingCrop = pendingCropId ? CROP_BY_ID.get(pendingCropId) : undefined
@@ -98,7 +100,6 @@ export default function FarmPage() {
       {/* ------- 内容 ------- */}
       <div className="relative z-10 flex flex-1 flex-col px-3 pt-safe">
         <TopBar
-          balance={balance}
           level={level}
           animalCount={animals.length}
           timeScale={farmClock.timeScale}
@@ -109,7 +110,7 @@ export default function FarmPage() {
 
         {/* 播种引导条 */}
         {pendingCrop ? (
-          <div className="anim-bounce-in mt-3 flex items-center gap-3 rounded-3xl border-[3px] border-grass-600/25 bg-white/95 p-2.5 shadow-cartoon">
+          <div className="anim-bounce-in mt-3 flex items-center gap-3 rounded-2xl border border-grass-600/25 bg-white/95 p-2.5 shadow-flat">
             <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-grass-100 text-2xl">
               {pendingCrop.emoji}
             </span>
@@ -125,7 +126,7 @@ export default function FarmPage() {
             <button
               type="button"
               onClick={() => setPendingCropId(null)}
-              className="btn-3d shrink-0 rounded-2xl border-[3px] border-ink-900/10 bg-ink-100 px-3 py-2 text-sm font-bold text-ink-700 active:btn-3d-press"
+              className="btn shrink-0 rounded-2xl border border-ink-900/10 bg-ink-100 px-3 py-2 text-sm font-bold text-ink-700 active:btn-press"
             >
               取消
             </button>
@@ -141,6 +142,7 @@ export default function FarmPage() {
               now={now}
               pendingCropId={pendingCropId}
               onPlanted={() => setPendingCropId(null)}
+              onHarvestRequest={setHarvestPlot}
             />
           ))}
         </div>
@@ -154,7 +156,7 @@ export default function FarmPage() {
                 setPendingCropId(null)
                 setShopOpen(true)
               }}
-              className="btn-3d flex min-h-[60px] flex-1 items-center justify-center gap-1.5 rounded-3xl border-[3px] border-grass-600/30 bg-gradient-to-b from-grass-300 to-grass-500 font-display text-base font-extrabold text-white shadow-cartoon active:btn-3d-press"
+              className="btn flex min-h-[60px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-grass-600/30 bg-gradient-to-b from-grass-300 to-grass-500 font-display text-base font-extrabold text-white shadow-flat active:btn-press"
             >
               <span className="text-xl" aria-hidden>
                 🌱
@@ -167,7 +169,7 @@ export default function FarmPage() {
                 setPendingCropId(null)
                 setBarnOpen(true)
               }}
-              className="btn-3d flex min-h-[60px] flex-1 items-center justify-center gap-1.5 rounded-3xl border-[3px] border-grape-500/30 bg-gradient-to-b from-grape-300 to-grape-500 font-display text-base font-extrabold text-white shadow-cartoon active:btn-3d-press"
+              className="btn flex min-h-[60px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-grape-500/30 bg-gradient-to-b from-grape-300 to-grape-500 font-display text-base font-extrabold text-white shadow-flat active:btn-press"
             >
               <span className="text-xl" aria-hidden>
                 🐾
@@ -180,7 +182,7 @@ export default function FarmPage() {
                 setPendingCropId(null)
                 setMarketOpen(true)
               }}
-              className="btn-3d relative flex min-h-[60px] flex-[1.15] items-center justify-center gap-1.5 rounded-3xl border-[3px] border-sun-600/40 bg-gradient-to-b from-sun-300 to-sun-500 font-display text-base font-extrabold text-ink-900 shadow-cartoon active:btn-3d-press"
+              className="btn relative flex min-h-[60px] flex-[1.15] items-center justify-center gap-1.5 rounded-2xl border border-sun-600/40 bg-gradient-to-b from-sun-300 to-sun-500 font-display text-base font-extrabold text-ink-900 shadow-flat active:btn-press"
             >
               <span className="text-xl" aria-hidden>
                 🏪
@@ -188,7 +190,7 @@ export default function FarmPage() {
               市场
               {/* 背包里有能卖的东西就提示一下，否则孩子不知道这里能换积分 */}
               {sellableUnits > 0 && (
-                <span className="tnum anim-pop absolute -right-1.5 -top-1.5 grid min-w-[22px] place-items-center rounded-full border-2 border-white bg-berry-500 px-1 text-[11px] font-extrabold text-white">
+                <span className="tnum anim-pop absolute -right-1.5 -top-1.5 grid min-w-[22px] place-items-center rounded-full border border-white bg-berry-500 px-1 text-[11px] font-extrabold text-white">
                   {sellableUnits}
                 </span>
               )}
@@ -225,6 +227,8 @@ export default function FarmPage() {
       <AnimalHouse open={barnOpen} onClose={() => setBarnOpen(false)} now={now} />
       <MarketSheet open={marketOpen} onClose={() => setMarketOpen(false)} />
       <FarmLog open={logOpen} onClose={() => setLogOpen(false)} />
+      {/* 成熟的地块先问一句「当场卖还是收背包」，不替孩子做决定 */}
+      <HarvestSheet plot={harvestPlot} onClose={() => setHarvestPlot(null)} />
     </div>
   )
 }
@@ -254,7 +258,6 @@ function farmClockLabel(timeScale: number): { day: number; hhmm: string } {
 }
 
 function TopBar({
-  balance,
   level,
   animalCount,
   timeScale,
@@ -262,7 +265,6 @@ function TopBar({
   unreadEvents,
   onOpenLog,
 }: {
-  balance: number
   level: { level: number; into: number; need: number }
   animalCount: number
   timeScale: number
@@ -273,23 +275,23 @@ function TopBar({
   const ratio = level.need > 0 ? level.into / level.need : 1
   const clock = farmClockLabel(timeScale)
   return (
-    <div className="card-cartoon mt-2 p-2.5">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="grid size-11 place-items-center rounded-2xl bg-sun-100 text-2xl">
-            🪙
-          </span>
-          <span className="tnum font-display text-2xl font-extrabold leading-none text-ink-900">
-            {balance}
-          </span>
-        </div>
+    <div className="surface mt-2 p-2.5">
+      {/*
+        ⚠️ 这里**不再显示 🪙 / 🌾**。
+        全局顶栏（`App.tsx` 的 `header`，`sticky top-0`）已经常驻显示这两个币种，
+        农场卡再放一遍，就是**同一屏里同一件事出现两次**。
+        本卡只留「农场自己的状态」：等级 / 进度、动物数、日志入口。
 
+        历史：这里曾经 5 个块挤在 390px 里，gap-3 会把「1 级农场」挤到换行、
+        整行 44px → 54px 把顶栏裁掉。块少了，但**别把 gap 调大**。
+      */}
+      <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-display text-sm font-extrabold text-grass-600">
+            <span className="whitespace-nowrap font-display text-sm font-extrabold text-grass-600">
               🏅 {level.level} 级农场
             </span>
-            <span className="tnum text-xs text-ink-500">
+            <span className="tnum shrink-0 text-xs text-ink-500">
               {level.into}/{level.need}
             </span>
           </div>
@@ -304,12 +306,12 @@ function TopBar({
         <button
           type="button"
           onClick={onOpenLog}
-          className="btn-3d relative grid size-11 shrink-0 place-items-center rounded-2xl border-[3px] border-ink-900/10 bg-white text-xl active:btn-3d-press"
+          className="btn relative grid size-11 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-white text-xl active:btn-press"
           aria-label="农场日志"
         >
           📖
           {unreadEvents > 0 && (
-            <span className="tnum absolute -right-1 -top-1 grid min-w-[20px] place-items-center rounded-full border-2 border-white bg-berry-500 px-0.5 text-[10px] font-extrabold text-white">
+            <span className="tnum absolute -right-1 -top-1 grid min-w-[20px] place-items-center rounded-full border border-white bg-berry-500 px-0.5 text-[10px] font-extrabold text-white">
               {unreadEvents > 9 ? '9+' : unreadEvents}
             </span>
           )}
@@ -343,15 +345,17 @@ function PlotTile({
   now,
   pendingCropId,
   onPlanted,
+  onHarvestRequest,
 }: {
   plot: Plot
   now: number
   /** 当前待播种的作物 id，非空且这块地是空地时高亮 */
   pendingCropId: string | null
   onPlanted: () => void
+  /** 点了一块成熟的地 —— 交给父级弹「当场卖 / 收背包」 */
+  onHarvestRequest: (plot: Plot) => void
 }) {
   const plant = useApp((s) => s.plant)
-  const harvest = useApp((s) => s.harvest)
   const unlockPlot = useApp((s) => s.unlockPlot)
   const water = useApp((s) => s.water)
   const pushToast = useApp((s) => s.pushToast)
@@ -381,7 +385,7 @@ function PlotTile({
           void unlockPlot(plot.index)
         }}
         className={clsx(
-          'btn-3d flex aspect-square flex-col items-center justify-center gap-0.5 rounded-3xl border-[3px] border-dashed shadow-cartoon-sm active:btn-3d-press',
+          'btn flex aspect-square flex-col items-center justify-center gap-0.5 rounded-2xl border border-dashed shadow-flat active:btn-press',
           affordable
             ? 'border-sun-400 bg-sun-100'
             : 'border-ink-300 bg-white/60',
@@ -433,7 +437,7 @@ function PlotTile({
         type="button"
         onClick={clearWithered}
         className={clsx(
-          'btn-3d relative flex aspect-square flex-col items-center justify-center gap-1 overflow-hidden rounded-3xl border-[3px] shadow-cartoon-sm active:btn-3d-press',
+          'btn relative flex aspect-square flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl border shadow-flat active:btn-press',
           withered
             ? 'border-ink-300 bg-ink-100'
             : 'bg-grass-100',
@@ -483,7 +487,9 @@ function PlotTile({
 
   const onTap = () => {
     tapBump()
-    if (mature) void harvest(plot.index)
+    // 成熟了不直接收 —— 先让孩子选「当场卖」还是「收背包」。
+    // 默认不替他决定，这是用户明确要的「提供选择」。
+    if (mature) onHarvestRequest(plot)
     else void water(plot.index)
   }
 
@@ -492,7 +498,7 @@ function PlotTile({
       type="button"
       onClick={onTap}
       className={clsx(
-        'btn-3d relative flex aspect-square flex-col items-center justify-center gap-1 overflow-hidden rounded-3xl border-[3px] shadow-cartoon-sm active:btn-3d-press',
+        'btn relative flex aspect-square flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl border shadow-flat active:btn-press',
         mature
           ? 'border-sun-400/50 bg-gradient-to-b from-sun-100 to-sun-200'
           : 'border-ink-900/15 bg-gradient-to-b from-grass-100 to-grass-200',
@@ -520,8 +526,10 @@ function PlotTile({
       {mature ? (
         <>
           <span className="font-display text-[11px] font-extrabold text-sun-700">可以收啦!</span>
+          {/* ⚠️ 这里不能写 🪙 —— 收获**不发积分**，产出物进背包，
+              钱要等卖出才结算（而且是 🌾 不是 🪙）。显示产出物才对。 */}
           <span className="tnum rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-extrabold text-sun-700">
-            ≈{def?.harvestPoints ?? 0} 🪙
+            {ITEM_BY_ID.get(def?.produceItemId ?? '')?.emoji ?? '🧺'} ≈{def?.produceAmount ?? 1} 个
           </span>
         </>
       ) : (

@@ -139,6 +139,8 @@ export interface PeriodUnit {
   index: number
   label: string
   done: boolean
+  /** 已交上去、等家长审核（既不是空格子，也还没算完成） */
+  pending?: boolean
   completedAt?: number
   actualMinutes?: number
   earnedPoints?: number
@@ -157,6 +159,9 @@ export function buildPeriodUnits(
       index: i,
       label: `第 ${i + 1} 次`,
       done: !!s && (s.status === 'completed' || s.status === 'failed'),
+      // 待审核的格子必须和「还没做」区分开 —— 否则孩子看到空格子会再交一次，
+      // 家长那边就冒出两条一模一样的待办。
+      pending: !!s && s.status === 'submitted',
       completedAt: s?.completedAt,
       actualMinutes: s?.actualMinutes,
       earnedPoints: s?.earnedPoints,

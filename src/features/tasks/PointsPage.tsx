@@ -17,7 +17,6 @@ const PAGE_SIZE = 30
 const INITIAL_ROWS = 30
 
 export default function PointsPage() {
-  const balance = useApp((s) => s.balance)
   const ledger = useApp((s) => s.ledger)
   const instances = useApp((s) => s.instances)
   const checkIns = useApp((s) => s.checkIns)
@@ -53,22 +52,20 @@ export default function PointsPage() {
 
   return (
     <div className="mx-auto w-full max-w-[430px] px-4 pb-28">
-      {/* ================= 余额 ================= */}
+      {/*
+        ⚠️ 这里**不再有「🪙 现在一共有 N」那张余额大卡**。
+        全局顶栏（`App.tsx` 的 sticky header）已经常驻显示同一个数，
+        同一屏里同一个数出现两次，孩子反而不知道该看哪个。
+        这一页的职责是「这些分是怎么来的 / 攒到了哪些成就」，
+        余额只在顶栏说一次。
+        （e2e-check 有断言守着；同一条规矩也适用于兑换页和农场卡。）
+      */}
       <header className="pt-safe pt-4">
-        <h1 className="font-display text-xl font-extrabold text-ink-900">我的积分 🪙</h1>
-        <div className="card-cartoon mt-3 flex items-center gap-4 border-[3px] border-sun-300 bg-gradient-to-br from-sun-100 via-sun-50 to-grass-50 p-5">
-          <span className="anim-sway text-5xl">🪙</span>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-ink-500">现在一共有</p>
-            <p className="tnum font-display text-5xl font-extrabold leading-none text-sun-600">
-              {balance}
-            </p>
-          </div>
-        </div>
+        <h1 className="font-display text-xl font-extrabold text-ink-900">我的积分</h1>
       </header>
 
       {/* ================= 7 日柱状图 ================= */}
-      <section className="card-cartoon mt-4 border-[3px] border-sky-300 bg-white p-4">
+      <section className="surface mt-4 border border-sky-300 bg-white p-4">
         <div className="flex items-baseline justify-between">
           <h2 className="font-display text-base font-extrabold text-ink-900">最近 7 天赚到的分</h2>
           <span className="tnum text-xs font-bold text-ink-500">
@@ -91,7 +88,7 @@ export default function PointsPage() {
                 <div className="flex h-[76px] w-full items-end">
                   <div
                     className={clsx(
-                      'w-full rounded-t-lg border-2 border-b-0 transition-all duration-500',
+                      'w-full rounded-t-lg border border-b-0 transition-all duration-500',
                       d.isToday ? 'border-sun-500 bg-sun-300' : 'border-sky-400 bg-sky-300',
                       d.total === 0 && 'border-ink-100 bg-ink-100',
                     )}
@@ -129,7 +126,7 @@ export default function PointsPage() {
               key={a.id}
               title={a.desc}
               className={clsx(
-                'card-cartoon flex min-h-[104px] flex-col items-center justify-center gap-1 border-[3px] p-2 text-center',
+                'surface flex min-h-[104px] flex-col items-center justify-center gap-1 border p-2 text-center',
                 a.unlocked
                   ? clsx(a.border, a.bg)
                   : 'border-dashed border-ink-300 bg-white/60 opacity-70',
@@ -163,7 +160,7 @@ export default function PointsPage() {
           <h2 className="font-display text-lg font-extrabold text-ink-900">积分流水</h2>
         </div>
         {ledger.length === 0 ? (
-          <div className="card-paper p-4 text-sm font-bold text-ink-500">
+          <div className="surface-paper p-4 text-sm font-bold text-ink-500">
             还没有记录，去完成一个任务吧 ✨
           </div>
         ) : (
@@ -176,7 +173,7 @@ export default function PointsPage() {
             {ledger.length > visibleCount && (
               <button
                 onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
-                className="btn-3d active:btn-3d-press mt-3 w-full rounded-btn border-2 border-ink-200 bg-white py-2.5 text-sm font-extrabold text-ink-700"
+                className="btn active:btn-press mt-3 w-full rounded-btn border border-ink-200 bg-white py-2.5 text-sm font-extrabold text-ink-700"
               >
                 再看早一点的记录（还有 {ledger.length - visibleCount} 条）
               </button>
@@ -212,7 +209,7 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
   const positive = entry.delta > 0
   const zero = entry.delta === 0
   return (
-    <li className="card-cartoon flex items-center gap-3 border-[3px] border-ink-100 bg-white p-3">
+    <li className="surface flex items-center gap-3 border border-ink-100 bg-white p-3">
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-ink-100/60 text-xl">
         {meta.emoji}
       </span>

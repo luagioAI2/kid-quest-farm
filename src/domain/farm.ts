@@ -1,12 +1,13 @@
 import type {
   Animal,
+  AnimalDef,
   AnimalMood,
   CropStage,
   FarmState,
   Plot,
 } from './types'
 import { ANIMAL_BY_ID, CROP_BY_ID } from './catalog'
-import { farmMinutes, isAnimalExpired } from './farmEvents'
+import { farmMinutes } from './farmEvents'
 
 /* ============================================================
    农场引擎
@@ -156,26 +157,36 @@ export function animalNextProduceMinutes(
 
 /**
  * 心情：投喂得当就开心。
- * 生病 → sick；12 小时没喂 → hungry；快老去 → old；3 小时内喂过 → happy。
+ * 生病 → sick；产出次数用尽 → spent（"不产了"）；12 小时没喂 → hungry；
+ * 快产完 → old；3 小时内喂过 → happy。
  */
 export function animalMood(animal: Animal, now = Date.now(), timeScale = 1): AnimalMood {
   if (animal.sickAt) return 'sick'
   const def = animalDefOf(animal)
-  if (def?.lifespanMinutes) {
-    const lived = farmMinutes(now - animal.bornAt, timeScale)
-    if (lived >= def.lifespanMinutes * 0.85) return 'old'
-  }
+  if (def && animalProduceLeft(animal, def) <= 0) return 'spent'
+  // 「老」现在看的是**产出用了几成**，不是活了多久 —— 寿命不再决定产出
+  if (def && animalAgeProgress(animal) >= 0.85) return 'old'
   const sinceFed = farmMinutes(now - animal.lastFedAt, timeScale) / 60
   if (sinceFed >= 12) return 'hungry'
   if (sinceFed <= 3) return 'happy'
   return 'normal'
 }
 
-/** 动物年龄进度 0-1（相对于寿命） */
-export function animalAgeProgress(animal: Animal, now = Date.now(), timeScale = 1): number {
+/** 还剩几次产出（≤0 就是已经停产，但动物还在） */
+export function animalProduceLeft(animal: Animal, def: AnimalDef): number {
+  return Math.max(0, def.produceTimes - (animal.produceCount ?? 0))
+}
+
+/** 是否已经产完（停产但未离世） */
+export function animalIsSpent(animal: Animal, def: AnimalDef): boolean {
+  return !animal.deceased && animalProduceLeft(animal, def) <= 0
+}
+
+/** 产出进度 0-1（**按产出次数算**，不再按寿命） */
+export function animalAgeProgress(animal: Animal): number {
   const def = animalDefOf(animal)
-  if (!def?.lifespanMinutes) return 0
-  return Math.min(1, farmMinutes(now - animal.bornAt, timeScale) / def.lifespanMinutes)
+  if (!def || def.produceTimes <= 0) return 0
+  return Math.min(1, (animal.produceCount ?? 0) / def.produceTimes)
 }
 
 /**
@@ -211,17 +222,12 @@ export function advanceAnimals(
       continue
     }
 
-    // 寿命检查
-    if (def.lifespanMinutes && isAnimalExpired(a, def.lifespanMinutes, now, timeScale)) {
-      changed = true
-      next.push({
-        ...a,
-        deceased: true,
-        diedAt: now,
-        lastEvent: `${a.name}陪了我们好久，安安静静地睡着了。`,
-      })
-      continue
-    }
+    // ⚠️ 这里**刻意不再做「寿命到期就老死」的检查**（2026-09-15 改）。
+    //
+    // 用户原话：「鸡也是到了周期，就不生蛋了。**虽然鸡还在。**」
+    // 动物改成「产够 produceTimes 次就停产，但留在农场里」。
+    // 旧模型是「活 8 天一直产」，小鸡成本 40 能换回约 20000 —— 经济完全失控。
+    // `isAnimalExpired` 保留导出（别的展示还在用），但**不再决定产出与生死**。
 
     // 生病期间不产出
     if (a.sickAt) {
@@ -230,6 +236,14 @@ export function advanceAnimals(
     }
 
     if (!isAnimalMature(a, now, timeScale)) {
+      next.push(a)
+      continue
+    }
+
+    // 产出次数用尽 → 停产。动物不消失、不生病、只是不再产东西。
+    const timesDone = a.produceCount ?? 0
+    const timesLeft = def.produceTimes - timesDone
+    if (timesLeft <= 0) {
       next.push(a)
       continue
     }
@@ -249,7 +263,10 @@ export function advanceAnimals(
       continue
     }
 
-    const times = Math.floor(elapsed / interval)
+    const elapsedTimes = Math.floor(elapsed / interval)
+    // **关键：产出次数封顶。** 离线一个月回来也只能收到剩下的那几次，
+    // 不会因为「攒了很久」就多产。
+    const times = Math.min(elapsedTimes, timesLeft)
     const gained = times * def.produceAmount
     if (gained <= 0) {
       next.push(a)
@@ -259,8 +276,9 @@ export function advanceAnimals(
     changed = true
     next.push({
       ...a,
+      produceCount: timesDone + times,
       pendingProduce: Math.min(PENDING_CAP, a.pendingProduce + gained),
-      lastProduceAt: last + times * interval,
+      lastProduceAt: last + elapsedTimes * interval,
     })
   }
 

@@ -270,20 +270,409 @@ try {
   })
   check('拒绝非法备份文件', badImport.ok === false, badImport.message)
 
+  /* ---- 脏分类不能把整页弄崩 ----
+     `Task.category` 在**类型**上是联合类型，运行时不是：导入的备份
+     （`validateBackup` 只校验结构，不逐个校验 category）或者更老的数据，
+     都可能带着一个现在已经不存在的分类。
+     以前渲染直接写 `CATEGORY[task.category]` → undefined →
+     紧接着的 `cat.solid` 抛 TypeError → ErrorBoundary 把**整个任务页**换成崩溃页。
+     一个字段不认识，代价是整页打不开。
+
+     这层要证的是「页面还能用」，所以必须**真的切到任务页去看** ——
+     只断言 store 里的数据没丢是不够的（数据一直在，崩的是渲染）。 */
+  const cleanBackup = await page.evaluate(async () => window.__kqf__.exportBackup())
+
+  const dirtyCat = await page.evaluate(async () => {
+    const backup = await window.__kqf__.exportBackup()
+    const dirty = JSON.parse(JSON.stringify(backup))
+    // 所有任务的分类都改成不存在的值 —— 保证渲染路径一定被走到
+    for (const t of dirty.data.tasks) t.category = 'dance-party'
+    const r = await window.__kqf__.importBackup(dirty)
+    await new Promise((res) => setTimeout(res, 600))
+    return { ok: r.ok, msg: r.message, titles: dirty.data.tasks.map((t) => t.title) }
+  })
+  check('带脏分类的备份能导入', dirtyCat.ok === true, dirtyCat.msg)
+
+  // 切回任务页（底部导航最后一个字是「任务」）
+  await page.evaluate(async () => {
+    const b = [...document.querySelectorAll('nav button')].find(
+      (x) => x.innerText.trim().split('\n').pop().trim() === '任务',
+    )
+    b?.click()
+    await new Promise((r) => setTimeout(r, 900))
+  })
+
+  const dirtyRender = await page.evaluate((titles) => {
+    const body = document.body.innerText
+    // 兜底分类到底有没有真的画出来 —— 找带「其他」语义的节点不如直接看颜色：
+    // Tailwind 对写错的类名（比如 `bg-ink-400`，ink 没有 400 档）
+    // 是**静默失败**的，类名照写、CSS 一个字节都不生成。
+    // 所以这里读计算样式：兜底是中性色，背景必须是**不透明**的。
+    // （这条比在单测里解析 theme.css 的令牌表更硬 ——
+    //  它证明的是「浏览器里真的画出来了」。）
+    const tiles = [...document.querySelectorAll('div[class*="surface"]')]
+    const painted = tiles
+      .map((el) => getComputedStyle(el).backgroundColor)
+      .filter((c) => c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent')
+    return {
+      len: body.trim().length,
+      rendered: titles.filter((t) => body.includes(t)).length,
+      crashed: /哎呀，这里出了点小问题/.test(body),
+      fallbackEmoji: body.includes('📌'),
+      paintedBg: painted.length,
+    }
+  }, dirtyCat.titles)
+  check(
+    '脏分类不会把任务页弄崩（兜底成「其他」）',
+    dirtyRender.len > 40 && !dirtyRender.crashed && dirtyRender.rendered > 0,
+    `页面长度 ${dirtyRender.len}、渲染出 ${dirtyRender.rendered} 个任务、` +
+      `崩溃页=${dirtyRender.crashed}、兜底图标 📌=${dirtyRender.fallbackEmoji}`,
+  )
+  check(
+    '兜底分类的底色真的画出来了（类名不是静默失效的）',
+    dirtyRender.paintedBg > 0,
+    `${dirtyRender.paintedBg} 个卡片有不透明背景色`,
+  )
+
+  // 把干净备份导回去，别污染后面的用例
+  const restored = await page.evaluate(async (backup) => {
+    const r = await window.__kqf__.importBackup(backup)
+    await new Promise((res) => setTimeout(res, 500))
+    return r.ok
+  }, cleanBackup)
+  check('还原干净备份', restored === true)
+
   /* ============ 6. 签到 ============ */
-  console.log('\n【6】签到任务')
+  console.log('\n【6】签到任务 → 家长审核')
+  // 签到以前是「孩子一点就发分」。开了家长审核后必须走：点签到 → 待审 → 家长确认 → 到账。
+  // 断言要跟着行为走，别只把失败的那行删掉 —— 那样等于把这条链路测丢了。
   const checkInRes = await page.evaluate(async () => {
     const s = window.__kqf__.getState()
     const task = s.tasks.find((t) => t.checkInEnabled)
     if (!task) return { err: 'no checkin task' }
     const before = s.balance
+
+    // 1) 点签到
     const r = await s.doCheckIn(task.id)
-    const after = window.__kqf__.getState().balance
+    const afterSubmit = window.__kqf__.getState().balance
+
+    // 2) 待审期间再点一次
     const again = await window.__kqf__.getState().doCheckIn(task.id)
-    return { gained: r.gained, bonus: r.bonus, before, after, againGained: again.gained }
+
+    const st = window.__kqf__.getState()
+    const rows = st.checkInProgress.filter((p) => p.taskId === task.id)
+    const pendingDays = rows.flatMap((p) => p.pendingDays ?? [])
+    const queueBefore = pendingDays.length
+
+    // 3) 家长确认
+    const pk = rows[0]?.periodKey
+    const date = pendingDays[0]
+    const gained = await window.__kqf__.getState().approveCheckIn(task.id, pk, date)
+    const st2 = window.__kqf__.getState()
+    const rows2 = st2.checkInProgress.filter((p) => p.taskId === task.id)
+
+    return {
+      basePoints: task.basePoints,
+      before,
+      submitGained: r.gained,
+      afterSubmit,
+      againGained: again.gained,
+      pendingDays,
+      queueBefore,
+      gained,
+      afterApprove: st2.balance,
+      days: rows2.flatMap((p) => p.days),
+      queueAfter: rows2.flatMap((p) => p.pendingDays ?? []).length,
+    }
   })
-  check('签到获得积分', checkInRes.gained > 0, `+${checkInRes.gained}${checkInRes.bonus ? ` (+${checkInRes.bonus} 阶梯)` : ''}`)
-  check('当天重复签到被拦截', checkInRes.againGained === 0)
+  check(
+    '签到先进入待审，当场不发积分',
+    checkInRes.submitGained === 0 && checkInRes.afterSubmit === checkInRes.before,
+    `${checkInRes.before} → ${checkInRes.afterSubmit}`,
+  )
+  check('待审签到出现在家长待办队列里', checkInRes.queueBefore === 1)
+  check(
+    '待审期间重复签到被拦截，不会攒出第二条',
+    checkInRes.againGained === 0 && checkInRes.pendingDays.length === 1,
+  )
+  check(
+    '家长确认后积分才到账',
+    checkInRes.gained >= checkInRes.basePoints &&
+      checkInRes.afterApprove === checkInRes.before + checkInRes.gained,
+    `+${checkInRes.gained}（基础 ${checkInRes.basePoints}）`,
+  )
+  check(
+    '确认后计入坚持天数并清空待办',
+    checkInRes.days.length === 1 && checkInRes.queueAfter === 0,
+    `days=${checkInRes.days.length} 待办=${checkInRes.queueAfter}`,
+  )
+
+  /* ============ 7. 收获二选一 + 每轮闸门（真实 DOM） ============ */
+  //
+  // 这一段**必须走真实点击**。store 级用例（`store/useApp.test.ts`）已经把闸门
+  // 算术测穿了，但测不到：「弹层有没有真的弹出来」「按钮点了有没有反应」
+  // 「弹层会不会被底部 TabBar 盖住」。历史上栽过的坑就是最后一条。
+  //
+  // 另外：**不要用「第一个写着『可以收啦』的地块」来定位** ——
+  // 前面几段流程留下的成熟地块顺序不确定，会点到别的作物上。
+  // 按 plots 数组下标点，才是确定的。
+  console.log('\n【7】收获二选一：当场卖 / 收进背包（真实点击）')
+
+  /** 关掉当前弹层（✕ 有 aria-label="关闭"） */
+  async function closeSheet() {
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(
+        (x) => x.getAttribute('aria-label') === '关闭',
+      )
+      b?.click()
+    })
+    await new Promise((r) => setTimeout(r, 400))
+  }
+
+  /** 点第 index 块地（网格里的直接子 button，顺序 == plots 顺序） */
+  async function tapPlot(index) {
+    return page.evaluate((i) => {
+      const grid = document.querySelector('div.grid.grid-cols-3')
+      if (!grid) return { ok: false, why: '找不到地块网格' }
+      const tiles = [...grid.querySelectorAll(':scope > button')]
+      if (!tiles[i]) return { ok: false, why: `第 ${i} 块地不存在（共 ${tiles.length} 块）` }
+      const text = tiles[i].innerText.replace(/\s+/g, ' ').trim()
+      tiles[i].click()
+      return { ok: true, text }
+    }, index)
+  }
+
+  /** 读第 index 块地的文案 */
+  async function plotText(index) {
+    return page.evaluate((i) => {
+      const grid = document.querySelector('div.grid.grid-cols-3')
+      const tiles = grid ? [...grid.querySelectorAll(':scope > button')] : []
+      return tiles[i] ? tiles[i].innerText.replace(/\s+/g, ' ').trim() : ''
+    }, index)
+  }
+
+  /**
+   * 轮询等到地块显示「可以收啦」。
+   *
+   * ⚠️ **不能用固定 sleep。** 农场页靠 `useFarmTick(1000)` 每秒重渲染一次，
+   * 种下后只等 900ms，有可能一次 tick 都没赶上 —— 地块还显示「还要 2 分钟」，
+   * 于是点了个寂寞（第一版就是这么假失败的）。
+   */
+  async function waitMaturePlot(index, timeoutMs = 8000) {
+    const t0 = Date.now()
+    while (Date.now() - t0 < timeoutMs) {
+      const text = await plotText(index)
+      if (/可以收啦/.test(text)) return { ok: true, text }
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    return { ok: false, text: await plotText(index) }
+  }
+
+  /** 种一块地，并轮询等它真的成熟（时钟已经拧到 1200×） */
+  async function plantMature(cropId) {
+    const planted = await page.evaluate(
+      async (id) => {
+        const st = () => window.__kqf__.getState()
+        const empty = st().plots.find((p) => p.unlocked && !p.crop)
+        if (!empty) return { ok: false, why: '没有已解锁的空地' }
+        return { ok: await st().plant(empty.index, id), index: empty.index }
+      },
+      cropId,
+    )
+    if (!planted.ok) return planted
+    const ripe = await waitMaturePlot(planted.index)
+    return { ok: ripe.ok, index: planted.index, text: ripe.text }
+  }
+
+  // 切到农场 Tab，关掉随机事件（让产量确定），把时钟拧快
+  await page.evaluate(async () => {
+    const b = [...document.querySelectorAll('button')].find(
+      (x) => x.innerText.trim().split('\n').pop().trim() === '农场',
+    )
+    b?.click()
+    await new Promise((r) => setTimeout(r, 1200))
+    const st = () => window.__kqf__.getState()
+    await st().updateSettings({ farmEventsEnabled: false })
+    await st().updateSettings({ farmClock: { ...st().settings.farmClock, timeScale: 1200 } })
+  })
+
+  const prep = await plantMature('carrot')
+  check('准备好一块成熟的地（1200× 时钟）', prep.ok === true, `plot=${prep.index}`)
+
+  const tapped = await tapPlot(prep.index)
+  check('点到的是成熟地块', tapped.ok === true && /可以收啦/.test(tapped.text ?? ''), tapped.text ?? tapped.why)
+  await new Promise((r) => setTimeout(r, 700))
+
+  const sheetText = await page.evaluate(() => document.body.innerText)
+  check('弹出「收进背包」选项', /收进背包/.test(sheetText))
+  check('弹出「当场卖掉」选项', /当场卖掉/.test(sheetText))
+  check('弹层里说明了这一轮的额度', /这一轮还能卖/.test(sheetText))
+
+  // 遮挡探针：弹层必须压过底部 TabBar。
+  // 项目踩过这个坑 —— 外壳的 anim-fade 是层叠上下文，弹层不 Portal 就永远在上面。
+  const occlusion = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll('button')].find((b) => /当场卖掉/.test(b.innerText))
+    if (!btn) return { ok: false, why: '找不到按钮' }
+    const r = btn.getBoundingClientRect()
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+    return {
+      ok: !!top && (top === btn || btn.contains(top)),
+      why: top ? `${top.tagName}.${String(top.className).slice(0, 40)}` : 'null（没测到）',
+      rect: `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)}`,
+    }
+  })
+  check('「当场卖掉」没有被别的层盖住', occlusion.ok, `${occlusion.rect} → 命中 ${occlusion.why}`)
+
+  // ---- ① 当场卖掉：钱立刻到账 ----
+  const sellRes = await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    const before = st().harvestBalance
+    const btn = [...document.querySelectorAll('button')].find((b) => /当场卖掉/.test(b.innerText))
+    if (!btn) return { err: '找不到按钮' }
+    btn.click()
+    await new Promise((r) => setTimeout(r, 1000))
+    return { before, after: st().harvestBalance }
+  })
+  check(
+    '「当场卖掉」立刻结算丰收币',
+    sellRes.after > sellRes.before,
+    `丰收币 ${sellRes.before} → ${sellRes.after}`,
+  )
+  await closeSheet()
+
+  // ---- ② 收进背包：不发钱，产出进背包 ----
+  const prep2 = await plantMature('carrot')
+  check('再准备一块成熟的地', prep2.ok === true, `plot=${prep2.index}`)
+  await tapPlot(prep2.index)
+  await new Promise((r) => setTimeout(r, 700))
+
+  const storeRes = await page.evaluate(async (idx) => {
+    const st = () => window.__kqf__.getState()
+    const before = st().harvestBalance
+    const itemsBefore = st().inventory.find((x) => x.itemId === 'produce-carrot')?.count ?? 0
+    // 收割前后的额度 —— 用来验「额度有没有跟着地块一起蒸发」
+    const capBefore = window.__kqf__.catalog.remainingCap('produce-carrot')
+    const btn = [...document.querySelectorAll('button')].find((b) => /收进背包/.test(b.innerText))
+    if (!btn) return { err: '找不到「收进背包」' }
+    btn.click()
+    await new Promise((r) => setTimeout(r, 1000))
+    return {
+      before,
+      after: st().harvestBalance,
+      gained: (st().inventory.find((x) => x.itemId === 'produce-carrot')?.count ?? 0) - itemsBefore,
+      capBefore,
+      capAfter: window.__kqf__.catalog.remainingCap('produce-carrot'),
+      carry: st().quotaCarry['produce-carrot'] ?? 0,
+      plotCrop: st().plots.find((p) => p.index === idx)?.crop ?? null,
+    }
+  }, prep2.index)
+  check(
+    '「收进背包」不发钱',
+    storeRes.after === storeRes.before,
+    `丰收币 ${storeRes.before} → ${storeRes.after}`,
+  )
+  check('「收进背包」产出进了背包', storeRes.gained > 0, `+${storeRes.gained} 个胡萝卜`)
+
+  // ---- ②b 收进背包之后，没用完的额度不能跟着地块蒸发 ----
+  //
+  // 2026-09-15 由界面走查发现、这一层负责守住：闸门挂在**活着的**标的上，
+  // 而胡萝卜是一次性作物，收完地块就变空地 → 标的消失 → 剩下那点额度
+  // 跟着蒸发 → 存进背包的产出**永远卖不掉**，还提示「这一轮已经卖满啦」。
+  // 而「收进背包」按钮上明写着「先存着，等市场上价格好的时候自己卖」。
+  //
+  // 判据用「收割前后剩余额度不该下降」，而不是「卖得出去就行」——
+  // 后者会假通过：脚本前面在第 0/1 号地留着两块没割的胡萝卜（老 fixture），
+  // 光靠它们的额度就够卖出钱，完全盖住了这个 bug。
+  // 额度是问领域函数拿的，不在脚本里手算，免得算错变成假失败。
+  check(
+    '收完那块地真的空了（一次性作物不能被复活）',
+    storeRes.plotCrop === null,
+    `地块 ${prep2.index} → ${JSON.stringify(storeRes.plotCrop)}`,
+  )
+  check(
+    '收割不会让剩余额度蒸发（没用完的结转了下来）',
+    storeRes.capAfter >= storeRes.capBefore - 0.01 && storeRes.carry > 0,
+    `额度 ${storeRes.capBefore.toFixed(2)} → ${storeRes.capAfter.toFixed(2)}，结转 ${storeRes.carry.toFixed(2)} 🌾`,
+  )
+
+  // ---- ③ 闸门：反复卖到卖不动，总额不能超过卖之前的剩余额度 ----
+  // 期望值直接问领域函数（`remainingCap`），不在脚本里手算「成本 × 1.6 × 地块数」——
+  // 手算要假设「有哪些地块、各自卖了没」，错一次就是假失败。
+  const gate = await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    const before = window.__kqf__.catalog.remainingCap('produce-carrot')
+
+    let total = 0
+    let rounds = 0
+    for (let i = 0; i < 40; i++) {
+      const got = await st().sellProduce('produce-carrot', 999)
+      if (got <= 0) break
+      total += got
+      rounds++
+    }
+    return {
+      total,
+      rounds,
+      before,
+      after: window.__kqf__.catalog.remainingCap('produce-carrot'),
+      left: st().inventory.find((x) => x.itemId === 'produce-carrot')?.count ?? 0,
+    }
+  })
+  check('反复卖到卖不动（确实卖出去过）', gate.total > 0, `${gate.rounds} 轮共 ${gate.total.toFixed(2)} 🌾`)
+  check(
+    '总卖出额不超过卖之前的剩余额度',
+    gate.total <= gate.before + 0.02,
+    `卖出 ${gate.total.toFixed(2)} ≤ 卖前剩余 ${gate.before.toFixed(2)}`,
+  )
+  check(
+    '卖出确实扣掉了额度（闸门记账生效）',
+    gate.after < gate.before - 0.01,
+    `剩余额度 ${gate.before.toFixed(2)} → ${gate.after.toFixed(2)}`,
+  )
+
+  // ---- ④ 家长把浮盈上限调到 40%，弹层里的额度要跟着变 ----
+  const ratioPrep = await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    await st().updateSettings({ profitRatio: 0.4 })
+    const empty = st().plots.find((p) => p.unlocked && !p.crop)
+    if (!empty) return { ok: false, why: '没有空地' }
+    return { ok: await st().plant(empty.index, 'radish'), index: empty.index }
+  })
+  if (ratioPrep.ok) await waitMaturePlot(ratioPrep.index)
+  // 期望值问领域函数，不在脚本里手算 —— 手算要假设「有哪些地块、各自卖了没」。
+  // ⚠️ 弹层按 **0.1** 显示（`HarvestSheet` 的 `fmt`），这里必须用同一个口径，
+  // 用 Math.round 去比会在 2.8 这种数上假失败。
+  const ratioExpected = await page.evaluate(() =>
+    Number(window.__kqf__.catalog.remainingCap('produce-radish').toFixed(1)),
+  )
+  check('调上限后种下一块小萝卜', ratioPrep.ok === true, `plot=${ratioPrep.index}`)
+
+  const ratioTap = await tapPlot(ratioPrep.index)
+  await new Promise((r) => setTimeout(r, 700))
+  const shownRes = await page.evaluate(() => {
+    const t = document.body.innerText
+    const m = t.match(/这一轮还能卖\s*([\d.]+)/)
+    return {
+      shown: m ? Number(m[1]) : -1,
+      sheetOpen: /收进背包/.test(t),
+      tail: t.replace(/\s+/g, ' ').slice(-140),
+    }
+  })
+  check(
+    '上限调到 40% 后，弹层显示的额度 = 领域函数算出来的剩余额度',
+    ratioTap.ok === true && shownRes.shown === ratioExpected,
+    `tap=${ratioTap.ok ? 'ok' : (ratioTap.why ?? '?')} 点到的地=「${ratioTap.text ?? ''}」；` +
+      `弹层${shownRes.sheetOpen ? '已开' : '没开'}；显示 ${shownRes.shown}，应为 ${ratioExpected}；末尾「${shownRes.tail}」`,
+  )
+  await closeSheet()
+
+  // 还原设置，别污染后面的流程
+  await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    await st().updateSettings({ profitRatio: 0.6, farmEventsEnabled: true })
+    await st().updateSettings({ farmClock: { ...st().settings.farmClock, timeScale: 1 } })
+  })
+
 
   /* ============ 汇总 ============ */
   console.log('\n' + '─'.repeat(58))
