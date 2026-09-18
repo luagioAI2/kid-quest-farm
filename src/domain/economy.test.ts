@@ -7,6 +7,7 @@ import {
   MAX_PROFIT_RATIO,
   MIN_PROFIT_RATIO,
   PRODUCE_BASE_PRICE,
+  priceCeilingFor,
   roundCap,
 } from './catalog'
 import {
@@ -17,7 +18,7 @@ import {
   maxSellable,
   remainingCapFor,
 } from './economy'
-import { rollHarvestEvent } from './farmEvents'
+import { rollAnimalProduceEvent, rollHarvestEvent } from './farmEvents'
 import { farmLevel } from './farm'
 import type { Animal, Plot } from './types'
 
@@ -98,6 +99,92 @@ describe('配置表：上限回收与基准单价自洽', () => {
         `${a.name}：${units} 个 × ${price} = ${units * price} 超过了上限 ${cap}`,
       ).toBeLessThanOrEqual(cap + 1e-9)
     }
+  })
+
+  /**
+   * 2026-09-18 家长定的规则：
+   * 「设定里市场盈利最高 60%，那最高市场价应该是成本 × 1.6。
+   *   意思是波动不能够超过它。」
+   *
+   * 现价硬顶 = `上限回收 ÷ 满产` = 单位成本 × (1 + r)。这条同时钉住两件事：
+   *
+   *   ① `硬顶 × 满产 ≤ 上限回收` —— 行情再好也不越过「成本 + 60%」；
+   *   ② `round(硬顶 × 满产) ≤ 上限回收` —— 行情最好的时候**一个不剩**。
+   *
+   * ② 里的 `round` 不能省：`sellQuote` 是 `Math.round(现价 × 个数)`，
+   * 玫瑰花 25.6 ÷ 12 = 2.1333… 直接取 2.13 就会 `round(25.56) = 26 > 25.6`，
+   * 最后一朵还是卖不掉 —— `priceCeilingFor` 里那个 `floor(上限) + 0.5` 正是为它准备的。
+   *
+   * 历史：旧口径是 `PRICE_CEILING = 1.6`（基准价的 1.6 倍）。基准价本身就已经等于
+   * 「满产刚好卖光」那条线，再乘 1.6 等于把天花板抬到闸门上方 —— 实测 730 天里
+   * 6.1% 的产出因此烂在背包里，而多出来的价一分钱都拿不到（被闸门全额追回）。
+   */
+  it('现价硬顶：满产 × 硬顶 四舍五入后也不越上限（行情最好时一个不剩）', () => {
+    const cases = [
+      ...CROPS.map((c) => ({
+        name: c.name,
+        cost: c.seedCost,
+        units: (c.produceAmount ?? 1) * c.regrowCount,
+        itemId: c.produceItemId,
+      })),
+      ...ANIMALS.map((a) => ({
+        name: a.name,
+        cost: a.cost,
+        units: a.produceTimes * a.produceAmount,
+        itemId: a.produceItemId,
+      })),
+    ]
+
+    for (const { name, cost, units, itemId } of cases) {
+      const cap = roundCap(cost)
+      const ceiling = priceCeilingFor(itemId)
+
+      expect(ceiling, `${name} 没有现价硬顶`).toBeGreaterThan(0)
+      expect(
+        ceiling * units,
+        `${name}：硬顶 ${ceiling} × 满产 ${units} 越过了上限回收 ${cap}`,
+      ).toBeLessThanOrEqual(cap + 1e-9)
+      expect(
+        Math.round(ceiling * units),
+        `${name}：行情最好时 ${units} 个卖不完（记账 ${Math.round(ceiling * units)} > 上限 ${cap}）`,
+      ).toBeLessThanOrEqual(cap)
+      expect(
+        ceiling,
+        `${name} 的硬顶低于基准价，第 0 天建仓价会被夹下去`,
+      ).toBeGreaterThanOrEqual((PRODUCE_BASE_PRICE[itemId] ?? 0) - 1e-9)
+    }
+  })
+
+  it('硬顶跟着家长的 r 走 —— 调档之后「满产卖得完」仍然成立', () => {
+    // 家长在设置里能把市场盈利上限调到 `MIN_PROFIT_RATIO ~ MAX_PROFIT_RATIO`。
+    // 硬顶 = `上限回收 ÷ 满产`，必须跟着 r 一起动。
+    //
+    // ⚠️ 这条是补一个**我自己刚犯过的错**：第一版 `priceCeilingFor` 里加了
+    // `Math.max(算出来的线, 基准价)` 防止第 0 天建仓价被夹低。但基准价是按
+    // `r = 0.6` 算的静态值 —— 家长把 r 调低之后，那个「保底」反而把硬顶顶到
+    // 闸门上方，剩货就又回来了。所以保底已删。
+    for (const r of [MIN_PROFIT_RATIO, 0.3, DEFAULT_PROFIT_RATIO, 0.9, MAX_PROFIT_RATIO]) {
+      for (const c of CROPS) {
+        const units = (c.produceAmount ?? 1) * c.regrowCount
+        const cap = roundCap(c.seedCost, r)
+        expect(
+          Math.round(priceCeilingFor(c.produceItemId, r) * units),
+          `r=${r} ${c.name}：行情最好时卖不完`,
+        ).toBeLessThanOrEqual(cap)
+      }
+      for (const a of ANIMALS) {
+        const units = a.produceTimes * a.produceAmount
+        const cap = roundCap(a.cost, r)
+        expect(
+          Math.round(priceCeilingFor(a.produceItemId, r) * units),
+          `r=${r} ${a.name}：行情最好时卖不完`,
+        ).toBeLessThanOrEqual(cap)
+      }
+    }
+    // 硬顶确实随 r 变（不是把默认档写死了）
+    expect(priceCeilingFor('produce-radish', MIN_PROFIT_RATIO)).toBeLessThan(
+      priceCeilingFor('produce-radish', MAX_PROFIT_RATIO),
+    )
   })
 
   it('harvestPoints 是「每次收获的毛收入」，× 收获次数 ≈ 上限回收', () => {
@@ -326,18 +413,98 @@ describe('真引擎对账：期望浮盈与撞顶率', () => {
     }
   })
 
-  it('动物不掷灾害骰子，所以期望浮盈就是满额 60%（与作物不同，待用户定夺）', () => {
-    // ⚠️ 这是**现状**，不是设计目标。
-    // `advanceAnimals` 只受「生病停产」影响，不跑 `rollHarvestEvent`，
-    // 所以动物产多少就是多少 → 期望回收 = 上限回收 → 浮盈恒为 +60%。
-    // 作物因为吃灾害，只有 +44%~+48%。两者的「划算程度」目前不一致。
-    for (const a of ANIMALS) {
-      const value = a.produceTimes * a.produceAmount * PRODUCE_BASE_PRICE[a.produceItemId]
-      const expRecovery = Math.min(value, roundCap(a.cost))
-      const profit = (expRecovery - a.cost) / a.cost
-      expect(profit, `${a.name} 的期望浮盈`).toBeGreaterThan(0.58)
-      expect(profit, `${a.name} 的期望浮盈`).toBeLessThanOrEqual(0.6 + 1e-9)
+  /* ---------------- 动物：减产骰子（2026-09-16 新增） ---------------- */
+
+  // 周二，避开周末加成，和 §5.6 的口径一致
+  const T_ANIMAL = 1_700_000_000
+
+  /**
+   * 一次「收下产出」拿到多少 —— 逐字复刻 `useApp.collectAnimal` 的算法：
+   *
+   *   perCycleOut = round(单次产量 × 骰子倍率)
+   *   这一批收到   = perCycleOut × 批里的轮数
+   *
+   * 骰子走**真引擎** `rollAnimalProduceEvent`（和作物共用同一套 `HARVEST_TIERS`）。
+   * `cycles` = 这一批攒了几轮，`produceCount` = 那一刻已产过几轮 ——
+   * 两者必须分开传：种子用的是 `produceCount`，批次大小用的是 `cycles`。
+   */
+  function animalBatch(
+    a: (typeof ANIMALS)[number],
+    cycles: number,
+    produceCount: number,
+    t: number,
+  ): number {
+    const roll = rollAnimalProduceEvent(
+      mkAnimal(`a${t}`, a.id, { produceCount }),
+      a,
+      T_ANIMAL + t * 97,
+      true,
+    )
+    const perCycle = a.produceAmount || 1
+    const perCycleOut = roll.wipedOut ? 0 : Math.max(0, Math.round(perCycle * roll.multiplier))
+    return perCycleOut * cycles
+  }
+
+  /** `collectAll = true` 攒满整批一次收；`false` 每产出一轮就收一次 */
+  function animalProfit(a: (typeof ANIMALS)[number], collectAll: boolean): number {
+    const cap = roundCap(a.cost)
+    const price = PRODUCE_BASE_PRICE[a.produceItemId]
+    let sum = 0
+    for (let t = 0; t < N; t++) {
+      let items = 0
+      if (collectAll) {
+        items = animalBatch(a, a.produceTimes, a.produceTimes, t)
+      } else {
+        for (let c = 1; c <= a.produceTimes; c++) items += animalBatch(a, 1, c, t)
+      }
+      sum += Math.min(items * price, cap)
     }
+    return (sum / N - a.cost) / a.cost
+  }
+
+  it('动物也吃减产骰子，期望浮盈落到和作物同一档（+40% ~ +55%）', () => {
+    // 2026-09-16 用户定：给动物也加一层减产。
+    // 改之前动物**不掷骰子**（`advanceAnimals` 只按算术累加产出），
+    // 所以期望回收 = 上限回收 → 浮盈恒为 +60%，比作物的 +44~48% 高出一截。
+    // 现在动物和作物**共用同一套 `HARVEST_TIERS`**，浮盈落回同一档。
+    for (const a of ANIMALS) {
+      const profit = animalProfit(a, true)
+      expect(profit, `${a.name} 的期望浮盈`).toBeGreaterThan(0.4)
+      expect(profit, `${a.name} 的期望浮盈`).toBeLessThan(0.55)
+    }
+  })
+
+  it('动物的期望浮盈和「攒几轮一起收」无关 —— 只和标的本身有关', () => {
+    // ⚠️ 这条是防回归的关键。`round()` 的颗粒度是 1 个：如果骰子直接乘**整批**，
+    // 取整落在不同位置会算出不同的期望（实测 小鸡 34.5% vs 45.9%，差 11 个点）——
+    // 等于**孩子的收益取决于他怎么点按钮**，而这个他根本看不见。
+    // 现在骰子作用在**单次产出**上再线性放大，两种收货方式必须基本一致。
+    for (const a of ANIMALS) {
+      const all = animalProfit(a, true)
+      const oneByOne = animalProfit(a, false)
+      expect(
+        Math.abs(all - oneByOne),
+        `${a.name}：攒满整批收 ${(all * 100).toFixed(1)}% vs 每轮各收一次 ${(oneByOne * 100).toFixed(1)}%`,
+      ).toBeLessThan(0.04)
+    }
+  })
+
+  it('动物的减产骰子真的掷得出多种结果（不是恒等于 1）', () => {
+    // 反向验证：万一哪天有人把减产挪进 `advanceAnimals`、或让 multiplier 恒为 1，
+    // 上面两条会红；这条再补一刀 —— 直接断言「确实掷出过不止一种倍率」。
+    const a = ANIMALS[0]
+    const outcomes = new Set<number>()
+    for (let t = 0; t < 400; t++) {
+      const roll = rollAnimalProduceEvent(
+        mkAnimal(`z${t}`, a.id, { produceCount: a.produceTimes }),
+        a,
+        T_ANIMAL + t * 97,
+        true,
+      )
+      outcomes.add(roll.multiplier)
+    }
+    expect(outcomes.size, '减产骰子只掷出一种结果 = 等于没掷').toBeGreaterThan(1)
+    expect(outcomes.has(1), '必须能掷到小于 1 的减产结果').toBe(false)
   })
 
   it('每分钟浮盈：同一个档位内随解锁等级递增（被动档位故意更低）', () => {

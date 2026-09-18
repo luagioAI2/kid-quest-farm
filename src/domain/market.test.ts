@@ -9,7 +9,12 @@ import {
   trendOf,
   valueHint,
 } from './market'
-import { MARKET_HISTORY_DAYS, PRICE_CEILING, PRICE_FLOOR, PRODUCE_BASE_PRICE } from './catalog'
+import {
+  MARKET_HISTORY_DAYS,
+  PRICE_FLOOR,
+  PRODUCE_BASE_PRICE,
+  priceCeilingFor,
+} from './catalog'
 
 /* ============================================================
    市场计价引擎测试
@@ -46,13 +51,16 @@ describe('createInitialMarket', () => {
 })
 
 describe('advanceMarket —— 价格硬边界', () => {
-  it('无论推进多少天，价格都锁在 base×0.55 ~ base×1.6 之间', () => {
+  it('无论推进多少天，价格都锁在 base×0.55 ~ 现价硬顶之间', () => {
     let m = createInitialMarket(BASE, 0)
     // 暴力推进：跨过 90 天慢波周期、跨年、跨闰
     for (const target of [1, 7, 30, 90, 180, 365, 730, 1460]) {
       m = advanceMarket(m, target)
       for (const q of m.quotes) {
-        expect(q.price).toBeLessThanOrEqual(round2(q.base * PRICE_CEILING) + 1e-9)
+        // 2026-09-18：上限从「基准价 × 1.6」改成「上限回收 ÷ 满产」。
+        // 旧口径方向是反的 —— 基准价本身就已经含满 60%（= 单位成本 × 1.6），
+        // 再乘 1.6 等于把天花板抬到闸门上方 60%。见 `priceCeilingFor` 的注释。
+        expect(q.price).toBeLessThanOrEqual(priceCeilingFor(q.itemId) + 1e-9)
         expect(q.price).toBeGreaterThanOrEqual(round2(q.base * PRICE_FLOOR) - 1e-9)
       }
     }
@@ -62,7 +70,7 @@ describe('advanceMarket —— 价格硬边界', () => {
     const m = advanceMarket(createInitialMarket(BASE, 0), 1000)
     for (const q of m.quotes) {
       expect(q.price / q.base).toBeGreaterThanOrEqual(PRICE_FLOOR - 1e-9)
-      expect(q.price / q.base).toBeLessThanOrEqual(PRICE_CEILING + 1e-9)
+      expect(q.price).toBeLessThanOrEqual(priceCeilingFor(q.itemId) + 1e-9)
     }
   })
 
@@ -180,9 +188,11 @@ describe('trendOf / valueHint', () => {
       day: 1,
       soldToday: 0,
     })
-    expect(valueHint(mk(70)).tone).toBe('cheap')
-    expect(valueHint(mk(100)).tone).toBe('normal')
-    expect(valueHint(mk(150)).tone).toBe('pricey')
+    // 2026-09-18 阈值重定：硬顶从「基准价 × 1.6」改成「上限回收 ÷ 满产」（≈ 基准价），
+    // 所以「贴到基准价」现在就是最好价 —— 原来的 `≥1.25` 那档永远够不到了。
+    expect(valueHint(mk(70)).tone).toBe('cheap') // 0.70 × 基准价
+    expect(valueHint(mk(90)).tone).toBe('normal') // 0.90 × 基准价
+    expect(valueHint(mk(100)).tone).toBe('pricey') // 1.00 × 基准价 = 硬顶
   })
 })
 
@@ -195,7 +205,7 @@ describe('priceSeries', () => {
     const base = BASE['egg']!
     for (const p of s) {
       expect(p).toBeGreaterThan(0)
-      expect(p).toBeLessThanOrEqual(round2(base * PRICE_CEILING) + 1e-9)
+      expect(p).toBeLessThanOrEqual(priceCeilingFor('egg') + 1e-9)
       expect(p).toBeGreaterThanOrEqual(round2(base * PRICE_FLOOR) - 1e-9)
     }
   })
@@ -220,23 +230,25 @@ describe('priceSeries', () => {
 })
 
 describe('孩子收益不会膨胀（兑换可控性的根基）', () => {
-  it('单个产出品在 365 天内的最高价不超过基准价的 1.6 倍', () => {
+  it('单个产出品在 365 天内的最高价不超过现价硬顶（= 上限回收 ÷ 满产）', () => {
     let m = createInitialMarket(BASE, 0)
-    let peak = 0
+    const peak = new Map<string, number>()
     for (let d = 1; d <= 365; d += 7) {
       m = advanceMarket(m, d)
-      for (const q of m.quotes) peak = Math.max(peak, q.price / q.base)
+      for (const q of m.quotes) peak.set(q.itemId, Math.max(peak.get(q.itemId) ?? 0, q.price))
     }
-    expect(peak).toBeLessThanOrEqual(PRICE_CEILING + 1e-9)
+    for (const [id, p] of peak) {
+      expect(p, `${id} 的峰值价越过了硬顶`).toBeLessThanOrEqual(priceCeilingFor(id) + 1e-9)
+    }
   })
 
   it('卖光一背包也不会瞬间致富：单次收益有明确上界', () => {
     const m = advanceMarket(createInitialMarket(BASE, 0), 10)
     // 假设孩子攒满 999 个最贵的产出
-    const best = Math.max(...m.quotes.map((q) => q.base))
-    const jackpot = sellQuote(m, m.quotes.find((q) => q.base === best)!.itemId, 999)
-    // 上限 = 999 × base × 1.6，且因为砸盘实际更低
-    expect(jackpot).toBeLessThanOrEqual(Math.round(999 * best * PRICE_CEILING))
+    const top = m.quotes.reduce((a, b) => (b.base > a.base ? b : a))
+    const jackpot = sellQuote(m, top.itemId, 999)
+    // 上界 = 999 × 现价硬顶（现价 ≤ 硬顶，砸盘只会更低）
+    expect(jackpot).toBeLessThanOrEqual(Math.round(999 * priceCeilingFor(top.itemId)))
   })
 })
 

@@ -535,12 +535,173 @@ try {
       )
       return { total: rows.length, enabled: rows.filter((x) => !x.disabled).length }
     })
-    check(
-      '新农场至少有一个种子能买（否则开局即死锁）',
-      seedPick.total > 0 && seedPick.enabled > 0,
-      `${seedPick.enabled}/${seedPick.total} 个可点`,
-    )
+  check(
+    '新农场至少有一个种子能买（否则开局即死锁）',
+    seedPick.total > 0 && seedPick.enabled > 0,
+    `${seedPick.enabled}/${seedPick.total} 个可点`,
+  )
   }
+
+  /* ---------- 5b. 市场弹层：结的是丰收币 🌾，不是积分 🪙 ----------
+     2026-09-16 修的两个「文案和机制对不上」：
+
+     ① `MarketSheet` 顶部币种胶囊错传了 `balance`（积分），而 `sellProduce`
+        结的是 `harvestBalance`（丰收币）。孩子卖完东西，**眼前那个数字一动不动**，
+        看起来就是「市场卖出坏了」。而且顶栏本来就已经有一颗 🪙 积分，
+        弹层里再来一颗一模一样的，更容易看串。
+
+     ② 弹层底部写过一行「全卖会拿到 X 分，和刚才比少了 N 分 —— 因为一次卖太多，
+        价格被压下去了」，而 `N` 恒等于 0：`sellQuote` 是「现价 × 个数」，线性的，
+        `unit * count - total` 只剩四舍五入的余数。等于自相矛盾地教了一条假规则。
+
+     这两处都只能靠**渲染出来的字**钉住（领域函数是对的，错的是 UI 接线），
+     所以放在第 4 层界面走查，不放单元测试。
+     币种/文案那几条不依赖有没有货（空背包时弹层照样开、胶囊照样渲染），
+     但**卖出按钮**只在「背包里有货」时才渲染 —— 空背包走的是
+     「背包还是空的」空状态，连 `<ul>` 都没有。所以这里先补种补收一次。 */
+  await page.evaluate(() => {
+    // 先把种子商店关掉（✕ 有 aria-label="关闭"）
+    const close = [...document.querySelectorAll('button')].find(
+      (x) => x.getAttribute('aria-label') === '关闭',
+    )
+    close?.click()
+  })
+  await new Promise((r) => setTimeout(r, 500))
+
+  // 拧快农场时钟 + 关掉灾害，让胡萝卜两秒内成熟（只影响本段，末尾会还原）
+  const seeded = await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    await st().updateSettings({ farmEventsEnabled: false })
+    await st().updateSettings({ farmClock: { ...st().settings.farmClock, timeScale: 1200 } })
+    const empty = st().plots.find((p) => p.unlocked && !p.crop)
+    if (!empty) return { ok: false, why: '没有已解锁的空地' }
+    const planted = await st().plant(empty.index, 'carrot')
+    return { ok: planted, index: empty.index }
+  })
+  if (seeded.ok) {
+    await new Promise((r) => setTimeout(r, 2200))
+    const stored = await page.evaluate(async (i) => {
+      const st = () => window.__kqf__.getState()
+      // 收进背包：市场里才会有货、展开行才会出现卖出按钮
+      await st().harvest(i, 'store')
+      await new Promise((r) => setTimeout(r, 600))
+      return st().inventory.find((x) => x.itemId === 'produce-carrot')?.count ?? 0
+    }, seeded.index)
+    check('背包里补到了能卖的产出（卖出按钮才会渲染）', stored > 0, `胡萝卜 x${stored}`)
+  } else {
+    check('背包里补到了能卖的产出（卖出按钮才会渲染）', false, seeded.why ?? '种不下去')
+  }
+
+  const marketOpened = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => /市场/.test(x.innerText))
+    if (!b) return false
+    b.click()
+    return true
+  })
+  check('市场入口可打开', marketOpened)
+  await new Promise((r) => setTimeout(r, 900))
+
+  const marketRes = await page.evaluate(() => {
+    const text = document.body.innerText.replace(/\s+/g, ' ')
+    const h2 = [...document.querySelectorAll('h2')].find(
+      (h) => (h.textContent ?? '').trim() === '农场市场',
+    )
+    // 弹层头 = h2 的父容器（BottomSheet 里 h2 和 headerRight 是兄弟）
+    const head = h2?.parentElement ?? null
+    const headGlyphs = head
+      ? [...head.querySelectorAll('span')]
+          .filter((s) => s.children.length === 0)
+          .map((s) => (s.textContent ?? '').trim())
+          .filter(Boolean)
+      : []
+    return {
+      sheetOpen: !!h2,
+      headGlyphs,
+      hasFalseHint: /和刚才比少了/.test(text),
+      saysFenPerUnit: /[\d.]+\s*分\s*\/\s*个/.test(text),
+      saysFenTotal: /产出大约值\s*[\d.]+\s*分/.test(text),
+    }
+  })
+  check('市场弹层已打开', marketRes.sheetOpen === true)
+  check(
+    '市场弹层顶部的币种是丰收币 🌾（不是积分 🪙）',
+    marketRes.headGlyphs.includes('🌾') && !marketRes.headGlyphs.includes('🪙'),
+    `弹层头里的图标：${JSON.stringify(marketRes.headGlyphs)}`,
+  )
+  check(
+    '市场弹层里没有「和刚才比少了 N 分」那行假提示',
+    marketRes.hasFalseHint === false,
+  )
+  check(
+    '市场弹层里的单价/总额都写 🌾，不写「分」',
+    marketRes.saysFenPerUnit === false && marketRes.saysFenTotal === false,
+    `分/个=${marketRes.saysFenPerUnit} 值…分=${marketRes.saysFenTotal}`,
+  )
+
+  /* 卖出按钮的标签不许换行。
+     ------------------------------------------------------------
+     2026-09-16 修 bug 时踩的：给按钮加上币种单位「🌾」之后，三个按钮
+     （flex-1 / flex-1 / flex-[1.4]）在 390px 视口下每个只剩 **94px**，
+     而「卖 1 个 +2 🌾」要 ~97px → 🌾 被挤到第二行，按钮变成两行高。
+     现在改成两行网格（上两个、全卖独占一行，宽 163 / 334），余量充足。
+
+     ⚠️ **判「换没换行」只能用 Range。** 两个看似可行、实测都失效的判据：
+       · `Element.getClientRects()` 对块级元素只返回 1 个矩形（元素框本身），
+         永远看不出文字换了几行；
+       · `scrollHeight > clientHeight` 也不行 —— 按钮有 `min-h-[46px]` 兜着，
+         两行文字照样塞得下，scrollHeight 不变。
+     `Range.getClientRects()` 是**每行一个矩形**，按 top 去重才是真行数。
+     展开任意一行即可 —— 没货时按钮是 disabled，但照样渲染、照样能量。 */
+  await page.evaluate(() => {
+    const row = [...document.querySelectorAll('li button')].find((b) => /有\s*\d/.test(b.innerText))
+    row?.click()
+  })
+  await new Promise((r) => setTimeout(r, 700))
+
+  const sellBtns = await page.evaluate(() => {
+    const btns = [...document.querySelectorAll('li button')].filter((b) => /卖|全卖/.test(b.innerText))
+    return btns.map((b) => {
+      const range = document.createRange()
+      range.selectNodeContents(b)
+      const lines = new Set([...range.getClientRects()].map((x) => Math.round(x.top))).size
+      return {
+        text: b.innerText.replace(/\s+/g, ' '),
+        w: Math.round(b.getBoundingClientRect().width),
+        lines,
+      }
+    })
+  })
+  check(
+    '市场卖出按钮渲染出来了（展开行才有）',
+    sellBtns.length === 3,
+    sellBtns.map((b) => b.text).join(' | ') || '(一个都没有)',
+  )
+  check(
+    '卖出按钮的文案都在一行里（币种 🌾 没被挤下去）',
+    sellBtns.length > 0 && sellBtns.every((b) => b.lines === 1),
+    sellBtns.map((b) => `${b.text} → ${b.lines} 行 / ${b.w}px`).join('；'),
+  )
+  check(
+    '卖出按钮够宽，三、四位数也放得下',
+    sellBtns.length > 0 && sellBtns.every((b) => b.w >= 150),
+    sellBtns.map((b) => `${b.w}px`).join(' / '),
+  )
+
+  // 关掉，别污染后面的流程
+  await page.evaluate(() => {
+    const close = [...document.querySelectorAll('button')].find(
+      (x) => x.getAttribute('aria-label') === '关闭',
+    )
+    close?.click()
+  })
+  await new Promise((r) => setTimeout(r, 500))
+
+  // 还原本段拧过的设置（时钟 / 灾害），后面的段落不该继承
+  await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    await st().updateSettings({ farmEventsEnabled: true })
+    await st().updateSettings({ farmClock: { ...st().settings.farmClock, timeScale: 1 } })
+  })
 
   /* ---------- 6. 家长确认：必须要求密码，且输对后能进入打分 ---------- */
   // 先设密码 + 造一个待审实例，否则队列是空的，测不出解锁效果

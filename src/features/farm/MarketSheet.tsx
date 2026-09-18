@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '@/store/useApp'
-import { ITEM_BY_ID } from '@/domain/catalog'
+import { DEFAULT_PROFIT_RATIO, ITEM_BY_ID } from '@/domain/catalog'
 import { priceSeries, trendOf, valueHint } from '@/domain/market'
+import { maxSellable, remainingCapFor } from '@/domain/economy'
 import { BottomSheet, CoinPill } from './farmUi'
 
 /* ============================================================
@@ -14,34 +15,75 @@ import { BottomSheet, CoinPill } from './farmUi'
    所以这里不只是"卖东西"，而是一个小型的市场课堂：
    * 价格走势图（手写 div，不引入图表库）
    * 涨跌箭头 + 「便宜了 / 好价」标签 → 教低买高卖
-   * 卖出会砸盘 → 教"分批出货"
+   * 卖出会砸盘 → 让孩子看到"货一多价就跌"
    * 大盘指数 → 让孩子感受"整个市场"
 
    全程用 emoji + CSS，无外部依赖。
+
+   ⚠️ **两个坑，改之前先读：**
+
+   ① **这一页结的是丰收币 🌾，不是积分 🪙。**
+   卖出走 `sellProduce` → `postHarvest`，进的是 `harvestBalance`。
+   所以顶部那颗币种胶囊必须是 `harvestBalance` + `tone="grass"` + 🌾。
+   2026-09-16 修过一次：原来错传了 `balance`（积分），孩子卖完东西
+   眼前那个数字**一动不动**，看起来就是"卖出坏了"。
+   单位文案同理 —— 写 `🌾`，别写「分」（「分」在本项目专指积分 🪙）。
+
+   ② **`sellQuote` 是「现价 × 个数」，线性的，不含卖压。**
+   卖压只在 `applySell` 里体现，作用在**卖出之后**的行情上
+   （所以同一批货当天再卖，单价才会变低）。
+   曾经这里写过一行「全卖会拿到 X，和刚才比少了 N 分 —— 因为一次卖太多，
+   价格被压下去了」，而 `N` 恒等于 0（`unit*count - total` 就是四舍五入的余数），
+   自相矛盾地教了孩子一条假规则。**别再把它加回来。**
+   要真做"分批更划算"，得先让 `sellQuote` 按 `SELL_IMPACT_PER_UNIT`
+   对整笔卖出做衰减积分 —— 那是改经济数值，见 `docs/farm-economy-design.md` §6.4。
+
+   ③ **闸门按丰收币计价，货却是整颗的 —— 按钮必须报「真能卖几个」。**
+   家长 2026-09-18 报「小萝卜收进背包后不能全部卖掉」。不是小数 bug：
+   小萝卜种子 2 分 → 一轮上限 `2 × 1.6 = 3.2` 丰收币；现价 0.9 时
+   4 个值 `4 × 0.9 = 3.6 > 3.2`，于是只卖得动 3 个，剩下 1 个 + 0.2 额度卡住。
+   **只要现价高于基准价（0.8），就必然有整颗卖不掉** —— 因为基准价是按
+   「上限 ÷ 总产量」反推的，所以「基准价」恰好是「刚好卖得完」的那个价。
+
+   所以三个按钮一律先过 `maxSellable`（与 `sellProduce` 同一个函数），
+   按钮上写的就是结算结果；卖不光时补一句额度说明。
+   **别再退回「全卖 count 个 + quoteFor(count)」** —— 那是按不限额度报价，
+   承诺「+4」只给「+3」，和 09-16 那条假提示是同一类毛病。
    ============================================================ */
 
 export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const market = useApp((s) => s.market)
   const inventory = useApp((s) => s.inventory)
-  const balance = useApp((s) => s.balance)
+  // ⚠️ 丰收币，不是积分 —— 这一页卖出结的就是它，见文件头注释 ①
+  const harvestBalance = useApp((s) => s.harvestBalance)
   const sellProduce = useApp((s) => s.sellProduce)
+  const plots = useApp((s) => s.plots)
+  const animals = useApp((s) => s.animals)
+  const quotaCarry = useApp((s) => s.quotaCarry)
+  const profitRatio = useApp((s) => s.settings.profitRatio)
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const rows = useMemo(() => {
-    return market.quotes
-      .map((q) => {
-        const inv = inventory.find((i) => i.itemId === q.itemId)
-        const item = ITEM_BY_ID.get(q.itemId)
-        return {
-          quote: q,
-          count: inv?.count ?? 0,
-          name: item?.name ?? q.itemId,
-          emoji: item?.emoji ?? '📦',
-        }
-      })
-      // 有货的排前面
-      .sort((a, b) => b.count - a.count)
-  }, [market.quotes, inventory])
+    const r = profitRatio ?? DEFAULT_PROFIT_RATIO
+    return (
+      market.quotes
+        .map((q) => {
+          const inv = inventory.find((i) => i.itemId === q.itemId)
+          const item = ITEM_BY_ID.get(q.itemId)
+          return {
+            quote: q,
+            count: inv?.count ?? 0,
+            name: item?.name ?? q.itemId,
+            emoji: item?.emoji ?? '📦',
+            // 这一轮还能卖多少丰收币。和 `sellProduce` 用的是同一个领域函数，
+            // 所以按钮上算出来的「实际能卖几个」和结算时**必然一致**。
+            remaining: remainingCapFor(q.itemId, plots, animals, r, quotaCarry[q.itemId] ?? 0),
+          }
+        })
+        // 有货的排前面
+        .sort((a, b) => b.count - a.count)
+    )
+  }, [market.quotes, inventory, plots, animals, profitRatio, quotaCarry])
 
   const indexDelta = (market.indexNow ?? 100) - (market.indexPrev ?? 100)
   const totalValue = rows.reduce((sum, r) => sum + r.count * r.quote.price, 0)
@@ -52,7 +94,7 @@ export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => v
       onClose={onClose}
       emoji="🏪"
       title="农场市场"
-      headerRight={<CoinPill amount={balance} />}
+      headerRight={<CoinPill amount={harvestBalance} tone="grass" icon="🌾" />}
     >
       {/* ---- 大盘情绪 ---- */}
       <div className="surface-paper mb-3 flex items-center gap-3 p-3">
@@ -92,7 +134,7 @@ export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => v
             <span className="tnum font-display text-lg font-extrabold text-ink-900">
               {Math.round(totalValue)}
             </span>{' '}
-            分
+            🌾
           </p>
         </div>
       )}
@@ -115,6 +157,7 @@ export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => v
               name={r.name}
               emoji={r.emoji}
               count={r.count}
+              remaining={r.remaining}
               expanded={expanded === r.quote.itemId}
               onToggle={() =>
                 setExpanded(expanded === r.quote.itemId ? null : r.quote.itemId)
@@ -126,8 +169,8 @@ export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => v
       )}
 
       <p className="px-2 pb-2 text-center text-[11px] leading-relaxed text-ink-500">
-        💡 小知识：卖得越多，价格会越便宜 —— 因为市场里的东西变多了。
-        分几次卖，通常比一次全卖掉更划算哦。
+        💡 小知识：市场里的货一多，价格就会往下走一点 —— 今天卖掉的越多，
+        今天的价钱就越低。想卖个好价钱，就挑「好价」的时候出手。
       </p>
     </BottomSheet>
   )
@@ -140,6 +183,7 @@ function MarketRow({
   name,
   emoji,
   count,
+  remaining,
   expanded,
   onToggle,
   onSell,
@@ -148,23 +192,55 @@ function MarketRow({
   name: string
   emoji: string
   count: number
+  /** 这一轮还能卖多少丰收币（闸门余额） */
+  remaining: number
   expanded: boolean
   onToggle: () => void
   onSell: (n: number) => Promise<number>
 }) {
   const market = useApp((s) => s.market)
   const quoteFor = useApp((s) => s.quoteFor)
+  const priceFor = useApp((s) => s.priceFor)
+  const profitRatio = useApp((s) => s.settings.profitRatio)
   const [busy, setBusy] = useState(false)
 
   const q = market.quotes.find((x) => x.itemId === itemId)
   if (!q) return null
 
-  const trend = trendOf(q)
-  const hint = valueHint(q)
+  // 硬顶跟着家长的 r 变，所以涨跌 / 便宜贵 的判断也要用真的 r
+  const r = profitRatio ?? DEFAULT_PROFIT_RATIO
+  const trend = trendOf(q, r)
+  const hint = valueHint(q, r)
   const series = priceSeries(market, itemId, 7)
-  const unit = q.price
-  const total = quoteFor(itemId, count)
-  const sellAll = quoteFor(itemId, count)
+  // ⚠️ 单价要用 `priceFor`（夹过硬顶的**成交价**），不要直接读 `q.price` ——
+  // 存下来的价可能是旧口径留下的、也可能被测试钉过，会和实付对不上。
+  const unit = priceFor(itemId)
+
+  /*
+    ⚠️ **按钮上写的数字必须是真能拿到的。**
+    ------------------------------------------------------------
+    家长 2026-09-18 报：「买了萝卜种子，收成后收进背包，去市场卖不能全部卖掉」。
+
+    查下来不是小数 bug，是**闸门按丰收币计价、而货是整颗的**：
+      小萝卜 种子 2 分 → 一轮上限 `2 × (1+0.6) = 3.2` 丰收币
+      基准价 0.8 / 个，但现价会浮动（0.44 ~ 1.28）
+      现价 0.9 时，4 个值 `4 × 0.9 = 3.6 > 3.2` → 只卖得动 3 个
+    剩下的 1 个 + 0.2 丰收币额度就卡在背包里了（额度不够买 1 个整颗）。
+
+    原来这里写的是 `全卖 {count} 个 +{quoteFor(itemId, count)}` ——
+    也就是**按「不限额度」报价**，于是按钮承诺「全卖 4 个 +4 🌾」，
+    点下去只卖 3 个到手 3。和 09-16 修掉的那条假提示是同一类毛病：
+    UI 承诺了引擎不会兑现的事。
+
+    现在三个按钮一律走 `maxSellable`（和 `sellProduce` 内部同一个函数），
+    按钮上显示的就是结算结果。
+  */
+  const plan = (want: number) => maxSellable(Math.min(want, count), remaining, (n) => quoteFor(itemId, n))
+  const p1 = plan(1)
+  const p5 = plan(5)
+  const pAll = plan(count)
+  /** 额度不够、卖不光 —— 这时候要跟孩子解释一句 */
+  const clamped = pAll.count < count
 
   const doSell = async (n: number) => {
     if (n <= 0 || busy) return
@@ -177,7 +253,7 @@ function MarketRow({
   }
 
   return (
-    <li className="surface overflow-hidden">
+    <li className={clsx('surface overflow-hidden', count > 0 && 'ring-2 ring-grass-400/50')}>
       <button type="button" onClick={onToggle} className="flex w-full items-center gap-3 p-3 text-left">
         <div className="grid size-14 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-sun-50 text-2xl">
           {emoji}
@@ -185,15 +261,31 @@ function MarketRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
+            {/* 有货的加个绿点做标记 —— 一屏里一眼扫出「哪些能卖」 */}
+            {count > 0 && (
+              <span className="size-2 shrink-0 self-center rounded-full bg-grass-500" aria-hidden />
+            )}
             <p className="truncate font-display text-base font-extrabold text-ink-900">{name}</p>
-            <span className="tnum shrink-0 text-xs text-ink-500">有 {count} 个</span>
+            {/*
+              数量标记。家长 2026-09-18 要求：「背包里有的条栏加个标记，
+              >0 时数字加个颜色」—— 原来只有一个 `text-ink-500` 的灰字，
+              和「没有」的行长得一样，孩子扫不出来哪些能卖。
+              现在有货是绿底胶囊，没货是浅灰「没有」，对比一眼可辨。
+            */}
+            {count > 0 ? (
+              <span className="tnum shrink-0 rounded-full bg-grass-200 px-2 py-0.5 text-xs font-extrabold text-grass-700">
+                有 {count} 个
+              </span>
+            ) : (
+              <span className="tnum shrink-0 text-xs text-ink-400">没有</span>
+            )}
           </div>
 
           <div className="mt-0.5 flex items-center gap-2">
             <span className="tnum font-display text-lg font-extrabold text-ink-900">
               {unit.toFixed(0)}
             </span>
-            <span className="text-xs text-ink-500">分/个</span>
+            <span className="text-xs text-ink-500">🌾/个</span>
             <span
               className={clsx(
                 'tnum rounded-full px-1.5 text-[11px] font-bold',
@@ -230,40 +322,48 @@ function MarketRow({
           {/* ---- 走势图 ---- */}
           <PriceChart series={series} base={q.base} ceiling={q.base * 1.6} floor={q.base * 0.55} />
 
-          <div className="mt-3 flex flex-wrap gap-2">
+          {/*
+            三个卖出按钮排成两行（上两个、全卖独占一行）。
+            ⚠️ **别改回「三个挤一行」。** 390px 视口下每个只剩 94px，
+            而「卖 1 个 +2 🌾」这种带币种单位的标签要 ~97px ——
+            结果 🌾 会被挤到第二行，按钮变成两行高，看着像坏了。
+            贵一点的货（魔法豆 50 🌾/个）连原来的「卖 5 个 +250」都塞不下。
+            两行之后每个按钮宽 ~163px / 334px（实测），三、四位数也放得下，
+            顺便把点击目标放大了一倍 —— 给孩子点的东西本来就不该这么窄。
+          */}
+          <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
-              disabled={count <= 0 || busy}
+              disabled={p1.count < 1 || busy}
               onClick={() => void doSell(1)}
-              className="btn min-h-[46px] flex-1 rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
+              className="btn min-h-[46px] rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
             >
-              卖 1 个 +{Math.round(unit)}
+              卖 1 个 +{p1.total} 🌾
             </button>
             <button
               type="button"
-              disabled={count < 5 || busy}
+              disabled={p5.count < 5 || busy}
               onClick={() => void doSell(5)}
-              className="btn min-h-[46px] flex-1 rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
+              className="btn min-h-[46px] rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
             >
-              卖 5 个 +{Math.round(quoteFor(itemId, 5))}
+              {/* 额度卖不动 5 个时**不写价格** —— 灰按钮上挂个拿不到的价就是撒谎 */}
+              {p5.count < 5 ? '卖 5 个' : `卖 5 个 +${p5.total} 🌾`}
             </button>
             <button
               type="button"
-              disabled={count <= 0 || busy}
-              onClick={() => void doSell(count)}
-              className="btn min-h-[46px] flex-[1.4] rounded-2xl border border-sun-500/40 bg-gradient-to-b from-sun-300 to-sun-500 font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
+              disabled={pAll.count < 1 || busy}
+              onClick={() => void doSell(pAll.count)}
+              className="btn col-span-2 min-h-[46px] rounded-2xl border border-sun-500/40 bg-gradient-to-b from-sun-300 to-sun-500 font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
             >
-              全卖 {count} 个 +{Math.round(sellAll)}
+              全卖 {pAll.count} 个 +{pAll.total} 🌾
             </button>
           </div>
 
-          {count >= 5 && (
-            <p className="mt-2 text-center text-[11px] text-ink-500">
-              全卖会拿到 {Math.round(sellAll)} 分，和刚才比少了{' '}
-              <span className="tnum font-bold text-berry-500">
-                {Math.round(unit * count - total)}
-              </span>{' '}
-              分 —— 因为一次卖太多，价格被压下去了
+          {/* 额度卡住了就说清楚 —— 否则孩子看到「背包 4 个、全卖只卖 3 个」只会困惑 */}
+          {clamped && (
+            <p className="mt-2 rounded-xl bg-sun-50 px-3 py-2 text-[11px] font-bold leading-relaxed text-ink-700">
+              这一轮还能卖 {Number(remaining.toFixed(1))} 🌾，只够卖 {pAll.count} 个。
+              剩下 {count - pAll.count} 个先留着 —— 换点别的种、或者等这一轮的额度涨上来再卖。
             </p>
           )}
         </div>

@@ -105,6 +105,7 @@ import {
 import {
   farmMinutes,
   rollAnimalEvent,
+  rollAnimalProduceEvent,
   rollHarvestEvent,
   seasonalBonus,
 } from '../domain/farmEvents'
@@ -252,7 +253,14 @@ interface AppState {
   ) => Promise<number>
   /** 当前现价（用于 UI 预览） */
   priceFor: (itemId: string) => number
-  /** 卖出 n 个能拿多少分（走浮动价，含砸盘影响） */
+  /**
+   * 卖出 n 个能拿多少丰收币。
+   *
+   * ⚠️ **线性：现价 × 个数，不含卖压。** 卖压只在卖出**之后**压行情
+   * （见 `applySell` / `SELL_IMPACT_PER_UNIT`），所以同一批货当天再卖，
+   * 单价才会变低。UI 里别再拿它和「逐个卖」作差去编「少了 N 分」的故事 ——
+   * 差额恒等于四舍五入的余数。2026-09-16 修过一次，见 `MarketSheet` 文件头。
+   */
   quoteFor: (itemId: string, count: number) => number
   /** 清理已离世的动物 */
   removeAnimal: (animalId: string) => Promise<void>
@@ -365,6 +373,16 @@ async function seedIfEmpty(): Promise<void> {
    出现两条实例 → 同一任务可被结算两次。这里把并发调用折叠成一次。
    ============================================================ */
 let refreshInFlight: Promise<void> | null = null
+
+/* ============================================================
+   设置的写入串行闸门
+   ------------------------------------------------------------
+   `updateSettings` 会先同步更新内存、再落库。落库这一半必须串起来，
+   否则两次并发写的完成顺序可能颠倒，DB 里留下的是**先发起的那一次**
+   （内存与 DB 不一致，下次启动就"变回旧值"）。
+   见 `updateSettings` 的注释。
+   ============================================================ */
+let settingsWriteChain: Promise<void> = Promise.resolve()
 
 /* ============================================================
    备份文件校验
@@ -533,8 +551,14 @@ async function doRefresh(
   }
 
   // 3d) 市场行情推进（跨日）
+  // ⚠️ 要把家长设的 `r` 传进去 —— 现价硬顶 = `上限回收 ÷ 满产` 是跟着 `r` 变的
+  // （见 `priceCeilingFor`）。不传的话家长调档之后，行情还是按默认 0.6 夹的。
   const marketDay = Math.floor(now / (1000 * 60 * 60 * 24))
-  const market = advanceMarket(await loadMarket(), marketDay)
+  const market = advanceMarket(
+    await loadMarket(),
+    marketDay,
+    get().settings.profitRatio ?? DEFAULT_PROFIT_RATIO,
+  )
   await saveMarket(market)
 
   if (newEvents.length > 0) {
@@ -1685,33 +1709,67 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   collectAnimal: async (animalId) => {
-    const { animals } = get()
+    const { animals, settings } = get()
     const a = animals.find((x) => x.id === animalId)
     if (!a || a.pendingProduce <= 0) return 0
     const def = animalDefOf(a)
     if (!def) return 0
 
-    // 产出也吃周末/节假日加成 —— 同样不提示
-    const bonus = seasonalBonus(Date.now())
-    const gained = Math.max(1, Math.round(a.pendingProduce * bonus))
+    const now = Date.now()
 
-    await addItem(def.produceItemId, gained)
+    // ---- 减产骰子 + 周末/节假日加成 ----
+    //
+    // 和作物同一条原则：**在「收下产出」这一刻结算，不在 `advanceAnimals` 里
+    // 偷偷扣。** 孩子必须亲眼看到「这批只剩 70%」才学得到。
+    // 分布与作物**共用同一套** `HARVEST_TIERS`（原因见 rollAnimalProduceEvent）。
+    //
+    // ⚠️ 别把这一句挪进 `advanceAnimals`：数值上等价，但那是后台扣，
+    // 孩子看不到损失，这一层就白加了。
+    const roll = rollAnimalProduceEvent(a, def, now, settings.farmEventsEnabled !== false)
+
+    // 骰子作用在**单次产出**上，再乘以轮数 —— 不是直接乘整批。
+    //
+    // 为什么：`round()` 的颗粒度是 1 个。直接乘整批的话，「攒 5 轮一起收」和
+    // 「每轮收一次」会因为取整落在不同的位置，算出不同的期望
+    // （实测 小鸡 34.5% vs 45.9%，差 11 个点）——
+    // 等于**孩子的收益取决于他怎么点按钮**，而这个他根本看不见。
+    // 作用在单次产出上再线性放大，期望就只和标的本身有关、与攒几轮无关；
+    // 颗粒度也正好和作物一致（作物也是每次收获掷一次、单次产量 4）。
+    const perCycle = def.produceAmount || 1
+    const cycles = Math.max(1, Math.round(a.pendingProduce / perCycle))
+    const perCycleOut = roll.wipedOut
+      ? 0
+      : Math.max(0, Math.round(perCycle * roll.multiplier))
+
+    // 产出也吃周末/节假日加成 —— 同样不提示
+    const bonus = seasonalBonus(now)
+    const gained = Math.max(0, Math.round(perCycleOut * cycles * bonus))
+
+    if (gained > 0) await addItem(def.produceItemId, gained)
     await db.animals.update(animalId, {
       pendingProduce: 0,
-      lastProduceAt: Date.now(),
+      lastProduceAt: now,
     })
+    if (roll.event) await logFarmEvents([roll.event])
+
     set({
       settleFlash: {
         points: 0,
-        reason: `收到 ${gained} 个${def.produceItemName}！`,
-        emoji: def.produceEmoji,
+        reason:
+          gained > 0
+            ? `收到 ${gained} 个${def.produceItemName}！`
+            : `这批${def.produceItemName}没保住…`,
+        emoji: gained > 0 ? def.produceEmoji : '🪹',
       },
     })
     get().pushToast({
-      kind: 'reward',
-      title: `+${gained} ${def.produceItemName}`,
-      detail: '去市场卖掉就能换积分啦',
-      emoji: def.produceEmoji,
+      kind: gained > 0 ? 'reward' : 'warn',
+      title: gained > 0 ? `+${gained} ${def.produceItemName}` : '这批没收到',
+      // 有事件就把事件原文说出来（「这批只剩 70%」就在里面），
+      // 没有事件（中性档）才退回原来的提示。
+      // 卖产出结的是**丰收币**，不是积分 —— 别写回「换积分」。
+      detail: roll.event?.message ?? '去市场卖掉就能换丰收币啦',
+      emoji: gained > 0 ? def.produceEmoji : '🪹',
     })
     await get().refresh()
     return gained
@@ -1755,25 +1813,37 @@ export const useApp = create<AppState>((set, get) => ({
   /* ---------------- 农场市场 ---------------- */
 
   priceFor: (itemId) => {
-    return priceOf(get().market, itemId) ?? PRODUCE_BASE_PRICE[itemId] ?? 0
+    const r = get().settings.profitRatio ?? DEFAULT_PROFIT_RATIO
+    return priceOf(get().market, itemId, r) ?? PRODUCE_BASE_PRICE[itemId] ?? 0
   },
 
   quoteFor: (itemId, count) => {
-    return sellQuote(get().market, itemId, count)
+    const r = get().settings.profitRatio ?? DEFAULT_PROFIT_RATIO
+    return sellQuote(get().market, itemId, count, r)
   },
 
   /**
    * 到市场卖产出。
    *
-   * 与旧版的区别：**卖多少会影响价格**（applySell 会砸盘）。
-   * 这是刻意设计的市场教育 —— 一次全卖光，单价就下来了，
-   * 孩子会自己总结出「分批卖更划算」。
+   * **卖多少会影响价格**：`applySell` 会砸盘，压的是**卖出之后**的行情。
+   * 这是刻意设计的市场教育 —— 孩子会看到「市场里的货一多，价钱就往下走」。
+   *
+   * ⚠️ 但**不要**说成「一次全卖光会比分开卖少拿钱」：`sellQuote` 是线性的
+   * （现价 × 个数），同一批货在同一个价位上分几笔卖，总额是一样的。
+   * 2026-09-16 之前 UI 上是这么写的，而那个差额恒为 0。
+   * 要让「分批更划算」成立，得先改 `sellQuote`，见 `docs/farm-economy-design.md` §6.4。
    */
   sellProduce: async (itemId, count, opts) => {
     if (!MARKET_GOODS.includes(itemId) || count <= 0) return 0
 
     const { market, plots, animals, settings } = get()
-    const current = priceOf(market, itemId)
+
+    // ⚠️ `r` 必须先取出来再算价 —— 现价硬顶 = `上限回收 ÷ 满产` 是**跟着 r 变的**
+    // （见 `priceCeilingFor`）。拿默认 0.6 去夹价，家长一旦调档，
+    // 硬顶就和闸门对不上：调低 → 硬顶偏高 → 又开始剩货；调高 → 硬顶偏低 → 白少给钱。
+    const r = settings.profitRatio ?? DEFAULT_PROFIT_RATIO
+
+    const current = priceOf(market, itemId, r)
     if (current == null) return 0
 
     const name = ITEM_BY_ID.get(itemId)?.name ?? itemId
@@ -1781,7 +1851,6 @@ export const useApp = create<AppState>((set, get) => ({
     // ---- 闸门：这一轮还能卖多少 ----
     // 「直接卖」和「存储后市场卖」走的是**同一个闸门**，
     // 所以「先存起来」不能绕过上限。
-    const r = settings.profitRatio ?? DEFAULT_PROFIT_RATIO
     const carry = get().quotaCarry[itemId] ?? 0
     const targets = capTargetsFor(itemId, plots, animals, r)
     const liveRemaining = targets.reduce((s, t) => s + t.remaining, 0)
@@ -1822,7 +1891,7 @@ export const useApp = create<AppState>((set, get) => ({
     // 在闸门内最多能卖几个。**不是把多出来的白扔掉** ——
     // 卖不掉的留在背包里，等下一轮或者别的对象腾出额度。
     const { count: sellCount, total } = maxSellable(want, remaining, (n) =>
-      sellQuote(market, itemId, n),
+      sellQuote(market, itemId, n, r),
     )
     if (sellCount <= 0 || total <= 0) return 0
 
@@ -1863,11 +1932,11 @@ export const useApp = create<AppState>((set, get) => ({
     if (changedAnimals.length) await db.animals.bulkPut(changedAnimals)
 
     // 更新行情（价格被卖压打下来）
-    const nextMarket = applySell(market, itemId, sellCount)
+    const nextMarket = applySell(market, itemId, sellCount, r)
     await saveMarket(nextMarket)
     set({ market: nextMarket })
 
-    const newPrice = priceOf(nextMarket, itemId) ?? current
+    const newPrice = priceOf(nextMarket, itemId, r) ?? current
     const dropPct = Math.round(((newPrice - current) / (current || 1)) * 100)
 
     if (!opts?.quiet) {
@@ -2029,10 +2098,36 @@ export const useApp = create<AppState>((set, get) => ({
 
   /* ================= 设置与数据 ================= */
 
+  /**
+   * 改设置。
+   *
+   * ⚠️ **`set` 必须在 `await` 之前。** 原来写的是「await 落库 → 再 set」，
+   * 在慢设备上会让孩子/家长看到「刚打的字没了」。两个真实后果
+   * （2026-09-18 由探针在 20× CPU 降速下复现）：
+   *
+   * ① **受控输入框会把刚敲的字吃掉。**
+   *    设置页那个「孩子的小名」是 `value={settings.childName}` —— 值来自 store。
+   *    `set` 落在 await 之后，于是在 IndexedDB 写返回之前 store 里还是旧名字，
+   *    React 拿旧值重渲染，把刚输入的那个字**抹掉**。
+   *    实测降速 20× 下输入「小明」只剩「明」。
+   *
+   * ② **同一 tick 内连续两次调用会丢更新。**
+   *    第二次 `{ ...get().settings }` 读到的还是第一次 `set` 之前的旧快照，
+   *    整体覆盖过去，把第一次的改动丢掉。
+   *    而「点头像」正好是紧跟输入框的第二次调用 ——
+   *    表现就是家长说的「填完名字一点头像，名字就变回原来的了」。
+   *    实测：同一 tick 连调 `{childName:'同Tick'}` + `{avatar:'🦄'}`，
+   *    childName 丢了、avatar 生效。
+   *
+   * 所以顺序改成「同步 set → 串行落库」。落库串行是防两次写完成顺序颠倒
+   * （内存对了、DB 里却是旧值，重启后又变回去）。
+   */
   updateSettings: async (patch) => {
     const next = { ...get().settings, ...patch }
-    await saveSettings(next)
+    // 先同步更新内存：受控输入框、以及同一 tick 里的后续调用，立刻看到新值
     set({ settings: next })
+    settingsWriteChain = settingsWriteChain.catch(() => {}).then(() => saveSettings(next))
+    await settingsWriteChain
   },
 
   exportBackup: async () => {

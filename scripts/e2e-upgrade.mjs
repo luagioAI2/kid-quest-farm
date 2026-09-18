@@ -10,12 +10,19 @@
  * 表现是**老用户数据被清空**，而且不报错 —— 正是这个项目反复踩过的那类坑。
  *
  * 做法：
- *   1. 先落在一个**不启动 App 的同源页面**（favicon.svg），
+ *   1. 先落在一个**不启动 App 的同源静态资源**（现在用 favicon.png），
  *      否则 Dexie 会抢先建出 v5 的库，而且它握着连接，
  *      deleteDatabase 会被 onblocked 挡住 —— 上一版探针就是这么假通过的。
  *   2. 手搓一个 v4 的库（IDB 版本 40，Dexie 把声明版本 ×10），塞入真实数据。
  *   3. 进 App，让它以 v5 打开、触发真实升级。
  *   4. 回读：表有没有丢、数据有没有丢、余额算得对不对、有没有报错。
+ *
+ * ⚠️ 落点必须是一个**真实存在**的静态资源。
+ *    vite preview 有 SPA fallback：任何没命中的路径都会返回 index.html，
+ *    于是「不启动 App 的页面」这个前提就没了 —— 而且报出来的错是
+ *    「版本 40 小于 50」，完全指不到真正的原因。
+ *    2026-09-16 踩过：原来落的是 /favicon.svg，favicon 换成 PNG 后那个文件被删，
+ *    fallback 立刻接管。所以下面除了换路径，还断言了「拿到的不是 HTML」。
  *
  * 用法：node scripts/e2e-upgrade.mjs http://127.0.0.1:4180/
  */
@@ -56,10 +63,20 @@ page.on('console', (m) => {
 
 console.log(`\n升级验收 ${URL}\n`)
 
-// 关键：先落在一个**不启动 App** 的同源页面
-await page.goto(`${URL.replace(/\/$/, '')}/favicon.svg`, {
-  waitUntil: 'domcontentloaded',
-})
+// 关键：先落在一个**不启动 App** 的同源静态资源。
+// 断言 content-type 不是 HTML —— SPA fallback 一旦接管，App 就会在这个页面里
+// 启动，升级测试的前提整个失效，而报错会伪装成无关的 VersionError。
+const LANDING = `${URL.replace(/\/$/, '')}/favicon.png`
+const landingRes = await page.goto(LANDING, { waitUntil: 'domcontentloaded' })
+const landingType = landingRes?.headers()['content-type'] ?? ''
+if (landingType.includes('html')) {
+  throw new Error(
+    `✗ 落点 ${LANDING} 返回的是 HTML（content-type: ${landingType}）。\n` +
+      '  vite preview 的 SPA fallback 接管了，App 会在这个页面里启动、抢先建出 v5 的库，\n' +
+      '  于是后面 open(40) 必然 VersionError —— 升级测试的前提不成立。\n' +
+      '  换一个**真实存在**的静态资源当落点（图片 / 字体等），别用会被 fallback 兜住的路径。',
+  )
+}
 
 /* ---------- 1. 手搓一个 v4 的库，塞入真实数据 ---------- */
 

@@ -133,6 +133,32 @@ const HARVEST_TIERS: Array<{
 /** 枯萎病：直接绝收，多年生还可能整棵枯死 */
 const WITHER_P = 0.01
 
+/**
+ * 从档位表里抽一档（**不含**枯萎病那一档，调用方自己先判）。
+ *
+ * 抽出来是为了让**作物和动物共用同一套分布** —— 两处各写一遍循环，
+ * 迟早会漂移（本项目已经踩过一次「平行模型和真实现不一致」的坑）。
+ * 概率与区间只有 `HARVEST_TIERS` 一个来源。
+ *
+ * `isGood` 由档位自己的 `lo >= 1` 决定（不是由抽到的 `mult` 反推）——
+ * 和原来内联的写法逐字等价，别改成 `mult >= 1`。
+ */
+function pickTier(
+  roll: number,
+  seed: number,
+): { mult: number; kind: FarmEvent['kind'] | 'none'; isGood: boolean } {
+  let acc = WITHER_P
+  for (const t of HARVEST_TIERS) {
+    acc += t.p
+    if (roll >= acc) continue
+    // 区间内取一个稳定值（同一个 seed → 同一个倍率）
+    const mult = round2(t.lo + hashRandom(seed + 7) * (t.hi - t.lo))
+    return { mult, kind: t.kind, isGood: t.lo >= 1 }
+  }
+  // 兜底（概率表加起来应该是 1，走到这里说明表写错了）
+  return { mult: 0.92, kind: 'none', isGood: false }
+}
+
 /** 结算一次收获的随机事件。 */
 export function rollHarvestEvent(
   plot: Plot,
@@ -184,41 +210,129 @@ export function rollHarvestEvent(
     }
   }
 
-  // --- 按档位抽产量倍率 ---
-  let acc = WITHER_P
-  for (const t of HARVEST_TIERS) {
-    acc += t.p
-    if (roll >= acc) continue
+  // --- 按档位抽产量倍率（和动物共用 pickTier，别在这里再写一遍循环） ---
+  const { mult, kind, isGood } = pickTier(roll, seed)
 
-    // 区间内取一个稳定值（同一个 seed → 同一个倍率）
-    const mult = round2(t.lo + hashRandom(seed + 7) * (t.hi - t.lo))
+  // 中性档：不生成事件、不给提示 —— 大部分时候就该是「什么都没发生」
+  if (kind === 'none') return { multiplier: mult, wipedOut: false, died: false }
 
-    // 中性档：不生成事件、不给提示 —— 大部分时候就该是「什么都没发生」
-    if (t.kind === 'none') return { multiplier: mult, wipedOut: false, died: false }
-
-    const pool = t.lo >= 1 ? GOOD_EVENTS : BAD_EVENTS
-    const e = pool[Math.floor(hashRandom(seed + 3) * pool.length)]
-    return {
+  const pool = isGood ? GOOD_EVENTS : BAD_EVENTS
+  const e = pool[Math.floor(hashRandom(seed + 3) * pool.length)]
+  return {
+    multiplier: mult,
+    wipedOut: false,
+    died: false,
+    event: {
+      id: `ev-${seed}-${kind}`,
+      kind,
+      message: isGood ? e.msg : `${e.msg}（这次只剩 ${Math.round(mult * 100)}%）`,
+      emoji: e.emoji,
       multiplier: mult,
-      wipedOut: false,
-      died: false,
+      createdAt: now,
+      refId: String(plot.index),
+    },
+  }
+}
+
+/* ---------------- 动物产出结算（减产骰子） ---------------- */
+
+/** 动物专用的提示文案（语气和作物不同：作物是「地里」，动物是「它」） */
+const ANIMAL_GOOD: Array<{ kind: FarmEvent['kind']; msg: string; emoji: string }> = [
+  { kind: 'weather_good', msg: '心情特别好，这批产出比平时多', emoji: '☀️' },
+  { kind: 'harvest_bumper', msg: '养得真好，这批攒得特别多', emoji: '🧺' },
+]
+
+const ANIMAL_BAD: Array<{ kind: FarmEvent['kind']; msg: string; emoji: string }> = [
+  { kind: 'weather_bad', msg: '这几天有点不舒服，产出少了一些', emoji: '🌧️' },
+  { kind: 'pest', msg: '圈里闹了虫，糟蹋掉一部分', emoji: '🐛' },
+  { kind: 'disease', msg: '有点没精神，这批少收了', emoji: '🤒' },
+  { kind: 'harvest_poor', msg: '这批收成不太好', emoji: '😢' },
+]
+
+export interface AnimalProduceEventResult {
+  /** 最终产量倍率（1 = 正常） */
+  multiplier: number
+  /** 是否颗粒无收 */
+  wipedOut: boolean
+  event?: FarmEvent
+}
+
+/**
+ * 结算一次「收下动物产出」的减产骰子（2026-09-16 新增）。
+ *
+ * **为什么要有：** 动物原来**不掷骰子** —— `advanceAnimals` 只按算术累加产出，
+ * 所以「产多少就是多少」→ 期望回收 = 上限回收 → 浮盈恒为 **+60%**；
+ * 而作物吃灾害只有 **+44%~+48%**。两者的「划算程度」不一致。
+ * 用户 2026-09-16 定：**给动物也加一层减产。**
+ *
+ * 四个刻意的选择（改回去会坏事）：
+ *
+ * 1. **共用 `HARVEST_TIERS`（走 `pickTier`），不给动物另起一套分布。**
+ *    一旦每个标的自己有概率，「基准单价 = 上限回收 ÷ 最高产量」推出来的
+ *    期望浮盈就不再统一，§5.6 整张表作废。要差异化请改**成本 / 次数 / 间隔**。
+ *
+ * 2. **在「收下产出」那一刻结算**（`collectAnimal`），**不在 `advanceAnimals`
+ *    里偷偷扣。** 和作物同一条原则：孩子必须亲眼看到「这批只剩 70%」才学得到。
+ *    放在 `advanceAnimals` 里数值上一样，但那是后台扣，孩子学不到东西。
+ *
+ * 3. **幂等**：种子 = `动物id | 种类id | 第几批产出 | salt`。刷新页面不能重掷骰子。
+ *    `produceCount` 只在产出时递增、收下时**不清零**，所以同一批产出永远是同一结果。
+ *
+ * 4. **不会因此送命。** 作物抽到枯萎病时多年生可能整棵枯死；动物这一层
+ *    **只减产、不减命** —— 死亡走 `rollAnimalEvent` 那条独立的路。
+ *    「减产」和「送命」是两件事，别混在一起。
+ */
+export function rollAnimalProduceEvent(
+  animal: Animal,
+  def: { name: string; produceItemName: string },
+  now: number,
+  enabled = true,
+  salt = 0,
+): AnimalProduceEventResult {
+  if (!enabled) return { multiplier: 1, wipedOut: false }
+
+  const seed = seedOf(`${animal.id}|${animal.animalId}|${animal.produceCount ?? 0}|${salt}`)
+  const roll = hashRandom(seed)
+
+  // 枯萎病那一档：这一批全没了（但动物本身没事，只是这批白等了）
+  if (roll < WITHER_P) {
+    return {
+      multiplier: 0,
+      wipedOut: true,
       event: {
-        id: `ev-${seed}-${t.kind}`,
-        kind: t.kind,
-        message:
-          t.lo >= 1
-            ? e.msg
-            : `${e.msg}（这次只剩 ${Math.round(mult * 100)}%）`,
-        emoji: e.emoji,
-        multiplier: mult,
+        id: `ev-${seed}-aw`,
+        kind: 'harvest_poor',
+        message: `这一批${def.produceItemName}没保住……下次会好起来的。`,
+        emoji: '🪹',
+        multiplier: 0,
         createdAt: now,
-        refId: String(plot.index),
+        refId: animal.id,
       },
     }
   }
 
-  // 兜底（概率表加起来应该是 1，走到这里说明表写错了）
-  return { multiplier: 0.92, wipedOut: false, died: false }
+  const { mult, kind, isGood } = pickTier(roll, seed)
+
+  // 中性档：不生成事件、不给提示 —— 大部分时候就该是「什么都没发生」
+  if (kind === 'none') return { multiplier: mult, wipedOut: false }
+
+  const pool = isGood ? ANIMAL_GOOD : ANIMAL_BAD
+  const e = pool[Math.floor(hashRandom(seed + 3) * pool.length)]
+  return {
+    multiplier: mult,
+    wipedOut: false,
+    event: {
+      id: `ev-${seed}-a-${kind}`,
+      kind,
+      message: isGood
+        ? `${def.name}${e.msg}！`
+        : `${def.name}${e.msg}（这批只剩 ${Math.round(mult * 100)}%）。`,
+      emoji: e.emoji,
+      multiplier: mult,
+      createdAt: now,
+      refId: animal.id,
+    },
+  }
 }
 
 /* ---------------- 动物事件 ---------------- */

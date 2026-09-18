@@ -19,6 +19,7 @@ import {
 } from './useApp'
 import { currentDayKey } from '../domain/recurrence'
 import { periodKeyFor } from '../domain/time'
+import { priceCeilingFor } from '../domain/catalog'
 
 /* ============================================================
    签到 / 长期任务的家长审核
@@ -746,6 +747,48 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
     ).toBe(0)
   })
 
+  /**
+   * 小萝卜的**基准单价**（与日期无关的那个价）。
+   *
+   * 闸门按**金额**封顶（成本 × (1+r) = 3.2 枚），而收获按**个数**给。
+   * 两者在**基准价**下刚好对齐（`4 × 0.8 = 3.2`）。
+   *
+   * ⚠️ 2026-09-18 之后，基准价同时就是**现价硬顶**（`priceCeilingFor`）——
+   * 行情再怎么涨也不会超过它。所以「拿基准价算前提」不再只是保守做法，
+   * 而是**唯一可能的价**。见 `catalog.ts` 里 `priceCeilingFor` 的注释。
+   */
+  function radishBase(): number {
+    return useApp.getState().market.quotes.find((q) => q.itemId === 'produce-radish')?.base ?? 0
+  }
+
+  /**
+   * 把 `produce-radish` 的当日价钉回基准价（或基准价的指定倍数）。
+   *
+   * 为什么要钉：闸门是 3.2 **枚**，收获是 4 **个**。基准单价 0.8 时
+   * `4 × 0.8 = 3.2` 刚好装满额度；可单价每天 ±22% 波动，今天 1.0 的话
+   * `3.2 ÷ 1.0` 只买得走 3 个 → 背包剩 1 个。
+   * 不钉住的话，「一轮收成能不能全卖掉」就变成了**看天吃饭** ——
+   * 用例会今天绿明天红，而代码一行都没动。
+   * （2026-09-16 实测：同一份代码 09-15 绿、09-16 红，就是这个原因。）
+   *
+   * ⚠️ 必须在**最后一次 `refresh()` 之后**调用。
+   * `refresh()` 内部会 `advanceMarket(await loadMarket(), day)` 把价格重算一遍，
+   * 钉早了会被冲掉。
+   */
+  function pinRadishPrice(mult = 1) {
+    const m = useApp.getState().market
+    useApp.setState({
+      market: {
+        ...m,
+        quotes: m.quotes.map((q) =>
+          q.itemId === 'produce-radish'
+            ? { ...q, prevPrice: q.price, price: q.base * mult, soldToday: 0 }
+            : q,
+        ),
+      },
+    })
+  }
+
   it('④ 「收进背包」之后还能卖出去 —— 收完地空了也要认这笔账', async () => {
     // 2026-09-15 由**第 4 层界面走查**抓出来的真 bug。
     //
@@ -772,13 +815,69 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
       '一次性作物收完地块应该变空（这正是触发 bug 的前提）',
     ).toBeUndefined()
 
+    const base = radishBase()
+    expect(base, '前提：取得到基准单价').toBeGreaterThan(0)
+    const cap = 2 * 1.6
+    pinRadishPrice() // 钉回基准价 —— 见上面的注释，不钉就是看天吃饭
+
+    // **把前提写成断言**：这批货的价值得在额度内，「全卖掉」才是个成立的期望。
+    // 否则哪天档位表调了、收获变成 5 个，这里会报成「卖不掉」，
+    // 而真实原因其实是「本来就不该期望全卖掉」—— 报错会指错方向。
+    expect(stored * base, '前提：这一批货的价值要在额度内').toBeLessThanOrEqual(cap + 0.01)
+
     const total = await useApp.getState().sellProduce('produce-radish', stored)
 
     expect(total, '存进背包的产出必须还能卖出去').toBeGreaterThan(0)
     expect(
       useApp.getState().inventory.find((s) => s.itemId === 'produce-radish')?.count ?? 0,
-      '卖掉之后背包该清空',
+      '卖掉之后背包该清空（前提已断言：这一批在额度内）',
     ).toBe(0)
+  })
+
+  it('④ 额度之外的货留在背包里，不凭空蒸发（价钉到硬顶也一样）', async () => {
+    // 上一条钉的是「额度够 → 全卖掉」。这条钉它的反面：**货比额度多**。
+    //
+    // ⚠️ 2026-09-18 改口径。原来是「行情贵的时候一轮卖不完」：现价硬顶写的是
+    // `base × 1.6`，小萝卜 3.2 枚额度在 1.28 的价下只买得走 2 个。
+    // 现在硬顶 = `上限回收 ÷ 满产`（家长：「最高市场价应该是成本 × 1.6，
+    // 波动不能够超过它」），`满产 × 硬顶 = 上限回收` **恰好相等** ——
+    // 也就是说**「贵到卖不完」这件事已经不可能发生了**，满产永远卖得掉。
+    // 所以这条改成钉「价顶到硬顶时，额度之外的货仍然老老实实留在背包里」。
+    //
+    // 前提故意**不用收获骰子**（改用 addItem 定量投放），
+    // 这样「货比额度多」是构造出来的，不是碰巧的。
+    await setBalanceTo(50)
+    await plantAndMature('radish', 0) // 地还活着 → 闸门挂着
+    await addItem('produce-radish', 6)
+    await useApp.getState().refresh()
+
+    const base = radishBase()
+    expect(base, '前提：取得到基准单价').toBeGreaterThan(0)
+    const cap = 2 * 1.6
+    const ceilingFactor = priceCeilingFor('produce-radish') / base
+    expect(ceilingFactor, '前提：硬顶不该低于基准价').toBeGreaterThanOrEqual(1 - 1e-9)
+    pinRadishPrice(ceilingFactor)
+    const price = base * ceilingFactor
+
+    const total = await useApp.getState().sellProduce('produce-radish', 99)
+    const left =
+      useApp.getState().inventory.find((s) => s.itemId === 'produce-radish')?.count ?? 0
+    const sold = 6 - left
+
+    expect(total, '贵的时候也得卖得出去，只是卖得少').toBeGreaterThan(0)
+    expect(total, '再贵也不能突破每轮上限').toBeLessThanOrEqual(cap + 0.01)
+    expect(left, '上限之外的那部分必须还在背包里，不能蒸发').toBeGreaterThan(0)
+    expect(
+      sold,
+      '卖得比额度允许的还少 = 提前收手了（报价是线性的，所以这是个下界）',
+    ).toBeGreaterThanOrEqual(Math.floor(cap / price))
+    // 钱和「少掉的个数」要对得上：不能扣了货不给钱，也不能给了钱不扣货。
+    // ⚠️ 丰收币是**整数** —— `postHarvest` 里写着 `Math.round(entry.delta)`，
+    //    所以上界必须留 0.5 的四舍五入余量（实测 2 个 × 1.285 = 2.57 → 记账 3）。
+    //    下界的 6% 余量留着 —— 报价是线性的（现价 × 个数），本来就不该少，
+    //    余量只是防将来给 `sellQuote` 加卖压衰减时这条断言变假失败。
+    expect(total, '收到的钱不能明显多于 单价 × 卖掉个数').toBeLessThanOrEqual(sold * price + 0.5)
+    expect(total, '也不能明显少于 单价 × 卖掉个数').toBeGreaterThan(sold * price * 0.94 - 0.5)
   })
 
   it('④ 收进背包不能变成「无限额度」—— 攒够一轮的上限就停', async () => {

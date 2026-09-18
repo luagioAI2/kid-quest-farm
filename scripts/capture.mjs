@@ -319,8 +319,11 @@ try {
      为什么拍的是这个状态、而不是「按钮变灰的卖满态」：
      闸门是**按产出物**归集的（活着的标的 + 结转），所以要让整条都归零，
      得同时满足「这个作物的每一块地都卖满」且「结转也是 0」。
-     而卖压让实际到手 < 名义额度，光靠种出来的那点产出**永远卖不满**，
-     这个态在真机上也很难走到 —— 它是安全阀，不是日常状态。
+     而实际产出**低于**「最高产量」—— 灾害骰子的期望倍率是 0.87
+     （`HARVEST_TIERS`），而基准单价是按**最高产量**推的
+     （`基准单价 = 上限回收 ÷ 总产出量`，见 `docs/farm-economy-design.md` §5.6）。
+     所以光靠种出来的那点产出**永远卖不满**，这个态在真机上也很难走到 ——
+     它是安全阀，不是日常状态。
      这里拍一个真实可达、而且正好说明「闸门是按轮算的」的状态：
      这一块地的这一轮已经收回满额，别的地/结转的额度还在。 */
   await page.evaluate(async () => {
@@ -353,6 +356,52 @@ try {
   })
   await wait(1200)
   await shot('08-seed-shop')
+  await closeSheet()
+
+  /* 8b. 农场市场：行情条 + 背包估值 + 商品列表 + 展开行的走势图与卖出按钮
+     ------------------------------------------------------------
+     2026-09-16 补。这一页原来**根本不在走查图集里**，代价是：
+       · 顶部币种胶囊错显成「积分 🪙」（实际结的是丰收币 🌾），
+         孩子卖完东西眼前那个数字一动不动；
+       · 底部写着「全卖会拿到 X 分，和刚才比少了 N 分」，而 N 恒为 0。
+     两个都是**肉眼一看就能发现**的问题，却因为没有图，一直躺在那里。
+     文件头那句「新增界面必须加进这个脚本」在这里兑现 —— 走查图集看不见的改动 ≈ 没验过。
+
+     拍两张：
+       08b-market-sheet —— 行情条 / 背包估值 / 商品列表（**顶部币种胶囊要看得见**）
+       08c-market-row   —— 展开一行：7 日走势图 + 「卖 1 / 卖 5 / 全卖」三个按钮
+     08c 需要背包里有货（展开行才有卖出按钮），所以先补种补收一次 ——
+     上面第 7 段为了拍「这一轮卖满」把胡萝卜卖光了。 */
+  const pm = await plantMature()
+  await tapPlot(pm)
+  await wait(900)
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => /收进背包/.test(x.innerText))
+    b?.click()
+  })
+  await wait(900)
+
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => /市场/.test(x.innerText))
+    b?.click()
+  })
+  await wait(1100)
+  await shot('08b-market-sheet')
+
+  const rowExpanded = await page.evaluate(() => {
+    // 展开**有货**的那一行：空行展开也没有卖出按钮，拍出来看不出问题
+    const row = [...document.querySelectorAll('li button')].find((b) =>
+      /有\s*[1-9]/.test(b.innerText),
+    )
+    if (!row) return false
+    row.click()
+    return true
+  })
+  if (!rowExpanded) {
+    console.warn('  ⚠️ 背包里没货，08c-market-row 拍不到卖出按钮 —— 先看 08b 是不是空的')
+  }
+  await wait(800)
+  await shot('08c-market-row')
   await closeSheet()
 
   /* 9~10. 其余 Tab */

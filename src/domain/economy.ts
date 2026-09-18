@@ -199,7 +199,7 @@ export function applyCapDeduction(
  * 返回 0 就是**这一轮已经卖满了** —— UI 应该说「这轮卖满啦，换点别的种吧」，
  * 而不是让孩子白扔东西。
  *
- * @param quote 卖出 `n` 个能拿多少钱（用市场的 sellQuote，价格有卖压衰减）
+ * @param quote 卖出 `n` 个能拿多少钱（`sellQuote`：现价 × 个数，**线性**）
  */
 export function maxSellable(
   wantCount: number,
@@ -208,8 +208,22 @@ export function maxSellable(
 ): { count: number; total: number } {
   if (wantCount <= 0 || remainingCap <= 0) return { count: 0, total: 0 }
   if (quote(wantCount) <= remainingCap) return { count: wantCount, total: quote(wantCount) }
-  // 卖压让 quote 次线性，所以按比例缩是安全的上界，再往下修到不超
-  let n = Math.max(0, Math.floor((wantCount * remainingCap) / quote(wantCount)))
-  while (n > 0 && quote(n) > remainingCap) n--
-  return { count: n, total: n > 0 ? quote(n) : 0 }
+
+  // ⚠️ **不能按比例估。** `sellQuote` 里有 `Math.round`，所以 `quote(n) / n`
+  // 并不恒等于单价：单价 0.8、n = 6 时 `round(4.8) = 5`，5 ÷ 6 = 0.833 > 0.8，
+  // 按比例估出来只有 3 个，而 `round(0.8 × 4) = 3 ≤ 3.2` 明明卖得掉 4 个。
+  // 孩子看到的是「明明还有货、额度也够，就是不让卖」—— 和闸门按金额封顶
+  // 造成的剩货是两回事，这个纯粹是算错。
+  // （2026-09-18 由 `useApp.test.ts` 的「额度之外的货留在背包里」抓出来：
+  //   `sold` 期望 ≥ 4，实际 3。原实现是「按比例估 + 只往下修」，方向反了。）
+  //
+  // `quote` 单调不减 → 二分找最后一个装得下的 n，结果是**恰好**的。
+  let lo = 0
+  let hi = wantCount
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    if (quote(mid) <= remainingCap) lo = mid
+    else hi = mid - 1
+  }
+  return { count: lo, total: lo > 0 ? quote(lo) : 0 }
 }

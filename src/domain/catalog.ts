@@ -296,9 +296,16 @@ export const ANIMALS: AnimalDef[] = [
     produceItemId: 'milk',
     produceItemName: '牛奶',
     produceEmoji: '🥛',
-    produceIntervalMinutes: 360,
-    produceAmount: 8,
-    produceTimes: 8,
+    // ⚠️ 单次产量必须和其他标的**保持一致（都是 4）**。
+    // 减产骰子作用在**单次产出**上（见 `rollAnimalProduceEvent`），
+    // 8 个的取整颗粒度太粗：`round(8 × 0.92) = 7`，掉 12.5%，
+    // 而中性档的设计意图只是掉 8% —— 结果奶牛的期望浮盈只有 **+33%**，
+    // 比其他动物（+44~47%）和作物（+44~48%）低 13 个点。
+    // 改回 4 之后，总产出（16 × 4 = 64）和总时长（16 × 180 = 2880 分）
+    // 与改之前**完全一样**，只是「每 3 小时攒 4 个」而不是「每 6 小时攒 8 个」。
+    produceIntervalMinutes: 180,
+    produceAmount: 4,
+    produceTimes: 16,
     lifespanMinutes: 2940,
     fragility: 1.2,
     unlockLevel: 4,
@@ -430,12 +437,77 @@ export const PRODUCE_BASE_PRICE: Record<string, number> = {
 /** 市场里可以卖的产出，按展示顺序 */
 export const MARKET_GOODS = Object.keys(PRODUCE_BASE_PRICE)
 
+/* ------------------------------------------------------------
+   现价硬顶（2026-09-18 家长定的规则）
+   ------------------------------------------------------------
+   家长原话：
+
+   > 「设定里市场盈利最高 60%，那最高市场价应该是成本 × 1.6。
+   >   意思是波动不能够超过它。」
+
+   所以硬顶 = `上限回收 ÷ 满产` = **单位成本 × (1 + r)**。
+   波动不得超过它 —— 这是**绝对上限**，不是「基准价的某个倍数」。
+
+   为什么必须是这个数：`满产 × 硬顶 = 满产 × (上限回收 ÷ 满产) = 上限回收`
+   **恰好相等**。于是行情再好也能把这一轮收的**全卖掉、一个不剩**，
+   同时到手永远不突破闸门。这两件事本来就是同一个数，
+   不该由两个旋钮各管一半 —— 那正是下面这段历史踩的坑。
+   ------------------------------------------------------------ */
+
+let ceilingCacheKey = Number.NaN
+let ceilingCache = new Map<string, number>()
+
 /**
- * 价格浮动上限系数。
- * 现价永远 <= base * PRICE_CEILING，保证「上限以下浮动」。
+ * 该产出物的现价硬顶（丰收币/个）。不是产出物 → `Infinity`（不受限）。
+ *
+ * ⚠️ **除法必须向下取到 2 位**，不能四舍五入：`上限回收 ÷ 满产` 常常除不尽
+ * （小猪 880 ÷ 24 = 36.666…），进位会让 `满产 × 硬顶` 微微超过上限回收，
+ * 于是最后一个又卖不掉了 —— 正是本文件反复踩的那个坑。
+ *
+ * 按 `r` 记忆化：`r` 是家长可调的（0.2 ~ 1.2），换档才重算。
+ *
+ * ⚠️ **硬顶跟着 `r` 走，所以调用方必须把真的 `r` 传进来。**
+ * 偷懒用默认 0.6 的后果：家长把上限调低之后，硬顶还停在 0.6 那档、比闸门高，
+ * 剩货就又回来了（调高则相反，白少给钱）。见 `useApp` 里 `sellProduce` 的注释。
+ *
+ * 注意 `r` 调到 0.6 以下时，硬顶会**低于** `PRODUCE_BASE_PRICE` 表里的基准价
+ * （那张表是按 `r = 0.6` 算的静态值）。这时行情会整体压在基准价之下 ——
+ * 钱是对的（满产照样卖得完、也不越上限），只是「基准价」那个展示值偏高。
+ * 要彻底干净得把基准价也做成 `r` 的派生量，那是下一步的事。
  */
-export const PRICE_CEILING = 1.6
-/** 价格下限系数，避免跌破成本让人绝望 */
+export function priceCeilingFor(itemId: string, r = DEFAULT_PROFIT_RATIO): number {
+  if (r !== ceilingCacheKey) {
+    const m = new Map<string, number>()
+    const put = (id: string, cost: number, yieldN: number) => {
+      if (yieldN <= 0) return
+      const cap = roundCap(cost, r)
+      // 单价要低到「满产 × 单价」**四舍五入之后**也不越上限 —— `sellQuote` 用的是
+      // `Math.round`。反例：玫瑰花 上限 25.6、满产 12 个，直接取 25.6 ÷ 12 = 2.1333
+      // 再截到 2.13 的话，`round(12 × 2.13) = round(25.56) = 26 > 25.6`
+      // → 最后一朵还是卖不掉。所以先把可用上限压到 `floor(上限) + 0.5` 再除。
+      // （这只会让硬顶比规则线更低一点 —— 规则说的是「不能超过」，更严是允许的。）
+      const safe = Math.min(cap, Math.floor(cap) + 0.5)
+      // +1e-6 只为吸收浮点噪声（0.8 × 100 会变成 80.00000000000001），
+      // 相对量级 2e-8，绝不会把一个真实的数位抬过去。
+      const line = Math.floor((safe / yieldN) * 100 + 1e-6) / 100
+      const cur = m.get(id)
+      if (cur == null || line < cur) m.set(id, line)
+    }
+    // `CropDef.produceAmount` 是可选的，缺省 1 —— 和 `harvest` 里的 `?? 1` 保持一致
+    for (const c of CROPS) put(c.produceItemId, c.seedCost, c.regrowCount * (c.produceAmount ?? 1))
+    for (const a of ANIMALS) put(a.produceItemId, a.cost, a.produceTimes * a.produceAmount)
+    ceilingCache = m
+    ceilingCacheKey = r
+  }
+  return ceilingCache.get(itemId) ?? Number.POSITIVE_INFINITY
+}
+
+/**
+ * 价格下限系数：现价 ≥ 基准价 × 本系数。
+ *
+ * 现状下**从来不会生效** —— 日波动 ±22% + 漂移 ±6% 最多把价格压到基准价的
+ * 0.72 倍，够不到 0.55。留着是为了 `r` 调小、或将来加大波动时兜底。
+ */
 export const PRICE_FLOOR = 0.55
 
 /** 价格每日最大波动幅度（±%） */
@@ -447,7 +519,16 @@ export const MARKET_HISTORY_DAYS = 14
 /**
  * 单日卖出对价格的下压系数：
  * 每卖出 1 个，价格向下跌 0.6%，最低不低于 base * PRICE_FLOOR。
- * 这样「一口气全卖光」会砸盘，教会孩子分批出货 —— 市场教育点。
+ *
+ * ⚠️ **只作用在「卖出之后」的行情上，不进 `sellQuote` 的报价。**
+ * 也就是说：这一笔的到手价还是卖出前的现价，跌价要到**下一笔**才吃到。
+ * 所以孩子看到的是「货一多，价钱就往下走」，而不是「一次卖太多会当场少拿钱」。
+ *
+ * 2026-09-16 定：**报价保持线性（现价 × 个数），不改。**
+ * 原先市场弹层写过「全卖会少拿 N 分，因为一次卖太多」，但 N 恒为 0，
+ * 等于教了一条假规则 —— 那行提示已删。真要做「分批更划算」，
+ * 得让 `sellQuote` 按本系数对整笔卖出做衰减积分，那是改经济数值，
+ * 见 `docs/farm-economy-design.md` §6.4。
  */
 export const SELL_IMPACT_PER_UNIT = 0.006
 

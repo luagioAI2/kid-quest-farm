@@ -86,7 +86,12 @@
 - **养动物**：小鸡 / 小鸭 / 小羊 / 小猪 / 奶牛。先养大成年，之后按间隔持续产出
   鸡蛋、羊毛、牛奶、松露、羽毛。
 - **离线生长**：作物和动物按真实时间推进，关掉 App 也在长。回来一次性结算产出。
-- **交易**：产出物可卖成积分，形成经济循环。
+- **交易**：产出物在市场上卖成**丰收币** —— 一张**独立账本，不能变回积分**
+  （见 `docs/farm-economy-design.md` §2）。每个标的**每一轮**最多卖回
+  「成本 × (1+r)」，卖满就停；种子随时能再买、地随时能再种。
+- **收成有波动**：每次收获 / 收下产出都会掷一次骰子，可能丰收也可能遇到虫灾。
+  作物和动物**共用同一套分布**，所以两边的期望浮盈在同一档（+44% ~ +48%）。
+  动物**不会**因为灾害死掉，只是这一批少收点。
 - **道具**：神奇肥料让作物立刻长一半。
 
 ### 三、数据
@@ -108,7 +113,10 @@
    ⚠️ **农场那一步不是操作说明**，讲的是「花积分买种子是投入、收成是回报，
    什么时候卖决定了回报多少」—— 这是家长要的「投资 / 市场意识」的**引子**。
    完整的一课其实在别处：收获弹层的「当场卖 / 收进背包等好价」二选一，
-   以及市场页的行情指数、涨跌箭头、7 日走势图和「一次卖太多会砸盘」的提示。
+   以及市场页的行情指数、涨跌箭头、7 日走势图和「货一多价就跌」的提示。
+   ⚠️ 注意别写成「一次卖太多会砸盘、所以分批更划算」—— `sellQuote` 是线性的
+   （现价 × 个数），那个差额恒为 0，2026-09-16 修过一次，见
+   `docs/farm-economy-design.md` §6.4。
    但孩子走完导览若只知道「农场能种地」，那一课就没有引子 ——
    **别把这一步的文案改回纯操作说明。**
 
@@ -208,14 +216,108 @@ bash scripts/build-apk.sh release  # release 包，需先配置签名
 
 ### 应用图标
 
-`scripts/make-icons.py` 用纯 Python 生成全套启动图标（自适应前景/背景层 +
-5 种密度的传统 PNG），不依赖 Pillow：
+图标是**一张 AI 生成的插画**（小女孩 + 奶牛 + 小鸡 + 菜地 + 谷仓），
+不是程序化画的。源图放在 `assets/icon/source.png`。
+
+> 上一版是 `scripts/make-icons.py` 程序化画的「金底 + 任务卡 + 对勾 + 小苗」。
+> **那个脚本已停用**（默认跑会直接拒绝执行），它会把插画图标覆盖回旧设计且不报错。
+> 真要跑得加 `--force-old-design`。
+
+处理链路是两步：
 
 ```bash
-python scripts/make-icons.py
+PY=C:/Users/admin/.workbuddy-ai/binaries/python/envs/default/Scripts/python.exe
+
+# ① 抠掉暖白底 → 透明 PNG
+"$PY" <skill>/make_transparent.py --src assets/icon/source.png --out-dir assets/icon
+
+# ② 出全套 Android / Web 图标
+"$PY" <skill>/generate_icons.py \
+    --art assets/icon/icon-square.png \
+    --res android/app/src/main/res \
+    --public public \
+    --preview assets/icon/icon-set-preview.png
 ```
 
-改配色就改脚本顶部的 `SKY_TOP` / `GRASS_MID` / `SUN` 等常量，重跑即可。
+> ⚠️ **抠背景不是「把接近白色的像素变透明」。** 那样会把插画**内部**所有白东西
+> 一起打穿 —— 云、白衬衫、纸、小鸡。正确做法是**从画布边框向内做洪水填充**，
+> 让插画自己的轮廓把内部的白挡住。
+> 另外这张图的底不是纯白，实测是 `#FDFCFA`（暖白），得量出来而不是假设 255。
+> 细节和三种失败模式见 skill 的 `references/pitfalls.md`。
+
+产出：
+
+| 输出 | 尺寸 | 用途 |
+| --- | --- | --- |
+| `mipmap-*/ic_launcher.png` / `_round.png` | 48dp | 传统图标（API < 26） |
+| `mipmap-*/ic_launcher_foreground.png` | 108dp | 自适应图标前景 |
+| `mipmap-*/ic_launcher_background.png` | 108dp | 自适应图标背景 |
+| `public/favicon.png` / `apple-touch-icon.png` | 64 / 180px | 网页 |
+
+关键规则：**自适应图标 108dp 画布里，插画只占 74dp**。
+系统只保证露出中间 72dp，把插画铺满 108dp 会白白丢掉三分之一的构图。
+背景层是同一张 74dp 合成图把透明区**向外做边缘延展**，这样万一某个启动器
+露出的比 72dp 多，也不会看到透明边。
+
+> ⚠️ 前景层和背景层**必须成对替换**，只换一层会出现「新插画 + 旧底色」的错位。
+
+**为什么原生启动图不带这个图标：** 见下一节 —— 入场页本身没有 logo，
+原生启动图先闪一个 logo 再消失，等于在交接处多造一次跳变。
+`generate_icons.py` 顺手产出的 `splash_icon.webp` 因此**没有进 `res/`**，
+放在 `assets/icon/splash-mark-unused.webp` 备用（想启用见下一节）。
+
+> ⚠️ **favicon 在 16px 下基本是一团色块**（插画细节太多）。这是
+> 「和 App 图标保持一致」换来的代价，是有意选的；浏览器标签页 32px 起才勉强认得出。
+> 想要小尺寸清晰，得单独做一版简化图形。
+
+### 启动画面（原生启动图 ↔ 入场页）
+
+APK 冷启动时屏幕上的顺序是：
+
+```
+系统启动屏 / 窗口背景（原生，暖金）
+   ↓ 淡出
+入场页 SplashPage（React，暖金 + 插画 + 格言）
+```
+
+两边颜色必须对得上，否则交接那 200ms 会「闪一下」。取色不要手抄：
+
+```bash
+npm run splash:measure        # 需要先起 dev server（默认量 5180）
+```
+
+它会开真 Chrome，把入场动画停在 t=0、藏掉插画卡那一坨，只留背景两层截图，
+然后逐行取横向平均，打印三个可以直接抄的值：
+
+| 输出 | 抄到哪 |
+| --- | --- |
+| `startColor` / `centerColor` / `endColor` | `android/app/src/main/res/drawable/splash.xml` |
+| 整幅平均色 | `values/colors.xml` 的 `splash_background`（Android 12+ 系统启动屏只认纯色） |
+
+**抄完记得验一遍** —— 这四个值分散在四处，漏抄一处就会闪：
+
+```bash
+npm run splash:check          # 量 + 校验四处是否一致，不一致 exit 1
+```
+
+它检查 `splash.xml` 三站 / `colors.xml` / `capacitor.config.json`，
+以及**打包产物 APK 内部**（防止「源码改了但忘了重新打包」）。
+
+> ⚠️ 查 APK 时注意两个坑：
+> ① 三个色站在**编译后的二进制 XML** `res/drawable/splash.xml` 里，
+> 不在 `resources.arsc` —— 只查 arsc 会漏掉三站，看着像没重新打包；
+> ② arsc/XML 里颜色是**小端 uint32 ARGB**，`#cd9840` 存成 `40 98 cd ff`
+> （B G R A，**alpha 在最后**），不是 ASCII 的 `#cd9840`，直接搜字符串搜不到。
+
+> ⚠️ **不要用「读 CSS 自己算」的办法。** 试过一版纯 Python 复刻 CSS 渐变，
+> 多层背景 + 椭圆 radial + premultiplied alpha 插值全都要自己实现，
+> 结果连渐变方向都算反了。唯一的真值是浏览器画出来的像素。
+
+> ⚠️ 全 App **没有 ActionBar**（`values/styles.xml` 里三条主题全是 `NoActionBar`）。
+> 原来是 `Theme.AppCompat.Light.DarkActionBar`，启动时会在启动图和入场页中间
+> 多出一条写着应用名的标题栏；而且 `Theme.SplashScreen` 自带的
+> `postSplashScreenTheme` 是 `?android:attr/theme`，会解析回那条带 ActionBar 的
+> 应用主题 —— 所以启动主题里必须**显式**写 `postSplashScreenTheme`。
 
 ---
 
@@ -225,13 +327,35 @@ python scripts/make-icons.py
 
 ```bash
 npm run preview &                        # 先起预览服务
-node scripts/e2e-check.mjs               # 59 项：新手引导 / 渲染 / 导航 / 溢出 / 顶栏 / 长期任务孩子端 / 音效开关 / 币种只在一处显示 / 导出
+node scripts/e2e-check.mjs               # 68 项：新手引导 / 渲染 / 导航 / 溢出 / 顶栏 / 长期任务孩子端 / 音效开关 / 币种只在一处显示 / 导出
 node scripts/e2e-gameplay.mjs            # 46 项：结算规则 / 账本 / 农场 / 签到 / 收获二选一 / 脏数据
 node scripts/e2e-upgrade.mjs             # 12 项：老库升级路径（不丢数据、不炸索引）
+node scripts/e2e-bag-sell.mjs            # 23 项：收进背包 → 市场卖出整条链（含丰收币到账、卖压、空背包空状态）
+node scripts/e2e-regressions.mjs         # 20 项：**回归守卫** —— 已经修过的具体 bug 别再改回去
 ```
 
 `e2e-gameplay.mjs` 会验证每一条结算规则在真实环境下的积分入账结果，
 以及「任务 → 积分 → 农场消费」整条链路的账本一致性。
+
+`e2e-regressions.mjs` 和上面几套的分工：那几套验「功能对不对」（按页面组织、覆盖广），
+它验「**这几个坑别再踩**」（按 bug 组织、覆盖窄，每条都带日期和病因）。
+修完一个 bug 就往里加一条。里面有几条**必须在 CPU 降速下跑**（脚本自己设了 20×）——
+满速桌面复现不出来，真机上必现，详见该文件头部注释。
+
+### 文案一致性（按钮 emoji 位置）
+
+```bash
+node scripts/check-copy-emoji.mjs        # 退出码 0 = 干净；1 = 有尾随 emoji 的控件文案
+```
+
+按钮文案统一成「**emoji 在前**」（`✅ 我做完啦！`，不是 `我做完啦 ✅`）。
+这个检查器用 **TypeScript 编译器 API** 解析 TSX，而不是正则 ——
+逐行正则会漏掉跨行的 JSX 文本节点，只看 `JsxText` 会漏掉 `{}` 里的字符串字面量，
+**本机 git-bash 的 `grep` 还匹配不了非 BMP 的 emoji**（U+1F3E1 这类会静默返回空）。
+三种判据都会让结果**静默变假**，所以这里一律用 node 当裁判。
+
+⚠️ 只管**可交互控件**。`<p>` 里的散文不管 ——
+「这次先跳过了，明天见 👋」这种句子尾随 emoji 是正常中文写法。
 
 断言截图会输出到 `screenshots/`（会被覆盖）。
 
@@ -320,9 +444,11 @@ src/
   深色）；**中明度 + 低饱和 + 黄绿（V 60~88% + S<35% + H 45~110°）= 泥（卡其）**。
   改之前背景渐变下面两站是 `#e4ddab`(S25) / `#cfe0ba`(S17)，叠上暗罩实测
   H65 S21 V71 —— 正是「脏」的来源；现在整帧 10 条分带 **0 条**落进泥色区间。
-  ⚠️ 改这里的颜色要同步 `capacitor.config.json` 的 `SplashScreen.backgroundColor`
-  （现为 `#caac65` = **首帧整幅的平均色**，实测；整屏铺一个颜色，用平均色接最不容易
-  看出接缝），否则 Android 上原生启动图与网页首帧对不上，会闪一下。
+  ⚠️ 改这里的颜色要同步四处，别手抄 —— 跑 `npm run splash:check` 逐个核对
+  （`capacitor.config.json` 的 `backgroundColor` 与 `res/values/colors.xml` 的
+  `splash_background` 都是 **首帧整幅的平均色**，现为 `#cfa356`；渐变的三个色站
+  另写在 `res/drawable/splash.xml`）。对不上 Android 上原生启动图与网页首帧
+  就会闪一下。详见上面「启动画面（原生启动图 ↔ 入场页）」。
   （`capture.mjs` 会拍两张：`01a-splash-dawn` / `01-splash`，并断言当时暗罩的 opacity。）
 - **减少动画偏好**：全局支持 `prefers-reduced-motion`
 - **安全区适配**：`env(safe-area-inset-*)`，刘海屏与手势条不遮挡内容
