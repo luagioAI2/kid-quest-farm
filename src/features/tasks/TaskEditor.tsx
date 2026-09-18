@@ -460,36 +460,42 @@ export function TaskEditor({
           )}
         </div>
 
-        {/* ---------- 奖励道具 ---------- */}
-        <Field label="完成后掉落（选填）" emoji="🎁">
-          <div className="grid grid-cols-4 gap-2">
-            {ITEMS.map((it) => {
-              const on = rewardItemIds.includes(it.id)
-              return (
-                <button
-                  key={it.id}
-                  onClick={() =>
-                    setRewardItemIds((prev) =>
-                      on ? prev.filter((x) => x !== it.id) : [...prev, it.id],
-                    )
-                  }
-                  title={`${it.name} · ${it.desc}`}
-                  className={clsx(
-                    'btn active:btn-press flex min-h-[58px] flex-col items-center justify-center gap-0.5 border px-1',
-                    on
-                      ? 'border-grape-500 bg-grape-100'
-                      : 'border-ink-100 bg-white',
-                  )}
-                >
-                  <span className={clsx('text-xl', on && 'anim-pop')}>{it.emoji}</span>
-                  <span className="w-full truncate text-[10px] font-bold text-ink-700">
-                    {it.name}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </Field>
+        {/* ---------- 奖励道具 ----------
+            ⚠️ 整块受「设置 → 任务掉落」开关控制（家长 2026-09-18 要求）。
+            关掉时这块**完全不渲染** —— 不是禁用、不是灰掉，就是不出现。
+            `!== false` 是为了兼容老数据：`taskDropsEnabled` 是后加的字段，
+            老库里可能没有，缺省按「开」处理（和 DEFAULT_SETTINGS 一致）。 */}
+        {settings.taskDropsEnabled !== false && (
+          <Field label="完成后掉落（选填）" emoji="🎁">
+            <div className="grid grid-cols-4 gap-2">
+              {ITEMS.map((it) => {
+                const on = rewardItemIds.includes(it.id)
+                return (
+                  <button
+                    key={it.id}
+                    onClick={() =>
+                      setRewardItemIds((prev) =>
+                        on ? prev.filter((x) => x !== it.id) : [...prev, it.id],
+                      )
+                    }
+                    title={`${it.name} · ${it.desc}`}
+                    className={clsx(
+                      'btn active:btn-press flex min-h-[58px] flex-col items-center justify-center gap-0.5 border px-1',
+                      on
+                        ? 'border-grape-500 bg-grape-100'
+                        : 'border-ink-100 bg-white',
+                    )}
+                  >
+                    <span className={clsx('text-xl', on && 'anim-pop')}>{it.emoji}</span>
+                    <span className="w-full truncate text-[10px] font-bold text-ink-700">
+                      {it.name}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </Field>
+        )}
 
         {/* ---------- 固定任务 ---------- */}
         <div className="space-y-3">
@@ -521,7 +527,7 @@ export function TaskEditor({
             先不弄
           </Btn>
           <Btn tone="grass" size="lg" full onClick={handleSave}>
-            {editing ? '保存修改 ✅' : '创建任务 🎉'}
+            {editing ? '✅ 保存修改' : '🎉 创建任务'}
           </Btn>
         </div>
           </>

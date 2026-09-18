@@ -184,7 +184,7 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
               onClick={() => void confirm()}
               className="btn min-h-[44px] shrink-0 rounded-2xl border border-grass-600/30 bg-grass-400 px-4 text-white active:btn-press"
             >
-              带回家 🏡
+              🏡 带回家
             </button>
           </div>
         </div>

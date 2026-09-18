@@ -257,7 +257,7 @@ function RedeemRow({ item, balance }: { item: RedeemItem; balance: number }) {
               onClick={() => void doRedeem()}
               className="btn min-h-[46px] flex-1 rounded-2xl border border-grass-600/30 bg-grass-400 font-display font-extrabold text-white active:btn-press disabled:opacity-50"
             >
-              换！🎉
+              🎉 换！
             </button>
           </div>
         </div>
@@ -682,7 +682,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
           onClick={() => void save()}
           className="btn mt-4 flex min-h-[54px] w-full items-center justify-center rounded-2xl border border-grape-500/30 bg-gradient-to-b from-grape-300 to-grape-500 font-display text-lg font-extrabold text-white shadow-flat active:btn-press"
         >
-          {item ? '保存修改' : '加进商城 🎁'}
+          {item ? '保存修改' : '🎁 加进商城'}
         </button>
       </div>
     </div>

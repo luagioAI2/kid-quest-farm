@@ -298,6 +298,15 @@ export default function SettingsPage({
                 />
 
                 <Toggle
+                  label="任务掉落"
+                  hint="开着的时候，新建任务能选「完成后掉落」贴纸、勋章等小道具。关掉后新建任务的界面上不再出现这一项（已经配好掉落的旧任务不受影响）"
+                  emoji="🎁"
+                  checked={settings.taskDropsEnabled !== false}
+                  disabled={!gateOpen}
+                  onChange={(v) => void updateSettings({ taskDropsEnabled: v })}
+                />
+
+                <Toggle
                   label="农场随机事件"
                   hint="庄稼可能丰收也可能减产，动物会生病。关掉之后收成完全稳定"
                   emoji="🎲"

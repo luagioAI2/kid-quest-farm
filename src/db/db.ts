@@ -398,6 +398,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   parentReviewEnabled: true,
   protectParentActions: true,
   redeemEnabled: true,
+  /**
+   * 任务掉落开关。默认 **true** —— 老用户升级上来行为不变，
+   * 想关的家长自己去设置里关（关掉后任务编辑页不再显示掉落选项）。
+   * `loadSettings` 会和 `DEFAULT_SETTINGS` 合并，所以老库里没这个字段也能拿到默认值。
+   */
+  taskDropsEnabled: true,
   farmEventsEnabled: true,
   /** 浮盈倍率 r。数值口径见 catalog.ts 的 `DEFAULT_PROFIT_RATIO` */
   profitRatio: 0.6,

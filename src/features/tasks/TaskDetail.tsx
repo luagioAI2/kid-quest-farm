@@ -302,7 +302,7 @@ export function TaskDetail({
                   onClick={() => setConfirmGiveUp(true)}
                   className="min-h-[44px] w-full text-sm font-bold text-ink-500 underline decoration-dotted decoration-2 underline-offset-4"
                 >
-                  我放弃了 🥲
+                  🥲 我放弃了
                 </button>
               ) : (
                 <div className="anim-fade-in rounded-2xl border border-ink-100 bg-white p-3 text-center">
@@ -401,7 +401,7 @@ function Celebration({
       </p>
       <div className="mt-5">
         <Btn tone="grass" size="lg" full onClick={onDone}>
-          好耶，收下 🎁
+          🎁 好耶，收下
         </Btn>
       </div>
     </div>
@@ -451,7 +451,7 @@ function SubmittedPanel({
 
       <div className="mt-5">
         <Btn tone="grass" size="lg" full onClick={onDone}>
-          好嘞，去看看别的 👀
+          👀 好嘞，去看看别的
         </Btn>
       </div>
     </div>

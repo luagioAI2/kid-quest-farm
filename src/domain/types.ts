@@ -678,6 +678,17 @@ export interface AppSettings {
   /** 兑换商城开关 */
   redeemEnabled: boolean
 
+  /**
+   * 任务掉落开关（家长 2026-09-18 要求）。
+   *
+   * 关掉之后，「新建 / 编辑任务」里那块「完成后掉落（选填）」
+   * **整块不渲染** —— 家长觉得孩子为了贴纸做任务、或者嫌道具太杂，可以关掉。
+   *
+   * ⚠️ 它只管**编辑界面**，不改结算逻辑：已经配好掉落的旧任务照旧会掉。
+   * 要连结算一起停，得在结算处再判一次 —— 见 `useApp` 里 `grantRewards` 附近。
+   */
+  taskDropsEnabled: boolean
+
   /** 农场随机事件开关（关掉就是风调雨顺） */
   farmEventsEnabled: boolean
 

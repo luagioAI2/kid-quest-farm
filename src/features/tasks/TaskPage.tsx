@@ -224,7 +224,7 @@ export default function TaskPage() {
                     openNew()
                   }}
                 >
-                  我是家长 🔑
+                  🔑 我是家长
                 </Btn>
               </div>
             </div>
@@ -474,7 +474,7 @@ function TaskCard({
                     {String(seconds % 60).padStart(2, '0')}
                   </span>
                   <Btn tone="grass" size="md" onClick={onOpen}>
-                    我做完啦 ✅
+                    ✅ 我做完啦！
                   </Btn>
                 </div>
               ) : (
@@ -561,7 +561,7 @@ function TaskCard({
                 昨天没做
               </span>
               <Btn tone="white" size="sm" onClick={onOpen}>
-                🌟 现在补做
+                🌟 现在补做掉
               </Btn>
             </div>
           )}
@@ -731,9 +731,9 @@ function PeriodCard({ task, onEdit }: { task: Task; onEdit: () => void }) {
             onClick={() => setOnceOpen(true)}
           >
             {allDone
-              ? '这个周期的目标完成啦 🎉'
+              ? '🎉 这个周期的目标完成啦'
               : full
-                ? '都交上去了，等爸爸妈妈确认 📮'
+                ? '📮 都交上去了，等爸爸妈妈确认'
                 : busy
                   ? '记录中…'
                   : '完成一次 ＋'}
@@ -1078,9 +1078,9 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
             onClick={handleCheckIn}
           >
             {signedToday
-              ? '今天已经签过啦 ✅'
+              ? '✅ 今天已经签过啦'
               : pendingToday
-                ? '已交，等爸爸妈妈看 📮'
+                ? '📮 已交，等爸爸妈妈看'
                 : busy
                   ? '签到中…'
                   : '📅 今天签到'}
