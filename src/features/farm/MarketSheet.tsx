@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '@/store/useApp'
-import { DEFAULT_PROFIT_RATIO, ITEM_BY_ID } from '@/domain/catalog'
+import { DEFAULT_PROFIT_RATIO, ITEM_BY_ID, PRICE_FLOOR, priceCeilingFor } from '@/domain/catalog'
 import { priceSeries, trendOf, valueHint } from '@/domain/market'
 import { maxSellable, remainingCapFor } from '@/domain/economy'
 import { BottomSheet, CoinPill } from './farmUi'
@@ -20,7 +20,7 @@ import { BottomSheet, CoinPill } from './farmUi'
 
    全程用 emoji + CSS，无外部依赖。
 
-   ⚠️ **两个坑，改之前先读：**
+   ⚠️ **三个坑，改之前先读：**
 
    ① **这一页结的是丰收币 🌾，不是积分 🪙。**
    卖出走 `sellProduce` → `postHarvest`，进的是 `harvestBalance`。
@@ -40,10 +40,15 @@ import { BottomSheet, CoinPill } from './farmUi'
 
    ③ **闸门按丰收币计价，货却是整颗的 —— 按钮必须报「真能卖几个」。**
    家长 2026-09-18 报「小萝卜收进背包后不能全部卖掉」。不是小数 bug：
-   小萝卜种子 2 分 → 一轮上限 `2 × 1.6 = 3.2` 丰收币；现价 0.9 时
+   小萝卜种子 2 分 → 一轮上限 `2 × 1.6 = 3.2` 丰收币；报的那天现价 0.9，
    4 个值 `4 × 0.9 = 3.6 > 3.2`，于是只卖得动 3 个，剩下 1 个 + 0.2 额度卡住。
-   **只要现价高于基准价（0.8），就必然有整颗卖不掉** —— 因为基准价是按
-   「上限 ÷ 总产量」反推的，所以「基准价」恰好是「刚好卖得完」的那个价。
+   根子是：**基准价是按「上限 ÷ 总产量」反推的，它恰好就是「刚好卖得完」那个价**，
+   所以旧口径下现价一旦高于基准价（0.8），就必然有整颗卖不掉。
+
+   ⚠️ 那个 0.9 是**旧硬顶**（基准价 × 1.6）才够得到的价。2026-09-18 硬顶改成
+   `上限回收 ÷ 满产` 之后就 ≈ 基准价了，现价只在基准价的 0.72~1.00 倍之间走 ——
+   **单轮满产已经不可能卖不光**。下面那个 `clamped` 分支现在只在
+   背包里攒了**不止一轮**的货时才触发。
 
    所以三个按钮一律先过 `maxSellable`（与 `sellProduce` 同一个函数），
    按钮上写的就是结算结果；卖不光时补一句额度说明。
@@ -217,15 +222,35 @@ function MarketRow({
   const unit = priceFor(itemId)
 
   /*
+    ⚠️ 图上的「上限」必须是**引擎真用的那条硬顶**（`上限回收 ÷ 满产`）。
+    ------------------------------------------------------------
+    2026-09-18 之前这里传的是 `q.base * 1.6` —— 那是**已经被删掉的旧口径**
+    （基准价的 1.6 倍）。三个后果，一个比一个明显：
+
+      ① 那条「上限」虚线画在真上限**上方 60%**，价格永远够不到 —— 是条假上限；
+      ② `PriceChart` 用 `Math.max(...series, ceiling)` 定 y 轴标尺，
+         多出来的那截空白把 7 天走势**压进图的下半部分**，看着像一条平线；
+      ③ 标签写「上限 1」，而小萝卜的真上限是 0.8。
+
+    所以这里跟 `priceOf` / `sellQuote` 用同一个来源，别再手写倍数。
+    `priceCeilingFor` 对没有产出定义的 item 返回 `Infinity` —— 理论上不该发生
+    （由 `market.test.ts` 的不变量钉住），这里退回基准价兜底：
+    真发生了也只是画得保守一点，不会把标尺和标签带崩。
+  */
+  const rawCeiling = priceCeilingFor(itemId, r)
+  const ceiling = Number.isFinite(rawCeiling) ? rawCeiling : q.base
+
+  /*
     ⚠️ **按钮上写的数字必须是真能拿到的。**
     ------------------------------------------------------------
     家长 2026-09-18 报：「买了萝卜种子，收成后收进背包，去市场卖不能全部卖掉」。
 
     查下来不是小数 bug，是**闸门按丰收币计价、而货是整颗的**：
       小萝卜 种子 2 分 → 一轮上限 `2 × (1+0.6) = 3.2` 丰收币
-      基准价 0.8 / 个，但现价会浮动（0.44 ~ 1.28）
-      现价 0.9 时，4 个值 `4 × 0.9 = 3.6 > 3.2` → 只卖得动 3 个
+      基准价 0.8 / 个；报的那天现价 0.9（**旧硬顶**下才够得到的价）
+      4 个值 `4 × 0.9 = 3.6 > 3.2` → 只卖得动 3 个
     剩下的 1 个 + 0.2 丰收币额度就卡在背包里了（额度不够买 1 个整颗）。
+    （现价区间现在是基准价的 0.72~1.00 倍，单轮满产卖不光已经不可能 —— 见文件头 ③）
 
     原来这里写的是 `全卖 {count} 个 +{quoteFor(itemId, count)}` ——
     也就是**按「不限额度」报价**，于是按钮承诺「全卖 4 个 +4 🌾」，
@@ -320,7 +345,12 @@ function MarketRow({
       {expanded && (
         <div className="border-t-2 border-ink-900/5 bg-paper-2/60 p-3">
           {/* ---- 走势图 ---- */}
-          <PriceChart series={series} base={q.base} ceiling={q.base * 1.6} floor={q.base * 0.55} />
+          <PriceChart
+            series={series}
+            base={q.base}
+            ceiling={ceiling}
+            floor={q.base * PRICE_FLOOR}
+          />
 
           {/*
             三个卖出按钮排成两行（上两个、全卖独占一行）。
@@ -374,6 +404,18 @@ function MarketRow({
 
 /* ---------------- 价格走势图（纯 CSS/div） ---------------- */
 
+/**
+ * 价签格式化：**便宜货必须带小数**。
+ *
+ * 小萝卜硬顶 0.8，`toFixed(0)` 会写成「1」—— 孩子看到的「上限」比真上限高 25%。
+ * 更糟的是底下那排 7 天价签：现价区间 0.58~0.80 四舍五入**全是 1**，
+ * 走势图下面七个一模一样的「1」，等于没标。
+ * 贵一点的货（苹果树 15.2、奶牛 35）保持整数，免得标签挤成一团。
+ */
+function price1(v: number): string {
+  return v < 10 ? v.toFixed(1) : v.toFixed(0)
+}
+
 function PriceChart({
   series,
   base,
@@ -418,7 +460,9 @@ function PriceChart({
     <div>
       <div className="mb-1 flex items-center justify-between">
         <span className="text-[11px] font-bold text-ink-500">最近 {series.length} 天价格</span>
-        <span className="text-[11px] text-ink-500">上限 {ceiling.toFixed(0)} / 下限 {floor.toFixed(0)}</span>
+        <span className="text-[11px] text-ink-500">
+          上限 {price1(ceiling)} / 下限 {price1(floor)}
+        </span>
       </div>
 
       <div className="relative overflow-hidden rounded-2xl border border-ink-900/10 bg-white">
@@ -467,7 +511,7 @@ function PriceChart({
                   v >= prev ? 'bg-grass-500' : 'bg-berry-400',
                 )}
               />
-              <span className="tnum text-[9px] leading-none text-ink-500">{v.toFixed(0)}</span>
+              <span className="tnum text-[9px] leading-none text-ink-500">{price1(v)}</span>
             </div>
           ))}
         </div>

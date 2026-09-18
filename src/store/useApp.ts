@@ -94,6 +94,7 @@ import {
   ITEM_BY_ID,
   MARKET_GOODS,
   PRODUCE_BASE_PRICE,
+  priceCeilingFor,
 } from '../domain/catalog'
 import {
   advanceMarket,
@@ -2506,6 +2507,14 @@ declare global {
          * 比在脚本里手算「成本 × 1.6 × 地块数」稳得多。
          */
         remainingCap: (itemId: string) => number
+        /**
+         * 现价硬顶（`上限回收 ÷ 满产` = 单位成本 × (1+r)）。
+         * 给 E2E 对账用 —— 走势图上印的「上限 X」必须**等于**这个数。
+         * 曾经它写死成 `基准价 × 1.6`（旧口径），画出来比真上限高 60%，
+         * 还把 7 天走势压进图的下半部分。断言「界面上的数 == 领域函数算出来的数」
+         * 是唯一能钉住这类「UI 接线错、领域函数没错」的办法。
+         */
+        priceCeiling: (itemId: string) => number
       }
     }
   }
@@ -2530,6 +2539,12 @@ if (typeof window !== 'undefined') {
           s.quotaCarry[itemId] ?? 0,
         )
       },
+      // 硬顶跟着家长的 r 变，所以这里也读活的 `profitRatio`（和 `MarketSheet` 一致）
+      priceCeiling: (itemId) =>
+        priceCeilingFor(
+          itemId,
+          useApp.getState().settings.profitRatio ?? DEFAULT_PROFIT_RATIO,
+        ),
     },
   }
 }

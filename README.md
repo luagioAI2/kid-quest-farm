@@ -327,7 +327,7 @@ npm run splash:check          # 量 + 校验四处是否一致，不一致 exit 
 
 ```bash
 npm run preview &                        # 先起预览服务
-node scripts/e2e-check.mjs               # 68 项：新手引导 / 渲染 / 导航 / 溢出 / 顶栏 / 长期任务孩子端 / 音效开关 / 币种只在一处显示 / 导出
+node scripts/e2e-check.mjs               # 70 项：新手引导 / 渲染 / 导航 / 溢出 / 顶栏 / 长期任务孩子端 / 音效开关 / 币种只在一处显示 / 市场走势图 / 导出
 node scripts/e2e-gameplay.mjs            # 46 项：结算规则 / 账本 / 农场 / 签到 / 收获二选一 / 脏数据
 node scripts/e2e-upgrade.mjs             # 12 项：老库升级路径（不丢数据、不炸索引）
 node scripts/e2e-bag-sell.mjs            # 23 项：收进背包 → 市场卖出整条链（含丰收币到账、卖压、空背包空状态）

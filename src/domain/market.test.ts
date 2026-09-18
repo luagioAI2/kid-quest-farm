@@ -50,6 +50,32 @@ describe('createInitialMarket', () => {
   })
 })
 
+describe('硬顶覆盖所有建了仓的商品', () => {
+  /*
+    `priceCeilingFor` 对**没有产出定义**的 itemId 返回 `Number.POSITIVE_INFINITY`
+    —— 它的缓存只由 `CROPS` / `ANIMALS` 的产出物填出来（见其实现）。
+
+    这是一条真不变量：市面上的货都是从产出表来的，所以硬顶一定有限。
+    但一直没人钉它，于是 `MarketSheet` 里那个 `Number.isFinite(ceiling)` 兜底
+    会不会触发，全靠假设。这条测试把它钉成「**证明够不到的兜底**」——
+    哪天有人往 `PRODUCE_BASE_PRICE` 里加了一条产出表里没有的货，
+    这里立刻红，而不是等到孩子的走势图上出现一条 `Infinity` 的标尺。
+
+    ⚠️ 别顺手加「硬顶 ≥ 基准价」的断言。基准价是按 r = 0.6 算的**静态值**，
+    家长把 r 调低之后硬顶本来就该低于它 —— 2026-09-18 加过一次这个「保底」，
+    结果把硬顶顶到闸门上方、剩货全回来了，已删。
+  */
+  it('每个建了仓的商品都能反推出有限的硬顶', () => {
+    const m = createInitialMarket(BASE, 0)
+    expect(m.quotes.length).toBeGreaterThan(0)
+    for (const q of m.quotes) {
+      const ceiling = priceCeilingFor(q.itemId)
+      expect(Number.isFinite(ceiling), `${q.itemId} 的硬顶不是有限值`).toBe(true)
+      expect(ceiling, `${q.itemId} 的硬顶应该为正`).toBeGreaterThan(0)
+    }
+  })
+})
+
 describe('advanceMarket —— 价格硬边界', () => {
   it('无论推进多少天，价格都锁在 base×0.55 ~ 现价硬顶之间', () => {
     let m = createInitialMarket(BASE, 0)

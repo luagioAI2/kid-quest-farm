@@ -658,6 +658,49 @@ try {
   })
   await new Promise((r) => setTimeout(r, 700))
 
+  /* ---------- 5c. 走势图上的「上限」必须是引擎真用的硬顶 ----------
+     ------------------------------------------------------------
+     2026-09-18 修：`MarketSheet` 给 `PriceChart` 传的还是**旧口径**
+     `q.base * 1.6`（基准价的 1.6 倍），而引擎早就不在那儿封顶了。
+     三个后果，一个比一个明显：
+
+       ① 那条「上限」虚线画在真上限**上方 60%**，价格永远够不到 —— 是条假上限；
+       ② `PriceChart` 用 `Math.max(...series, ceiling)` 定 y 轴标尺，
+          多出来的那截空白把 7 天走势**压进图的下半部分**，看着像一条平线；
+       ③ 标签印「上限 2.6」，而小胡萝卜的真上限是 1.6。
+
+     `priceCeilingFor` 一直是对的，错的是 **UI 接线** —— 所以只能靠
+     **渲染出来的字**钉住，和 5b 那两条同一个道理（第 4 层界面走查）。
+
+     期望值**不写死**：向 `window.__kqf__.catalog.priceCeiling()` 要真实数值。
+     写死的话，下次调经济数值这条就会变成「假失败」。 */
+  const chartRes = await page.evaluate(() => {
+    const ITEM = 'produce-carrot' // 本段只收过胡萝卜，展开的就是它
+    const row = [...document.querySelectorAll('li')].find((li) =>
+      /最近\s*7\s*天价格/.test(li.innerText),
+    )
+    return {
+      rowFound: !!row,
+      rowName: (row?.querySelector('p')?.textContent ?? '').trim(),
+      capText: row?.innerText.match(/上限\s*([\d.]+)/)?.[1] ?? null,
+      expected: window.__kqf__.catalog.priceCeiling(ITEM),
+      base:
+        window.__kqf__.getState().market.quotes.find((q) => q.itemId === ITEM)?.base ?? null,
+    }
+  })
+  check('展开的行渲染出了走势图', chartRes.rowFound === true, `行名：${chartRes.rowName}`)
+  {
+    // 图上是按显示精度印的（< 10 保留一位小数，见 `price1`），所以按同精度比
+    const dec = chartRes.expected < 10 ? 1 : 0
+    const shown = Number(chartRes.capText)
+    check(
+      '走势图的「上限」== 引擎的硬顶（不是写死的基准价 × 1.6）',
+      Number.isFinite(shown) &&
+        Number(shown.toFixed(dec)) === Number(chartRes.expected.toFixed(dec)),
+      `图上 ${chartRes.capText} / 引擎 ${chartRes.expected}（基准价 ${chartRes.base}）`,
+    )
+  }
+
   const sellBtns = await page.evaluate(() => {
     const btns = [...document.querySelectorAll('li button')].filter((b) => /卖|全卖/.test(b.innerText))
     return btns.map((b) => {
