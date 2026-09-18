@@ -48,3 +48,23 @@ dist-apk/
 
 # 测试
 coverage/
+
+# 图标处理链路（assets/icon/）：
+# 只把**源图**入库。下面这些都是 make_transparent.py / generate_icons.py
+# 能重新跑出来的中间产物和预览图，加起来 4MB 多，没必要进版本库。
+# 重新生成：见 README「应用图标」。
+assets/icon/icon-transparent.png
+assets/icon/icon-square.png
+assets/icon/edge-zoom.png
+assets/icon/icon-preview.png
+assets/icon/icon-set-preview.png
+assets/icon/favicon-sizes.png
+assets/icon/favicon-zoom.png
+assets/icon/splash-mark-unused.webp
+assets/icon/launcher-composite.png
+assets/icon/window-margin.png
+
+# 助手在本地记的工作笔记（memory/）：
+# 里面全是本机路径、临时探针、试错过程，属于「这个工作目录的草稿」，
+# 不是 App 的源码或文档。仓库是公开的，别把它推上去。
+.workbuddy-ai/

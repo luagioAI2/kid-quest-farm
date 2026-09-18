@@ -1,5 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标（API 26+）。
+
+  图形来源：assets/icon/source.png（AI 生成的插画，暖白底）
+  处理链路：
+    scripts 里的 make_transparent.py 抠掉暖白底 → icon-square.png
+    → generate_icons.py 出全套 → 本目录引用下面两层
+
+  背景层是**位图** @mipmap/ic_launcher_background（108dp 画布，把插画
+  向外做边缘延展，万一某个启动器露出的比 72dp 多也不会看到透明边）。
+  前景层是 74dp 的插画本体 —— 见 generate_icons.py 里 FOREGROUND_DP 的说明。
+
+  ⚠️ 这两层**必须成对替换**。只换前景不换背景，就会出现
+     「新插画 + 旧底色」的错位。
+
+  ⚠️ 旧的 drawable/ic_launcher_background.xml（金色渐变）和
+     values 里的同名 color 已经删掉了 —— 它们属于上一版手绘图标方案
+     （scripts/make-icons.py），跟这套插画图标不是一回事。
+
+  ⚠️ 注释里不要出现连续两个减号，aapt2 会报「注释中不允许出现字符串」。
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background"/>
+    <background android:drawable="@mipmap/ic_launcher_background"/>
     <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
 </adaptive-icon>

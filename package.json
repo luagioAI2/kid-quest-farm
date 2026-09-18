@@ -15,7 +15,9 @@
     "cap:sync": "npm run build && cap sync android",
     "cap:open": "cap open android",
     "apk": "bash scripts/build-apk.sh",
-    "apk:release": "bash scripts/build-apk.sh release"
+    "apk:release": "bash scripts/build-apk.sh release",
+    "splash:measure": "node scripts/measure-splash.mjs",
+    "splash:check": "node scripts/measure-splash.mjs --check"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",

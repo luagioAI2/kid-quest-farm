@@ -9,10 +9,19 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!--
+          ⚠️ Activity 上**不要**再写 android:label。
+             原来这里是 @string/title_activity_main（=「小任务农场」），
+             配合主题里那条 ActionBar，启动时顶上会多出一条写着应用名的标题栏 ——
+             正好夹在原生启动图和入场页中间，把一次连续的启动切成了三段。
+             现在主题已经全部改成 NoActionBar（见 values/styles.xml），
+             这里再把 label 去掉做双保险：即使哪天主题被换回去，
+             也只会出现一条空标题栏，不会又冒出应用名。
+             启动器上显示的名字来自 <application android:label>，不受影响。
+        -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
-            android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
             android:exported="true">

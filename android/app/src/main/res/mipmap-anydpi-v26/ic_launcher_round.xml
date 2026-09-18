@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  圆形自适应图标。内容与 ic_launcher.xml 完全相同，遮罩由启动器决定 ——
+  这里不做圆形裁剪，是因为自适应图标的遮罩是**系统**施加的，
+  自己再裁一次会导致边缘被裁两遍（半径对不上，边上会出现一圈透明缝）。
+
+  图形来源与处理链路见 ic_launcher.xml 的注释。
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background"/>
+    <background android:drawable="@mipmap/ic_launcher_background"/>
     <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
 </adaptive-icon>

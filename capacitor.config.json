@@ -11,10 +11,9 @@
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 1200,
-      "backgroundColor": "#caac65",
+      "backgroundColor": "#cfa356",
       "showSpinner": false,
-      "androidScaleType": "CENTER_CROP",
-      "splashFullScreen": true,
+      "splashFullScreen": false,
       "splashImmersive": false
     },
     "StatusBar": {

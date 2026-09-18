@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      品牌色。
+
+      ⚠️ 这三个值以前**没有在本工程里定义过** —— 是从 @capacitor/android 的库里
+         「漏」进来的默认值（colorPrimary = #3F51B5 靛蓝），跟这个 App 一点关系
+         都没有。因为现在已经没有 ActionBar 了，它们基本只影响文本选择手柄、
+         系统对话框这些边角，但留着靛蓝总归是个定时炸弹，所以显式定成品牌色。
+    -->
+    <color name="colorPrimary">#f59e0b</color>
+    <color name="colorPrimaryDark">#b45309</color>
+    <color name="colorAccent">#16a34a</color>
+
+    <!--
+      原生启动图底色。
+
+      给 Android 12+ 的**系统启动屏**用 —— 那个 API 只认一个纯色（不能渐变），
+      所以取入场页首帧的**整幅平均色**。取色口径与 drawable/splash.xml 一致，
+      跑 `node scripts/measure-splash.mjs` 重新量。
+    -->
+    <color name="splash_background">#cfa356</color>
+</resources>

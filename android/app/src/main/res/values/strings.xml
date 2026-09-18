@@ -1,7 +1,12 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
+    <!-- 启动器上显示的名字。别改，改了手机桌面上就跟着变 -->
     <string name="app_name">小任务农场</string>
-    <string name="title_activity_main">小任务农场</string>
+    <!--
+      这里原来还有一条 title_activity_main（同名字符串），是给 Activity 的
+      ActionBar 当标题用的。现在全 App 都没有 ActionBar 了（见 values/styles.xml），
+      Manifest 里那行 android:label 也删掉了，所以这条字符串一并去掉。
+    -->
     <string name="package_name">com.kidquestfarm.app</string>
     <string name="custom_url_scheme">com.kidquestfarm.app</string>
 </resources>

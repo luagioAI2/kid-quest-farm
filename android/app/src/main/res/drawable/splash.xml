@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  原生启动图（窗口背景）。
+
+  ⚠️ 这不是随便挑的一个金色，而是**入场页 SplashPage 首帧**的实测配色。
+     APK 冷启动的顺序是：原生启动图 → 淡出 → 入场页。
+     两边颜色对不上，交接那 200ms 就会「闪一下」。
+
+     取色口径：把入场动画停在 t=0、藏掉插画卡那一坨，只留背景两层，
+     再用真 Chrome 截图逐行取横向平均。跑 `node scripts/measure-splash.mjs`
+     可以重新量一遍（改了入场页的底色/暗罩就必须重量）。
+
+  ⚠️ Android 的 <gradient> 只支持 start / center / end 三站，
+     所以这里是首帧在 y=0% / 50% / 100% 三个高度的真实颜色，
+     不是「取个平均色」—— 顶部那团太阳光晕会让上三分之一明显偏暖，
+     取平均会把它抹平。
+
+  ⚠️ 不要改回 PNG。上一版用的是 Capacitor 脚手架自带的那张
+     （白底 + 蓝色闪电 logo），从白色启动图切到暖金色入场页，
+     那一下白闪就是「衔接很突兀」的来源。
+     渐变用 XML 画：任何屏幕尺寸都铺满、不会有 CENTER_CROP 的裁切错位，
+     而且不用为每个 dpi / 横竖屏各出一张图。
+
+  ⚠️ 这张渐变实际会在什么时候被看到：
+     · Android 12+ 走系统启动屏（SplashScreen API），**只认一个纯色**，
+       也就是 values/colors.xml 里的 splash_background，看不到这张渐变。
+       那个纯色取的是首帧整幅平均色，跟渐变的中间值基本一致，所以交接不显。
+     · 系统启动屏淡出、Activity 换成 AppTheme.NoActionBar 之后，
+       窗口背景就是这张渐变 —— WebView 画出第一帧之前露的就是它。
+     · Android 11 及以下（core-splashscreen 的兼容实现）同理。
+
+  ⚠️ `capacitor.config.json` 里的 `splashFullScreen` 已从 true 改成 false：
+     系统启动屏期间藏起状态栏、启动屏一撤状态栏又冒出来，是交接处
+     多出来的一次跳动。入场页本来就不藏状态栏，两边保持一致更顺。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="270"
+        android:startColor="#cd9840"
+        android:centerColor="#cea050"
+        android:endColor="#d2af74" />
+</shape>

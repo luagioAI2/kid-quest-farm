@@ -1,22 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Base application theme. -->
-    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
-        <!-- Customize your theme here. -->
+    <!--
+      应用主题。
+
+      ⚠️ 原来这里是 Theme.AppCompat.Light.DarkActionBar，会在启动时画出一条
+         写着「小任务农场」的**标题栏**，夹在原生启动图和入场页中间。
+         那条标题栏是「衔接很突兀」的一半原因，所以整个 App 一律不要 ActionBar：
+         界面全部由 WebView 自己画（App.tsx 里有自己的顶栏），原生这层只负责
+         一块干净的底。
+
+      android:windowBackground 用启动图那张渐变：
+      WebView 还没画出第一帧之前露出来的就是它，白底一闪也是这么来的。
+    -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">@drawable/splash</item>
     </style>
 
+    <!-- 启动图撤掉之后 Activity 用的主题（见下面 postSplashScreenTheme） -->
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <item name="android:windowBackground">@drawable/splash</item>
     </style>
 
+    <!--
+      启动主题（AndroidManifest 里挂在 Activity 上）。
 
+      ⚠️ postSplashScreenTheme **必须显式写**。
+         Theme.SplashScreen 自带的值是 `?android:attr/theme`，在本工程里会解析回
+         <application> 上的 AppTheme —— 也就是那条带 ActionBar 的主题。
+         于是启动图一撤，Activity 就被换成「有标题栏」的样子，顶上多出一条
+         写着应用名的横条（这正是用户看到的那条）。显式指向 NoActionBar 就没了。
+         core-splashscreen 要求这个值指向一个**非启动主题**，AppTheme.NoActionBar 符合。
+
+      Android 12+ 的系统启动屏由下面两条控制：底色 + 图标
+      （图标留空，见 drawable/splash_icon_blank.xml）。
+      Android 11 及以下走 android:windowBackground，也就是同一张渐变。
+    -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_blank</item>
+        <item name="windowSplashScreenAnimationDuration">200</item>
+        <item name="android:windowBackground">@drawable/splash</item>
         <item name="android:background">@drawable/splash</item>
     </style>
 </resources>

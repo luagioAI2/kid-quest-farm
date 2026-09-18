@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ 系统启动屏的「图标」槽位 —— 故意留成全透明。
+
+  系统启动屏（SplashScreen API）一定会画一个图标，不给就退回系统默认的
+  安卓小机器人。这里塞一个全透明的 drawable，等于**只留底色**。
+
+  为什么不要图标：入场页本身没有 logo —— 它是「暖金底 + 一株小苗弹进来」，
+  没有任何品牌标记。原生启动图先闪一个 logo、紧接着又消失，
+  等于在交接处多造一次「有 → 无」的跳变，正是要消掉的那种突兀。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+    <size android:width="1dp" android:height="1dp" />
+</shape>
