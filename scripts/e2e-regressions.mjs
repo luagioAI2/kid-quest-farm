@@ -6,14 +6,16 @@
  *   这一套验的是「**这几个坑别再踩**」（覆盖窄、按 bug 组织，每条都带日期和病因）。
  *   一个 bug 修完就往这里加一条 —— 它们是回归，不是新功能。
  *
- * 当前守着 4 条（2026-09-18 家长报的）：
- *   1. 设置页改「孩子的小名」后点头像，名字被吃回去
+ * 当前守着 5 条：
+ *   1. 设置页改「孩子的小名」后点头像，名字被吃回去（2026-09-18 家长报的）
  *      → `updateSettings` 的 `set` 落在了 `await` 之后
  *   2. 「设置 → 任务掉落」开关能控制任务编辑页里的「完成后掉落」
  *      → 新功能，顺带钉住默认值和落库
  *   3. 市场里有货的行要有标记（绿点 + 绿色数量胶囊 + 描边）
  *   4. 市场「全卖」按钮报的个数/金额必须真能拿到
  *      → 原来是按「不限额度」报价，承诺「全卖 4 个 +4」实际只卖 3 个
+ *   5. 成熟地块的产量标签是整数、不带 `≈`（2026-09-20 用户报的）
+ *      → 那个 `≈` 是「积分时代」`≈3.6 🪙` 的遗留，B1 + 甲之后纯属噪音
  *
  * 跑法：node scripts/e2e-regressions.mjs [url]   （默认 http://127.0.0.1:4180/）
  * 前置：先 `npm run preview`
@@ -128,17 +130,42 @@ try {
     const empty = st().plots.find((p) => p.unlocked && !p.crop)
     await st().plant(empty.index, 'carrot')
   })
+  // ⚠️ 落地页是「任务」tab，`div.grid.grid-cols-3` 只存在于「农场」tab。
+  // 不先切过去，下面读到的 tile 文本永远是空串 —— 而「标签里没有 `≈`」
+  // 这条在空串上会**静默通过**，是典型的假绿。所以必须先切 tab。
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('nav button')].find(
+      (x) => x.innerText.trim().split('\n').pop().trim() === '农场',
+    )
+    b?.click()
+  })
+  await sleep(1000)
+
   // 等成熟 → 收进背包
   const idx = await page.evaluate(() => window.__kqf__.getState().plots.find((p) => p.crop)?.index ?? 0)
+  let matureTile = ''
   for (let i = 0; i < 40; i++) {
-    const t = await page.evaluate((k) => {
+    matureTile = await page.evaluate((k) => {
       const g = document.querySelector('div.grid.grid-cols-3')
       const tiles = g ? [...g.querySelectorAll(':scope > button')] : []
       return tiles[k]?.innerText ?? ''
     }, idx)
-    if (/可以收啦/.test(t)) break
+    if (/可以收啦/.test(matureTile)) break
     await sleep(250)
   }
+
+  /* 2026-09-20：成熟地块的产量标签曾经写 `≈4 个` —— 那个 `≈` 是「积分时代」
+     （`≈{harvestPoints} 🪙`，值是 3.6 这种**连续小数**）的遗留。B1 整数化
+     （§6.1.3）+ 甲 产量封顶（§6.1.2）之后，产量只在 0/2/3/4 这些整数上取，
+     根本不存在「约等于」，`≈` 只剩噪音。见 `FarmPage.tsx` 那处注释。
+     ⚠️ 判据必须**同时**要求「成熟 + 有数字」，否则空 tile 也算通过。 */
+  const flatTile = matureTile.replace(/\s+/g, ' ')
+  check(
+    '成熟地块的产量标签是整数、不带 `≈`',
+    /可以收啦/.test(flatTile) && /\d+\s*个/.test(flatTile) && !flatTile.includes('≈'),
+    `tile「${flatTile || '(空 —— 没切到农场 tab?)'}」`,
+  )
+
   await page.evaluate(async (i) => {
     await window.__kqf__.getState().harvest(i, 'store')
   }, idx)

@@ -527,9 +527,20 @@ function PlotTile({
         <>
           <span className="font-display text-[11px] font-extrabold text-sun-700">可以收啦!</span>
           {/* ⚠️ 这里不能写 🪙 —— 收获**不发积分**，产出物进背包，
-              钱要等卖出才结算（而且是 🌾 不是 🪙）。显示产出物才对。 */}
+              钱要等卖出才结算（而且是 🌾 不是 🪙）。显示产出物才对。
+
+              ⚠️ 也**不要写 `≈`**（2026-09-20 去掉的）。那个符号是从「积分时代」
+              遗留下来的：最早的标签是 `≈{harvestPoints} 🪙`，而当时的收获积分
+              是 `3.6` 这种**连续小数**，所以 `≈` 是诚实的。
+              B1 整数化（§6.1.3）+ 甲 产量封顶（§6.1.2）之后，`produceAmount`
+              是**整数 4**，且实际产量 `min(满产, round(...))` 也只在
+              `0/2/3/4` 这几个整数上取值 —— 这里根本不存在「约等于」。
+              `≈` 是数学符号，孩子看不懂，看起来就像个显示错误。
+              歉收那几档（2/3 个）是**离散事件**，由收获时的 toast 负责讲
+              （「虫灾！这次只收了 2 个」），不该由标签用 `≈` 提前打折扣。
+              动物页 `AnimalHouse.tsx` 一直是 `{produceAmount} 个`，改完两边也一致了。 */}
           <span className="tnum rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-extrabold text-sun-700">
-            {ITEM_BY_ID.get(def?.produceItemId ?? '')?.emoji ?? '🧺'} ≈{def?.produceAmount ?? 1} 个
+            {ITEM_BY_ID.get(def?.produceItemId ?? '')?.emoji ?? '🧺'} {def?.produceAmount ?? 1} 个
           </span>
         </>
       ) : (
