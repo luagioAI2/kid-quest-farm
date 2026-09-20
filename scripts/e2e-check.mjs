@@ -154,7 +154,7 @@ try {
   check('跳过密码后进到完成页', await waitFor('[data-step="done"]'))
 
   await clickByText('带宝贝看一遍')
-  check('接着弹出给孩子的功能导览', await waitFor('[data-tour-bubble="tasks"]'))
+  check('接着弹出功能导览（第一步：任务）', await waitFor('[data-tour-bubble="tasks"]'))
 
   const tourBlocksNav = await isReachable('[data-tour="tab-tasks"]')
   check(
@@ -163,32 +163,49 @@ try {
     `该点最顶层是 ${tourBlocksNav.hit}`,
   )
 
+  /**
+   * 高亮框有没有真的套住某个元素，以及气泡在它的哪一侧、有没有跑出屏幕。
+   *
+   * ⚠️ 抽成函数是因为 2026-09-21 起导览有**两类目标**：底部 tab 和顶栏按钮。
+   * 前者气泡往上放、后者往下放（见 ChildTour 文件头第 5 条），必须分别验。
+   */
+  const holeVs = (sel) =>
+    page.evaluate((s) => {
+      const target = document.querySelector(s)
+      const bubble = document.querySelector('[data-tour-bubble]')
+      if (!target || !bubble) return null
+      // 挖洞层是唯一一个带 9999px 外阴影的元素（见 ChildTour 的注释）
+      const holeEl = [...document.querySelectorAll('div')].find((d) =>
+        (d.getAttribute('style') ?? '').includes('9999px'),
+      )
+      if (!holeEl) return null
+      const t = target.getBoundingClientRect()
+      const h = holeEl.getBoundingClientRect()
+      const b = bubble.getBoundingClientRect()
+      return {
+        covers:
+          h.left <= t.left + 1 && h.right >= t.right - 1 && h.top <= t.top + 1 && h.bottom >= t.bottom - 1,
+        bubbleAbove: b.bottom <= h.top + 1,
+        bubbleBelow: b.top >= h.bottom - 1,
+        // 「气泡被推出屏幕下沿」是顶栏目标最容易踩的坑，单独量一次
+        bubbleOnScreen: b.top >= -1 && b.bottom <= window.innerHeight + 1,
+      }
+    }, sel)
+
   // 高亮框要真的套在「任务」那一格上，气泡要在它上方 ——
   // 否则孩子看到的只是一块压暗的屏幕，不知道在讲哪儿。
-  const hole = await page.evaluate(() => {
-    const tab = document.querySelector('[data-tour="tab-tasks"]')
-    const bubble = document.querySelector('[data-tour-bubble]')
-    if (!tab || !bubble) return null
-    // 挖洞层是唯一一个带 9999px 外阴影的元素（见 ChildTour 的注释）
-    const holeEl = [...document.querySelectorAll('div')].find((d) =>
-      (d.getAttribute('style') ?? '').includes('9999px'),
-    )
-    if (!holeEl) return null
-    const t = tab.getBoundingClientRect()
-    const h = holeEl.getBoundingClientRect()
-    return {
-      covers:
-        h.left <= t.left + 1 && h.right >= t.right - 1 && h.top <= t.top + 1 && h.bottom >= t.bottom - 1,
-      bubbleAbove: bubble.getBoundingClientRect().bottom <= h.top + 1,
-    }
-  })
+  const hole = await holeVs('[data-tour="tab-tasks"]')
   check(
     '高亮框正好套住「任务」那一格，且气泡在它上方',
     !!hole && hole.covers && hole.bubbleAbove,
     hole ? `covers=${hole.covers} bubbleAbove=${hole.bubbleAbove}` : '没找到挖洞层',
   )
 
-  const restSteps = ['farm', 'redeem', 'points']
+  /**
+   * 六步：4 步讲底部 tab（给孩子）+ 2 步讲顶栏按钮（给家长）。
+   * 后两步是 2026-09-21 用户报「缺乏家长审核和家长设置的引导」之后补的。
+   */
+  const restSteps = ['farm', 'redeem', 'points', 'review', 'settings']
   for (let n = 0; n < restSteps.length; n++) {
     await clickByText('下一步')
     await sleep(250)
@@ -198,6 +215,20 @@ try {
       k,
     )
     check(`导览第 ${n + 2} 步切到「${k}」`, ok)
+
+    // 最后两步的目标在**顶栏**：气泡必须翻到下方、且不能跑出屏幕。
+    // 沿用「往上」那套算出来的是 `bottom: 视口高 + 6`，气泡会被推出屏幕下沿 ——
+    // 而且 DOM 查询照样找得到它，只有量位置才发现得了。
+    if (k === 'review' || k === 'settings') {
+      const h = await holeVs(`[data-tour="header-${k}"]`)
+      check(
+        `第 ${n + 2} 步「${k}」的高亮框套住顶栏按钮，气泡在它下方且没跑出屏幕`,
+        !!h && h.covers && h.bubbleBelow && h.bubbleOnScreen,
+        h
+          ? `covers=${h.covers} bubbleBelow=${h.bubbleBelow} bubbleOnScreen=${h.bubbleOnScreen}`
+          : '没找到挖洞层',
+      )
+    }
   }
 
   await clickByText('知道啦')

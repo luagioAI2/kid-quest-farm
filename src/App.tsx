@@ -216,6 +216,8 @@ export default function App() {
             <button
               onClick={() => setReviewOpen(true)}
               aria-label={pendingReview > 0 ? `家长确认，有 ${pendingReview} 个待办` : '家长确认'}
+              /* 导览最后两步要讲这个按钮（见 ChildTour 的 STEPS），同样靠属性定位 */
+              data-tour="header-review"
               className={
                 'btn active:btn-press relative flex h-10 w-10 items-center justify-center rounded-full text-xl shadow-flat ' +
                 (pendingReview > 0 ? 'bg-sun-300' : 'bg-white')
@@ -231,6 +233,7 @@ export default function App() {
             <button
               onClick={() => setShowSettings(true)}
               aria-label="设置"
+              data-tour="header-settings"
               className="btn flex h-10 w-10 items-center justify-center rounded-full bg-white text-xl shadow-flat active:btn-press"
             >
               ⚙️

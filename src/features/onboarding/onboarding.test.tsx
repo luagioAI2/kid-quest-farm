@@ -1,5 +1,7 @@
 /**
- * 回归测试：新手引导（家长设置向导 + 给孩子的功能导览）。
+ * 回归测试：新手引导（家长设置向导 + 功能导览）。
+ * 功能导览是 6 步：前 4 步讲底部四个 tab（给孩子），
+ * 后 2 步讲顶栏的「家长确认」和「设置」（给家长，2026-09-21 补）。
  *
  * 这一组里**最值钱的是「重看模式没有密码步骤」那一条**，它守的是一个安全洞：
  *
@@ -184,8 +186,8 @@ describe('家长设置向导', () => {
    给孩子的功能导览
    ============================================================ */
 
-describe('给孩子的功能导览', () => {
-  it('跟着走四步，每一步都把底部 tab 切过去；最后一步收尾', async () => {
+describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
+  it('跟着走六步：四步给孩子、两步给家长；最后一步收尾', async () => {
     const user = userEvent.setup()
     const onFinish = vi.fn()
     const onStepChange = vi.fn()
@@ -193,7 +195,7 @@ describe('给孩子的功能导览', () => {
 
     expect(onStepChange).toHaveBeenLastCalledWith('tasks')
     expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-bubble', 'tasks')
-    expect(screen.getByText('1 / 4')).toBeInTheDocument()
+    expect(screen.getByText('1 / 6')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
     expect(onStepChange).toHaveBeenLastCalledWith('farm')
@@ -203,13 +205,50 @@ describe('给孩子的功能导览', () => {
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
     expect(onStepChange).toHaveBeenLastCalledWith('points')
-    expect(screen.getByText('4 / 4')).toBeInTheDocument()
+    expect(screen.getByText('4 / 6')).toBeInTheDocument()
+
+    // ---- 后两步是给家长的：回到「任务」页，讲顶栏那两个按钮 ----
+    // （顶栏按钮哪个 tab 都在，但背景停在任务页才讲得通，见 ChildTour 文件头）
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-bubble', 'review')
+    expect(onStepChange).toHaveBeenLastCalledWith('tasks')
+
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-bubble', 'settings')
+    expect(screen.getByText('6 / 6')).toBeInTheDocument()
 
     // 最后一步没有「下一步」了，换成「知道啦」
     expect(screen.queryByRole('button', { name: '下一步' })).toBeNull()
     await user.click(screen.getByRole('button', { name: '知道啦' }))
 
     expect(onFinish).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * 家长那两步必须**自己**说明是给家长看的。
+   *
+   * 为什么值得单独一条：导览是连续的一条流，第 5 步开始画面没有任何变化
+   * （顶栏本来就一直在），拿手机的人会以为「还是给孩子看的东西」而划过去。
+   * 所以气泡上那个「给家长」小标是这两步唯一的身份提示，掉了就等于没加。
+   *
+   * ⚠️ 断言用「哪几步带标」而不是「一共有几个标」：后者在别人把标记
+   * 加到孩子那几步上时照样是绿的。
+   */
+  it('只有最后两步带「给家长」标记', async () => {
+    const user = userEvent.setup()
+    render(<ChildTour onFinish={() => {}} onStepChange={() => {}} />)
+
+    const hasParentBadge = () => screen.queryByText('给家长') !== null
+
+    expect(hasParentBadge()).toBe(false) // 第 1 步：任务（给孩子）
+    for (let n = 0; n < 3; n++) await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(hasParentBadge()).toBe(false) // 第 4 步：积分（给孩子）
+
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(hasParentBadge()).toBe(true) // 第 5 步：家长确认
+
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(hasParentBadge()).toBe(true) // 第 6 步：设置
   })
 
   it('「跳过」直接收尾', async () => {

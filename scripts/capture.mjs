@@ -229,15 +229,37 @@ try {
     await wait(800)
     await shot('01g-tour-farm')
 
-    await clickByText('跳过')
+    // 功能导览一共**六步**：前四步讲底部四个 tab（给孩子），
+    // 后两步讲顶栏的「家长确认」和「设置」（给家长，2026-09-21 补）。
+    // ⚠️ 新增的那两步**必须**也拍下来 —— 项目硬规矩：
+    //    走查图集里看不见的改动 ≈ 没验过（见本文件顶部第 2 条）。
+    await clickByText('下一步')
+    await wait(800)
+    await shot('01h-tour-redeem')
+
+    await clickByText('下一步')
+    await wait(800)
+    await shot('01i-tour-points')
+
+    // ⚠️ 后两步的目标在**顶栏**，气泡要翻到下方（ChildTour 文件头第 5 条）。
+    // 这一步正是最容易拍歪的地方 —— 沿用「往上」的算法气泡会被推出屏幕下沿。
+    await clickByText('下一步')
+    await wait(800)
+    await shot('01j-tour-review')
+
+    await clickByText('下一步')
+    await wait(800)
+    await shot('01k-tour-settings')
+
+    await clickByText('知道啦')
     await page
       .waitForFunction(() => !document.querySelector('[data-tour-bubble]'), { timeout: 8000 })
       .catch(() => {})
     await wait(600)
 
-    // ⚠️ 导览每一步都会把底部 tab 切过去，跳过时停在「农场」。
-    // 不切回「任务」的话，下面从 02-tasks 开始的每一张截图都会拍错页 ——
-    // 而且不会报错，只是图全不对（第一版就是这么错的）。
+    // ⚠️ 导览每一步都会把底部 tab 切过去。最后两步虽然停在「任务」，
+    // 但**不能靠这个巧合** —— 导览顺序一改，下面从 02-tasks 开始的每一张
+    // 截图都会拍错页，而且不会报错，只是图全不对（第一版就是这么错的）。
     await page.evaluate(() => {
       const b = [...document.querySelectorAll('button')].find(
         (x) => x.innerText.trim().split('\n').pop().trim() === '任务',
@@ -246,9 +268,9 @@ try {
     })
     await wait(700)
 
-    console.log('  引导截图：01b~01g（6 张）')
+    console.log('  引导截图：01b~01k（10 张）')
   } else {
-    console.log('  ! 没弹新手引导（profile 里已经有 onboardingDone 标记，这 6 张会缺）')
+    console.log('  ! 没弹新手引导（profile 里已经有 onboardingDone 标记，这 10 张会缺）')
   }
 
   await shot('02-tasks')

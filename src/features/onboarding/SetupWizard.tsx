@@ -24,7 +24,8 @@ import { PinPad } from '../parent/ParentGate'
       「重看引导」就能把家长密码改成自己设的，家长区从此形同虚设。
       所以 `replay` 模式下 STEPS 里根本没有 'pin'：重看只能看，不能改凭据。
 
-   向导走完**不算引导结束** —— 后面还有给孩子的功能导览（见 ChildTour）。
+   向导走完**不算引导结束** —— 后面还有六步功能导览
+   （4 步给孩子 + 2 步给家长，见 ChildTour）。
    `onboardingDone` 由外层在导览结束时统一写。
    ============================================================ */
 
@@ -201,7 +202,7 @@ export function SetupWizard({
                 都设好啦
               </h1>
               <p className="mx-auto mt-3 max-w-sm text-sm font-bold leading-relaxed text-ink-600">
-                接下来带宝贝认识一下四个页面 —— 一共四小步，随时可以跳过。
+                接下来带宝贝认识四个页面，最后两小步是给爸爸妈妈的 —— 一共六小步，随时可以跳过。
               </p>
             </div>
           )}
