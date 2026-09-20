@@ -19,7 +19,7 @@ import {
 } from './useApp'
 import { currentDayKey } from '../domain/recurrence'
 import { periodKeyFor } from '../domain/time'
-import { priceCeilingFor } from '../domain/catalog'
+import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
 
 /* ============================================================
    签到 / 长期任务的家长审核
@@ -617,13 +617,17 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
     await useApp.getState().updateSettings({ farmEventsEnabled: false })
     await setBalanceTo(50)
 
-    await plantAndMature('radish', 0) // 种子 2 积分
-    expect(useApp.getState().balance).toBe(48)
+    await plantAndMature('radish', 0) // 种子 3 积分（B1 后 2 → 3）
+    // ⚠️ 别把种子价写死：`2026-09-19` 改经济数值时，满篇硬编码的 2 / 3.2
+    // 让十几条用例一起红 —— 数值本身没错，是断言写死了。能派生的都派生。
+    expect(useApp.getState().balance).toBe(50 - CROP_BY_ID.get('radish')!.seedCost)
 
     const earned = await useApp.getState().harvest(0)
 
     expect(earned, '存背包这一步不结钱').toBe(0)
-    expect(useApp.getState().balance, '收获不该发积分').toBe(48)
+    expect(useApp.getState().balance, '收获不该发积分').toBe(
+      50 - CROP_BY_ID.get('radish')!.seedCost,
+    )
     expect(useApp.getState().harvestBalance, '还没卖，丰收币不该动').toBe(0)
     expect(
       useApp.getState().inventory.find((s) => s.itemId === 'produce-radish')?.count ?? 0,
@@ -662,10 +666,10 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
 
   /* ---------------- ④ 每轮闸门（用户 2026-09-15 锁定的核心约束） ---------------- */
 
-  it('④ 闸门封顶：卖满「成本 × (1+r)」之后再卖就是 0', async () => {
+  it('④ 闸门封顶：卖满「满产 × 整数单价」之后再卖就是 0', async () => {
     await setBalanceTo(50)
-    await plantAndMature('radish', 0) // 成本 2 → 上限 3.2
-    const cap = 2 * 1.6
+    await plantAndMature('radish', 0) // 满产 4 × 单价 1 → 上限 4（B1 前是 2 × 1.6 = 3.2）
+    const cap = capFor('produce-radish')
 
     // 塞一大把产出，远超这一轮的上限
     await addItem('produce-radish', 100)
@@ -707,7 +711,7 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
 
   it('④ 「存起来等好价」不能绕过闸门 —— 两条路共用一个额度', async () => {
     await setBalanceTo(50)
-    await plantAndMature('radish', 0) // 上限 3.2
+    await plantAndMature('radish', 0) // 上限 4（满产 4 × 单价 1）
 
     // 先存进背包卖一点
     await addItem('produce-radish', 4)
@@ -716,7 +720,7 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
     expect(stored).toBeGreaterThan(0)
 
     // 再走「直接卖」，额度已经用掉一部分，两边加起来不能超过上限
-    const cap = 2 * 1.6
+    const cap = capFor('produce-radish')
     await addItem('produce-radish', 20)
     await useApp.getState().refresh()
     const direct = await useApp.getState().sellProduce('produce-radish', 20)
@@ -734,7 +738,7 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
     // ⚠️ 背包数量必须**小于闸门允许的数量**，否则两边刚好相等，
     // 这条用例会「假通过」（第一次写就是踩了这个坑）。
     await setBalanceTo(50)
-    await plantAndMature('radish', 0) // 闸门允许卖 4 个（3.2 ÷ 0.8）
+    await plantAndMature('radish', 0) // 闸门允许卖 4 个（上限 4 ÷ 单价 1）
     await addItem('produce-radish', 1)
     await useApp.getState().refresh()
 
@@ -750,8 +754,9 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
   /**
    * 小萝卜的**基准单价**（与日期无关的那个价）。
    *
-   * 闸门按**金额**封顶（成本 × (1+r) = 3.2 枚），而收获按**个数**给。
-   * 两者在**基准价**下刚好对齐（`4 × 0.8 = 3.2`）。
+   * 闸门按**金额**封顶（`capFor` = 满产 × 整数单价 = 4 枚），而收获按**个数**给。
+   * 两者在**单价**下刚好对齐（`4 个 × 1 = 4 枚`）——
+   * 这正是 B1 要的性质：额度是单价的整数倍，一个都不剩。
    *
    * ⚠️ 2026-09-18 之后，基准价同时就是**现价硬顶**（`priceCeilingFor`）——
    * 行情再怎么涨也不会超过它。所以「拿基准价算前提」不再只是保守做法，
@@ -764,11 +769,11 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
   /**
    * 把 `produce-radish` 的当日价钉回基准价（或基准价的指定倍数）。
    *
-   * 为什么要钉：闸门是 3.2 **枚**，收获是 4 **个**。基准单价 0.8 时
-   * `4 × 0.8 = 3.2` 刚好装满额度；可单价每天 ±22% 波动，今天 1.0 的话
-   * `3.2 ÷ 1.0` 只买得走 3 个 → 背包剩 1 个。
-   * 不钉住的话，「一轮收成能不能全卖掉」就变成了**看天吃饭** ——
-   * 用例会今天绿明天红，而代码一行都没动。
+   * 为什么要钉：闸门是 4 **枚**，收获是 4 **个**。单价 1 时
+   * `4 × 1 = 4` 刚好装满额度；可单价每天 ±22% 波动，今天 0.8 的话
+   * `4 ÷ 0.8` 只买得走 5 个（够），今天 1.0 的话刚好 4 个（也够）——
+   * 但**只要价格动了，这条用例的「能不能全卖掉」就取决于当天行情**。
+   * 不钉住的话，用例会今天绿明天红，而代码一行都没动。
    * （2026-09-16 实测：同一份代码 09-15 绿、09-16 红，就是这个原因。）
    *
    * ⚠️ 必须在**最后一次 `refresh()` 之后**调用。
@@ -789,6 +794,76 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
     })
   }
 
+  it('④ 导出 → 导入 不能把「结转额度」清零（清零 = 死库存永久卖不掉）', async () => {
+    // 2026-09-19 排查「背包里有一个萝卜却卖不掉」时挖出来的真 bug。
+    //
+    // 结转额度住在 `meta['farm.quotaCarry']` 里，而 `importBackup` 会
+    // `db.meta.clear()` 再逐项写回 —— 写回清单里**没有这个 key**，
+    // `exportBackup` 也从来没导出过它。于是「导出 → 导入」一次：
+    // 一次性作物（小萝卜 / 胡萝卜）的地早就空了，额度**只挂在这里**，
+    // 一清就没了 → `remainingCap` 归零 → `sellProduce` 直接返回 0
+    // 并提示「这一轮已经卖满啦」。孩子看到的就是「背包里有一个萝卜，卖不掉」，
+    // 而且**永久**卖不掉（不像「单卖烧额度」那种下一轮还能救）。
+    //
+    // 断言刻意分两层：先钉「额度数值回来了」，再钉「真的卖得掉」——
+    // 孩子只看得到后者，只钉前者可能绿着而界面仍然是死的。
+    await setBalanceTo(50)
+    // 关掉灾害骰子：`wipedOut` 会让这一轮产出 0，用例就变成看天吃饭
+    await useApp.getState().updateSettings({ farmEventsEnabled: false })
+    await plantAndMature('radish', 0)
+    await useApp.getState().harvest(0, 'store')
+    await useApp.getState().refresh()
+
+    expect(
+      useApp.getState().plots[0].crop,
+      '前提：一次性作物收完地应该空掉（额度才会挂到 quotaCarry 上）',
+    ).toBeUndefined()
+    const held =
+      useApp.getState().inventory.find((s) => s.itemId === 'produce-radish')?.count ?? 0
+    expect(held, '前提：收成要真的进背包（否则最后那条断言测不到东西）').toBeGreaterThan(0)
+    const carryBefore = useApp.getState().quotaCarry['produce-radish'] ?? 0
+    expect(carryBefore, '前提：收完地空了，额度应该结转出来').toBeGreaterThan(0)
+
+    const backup = await useApp.getState().exportBackup()
+    const res = await useApp.getState().importBackup(backup)
+    expect(res.ok, res.message).toBe(true)
+
+    expect(
+      useApp.getState().quotaCarry['produce-radish'] ?? 0,
+      '导入备份不能丢掉结转额度',
+    ).toBeCloseTo(carryBefore, 5)
+
+    const sold = await useApp.getState().sellProduce('produce-radish', 1)
+    expect(sold, '导入之后背包里那批货必须还卖得掉').toBeGreaterThan(0)
+  })
+
+  it('④ 导出 → 导入 不能把背包清空（InventorySlot 的主键是 itemId，不是 id）', async () => {
+    // 和上一条同源、但更狠：`importBackup` 里的 `pickArray` 硬写 `'id' in x`，
+    // 而 `InventorySlot` 是 `{ itemId, count }` —— 没有 `id`。
+    // 于是 `pickArray(d.inventory)` 恒为 null → `[]` → 前面刚 clear 过 →
+    // **每次导入备份，整个背包（所有产出、收藏品）全部消失**。
+    //
+    // 为什么以前没被发现：`validateBackup` 用的是另一套规则
+    // （`BACKUP_ID_ARRAY_FIELDS` 特意排除了 `inventory`，作者知道它没 id），
+    // 校验放行 → 导入照常返回 `{ ok: true }` → 界面上只是「背包空了」，
+    // 没有任何报错。E2E 的往返用例只对了 tasks 和余额，正好漏掉背包。
+    await setBalanceTo(50)
+    await addItem('produce-radish', 7)
+    await addItem('produce-carrot', 3)
+    await useApp.getState().refresh()
+
+    const backup = await useApp.getState().exportBackup()
+    const res = await useApp.getState().importBackup(backup)
+    expect(res.ok, res.message).toBe(true)
+
+    const inv = useApp.getState().inventory
+    expect(
+      inv.find((s) => s.itemId === 'produce-radish')?.count ?? 0,
+      '导入备份不能把背包清空',
+    ).toBe(7)
+    expect(inv.find((s) => s.itemId === 'produce-carrot')?.count ?? 0).toBe(3)
+  })
+
   it('④ 「收进背包」之后还能卖出去 —— 收完地空了也要认这笔账', async () => {
     // 2026-09-15 由**第 4 层界面走查**抓出来的真 bug。
     //
@@ -807,6 +882,21 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
     await useApp.getState().harvest(0, 'store')
     await useApp.getState().refresh()
 
+    // ⚠️ 收完之后把背包**校准成恰好满产**，再往下断言。
+    //
+    // 收获数量是骰子给的：`min(满产, round(满产 × 灾害倍率 × 季节加成))`。
+    // 灾害倍率 0.45~1.2，所以小萝卜一次能收 **0~4** 个 —— 2026-09-19 加了甲
+    // 之后被满产封顶（B1 之前周末能收到 5 个，那正是「剩 1 个卖不掉」的来源）。
+    // 但下界仍然是 0（1% 绝收），这条用例照样看天吃饭：
+    // 抽到绝收时下面 `stored > 0` 那条前提就红了。
+    //
+    // 这条用例要证的是「收完地空了，结转过来的额度还认这笔账」，
+    // 不是「骰子有多大」—— 所以按本文件 `④ 额度之外的货留在背包里` 的既有做法
+    // **定量投放**，把骰子因素从前提里剔掉。地已经空了、额度已经结转，
+    // 被钉住的那个 bug 依然会被覆盖到。
+    await db.inventory.put({ itemId: 'produce-radish', count: 4 })
+    await useApp.getState().refresh()
+
     const stored =
       useApp.getState().inventory.find((s) => s.itemId === 'produce-radish')?.count ?? 0
     expect(stored, '收获的产出应该进背包').toBeGreaterThan(0)
@@ -817,7 +907,7 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
 
     const base = radishBase()
     expect(base, '前提：取得到基准单价').toBeGreaterThan(0)
-    const cap = 2 * 1.6
+    const cap = capFor('produce-radish')
     pinRadishPrice() // 钉回基准价 —— 见上面的注释，不钉就是看天吃饭
 
     // **把前提写成断言**：这批货的价值得在额度内，「全卖掉」才是个成立的期望。
@@ -838,11 +928,14 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
     // 上一条钉的是「额度够 → 全卖掉」。这条钉它的反面：**货比额度多**。
     //
     // ⚠️ 2026-09-18 改口径。原来是「行情贵的时候一轮卖不完」：现价硬顶写的是
-    // `base × 1.6`，小萝卜 3.2 枚额度在 1.28 的价下只买得走 2 个。
+    // `base × 1.6`，小萝卜的额度在 1.28 的价下只买得走 2 个。
     // 现在硬顶 = `上限回收 ÷ 满产`（家长：「最高市场价应该是成本 × 1.6，
     // 波动不能够超过它」），`满产 × 硬顶 = 上限回收` **恰好相等** ——
     // 也就是说**「贵到卖不完」这件事已经不可能发生了**，满产永远卖得掉。
     // 所以这条改成钉「价顶到硬顶时，额度之外的货仍然老老实实留在背包里」。
+    //
+    // 2026-09-19（B1）之后硬顶就是**整数单价**，小萝卜的 `ceilingFactor` 是 1
+    // （硬顶 = 基准价）。这条仍然有意义：它钉的是「货比额度多」时**多出来的留在背包**。
     //
     // 前提故意**不用收获骰子**（改用 addItem 定量投放），
     // 这样「货比额度多」是构造出来的，不是碰巧的。
@@ -853,7 +946,7 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
 
     const base = radishBase()
     expect(base, '前提：取得到基准单价').toBeGreaterThan(0)
-    const cap = 2 * 1.6
+    const cap = capFor('produce-radish')
     const ceilingFactor = priceCeilingFor('produce-radish') / base
     expect(ceilingFactor, '前提：硬顶不该低于基准价').toBeGreaterThanOrEqual(1 - 1e-9)
     pinRadishPrice(ceilingFactor)
@@ -883,7 +976,7 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
   it('④ 收进背包不能变成「无限额度」—— 攒够一轮的上限就停', async () => {
     // 上一条把「能卖」修好之后，顺手守住反面：
     // 收进背包的额度是**从那一轮搬过来的**，不是凭空新开一个池子。
-    // 小萝卜成本 2 → 上限 3.2，攒多少轮都不该突破单轮上限。
+    // 小萝卜上限 4（满产 4 × 整数单价 1），攒多少轮都不该突破单轮上限。
     await setBalanceTo(50)
     await plantAndMature('radish', 0)
     await useApp.getState().harvest(0, 'store')
@@ -894,7 +987,7 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
     await useApp.getState().refresh()
 
     const total = await useApp.getState().sellProduce('produce-radish', 100)
-    const cap = 2 * 1.6
+    const cap = capFor('produce-radish')
 
     expect(total).toBeGreaterThan(0)
     expect(total, '收进背包不能把单轮上限顶开').toBeLessThanOrEqual(cap + 0.01)
@@ -908,6 +1001,47 @@ describe('丰收币：不可逆约束 + 每轮闸门', () => {
     const again = await useApp.getState().sellProduce('produce-radish', 100)
 
     expect(again, '结转额度卖完就该归零，不能再卖').toBe(0)
+  })
+
+  it('④ 甲：产量封顶在「满产」—— 周末 / 节假日的加成不能顶过它', async () => {
+    // 2026-09-19 修「背包里有一个萝卜却卖不掉」时加的甲（见 §6.1.2）。
+    //
+    // 季节加成最高 1.8（儿童节），`round(4 × 1.2 × 1.8) = 9` 个 ——
+    // 而闸门只按**满产 4 个**配额度（`capFor = 满产 × 整数单价`），
+    // 多出来的那几个永远卖不掉，烂在背包里。
+    // 封顶之后加成变成「**倒霉的时候也能收满**」，闸门永远兜得住。
+    //
+    // ⚠️ 跑多轮是因为骰子每天都在变：只要**任何一轮**超过满产，这条就红。
+    // 反过来，`maxSeen` 也必须能到满产 —— 否则「封顶」变成了「压死产量」，
+    // 中性档（×0.92）的收成就永远凑不满，那是另一种坏法。
+    await useApp.getState().updateSettings({ farmEventsEnabled: true })
+    await setBalanceTo(1000)
+
+    const def = CROP_BY_ID.get('radish')!
+    const perHarvest = def.produceAmount ?? 1
+    let maxSeen = 0
+
+    const held = () =>
+      useApp.getState().inventory.find((s) => s.itemId === 'produce-radish')?.count ?? 0
+
+    for (let round = 1; round <= 16; round++) {
+      await plantAndMature('radish', 0)
+      const before = held()
+      await useApp.getState().harvest(0, 'store')
+      await useApp.getState().refresh()
+      const got = held() - before
+
+      expect(got, `第 ${round} 轮收了 ${got} 个，超过满产 ${perHarvest}`).toBeLessThanOrEqual(
+        perHarvest,
+      )
+      expect(got, `第 ${round} 轮收了负数个`).toBeGreaterThanOrEqual(0)
+      maxSeen = Math.max(maxSeen, got)
+    }
+
+    expect(
+      maxSeen,
+      '16 轮一次都没收满 —— 甲把产量压死了（加成本该还能把倒霉的日子补到满产）',
+    ).toBe(perHarvest)
   })
 
   it('④ 收获之后地块该空就得空 —— 一次性作物不能被「复活」', async () => {

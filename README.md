@@ -328,7 +328,7 @@ npm run splash:check          # 量 + 校验四处是否一致，不一致 exit 
 ```bash
 npm run preview &                        # 先起预览服务
 node scripts/e2e-check.mjs               # 70 项：新手引导 / 渲染 / 导航 / 溢出 / 顶栏 / 长期任务孩子端 / 音效开关 / 币种只在一处显示 / 市场走势图 / 导出
-node scripts/e2e-gameplay.mjs            # 46 项：结算规则 / 账本 / 农场 / 签到 / 收获二选一 / 脏数据
+node scripts/e2e-gameplay.mjs            # 49 项：结算规则 / 账本 / 农场 / 签到 / 收获二选一 / 备份往返（含背包与结转额度）/ 脏数据
 node scripts/e2e-upgrade.mjs             # 12 项：老库升级路径（不丢数据、不炸索引）
 node scripts/e2e-bag-sell.mjs            # 23 项：收进背包 → 市场卖出整条链（含丰收币到账、卖压、空背包空状态）
 node scripts/e2e-regressions.mjs         # 20 项：**回归守卫** —— 已经修过的具体 bug 别再改回去
@@ -336,6 +336,18 @@ node scripts/e2e-regressions.mjs         # 20 项：**回归守卫** —— 已�
 
 `e2e-gameplay.mjs` 会验证每一条结算规则在真实环境下的积分入账结果，
 以及「任务 → 积分 → 农场消费」整条链路的账本一致性。
+
+> ✅ **2026-09-19：三条红的守卫已修好，现在是绿的。**
+> 它们钉的是同一个不变量「**单轮满产一个不剩**」，当时有两个独立破口：
+> ① 周末 / 节假日的季节加成把产量顶过了 `满产`（额度按 4 个配，周末收 5 个）；
+> ② 额度是**小数**、结算是**整枚**、货是**整颗**，三个单位混用 →
+> `round(单价) > 单价`，一颗一颗卖会多扣额度，最后剩 1 个永远卖不掉。
+> 用户 2026-09-19 定：**B1（整数化）+ 甲（产量封顶）**。两处都改了，
+> 三条守卫由红转绿（`e2e-bag-sell 23/23`、`e2e-regressions 20/20`）。
+> 病因、修法与代价见 `docs/farm-economy-design.md` §6.1.2 / §6.1.3。
+>
+> ⚠️ 那几条断言**不要改松**。它们是这个不变量的唯一守卫，
+> 而且都做过**负向验证**（把 `min(满产, …)` 或 `capFor` 改回旧口径，立刻变红）。
 
 `e2e-regressions.mjs` 和上面几套的分工：那几套验「功能对不对」（按页面组织、覆盖广），
 它验「**这几个坑别再踩**」（按 bug 组织、覆盖窄，每条都带日期和病因）。
@@ -376,6 +388,14 @@ node scripts/capture.mjs                 # → screenshots/redesign/，21 张
 `.click()`，它**绕过命中测试** —— 被盖住照样点得到，于是脚本继续全绿、
 界面其实根本不能用。要测主界面的脚本一律先调
 `scripts/lib/onboarding.mjs` 的 `dismissOnboarding(page)` 把引导走完。
+
+⚠️ **e2e 的 Chrome profile 一律走 `scripts/lib/profile.mjs` 的 `makeProfileDir()`**，
+它把 profile 放在**项目同盘的 `.e2e-scratch/`**（已 gitignore），**不要用 `os.tmpdir()`**。
+2026-09-19 真踩过：系统盘写满 → Chrome 的 IndexedDB 抛
+`FILE_ERROR_NO_SPACE` / `DatabaseClosedError` / `BulkError`，
+症状是 e2e **随机**挂在任意一条用例上（同一套件两次跑挂在两个不同位置，
+其中一次干脆在 `boot()` 就炸），看起来完全像「应用有并发 bug」。
+把 profile 挪到还有空间的盘之后，同一个构建立刻全绿。
 
 ---
 

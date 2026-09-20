@@ -27,10 +27,8 @@
  * 用法：node scripts/e2e-upgrade.mjs http://127.0.0.1:4180/
  */
 import puppeteer from 'puppeteer-core'
-import { existsSync, rmSync } from 'node:fs'
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { makeProfileDir } from './lib/profile.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME_CANDIDATES = [
@@ -47,7 +45,9 @@ const check = (name, ok, detail = '') => {
   console.log(`  ${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`)
 }
 
-const profileDir = mkdtempSync(join(tmpdir(), 'kqf-upgrade-'))
+// profile 必须落在项目同盘 —— 系统盘满会让 Chrome 的 IndexedDB 直接罢工。
+// 本套件以前用 `os.tmpdir()`（Windows 上就是系统盘），见 lib/profile.mjs 顶部。
+const profileDir = makeProfileDir('upgrade')
 const browser = await puppeteer.launch({
   executablePath: chrome,
   headless: 'new',
@@ -249,5 +249,8 @@ if (failed.length) {
 }
 
 await browser.close()
-rmSync(profileDir, { recursive: true, force: true })
+// profile 的清理交给 `makeProfileDir` 注册的退出钩子（它带 try/catch）。
+// 这里原来自己 `rmSync` —— 本机 node-safe-delete-shim 对「一次删 >50 个文件」
+// 有护栏，而一个 Chrome profile 有 1600+ 个文件，于是**套件全绿之后进程崩掉**、
+// 退出码变 1。清理只留一个出口，别再各写一遍。
 process.exit(failed.length ? 1 : 0)

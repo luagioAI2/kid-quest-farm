@@ -43,6 +43,12 @@ android/app/src/main/assets/capacitor.plugins.json
 # 端到端截图
 screenshots/
 
+# e2e 跑起来时 Chrome 的 profile 目录（IndexedDB 就住在这里面）。
+# 特意放在项目同盘、而不是系统临时目录 —— 系统盘满会让 Chrome 抛
+# FILE_ERROR_NO_SPACE，症状是 e2e 随机挂在任意一条用例上。
+# 见 scripts/lib/profile.mjs。
+.e2e-scratch/
+
 # 打包出来的 APK 副本（供直接分发，体积大不入库）
 dist-apk/
 

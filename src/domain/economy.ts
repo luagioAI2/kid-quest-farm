@@ -2,20 +2,25 @@ import type { Animal, Plot } from './types'
 import {
   ANIMALS,
   ANIMAL_BY_ID,
+  capFor,
   CROP_BY_ID,
   CROPS,
   DEFAULT_PROFIT_RATIO,
-  roundCap,
 } from './catalog'
 
 /* ============================================================
    卖出闸门（上限回收）
    ------------------------------------------------------------
-   规则（用户 2026-09-15 锁定）：
+   规则（用户 2026-09-15 锁定；2026-09-19 按 B1 整数化）：
 
-     上限回收 = 成本 × (1 + r)          r 由家长设，默认 0.6
+     上限回收 = 满产 × 整数单价     ← 由 `capFor()` 给（默认档下 = 成本 × 1.6）
      闸门是「一轮」的，不是「终身」的 —— 卖满这一轮就结束，
      下一轮重新买种子、重新算上限。种子永远买得到、地永远能再种。
+
+   ⚠️ **本文件里所有额度一律走 `capFor(itemId, r)`，不要再退回
+   `roundCap(成本, r)`。** 后者是连续小数，孩子到手的丰收币是整枚，
+   两者对不齐就会剩货 —— 2026-09-19 修的那个「背包里的萝卜卖不掉」
+   正是这么来的，详见 docs/farm-economy-design.md §6.1.3。
 
    为什么归集在**标的**上而不是给背包物品记来源：
    每个标的的产出物 id 是唯一的（蛋 / 毛 / 奶 / 萝卜各归各的），
@@ -74,11 +79,12 @@ export function capTargetsFor(
   if (!prod) return []
 
   const out: CapTarget[] = []
+  // 同一产出物的所有标的共用同一个上限（单价按产出物定，满产也是）
+  const cap = capFor(itemId, r)
 
   for (const cropId of prod.crops) {
     const def = CROP_BY_ID.get(cropId)
     if (!def) continue
-    const cap = roundCap(def.seedCost, r)
     // 同一作物的多块地：先种的先扣
     const planted = plots
       .filter((p) => p.crop?.cropId === cropId)
@@ -92,7 +98,6 @@ export function capTargetsFor(
   for (const animalId of prod.animals) {
     const def = ANIMAL_BY_ID.get(animalId)
     if (!def) continue
-    const cap = roundCap(def.cost, r)
     const owned = animals
       .filter((a) => a.animalId === animalId)
       .sort((a, b) => (a.bornAt - b.bornAt) || a.id.localeCompare(b.id))
@@ -144,7 +149,7 @@ export function leftoverCapFor(
 ): number {
   const def = CROP_BY_ID.get(cropId)
   if (!def) return 0
-  return Math.max(0, roundCap(def.seedCost, r) - earnedSoFar)
+  return Math.max(0, capFor(def.produceItemId, r) - earnedSoFar)
 }
 
 /**
@@ -218,6 +223,10 @@ export function maxSellable(
   //   `sold` 期望 ≥ 4，实际 3。原实现是「按比例估 + 只往下修」，方向反了。）
   //
   // `quote` 单调不减 → 二分找最后一个装得下的 n，结果是**恰好**的。
+  //
+  // 2026-09-19 补：B1 之后单价是整数，`quote(n) = 单价 × n` 精确可加，
+  // 所以这里其实直接 `floor(remainingCap / 单价)` 也行。二分留着是因为
+  // `sellQuote` 读的是**当日现价**（会低于单价），线性仍然成立但斜率不是单价。
   let lo = 0
   let hi = wantCount
   while (lo < hi) {

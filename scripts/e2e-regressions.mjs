@@ -28,6 +28,7 @@
  */
 import puppeteer from 'puppeteer-core'
 import { existsSync } from 'node:fs'
+import { makeProfileDir } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
@@ -46,6 +47,9 @@ const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
   args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  // profile 必须落在项目同盘 —— 系统盘满会让 Chrome 的 IndexedDB 直接罢工，
+  // 症状是随机挂在任意一条用例上。见 scripts/lib/profile.mjs 顶部。
+  userDataDir: makeProfileDir('regressions'),
 })
 try {
   const page = await browser.newPage()

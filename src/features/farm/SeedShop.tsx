@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '@/store/useApp'
-import { CROPS, ITEM_BY_ID, roundCap } from '@/domain/catalog'
+import { capFor, CROPS, ITEM_BY_ID } from '@/domain/catalog'
 import { farmLevel } from '@/domain/farm'
 import { humanizeMinutes } from '@/domain/time'
 import type { CropDef } from '@/domain/types'
@@ -258,7 +258,9 @@ function SeedRow({
 
           <p className="tnum mt-1 text-[11px] font-bold text-ink-500">
             {/* ⚠️ 单位是丰收币 🌾，不是积分 🪙 —— 卖产出结的是丰收币 */}
-            这一轮最多能收回 {Number(roundCap(crop.seedCost).toFixed(1))} 🌾
+            {/* ⚠️ 走 `capFor`（满产 × 整数单价），不是 `roundCap(成本)` ——
+                B1 之后闸门是整数，两个数在默认档下相等，家长调档后才有差别 */}
+            这一轮最多能收回 {capFor(crop.produceItemId)} 🌾
           </p>
         </div>
 

@@ -13,6 +13,7 @@
  */
 import puppeteer from 'puppeteer-core'
 import { existsSync, writeFileSync, mkdirSync } from 'node:fs'
+import { makeProfileDir } from './lib/profile.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME_CANDIDATES = [
@@ -41,6 +42,9 @@ const browser = await puppeteer.launch({
   executablePath: chrome,
   headless: true,
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'],
+  // profile 必须落在项目同盘 —— 系统盘满会让 Chrome 的 IndexedDB 直接罢工，
+  // 症状是随机挂在任意一条用例上。见 scripts/lib/profile.mjs 顶部。
+  userDataDir: makeProfileDir('check'),
 })
 
 try {

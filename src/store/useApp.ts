@@ -40,6 +40,7 @@ import {
   logFarmEvents,
   postHarvest,
   postLedger,
+  QUOTA_CARRY_KEY,
   saveFarmDay,
   saveFarmTotals,
   saveMarket,
@@ -1428,9 +1429,23 @@ export const useApp = create<AppState>((set, get) => ({
     // `round(1 × 0.7) = 1` —— 灾害就完全看不见了。4 个才表达得出 2/3/4/5。
     // 放大单次产量**不改变经济数值**（产量 × 单价 恒定），只改变颗粒度。
     const perHarvest = def.produceAmount ?? 1
-    const amount = roll.wipedOut
+    const rolled = roll.wipedOut
       ? 0
       : Math.max(0, Math.round(perHarvest * roll.multiplier * bonus))
+
+    // ---- 甲：产量封顶在「满产」（2026-09-19）----
+    //
+    // 闸门是按**满产**配的（`capFor = 满产 × 整数单价`），而上面的季节加成
+    // 会把产量顶过满产：平日 4 → 周末 5 → 儿童节 7。多出来的那几个
+    // **永远卖不掉**（额度只够满产），变成背包里的死库存 ——
+    // 2026-09-19 实测：周末 `e2e-bag-sell` 出现「收进 5 个，卖了 4 个，剩 1 个」。
+    //
+    // 封顶之后加成的语义变成「**倒霉的时候也能收满**」而不是「多赚钱」：
+    // 虫灾（×0.75）平时只收 3 个，周末 ×1.35 就能收满 4 个。
+    // 加成本来就是刻意不提示的（孩子自己发现「周末收成好」），这个改动
+    // 不改提示、也不改闸门，只是**让产出不再超出闸门能付的量**。
+    // 见 docs/farm-economy-design.md §6.1.2。
+    const amount = Math.min(perHarvest, rolled)
 
     // ---- 产出进背包。**钱不在这一步结算** ----
     // 「直接卖」和「存储」的差别只在于**什么时候定价**：
@@ -1744,7 +1759,14 @@ export const useApp = create<AppState>((set, get) => ({
 
     // 产出也吃周末/节假日加成 —— 同样不提示
     const bonus = seasonalBonus(now)
-    const gained = Math.max(0, Math.round(perCycleOut * cycles * bonus))
+    // ---- 甲：这一批封顶在「按理该产的量」（2026-09-19）----
+    //
+    // 和作物同一个道理（见 `harvest` 里的注释）：`cycles × perCycle` 是这批
+    // **排程上该产多少**，也就是闸门（`capFor = 满产 × 整数单价`）付得起的上限。
+    // 加成再多也不越过它，否则多出来的蛋同样卖不掉。
+    // 逐批封顶 ⇒ 一生累计也不会超（`pendingProduce` 本身就被 `produceTimes` 卡住）。
+    const scheduled = cycles * perCycle
+    const gained = Math.max(0, Math.min(scheduled, Math.round(perCycleOut * cycles * bonus)))
 
     if (gained > 0) await addItem(def.produceItemId, gained)
     await db.animals.update(animalId, {
@@ -2148,6 +2170,7 @@ export const useApp = create<AppState>((set, get) => ({
       meta,
       farm,
       market,
+      quotaCarry,
     ] = await Promise.all([
       db.tasks.toArray(),
       db.taskInstances.toArray(),
@@ -2164,6 +2187,7 @@ export const useApp = create<AppState>((set, get) => ({
       db.meta.toArray(),
       loadFarm(),
       loadMarket(),
+      loadQuotaCarry(),
     ])
     return {
       app: 'kid-quest-farm',
@@ -2184,6 +2208,16 @@ export const useApp = create<AppState>((set, get) => ({
         market,
         settings,
         farm,
+        /**
+         * 从**已经收掉的地块**上结转过来、还没用掉的额度（按产出物 id）。
+         *
+         * ⚠️ 必须导出。它存在 `meta['farm.quotaCarry']` 里，而 `importBackup`
+         * 会 `db.meta.clear()` —— 不导出就等于**每次导出/导入都把这笔额度清零**，
+         * 背包里那些「收进背包」的一次性作物产出（地已经空了、额度只挂在这里）
+         * 就**永久卖不掉**了，还骗孩子说「这一轮已经卖满啦」。
+         * 2026-09-19 排查「背包有一个萝卜却卖不掉」时发现。
+         */
+        quotaCarry,
         meta: Object.fromEntries(meta.map((m) => [m.key, m.value])),
       },
     }
@@ -2208,8 +2242,22 @@ export const useApp = create<AppState>((set, get) => ({
         return { ok: false, message: validationError }
       }
 
-      const pickArray = <T,>(v: unknown): T[] | null =>
-        Array.isArray(v) && v.every((x) => x && typeof x === 'object' && 'id' in (x as object))
+      /**
+       * 从备份里取一个「对象数组」字段。
+       *
+       * ⚠️ **主键字段名必须传进来。** 这里原来硬写 `'id' in x`，
+       * 而 `InventorySlot` 的主键是 **`itemId`**（`{ itemId, count }`，没有 `id`）——
+       * 于是 `pickArray(d.inventory)` 恒为 `null` → 落到 `[]` →
+       * 前面刚 `db.inventory.clear()` 过 → **每次导入备份都把整个背包清空**。
+       *
+       * 讽刺的是 `validateBackup` 那边是对的：`BACKUP_ID_ARRAY_FIELDS`
+       * 特意把 `inventory` 排除在外（作者知道它没有 `id`），
+       * 可 `importBackup` 又用一个「所有字段都带 id」的 helper 去取它。
+       * 校验和导入两套规则不一致，校验放行了、导入悄悄丢数据 —— 最坏的一种组合。
+       * 2026-09-19 排查「背包里的萝卜卖不掉」时由单元测试抓出来。
+       */
+      const pickArray = <T,>(v: unknown, key = 'id'): T[] | null =>
+        Array.isArray(v) && v.every((x) => x && typeof x === 'object' && key in (x as object))
           ? (v as T[])
           : null
 
@@ -2219,7 +2267,8 @@ export const useApp = create<AppState>((set, get) => ({
         ledger: pickArray<LedgerEntry>(d.ledger) ?? [],
         // 老备份里没有这个字段，`pickArray(undefined)` 返回 null，落到空数组。
         harvestLedger: pickArray<HarvestEntry>(d.harvestLedger) ?? [],
-        inventory: pickArray<InventorySlot>(d.inventory) ?? [],
+        // ⚠️ 背包的主键是 `itemId`，不是 `id` —— 见上面 `pickArray` 的注释
+        inventory: pickArray<InventorySlot>(d.inventory, 'itemId') ?? [],
         animals: pickArray<Animal>(d.animals) ?? [],
         checkIns: pickArray<CheckInRecord>(d.checkIns) ?? [],
         checkInProgress: pickArray<CheckInProgress>(d.checkInProgress) ?? [],
@@ -2293,6 +2342,30 @@ export const useApp = create<AppState>((set, get) => ({
             })
             if (Number.isFinite(farm.farmDay)) {
               await db.meta.put({ key: 'farm.day', value: Number(farm.farmDay) })
+            }
+          }
+          /**
+           * 结转额度 —— **必须恢复**。
+           *
+           * 上面刚 `db.meta.clear()` 过，而结转额度就住在 `meta` 里。
+           * 漏掉这一步的后果：背包里那些「收进背包」的一次性作物产出
+           * （地已经空了，额度**只挂在这里**）会永久卖不掉 ——
+           * `remainingCap` 归零，`sellProduce` 直接返回 0 并提示
+           * 「这一轮已经卖满啦」，孩子看到的就是「背包里有一个萝卜，卖不掉」。
+           * 2026-09-19 排查该现象时发现（`exportBackup` 那边也漏了）。
+           *
+           * 老备份里没有这个字段 → `d.quotaCarry` 是 undefined → 保持不写 key，
+           * `loadQuotaCarry` 会兜底成 `{}`。所以**不需要动备份版本号**。
+           */
+          const carry = d.quotaCarry
+          if (carry && typeof carry === 'object' && !Array.isArray(carry)) {
+            const clean: Record<string, number> = {}
+            for (const [k, v] of Object.entries(carry as Record<string, unknown>)) {
+              // 和 `loadQuotaCarry` 同一套清洗规则，免得脏备份把负额度灌进来
+              if (typeof v === 'number' && Number.isFinite(v) && v > 0) clean[k] = v
+            }
+            if (Object.keys(clean).length > 0) {
+              await db.meta.put({ key: QUOTA_CARRY_KEY, value: clean })
             }
           }
         },

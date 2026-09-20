@@ -156,7 +156,7 @@ export async function saveFarmDay(day: number): Promise<void> {
 /* ---------------- 额度结转（收掉的地块上没用完的那部分） ---------------- */
 
 /**
- * 已收掉的地块上「没用完的额度」，按产出物 id 归集。
+ * 已收掉的地块上「没用完的额度」，按产出物 id 归集。**存 `meta` 的 key 见下面。**
  *
  * 为什么需要它：卖出闸门是挂在**活着的**标的上的（`capTargetsFor` 只看
  * plots / animals）。小萝卜、胡萝卜这类**一次性作物收完就变空地** →
@@ -166,8 +166,13 @@ export async function saveFarmDay(day: number): Promise<void> {
  * 存 `meta` 而不是新开一张表：`meta` 本来就是 key-value，加一个 key
  * **不需要动 Dexie 版本号**，也就不需要写迁移、不需要改老库升级用例。
  * `wipeAll` 已经会清 `meta`，不用额外处理。
+ *
+ * ⚠️ 导出成常量是为了让 `useApp.exportBackup` / `importBackup` 也用它 ——
+ * 备份那边原来**漏了这个 key**，于是「导出 → 导入」一次就把额度清零，
+ * 背包里的死库存永久卖不掉（见 `importBackup` 里的注释）。
+ * 两边各写一遍字符串字面量迟早会飘。
  */
-const QUOTA_CARRY_KEY = 'farm.quotaCarry'
+export const QUOTA_CARRY_KEY = 'farm.quotaCarry'
 
 export async function loadQuotaCarry(): Promise<Record<string, number>> {
   const raw = await getMeta<Record<string, number>>(QUOTA_CARRY_KEY, {})

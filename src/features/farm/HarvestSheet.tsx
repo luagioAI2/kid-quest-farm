@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '@/store/useApp'
-import { CROP_BY_ID, DEFAULT_PROFIT_RATIO, PRODUCE_BASE_PRICE, roundCap } from '@/domain/catalog'
+import { capFor, CROP_BY_ID, DEFAULT_PROFIT_RATIO, PRODUCE_BASE_PRICE } from '@/domain/catalog'
 import { remainingCapFor } from '@/domain/economy'
 import type { HarvestMode, Plot } from '@/domain/types'
 import { BottomSheet } from './farmUi'
@@ -35,7 +35,10 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
   if (!plot || !def || !plot.crop) return null
 
   const r = profitRatio ?? DEFAULT_PROFIT_RATIO
-  const cap = roundCap(def.seedCost, r)
+  // ⚠️ 走 `capFor(产出物)`，**不是** `roundCap(def.seedCost, r)`。
+  // B1 之后闸门是「满产 × 整数单价」（整数），而 `roundCap` 是连续小数；
+  // 拿后者显示会跟下面 `remaining`（`remainingCapFor` 走 `capFor`）对不上账。
+  const cap = capFor(def.produceItemId, r)
   const earned = plot.crop.earnedSoFar ?? 0
   // 闸门是**按产出物**归集的（同一种作物的所有地共用一批额度），
   // 所以这里要问全局剩余（含已收掉地块结转过来的），而不是只看这一块地。
@@ -49,11 +52,14 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
   const canSell = remaining > 0
 
   /**
-   * 丰收币按 0.1 显示 —— 跟商店、价格标签一个口径。
+   * 丰收币显示口径 —— 跟商店、价格标签一致。
    *
-   * ⚠️ 别用 `Math.round`：上限 6.4、已收回 5.5 时，剩余 0.9 会被四舍五入成 1，
-   * 于是界面上并排出现「还能卖 1」「已经收回 6」「最多 6」—— 三个数凑不上账，
-   * 孩子会以为算错了。（2026-09-15 界面走查发现的。）
+   * 2026-09-19（B1）之后额度与到手**全是整数**，`toFixed(1)` 只是保险。
+   * ⚠️ 别改成 `Math.round`：这条守的是「并排出现的三个数要凑得上账」
+   * （还能卖 N / 已收回 M / 最多 C，必须 `N + M = C`）。小数额度时代
+   * `round` 会把 `0.9` 显示成 `1`，三个数当场对不上（2026-09-15 界面走查发现）。
+   * 现在虽然都是整数，但留着 `toFixed(1)` 意味着将来若重新引入小数额度，
+   * 显示口径不用再改一次。
    */
   const fmt = (n: number) => Number(n.toFixed(1))
 

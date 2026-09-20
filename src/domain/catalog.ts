@@ -3,25 +3,46 @@ import type { ItemDef, CropDef, AnimalDef } from './types'
 /* ============================================================
    内容表：作物 / 动物 / 道具 / 市场价
 
-   经济口径（2026-09-15 由用户锁死，改数值前必须先读）：
+   经济口径（2026-09-15 由用户锁死；2026-09-19 按 B1 整数化修订）：
 
-     上限回收   = 成本 × (1 + r)          r 由家长设，默认 0.6
-     基准单价   = 上限回收 ÷ 总产出量      **按最高产量算，不做分位打折**
-     总产出量   = 作物：收获次数
-                  动物：产出次数 × 单次产量
+     满产       = 作物：单次产量 × 收获次数
+                  动物：单次产量 × 产出次数
+     上限回收   = 满产 × 整数单价           ← 2026-09-19 改
+     成本       = 上限回收 ÷ (1 + r)         r 由家长设，默认 0.6
 
-   三个要点：
+   **2026-09-19 的改动（B1 整数化，见 docs/farm-economy-design.md §6.1.3）**
+
+   原来 `上限回收 = 成本 × (1+r)` 是个**连续小数**（小萝卜 3.2），而单价是它的
+   1/4（0.8）。孩子一颗一颗卖的时候，每笔都按 `round(0.8) = 1` 扣额度 ——
+   扣得比单价多，卖到剩 1 个就卡住（额度剩 0.2，一颗要 1 枚，卖不动）。
+   这是**额度 / 货 / 到手**三个单位混用的后果：额度是小数、货是整数、
+   到手是整枚，三者对不齐。
+
+   现在把**单价取整**，并令 `上限回收 = 满产 × 整数单价`。于是
+   `round(单价 × n) ≡ 单价 × n`，报价天然可加，**一颗不剩**。
+   代价：单价 1 的小萝卜只能表达 25% 的利润步长，所以它的成本被抬到 3
+   （上限 4 = +33%），而不是 +60% —— 这是整数化的固有代价，见下面 `priceCeilingFor`。
+
+   六个要点：
+
    1. **闸门是一轮的事，不是终身的事。** 卖满这一轮就结束，下一轮重新买种子。
-      种子永远买得到、地永远能再种。
+      种子永远买得到、地永远能再种（用户 2026-09-15 明确）。
    2. **动物产够 `produceTimes` 次就停产，但动物留在农场里。**
       不要再退回「靠寿命一直产」——旧模型下小鸡成本 40 能换回约 20000。
    3. **配置表数值是定的，实际产出会被灾害打折。** 灾害把产量期望压到
-      约 0.87 倍，所以实测期望浮盈 +31%~+41%，而不是贴着 60% 上限。
+      约 0.9 倍，所以实测期望浮盈 +44%~+48%，而不是贴着 60% 上限。
    4. **所有标的共用同一套灾害分布，没有「这作物更娇气」这回事。**
       旧的 `CropDef.fragility` 已删除（2026-09-15）：一旦每个作物有自己的
-      减产概率，上面那条「基准单价 = 上限回收 ÷ 最高产量」推出来的
+      减产概率，上面那条「单价 = 上限回收 ÷ 满产」推出来的
       期望浮盈就不再统一，§5.6 那张表全部作废。要差异化请改**成本 / 次数 / 间隔**，
       不要偷偷加回一个概率倍率。
+   5. **成本必须是整数。** `postLedger` 里写着 `Math.round(entry.delta)` ——
+      成本写成 2.5 的话，`plant()` 用 2.5 判余额、实际扣 3，账对不上。
+      所以 B1 的推导里 `成本 = 满产 × 单价 ÷ 1.6` **必须落在整数上**，
+      落不到就换一个单价（见 §5.6 的推表脚本）。
+   6. **产量会被「满产」封顶（甲）。** 见 `useApp.harvest` ——
+      周末 / 节假日的季节加成最多把产量顶到满产，不会再多。
+      于是加成从「多赚钱」变成「倒霉的时候也能收满」，闸门永远兜得住。
 
    完整数值表见 docs/farm-economy-design.md §5.6（权威），
    每分钟浮盈必须严格随解锁等级递增，三档（作物 / 果树 / 动物）要拉开。
@@ -34,8 +55,10 @@ export const CROPS: CropDef[] = [
     emoji: '🥬',
     stageEmojis: ['🌱', '🌿', '🌿', '🥬'],
     growMinutes: 2,
-    seedCost: 2,
-    harvestPoints: 3.2,
+    // 成本 2 → 3：满产 4 个，整数单价最小是 1，上限回收就是 4。
+    // 成本 2 的话利润 +100%（越过家长的 60% 线），3 是**最小的合法整数成本**。
+    seedCost: 3,
+    harvestPoints: 4,
     produceItemId: 'produce-radish',
     produceAmount: 4,
     regrowCount: 1,
@@ -48,8 +71,8 @@ export const CROPS: CropDef[] = [
     emoji: '🥕',
     stageEmojis: ['🌱', '🌿', '🌿', '🥕'],
     growMinutes: 3,
-    seedCost: 4,
-    harvestPoints: 6.4,
+    seedCost: 5,
+    harvestPoints: 8,
     produceItemId: 'produce-carrot',
     produceAmount: 4,
     regrowCount: 1,
@@ -63,8 +86,8 @@ export const CROPS: CropDef[] = [
     stageEmojis: ['🌱', '🌿', '🌷', '🌹'],
     growMinutes: 6,
     regrowMinutes: 4,
-    seedCost: 16,
-    harvestPoints: 8.5,
+    seedCost: 15,
+    harvestPoints: 8,
     produceItemId: 'rose-bloom',
     produceAmount: 4,
     regrowCount: 3,
@@ -78,8 +101,10 @@ export const CROPS: CropDef[] = [
     stageEmojis: ['🌱', '🌿', '🌸', '🍓'],
     growMinutes: 10,
     regrowMinutes: 7,
-    seedCost: 24,
-    harvestPoints: 19.2,
+    // 24 → 30：胡萝卜的每分钟浮盈被 B1 抬到 0.755，草莓 24 只有 0.705，
+    // 会**低于 L1** —— §5.4 的「同档位内随等级递增」就破了。抬到 30 恢复 0.845。
+    seedCost: 30,
+    harvestPoints: 24,
     produceItemId: 'produce-strawberry',
     produceAmount: 4,
     regrowCount: 2,
@@ -93,8 +118,10 @@ export const CROPS: CropDef[] = [
     stageEmojis: ['🌱', '🌿', '🌾', '🌽'],
     growMinutes: 16,
     regrowMinutes: 11,
-    seedCost: 44,
-    harvestPoints: 35.2,
+    // 45 → 50（单价 9 → 10）：胡萝卜的每分钟浮盈被 B1 抬到 0.754，
+    // 而玉米 45 只有 0.750 —— L2 比 L1 还低一丁点，§5.4 的「同档位内递增」就破了。
+    seedCost: 50,
+    harvestPoints: 40,
     produceItemId: 'produce-corn',
     produceAmount: 4,
     regrowCount: 2,
@@ -108,8 +135,11 @@ export const CROPS: CropDef[] = [
     stageEmojis: ['🌱', '🌿', '🍀', '🍅'],
     growMinutes: 20,
     regrowMinutes: 14,
-    seedCost: 115,
-    harvestPoints: 61.3,
+    // 115 → 120：满产 12，整数单价只能取**偶数**才能让 `成本 = 12p/1.6` 落在整数上。
+    // p = 15 → 112.5（非整数，`postLedger` 会四舍五入成 113，账对不上），
+    // 所以取 p = 16 → 成本 120。
+    seedCost: 120,
+    harvestPoints: 64,
     produceItemId: 'produce-tomato',
     produceAmount: 4,
     regrowCount: 3,
@@ -154,8 +184,8 @@ export const CROPS: CropDef[] = [
     stageEmojis: ['🌱', '🌿', '🌳', '🍎'],
     growMinutes: 45,
     regrowMinutes: 30,
-    seedCost: 305,
-    harvestPoints: 61,
+    seedCost: 300,
+    harvestPoints: 60,
     produceItemId: 'produce-apple',
     produceAmount: 4,
     regrowCount: 8,
@@ -170,8 +200,8 @@ export const CROPS: CropDef[] = [
     stageEmojis: ['🌱', '🌿', '🌳', '🍋'],
     growMinutes: 60,
     regrowMinutes: 45,
-    seedCost: 670,
-    harvestPoints: 107.2,
+    seedCost: 675,
+    harvestPoints: 108,
     produceItemId: 'lemonade',
     produceAmount: 4,
     regrowCount: 10,
@@ -201,8 +231,8 @@ export const CROPS: CropDef[] = [
     stageEmojis: ['🌱', '🌿', '✨', '🫘'],
     growMinutes: 40,
     regrowMinutes: 28,
-    seedCost: 800,
-    harvestPoints: 213.3,
+    seedCost: 795,
+    harvestPoints: 212,
     produceItemId: 'produce-magic-bean',
     produceAmount: 4,
     regrowCount: 6,
@@ -224,7 +254,7 @@ export const ANIMALS: AnimalDef[] = [
     emoji: '🐔',
     babyEmoji: '🐤',
     matureMinutes: 15,
-    cost: 78,
+    cost: 75,
     produceItemId: 'egg',
     produceItemName: '鸡蛋',
     produceEmoji: '🥚',
@@ -241,7 +271,7 @@ export const ANIMALS: AnimalDef[] = [
     emoji: '🦆',
     babyEmoji: '🐥',
     matureMinutes: 20,
-    cost: 130,
+    cost: 125,
     produceItemId: 'feather',
     produceItemName: '羽毛',
     produceEmoji: '🪶',
@@ -275,7 +305,7 @@ export const ANIMALS: AnimalDef[] = [
     emoji: '🐷',
     babyEmoji: '🐖',
     matureMinutes: 40,
-    cost: 550,
+    cost: 555,
     produceItemId: 'truffle',
     produceItemName: '松露',
     produceEmoji: '🍄',
@@ -385,10 +415,16 @@ export const MIN_PROFIT_RATIO = 0.2
 export const MAX_PROFIT_RATIO = 1.2
 
 /**
- * 闸门：**一轮**最多能卖回多少丰收币。
+ * 闸门：**一轮**最多能卖回多少丰收币 —— 家长定的那条线。
  *
  * 注意是「一轮」—— 卖满这一轮就结束，下一轮重新买种子、重新算上限。
  * 种子永远买得到、地永远能再种（用户 2026-09-15 明确）。
+ *
+ * ⚠️ **这是「规则线」，不是实际生效的闸门。** 实际闸门是 `capFor(itemId, r)`，
+ * 它把这根线**夹到「满产 × 整数单价」**上（2026-09-19 B1）。
+ * 两者的关系：`capFor(id, r) ≤ roundCap(成本, r)`，默认档下**恰好相等**。
+ * 为什么不直接用这根线：它是连续小数（3.2），而孩子到手的丰收币是整枚，
+ * 两者对不齐就会剩货 —— 见 §6.1.3。
  */
 export function roundCap(cost: number, r = DEFAULT_PROFIT_RATIO): number {
   const clamped = Math.min(MAX_PROFIT_RATIO, Math.max(MIN_PROFIT_RATIO, r))
@@ -396,41 +432,64 @@ export function roundCap(cost: number, r = DEFAULT_PROFIT_RATIO): number {
 }
 
 /**
- * 产出的「基准市场价」= `上限回收 ÷ 总产出量`（**按最高产量算**）。
+ * 产出物 → **一轮的满产量**。
  *
- * 分母 = 作物 `收获次数 × 4`；动物 `产出次数 × 单次产量`。
+ * 作物 = `单次产量 × 收获次数`；动物 = `单次产量 × 产出次数`。
  * **单次产量取 4 是为了让灾害倍率（0.45~1.2）能用整数表达** ——
  * 每次只产 1 个的话 `round(1 × 0.7) = 1`，灾害就完全看不见了。
  * 放大单次产量**不改变任何经济数值**（`产量 × 单价` 恒定），只改变颗粒度。
  *
- * 价格取 1 位小数，并且**一律向下取**（`floor`）：
+ * 但注意：满产**越小，整数单价的颗粒度越粗**（小萝卜满产 4、单价 1，
+ * 一档就是 25% 的利润），所以满产小的标的成本会被抬得比较难看 —— 见 §6.1.3。
+ */
+const YIELD_BY_ITEM = new Map<string, number>([
+  ...CROPS.map((c) => [c.produceItemId, (c.produceAmount ?? 1) * c.regrowCount] as const),
+  ...ANIMALS.map((a) => [a.produceItemId, a.produceAmount * a.produceTimes] as const),
+])
+
+/** 该产出物一轮的满产量。不是产出物 → 0。 */
+export function yieldOf(itemId: string): number {
+  return YIELD_BY_ITEM.get(itemId) ?? 0
+}
+
+/**
+ * 产出的**基准单价**（丰收币/个）—— **一律是整数**（2026-09-19 B1）。
  *
- *     单价 = floor(上限回收 ÷ 总产出量 × 10) / 10
+ * 为什么必须整数：`sellQuote` 是 `Math.round(单价 × 个数)`，而孩子到手的
+ * 丰收币是**整枚**。单价带小数时 `round(单价) > 单价`（小萝卜 0.8 → 1），
+ * 一颗一颗卖等于每笔都多扣额度，卖到剩 1 个就卡住 —— 这就是「背包里那个
+ * 卖不掉的萝卜」。单价取整之后 `round(单价 × n) ≡ 单价 × n`，报价可加，
+ * 卖到最后恰好用完，一颗不剩。
  *
- * 为什么必须向下：向上取整会让「满产 × 单价」**超过**上限回收，
- * 于是最后 1 个产出永远卖不掉（闸门不让过），背包里留一个死库存。
- * 苹果（15.3 → 32 个 = 489.6 > 488）和小猪（36.7 → 24 个 = 880.8 > 880）
- * 就是这么被抓出来的。改配置表必须重跑 `domain/economy.test.ts` 的对账。
+ * 数值推导（见 docs/farm-economy-design.md §5.6 的推表脚本）：
+ *
+ *     单价 = round(成本 × 1.6 ÷ 满产)      ← 先用现值估一个整数
+ *     成本 = 满产 × 单价 ÷ 1.6             ← 再回推成本，保证利润率**恰好** 60%
+ *     成本必须落在整数上（`postLedger` 会 `Math.round` 扣款）
+ *
+ * 回推不出整数的标的就换一个单价。落不下的两处：
+ *   · 小萝卜（满产 4）：单价 1 → 成本 2.5（非整数）→ 只能抬到 3，利润率降到 +33%
+ *   · 番茄（满产 12）：单价 15 → 成本 112.5（非整数）→ 换成单价 16 → 成本 120
  */
 export const PRODUCE_BASE_PRICE: Record<string, number> = {
   // 作物
-  'produce-radish': 0.8,
-  'produce-carrot': 1.6,
-  'rose-bloom': 2.1,
-  'produce-strawberry': 4.8,
-  'produce-corn': 8.8,
-  'produce-tomato': 15.3,
+  'produce-radish': 1,
+  'produce-carrot': 2,
+  'rose-bloom': 2,
+  'produce-strawberry': 6,
+  'produce-corn': 10,
+  'produce-tomato': 16,
   'produce-pumpkin': 6,
   'produce-watermelon': 24,
-  'produce-apple': 15.2,
-  lemonade: 26.8,
+  'produce-apple': 15,
+  lemonade: 27,
   'produce-sunflower': 50,
-  'produce-magic-bean': 53.3,
+  'produce-magic-bean': 53,
   // 动物
-  egg: 6.2,
-  feather: 10.4,
+  egg: 6,
+  feather: 10,
   wool: 18,
-  truffle: 36.6,
+  truffle: 37,
   milk: 35,
 }
 
@@ -438,7 +497,7 @@ export const PRODUCE_BASE_PRICE: Record<string, number> = {
 export const MARKET_GOODS = Object.keys(PRODUCE_BASE_PRICE)
 
 /* ------------------------------------------------------------
-   现价硬顶（2026-09-18 家长定的规则）
+   现价硬顶 / 上限回收（2026-09-18 家长定规则，2026-09-19 B1 整数化）
    ------------------------------------------------------------
    家长原话：
 
@@ -448,58 +507,58 @@ export const MARKET_GOODS = Object.keys(PRODUCE_BASE_PRICE)
    所以硬顶 = `上限回收 ÷ 满产` = **单位成本 × (1 + r)**。
    波动不得超过它 —— 这是**绝对上限**，不是「基准价的某个倍数」。
 
-   为什么必须是这个数：`满产 × 硬顶 = 满产 × (上限回收 ÷ 满产) = 上限回收`
-   **恰好相等**。于是行情再好也能把这一轮收的**全卖掉、一个不剩**，
-   同时到手永远不突破闸门。这两件事本来就是同一个数，
-   不该由两个旋钮各管一半 —— 那正是下面这段历史踩的坑。
+   2026-09-19 起，硬顶**取整**，并且上限回收被定义成 `满产 × 硬顶`，
+   于是 `满产 × 硬顶 = 上限回收` **恰好相等且都是整数**。行情再好也能把
+   这一轮收的全卖掉、一个不剩，同时到手永远不突破闸门。
+   这两件事本来就是同一个数，不该由两个旋钮各管一半。
    ------------------------------------------------------------ */
 
 let ceilingCacheKey = Number.NaN
 let ceilingCache = new Map<string, number>()
 
 /**
- * 该产出物的现价硬顶（丰收币/个）。不是产出物 → `Infinity`（不受限）。
+ * 该产出物的**单价**（丰收币/个，**整数**）。不是产出物 → `Infinity`（不受限）。
  *
- * ⚠️ **除法必须向下取到 2 位**，不能四舍五入：`上限回收 ÷ 满产` 常常除不尽
- * （小猪 880 ÷ 24 = 36.666…），进位会让 `满产 × 硬顶` 微微超过上限回收，
- * 于是最后一个又卖不掉了 —— 正是本文件反复踩的那个坑。
+ * 默认档（`r = 0.6`）下恰好等于 `PRODUCE_BASE_PRICE`。家长把 r 调高时单价跟着涨，
+ * 但**仍然取整** —— 只有整数单价才能保证 `round(单价 × n) ≡ 单价 × n`。
+ *
+ * ⚠️ **r 调低时整数单价会「卡住不动」**，这是整数化的固有代价，不是 bug：
+ * 小萝卜基准价 1，r 在 [0.2, 1.2] 全程都算不出 ≥ 2 的整数价，于是 r 对它就失效。
+ * 单价 1 的 25% 就是 0.25，比 r 的最小步长（0.2）还粗。
+ * 想让 r 生效只能把该标的的**满产做大**（满产越大 → 单价越大 → 步长越细）。
  *
  * 按 `r` 记忆化：`r` 是家长可调的（0.2 ~ 1.2），换档才重算。
- *
- * ⚠️ **硬顶跟着 `r` 走，所以调用方必须把真的 `r` 传进来。**
- * 偷懒用默认 0.6 的后果：家长把上限调低之后，硬顶还停在 0.6 那档、比闸门高，
- * 剩货就又回来了（调高则相反，白少给钱）。见 `useApp` 里 `sellProduce` 的注释。
- *
- * 注意 `r` 调到 0.6 以下时，硬顶会**低于** `PRODUCE_BASE_PRICE` 表里的基准价
- * （那张表是按 `r = 0.6` 算的静态值）。这时行情会整体压在基准价之下 ——
- * 钱是对的（满产照样卖得完、也不越上限），只是「基准价」那个展示值偏高。
- * 要彻底干净得把基准价也做成 `r` 的派生量，那是下一步的事。
  */
 export function priceCeilingFor(itemId: string, r = DEFAULT_PROFIT_RATIO): number {
   if (r !== ceilingCacheKey) {
+    const clamped = Math.min(MAX_PROFIT_RATIO, Math.max(MIN_PROFIT_RATIO, r))
     const m = new Map<string, number>()
-    const put = (id: string, cost: number, yieldN: number) => {
-      if (yieldN <= 0) return
-      const cap = roundCap(cost, r)
-      // 单价要低到「满产 × 单价」**四舍五入之后**也不越上限 —— `sellQuote` 用的是
-      // `Math.round`。反例：玫瑰花 上限 25.6、满产 12 个，直接取 25.6 ÷ 12 = 2.1333
-      // 再截到 2.13 的话，`round(12 × 2.13) = round(25.56) = 26 > 25.6`
-      // → 最后一朵还是卖不掉。所以先把可用上限压到 `floor(上限) + 0.5` 再除。
-      // （这只会让硬顶比规则线更低一点 —— 规则说的是「不能超过」，更严是允许的。）
-      const safe = Math.min(cap, Math.floor(cap) + 0.5)
-      // +1e-6 只为吸收浮点噪声（0.8 × 100 会变成 80.00000000000001），
-      // 相对量级 2e-8，绝不会把一个真实的数位抬过去。
-      const line = Math.floor((safe / yieldN) * 100 + 1e-6) / 100
-      const cur = m.get(id)
-      if (cur == null || line < cur) m.set(id, line)
+    for (const [id, base] of Object.entries(PRODUCE_BASE_PRICE)) {
+      // `(1 + r) / (1 + 0.6)` —— 默认档下这个因子恰好是 1，硬顶回到基准价本身。
+      // `+1e-9` 只吸收浮点噪声（0.6 / 1.6 会飘到 0.9999999999999999）。
+      const factor = (1 + clamped) / (1 + DEFAULT_PROFIT_RATIO)
+      m.set(id, Math.max(1, Math.floor(base * factor + 1e-9)))
     }
-    // `CropDef.produceAmount` 是可选的，缺省 1 —— 和 `harvest` 里的 `?? 1` 保持一致
-    for (const c of CROPS) put(c.produceItemId, c.seedCost, c.regrowCount * (c.produceAmount ?? 1))
-    for (const a of ANIMALS) put(a.produceItemId, a.cost, a.produceTimes * a.produceAmount)
     ceilingCache = m
     ceilingCacheKey = r
   }
   return ceilingCache.get(itemId) ?? Number.POSITIVE_INFINITY
+}
+
+/**
+ * 一轮的**上限回收**（丰收币，整数）= `满产 × 单价`。
+ *
+ * 一定是单价的**整数倍** —— 这正是 B1 要的性质：卖到最后一颗时，
+ * 剩余额度恰好是单价的整数倍，`round(单价 × 剩余颗数)` 一分不差，
+ * 于是「背包里永远不会有卖不掉的货」。
+ *
+ * 默认档下 `capFor(id, 0.6) === roundCap(成本, 0.6) === 成本 × 1.6`（有测试钉住）。
+ * 其他档位下会被夹到单价的整数倍，所以**只会比规则线更低**（更严是允许的）。
+ */
+export function capFor(itemId: string, r = DEFAULT_PROFIT_RATIO): number {
+  const n = yieldOf(itemId)
+  if (n <= 0) return 0
+  return n * priceCeilingFor(itemId, r)
 }
 
 /**

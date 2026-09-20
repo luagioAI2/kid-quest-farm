@@ -9,6 +9,7 @@
 import puppeteer from 'puppeteer-core'
 import { existsSync } from 'node:fs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
+import { makeProfileDir } from './lib/profile.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME_CANDIDATES = [
@@ -32,6 +33,9 @@ const browser = await puppeteer.launch({
   executablePath: chrome,
   headless: true,
   args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  // profile 必须落在项目同盘 —— 系统盘满会让 Chrome 的 IndexedDB 直接罢工，
+  // 症状是随机挂在任意一条用例上（本套件踩过两次，见 profile.mjs 顶部）。
+  userDataDir: makeProfileDir('gameplay'),
 })
 
 const errors = []
@@ -268,6 +272,33 @@ try {
   check('导入备份成功', roundTrip.ok === true, roundTrip.msg)
   check('导入后任务数一致', roundTrip.beforeTasks === roundTrip.afterTasks, `${roundTrip.beforeTasks} → ${roundTrip.afterTasks}`)
   check('导入后余额一致', roundTrip.beforeBalance === roundTrip.afterBalance, `${roundTrip.beforeBalance} → ${roundTrip.afterBalance}`)
+
+  /* ---- 背包与结转额度必须一起往返 ----
+     这两样以前**从来没被检查过**，而它们恰好是坏的：
+       · `pickArray` 硬要求每个元素带 `id`，而 `InventorySlot` 是
+         `{ itemId, count }` → `d.inventory` 恒被丢成 `[]` → **背包清空**；
+       · 结转额度（`meta['farm.quotaCarry']`）既没导出、`db.meta.clear()`
+         之后也没写回 → **清零**，一次性作物的存货永久卖不掉。
+     2026-09-19 由单元测试抓出来，这里补上「真浏览器 + 真 Dexie」这一层。
+     断言用**注入后读取**：先把一个确定的背包塞进备份再导入，
+     免得依赖前面几段恰好留下了什么（那种断言会随执行顺序变红变绿）。 */
+  const carryTrip = await page.evaluate(async () => {
+    const backup = await window.__kqf__.exportBackup()
+    const injected = JSON.parse(JSON.stringify(backup))
+    injected.data.inventory = [{ itemId: 'produce-radish', count: 7 }]
+    injected.data.quotaCarry = { 'produce-radish': 2.5 }
+    const r = await window.__kqf__.importBackup(injected)
+    const s = window.__kqf__.getState()
+    return {
+      ok: r.ok,
+      msg: r.message,
+      invCount: s.inventory.find((x) => x.itemId === 'produce-radish')?.count ?? 0,
+      carry: s.quotaCarry['produce-radish'] ?? 0,
+    }
+  })
+  check('带背包的备份能导入', carryTrip.ok === true, carryTrip.msg)
+  check('导入后背包里的货还在（不能清空）', carryTrip.invCount === 7, `produce-radish × ${carryTrip.invCount}`)
+  check('导入后结转额度还在（不能清零）', Math.abs(carryTrip.carry - 2.5) < 1e-6, `${carryTrip.carry}`)
 
   const badImport = await page.evaluate(async () => {
     const r = await window.__kqf__.importBackup({ nope: true })
