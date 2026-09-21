@@ -363,30 +363,55 @@ try {
     await new Promise((r) => setTimeout(r, 300))
   }, headerProbe.prev)
 
-  /* ---------- 4. 任务结算：开始计时 → 完成 → 积分入账 ---------- */
+  /* ---------- 4. 任务结算：填用时 → 完成 → 积分入账 ---------- */
   const balanceBefore = await page.evaluate(() => {
     const m = document.body.innerText.match(/🪙\s*(\d+)/)
     return m ? Number(m[1]) : -1
   })
 
-  // 打开第一个待完成任务的详情
-  const opened = await page.evaluate(() => {
-    const btns = [...document.querySelectorAll('button')]
-    const b = btns.find((x) => /开始|完成|去完成/.test(x.innerText))
-    if (b) { b.click(); return b.innerText.trim() }
-    return null
-  })
+  /**
+   * 打开第一个待完成任务的详情。
+   *
+   * ⚠️ 卡片上的入口会随 `TIMER_ENABLED`（src/features/tasks/ui.tsx）变化：
+   *   · 关着（当前默认）：只有一个「✅ 我做完啦！」，点一下就开弹层
+   *   · 开着：第一个是「▶️ 开始」—— 点它**只会开始计时，弹层不开**
+   *
+   * 所以不能「点一下就假定弹层开了」，要**点到弹层真的出现**为止。
+   * 这样开关翻回 true 时这套用例照样绿 —— 否则「能翻回来」就只是一句话。
+   */
+  const CARD_ACTION = /我做完啦|开始|去完成/
+  let opened = null
+  for (let i = 0; i < 3; i++) {
+    opened = await page.evaluate((src) => {
+      const b = [...document.querySelectorAll('button')].find((x) =>
+        new RegExp(src).test(x.innerText),
+      )
+      if (b) { b.click(); return b.innerText.trim() }
+      return null
+    }, CARD_ACTION.source)
+    await new Promise((r) => setTimeout(r, 900))
+    if (await page.evaluate(() => !!document.querySelector('[role="dialog"]'))) break
+  }
   check('任务卡片有可点击的行动按钮', !!opened, opened ?? '未找到')
 
   if (opened) {
-    await new Promise((r) => setTimeout(r, 1000))
     const sheetText = await page.evaluate(() => document.body.innerText)
     check('任务详情/结算面板打开', sheetText.length > 40)
 
-    // 尝试提交（找"完成/提交"类按钮）
+    /**
+     * 提交。⚠️ **必须限定在弹层内找**（`[role="dialog"]`）。
+     *
+     * 卡片上那个按钮和弹层里的提交按钮**文案一模一样**（都是「✅ 我做完啦！」），
+     * 而弹层是盖在页面上的 —— 卡片按钮**仍然可见**，`offsetParent` 拦不住它。
+     * 不限定范围的话会点到卡片按钮，等于把弹层重开一次，
+     * 后面「积分有没有变」就永远测不到真正的提交（假绿）。
+     */
     const submitted = await page.evaluate(() => {
-      const btns = [...document.querySelectorAll('button')]
-      const b = btns.find((x) => /提交|完成啦|确认完成|完成/.test(x.innerText) && x.offsetParent)
+      const sheet = document.querySelector('[role="dialog"]')
+      if (!sheet) return null
+      const b = [...sheet.querySelectorAll('button')].find(
+        (x) => /提交|做完啦|完成啦|确认完成|完成/.test(x.innerText) && x.offsetParent,
+      )
       if (b) { b.click(); return b.innerText.trim() }
       return null
     })

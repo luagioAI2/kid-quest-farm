@@ -275,8 +275,11 @@ try {
 
   await shot('02-tasks')
 
-  /* 3. 任务详情弹层滚到底 —— 验底部按钮没被导航盖住 */
-  await clickByText('直接填时间')
+  /* 3. 任务详情弹层滚到底 —— 验底部按钮没被导航盖住
+     ⚠️ 2026-09-21：计时器隐藏后，卡片上的入口从「▶️ 开始 / 没用计时器·直接填时间」
+     两个按钮变成一个「✅ 我做完啦！」（见 src/features/tasks/ui.tsx 的 TIMER_ENABLED）。
+     这里点的是**卡片上**那个（此刻弹层还没开，页面上没有同名按钮）。 */
+  await clickByText('我做完啦')
   await wait(700)
   await page.evaluate(() => {
     const sheet = document.querySelector('[role="dialog"] > div:nth-child(2)')

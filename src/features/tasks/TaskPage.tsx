@@ -24,6 +24,7 @@ import {
   RewardChips,
   Sheet,
   SheetHead,
+  TIMER_ENABLED,
   TONE_TEXT,
   timerTone,
   useLiveSeconds,
@@ -371,7 +372,13 @@ function TaskCard({
   const tasks = useApp((s) => s.tasks)
   const cat = categoryOf(inst.category)
   const taskDef = useMemo(() => tasks.find((t) => t.id === inst.taskId), [tasks, inst.taskId])
-  const running = inst.status === 'pending' && !!inst.startedAt
+  /**
+   * ⚠️ `TIMER_ENABLED` 必须放在最前面。计时器关掉之后 `running` 恒为 false，
+   * 下面的秒表分支整段都不会渲染 —— 不这么写的话，一个**之前已经点过
+   * 「开始」的老任务**（`startedAt` 还在库里）会继续显示秒表，
+   * 而卡片上已经没有「开始」按钮了，孩子看着一个走动的表不知道怎么停。
+   */
+  const running = TIMER_ENABLED && inst.status === 'pending' && !!inst.startedAt
   const seconds = useLiveSeconds(inst.startedAt, running)
 
   const done = inst.status === 'completed' || inst.status === 'failed'
@@ -477,7 +484,7 @@ function TaskCard({
                     ✅ 我做完啦！
                   </Btn>
                 </div>
-              ) : (
+              ) : TIMER_ENABLED ? (
                 <div className="flex items-center gap-2">
                   <Btn
                     tone="sky"
@@ -495,6 +502,15 @@ function TaskCard({
                     没用计时器 · 直接填时间
                   </button>
                 </div>
+              ) : (
+                /* 计时器关着（见 ui.tsx 的 TIMER_ENABLED）：只剩一条路 ——
+                   点开 → 填用时 → 交上来。
+                   ⚠️ 别把「▶️ 开始」写回来，它是计时器的入口，开关关着没有意义；
+                   也别退回「没用计时器 · 直接填时间」那句 —— 那句是**对比着计时器**
+                   说的，没有计时器之后它就成了一脸问号。 */
+                <Btn tone="grass" size="md" full onClick={onOpen}>
+                  ✅ 我做完啦！
+                </Btn>
               )}
             </div>
           )}

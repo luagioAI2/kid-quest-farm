@@ -10,6 +10,7 @@ import {
   RewardChips,
   Sheet,
   SheetHead,
+  TIMER_ENABLED,
   TONE_BG,
   TONE_TEXT,
   globalFrom,
@@ -43,7 +44,13 @@ export function TaskDetail({
   const [confirmGiveUp, setConfirmGiveUp] = useState(false)
 
   const inst = instance
-  const running = !!inst?.startedAt
+  /**
+   * ⚠️ `TIMER_ENABLED` 放最前面（见 ui.tsx）。
+   * 关掉之后详情页永远走「填时间」那一支：标题是「实际用了多少分钟？」、
+   * 显示的是输入值而不是走动的秒表、步进器一直可见。
+   * 不改 JSX —— 下面所有分支本来就是按 `running` 分流的，把真相源关掉就够了。
+   */
+  const running = TIMER_ENABLED && !!inst?.startedAt
   // 计时是真相源：秒数由 startedAt 派生，切页不丢
   const liveSeconds = useLiveSeconds(inst?.startedAt, running && !result)
   const liveMinutes = liveSeconds / 60
@@ -55,7 +62,18 @@ export function TaskDetail({
     setBusy(false)
     setConfirmGiveUp(false)
     setQuality(inst.qualityRated ? undefined : undefined)
-    setMinutes(inst.actualMinutes ?? 0)
+    /**
+     * 预填用时。
+     *
+     * ⚠️ 计时器关掉之后，一个**之前点过「开始」的老任务**在库里还留着 `startedAt`。
+     * 不把已流逝的时间带过来的话，步进器会从 0 开始 —— 而孩子此时**两个地方
+     * 都看不到那个表了**（卡片和详情页的秒表都关了），只能凭记忆重填。
+     * 所以这里直接把「开始到现在」换算成预填值。
+     */
+    const elapsed = inst.startedAt
+      ? Math.max(0, Math.round((Date.now() - inst.startedAt) / 60000))
+      : 0
+    setMinutes(inst.actualMinutes ?? elapsed)
   }, [inst?.id])
 
   // 没在计时 → 用输入值；在计时 → 用实时值（孩子可手动改）
@@ -149,37 +167,24 @@ export function TaskDetail({
                 </div>
               </div>
 
-              {/* 进度条：计划内 / 超时 / 超一倍 */}
-              {!running && (
-                <div className="mt-3 h-3 w-full overflow-hidden rounded-full border border-white/70 bg-white/60">
-                  <div
-                    className={clsx(
-                      'h-full rounded-full transition-all',
-                      tone === 'grass'
-                        ? 'bg-grass-400'
-                        : tone === 'tangerine'
-                          ? 'bg-tangerine-400'
-                          : 'bg-berry-400',
-                    )}
-                    style={{ width: `${Math.min(100, pct / 2)}%` }}
-                  />
-                </div>
-              )}
-              {running && (
-                <div className="mt-3 h-3 w-full overflow-hidden rounded-full border border-white/70 bg-white/60">
-                  <div
-                    className={clsx(
-                      'h-full rounded-full transition-all',
-                      tone === 'grass'
-                        ? 'bg-grass-400'
-                        : tone === 'tangerine'
-                          ? 'bg-tangerine-400'
-                          : 'bg-berry-400',
-                    )}
-                    style={{ width: `${Math.min(100, pct / 2)}%` }}
-                  />
-                </div>
-              )}
+              {/* 进度条：计划内 / 超时 / 超一倍。
+                  ⚠️ 这里原来是**两个逐字相同**的块，分别挂在 `!running` 和 `running`
+                  上。计时器关掉之后 `running` 恒为 false，第二个块就是死代码。
+                  合并成一个 —— 计时和手填走的是同一套 `tone` / `pct`，
+                  本来就不该分家（分开写迟早有人只改一边）。 */}
+              <div className="mt-3 h-3 w-full overflow-hidden rounded-full border border-white/70 bg-white/60">
+                <div
+                  className={clsx(
+                    'h-full rounded-full transition-all',
+                    tone === 'grass'
+                      ? 'bg-grass-400'
+                      : tone === 'tangerine'
+                        ? 'bg-tangerine-400'
+                        : 'bg-berry-400',
+                  )}
+                  style={{ width: `${Math.min(100, pct / 2)}%` }}
+                />
+              </div>
 
               <p className="mt-2 text-xs font-bold text-ink-700">
                 {overRatio <= 1
