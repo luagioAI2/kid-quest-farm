@@ -74,3 +74,9 @@ assets/icon/window-margin.png
 # 里面全是本机路径、临时探针、试错过程，属于「这个工作目录的草稿」，
 # 不是 App 的源码或文档。仓库是公开的，别把它推上去。
 .workbuddy-ai/
+
+# 一次性探针（scripts/__*.mjs）：
+# 「跑一遍验证某个推断、用完即删」的临时脚本。**结论**该沉淀进 docs/，
+# 或者升级成正式的 e2e 守卫（scripts/e2e-*.mjs）；脚本本身不入库。
+# 例：scripts/__verify-reset.mjs（验证「清空全部数据」真的清干净）。
+scripts/__*.mjs

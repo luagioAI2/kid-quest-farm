@@ -69,11 +69,21 @@ export function TaskDetail({
      * 不把已流逝的时间带过来的话，步进器会从 0 开始 —— 而孩子此时**两个地方
      * 都看不到那个表了**（卡片和详情页的秒表都关了），只能凭记忆重填。
      * 所以这里直接把「开始到现在」换算成预填值。
+     *
+     * ⚠️ 2026-09-21：没有 `startedAt` 的新任务原来预填 **0**，
+     * 而 `0 ≤ 计划用时` ⇒ 预览直接显示「按时完成，拿到全部 20 分」。
+     * 计时器隐藏后「填时间」是**唯一**路径，默认值于是成了「一路点到底拿满分」。
+     * 改成预填 `plannedMinutes`：不再出现「0 分钟」这种不可能是真话的值，
+     * 而且和下面那个「按计划 N 分」快捷键**取同一个数**（本来就该一致）。
+     *
+     * ⚠️ 这只改**默认值**，没有动任何计分规则。孩子自报的用时本来就没法强制核对，
+     * 真正的闸门是 👀 家长确认 —— 家长看得到报上来的分钟数。
+     * 所以「孩子随手填 1 分钟」这种仍然存在，要堵得靠改计分，那是另一回事。
      */
     const elapsed = inst.startedAt
       ? Math.max(0, Math.round((Date.now() - inst.startedAt) / 60000))
       : 0
-    setMinutes(inst.actualMinutes ?? elapsed)
+    setMinutes(inst.actualMinutes ?? (elapsed || inst.plannedMinutes))
   }, [inst?.id])
 
   // 没在计时 → 用输入值；在计时 → 用实时值（孩子可手动改）
@@ -161,7 +171,13 @@ export function TaskDetail({
                 </div>
                 <div className="text-right">
                   <p className="text-[11px] font-bold text-ink-500">计划</p>
-                  <p className="tnum font-display text-lg font-extrabold text-ink-700">
+                  {/* `data-testid` 是给 e2e 用的锚点：弹层里「N 分」这个文本会出现
+                      四五次（计划值、步进器、两个快捷键、预览），靠文本分不开。
+                      见 scripts/e2e-regressions.mjs 的第 6 条守卫。 */}
+                  <p
+                    data-testid="planned-minutes"
+                    className="tnum font-display text-lg font-extrabold text-ink-700"
+                  >
                     {inst.plannedMinutes} 分
                   </p>
                 </div>
@@ -200,7 +216,10 @@ export function TaskDetail({
                   <StepBtn label="−5" onClick={() => setMinutes((m) => Math.max(0, m - 5))} />
                   <StepBtn label="−1" onClick={() => setMinutes((m) => Math.max(0, m - 1))} />
                   <div className="min-w-[92px] rounded-2xl border border-ink-100 bg-white px-3 py-1 text-center">
-                    <span className="tnum font-display text-3xl font-extrabold text-ink-900">
+                    <span
+                      data-testid="stepper-minutes"
+                      className="tnum font-display text-3xl font-extrabold text-ink-900"
+                    >
                       {Math.round(minutes)}
                     </span>
                     <span className="ml-0.5 text-xs font-bold text-ink-500">分</span>

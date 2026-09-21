@@ -6,7 +6,7 @@
  *   这一套验的是「**这几个坑别再踩**」（覆盖窄、按 bug 组织，每条都带日期和病因）。
  *   一个 bug 修完就往这里加一条 —— 它们是回归，不是新功能。
  *
- * 当前守着 5 条：
+ * 当前守着 6 条：
  *   1. 设置页改「孩子的小名」后点头像，名字被吃回去（2026-09-18 家长报的）
  *      → `updateSettings` 的 `set` 落在了 `await` 之后
  *   2. 「设置 → 任务掉落」开关能控制任务编辑页里的「完成后掉落」
@@ -16,6 +16,8 @@
  *      → 原来是按「不限额度」报价，承诺「全卖 4 个 +4」实际只卖 3 个
  *   5. 成熟地块的产量标签是整数、不带 `≈`（2026-09-20 用户报的）
  *      → 那个 `≈` 是「积分时代」`≈3.6 🪙` 的遗留，B1 + 甲之后纯属噪音
+ *   6. 任务详情的用时步进器默认 = 计划用时，不是 0（2026-09-21）
+ *      → 计时器隐藏后「填时间」成唯一路径，默认 0 ⇒ `0 ≤ 计划用时` ⇒ 一点即满分
  *
  * 跑法：node scripts/e2e-regressions.mjs [url]   （默认 http://127.0.0.1:4180/）
  * 前置：先 `npm run preview`
@@ -409,6 +411,86 @@ try {
     await window.__kqf__.getState().updateSettings({ taskDropsEnabled: true })
   })
   await sleep(400)
+
+  /* ============ 6. 用时步进器的默认值 ============ */
+  console.log('\n【6】任务详情：用时步进器的默认值')
+  /*
+    2026-09-21：实时计时器隐藏之后，「填时间」成了**唯一**路径，而步进器默认是 0 ——
+    而 `0 ≤ 计划用时` ⇒ 预览直接写「✅ 在计划时间内，可拿全部积分」，
+    也就是**一路点到底就能拿满分**。已改成默认预填 `plannedMinutes`。
+
+    ⚠️ 判据要**同时**钉住「非 0」和「= 计划用时」。只判「非 0」的话，
+    哪天有人改成硬编码 `1` 也照样绿 —— 那正是这个 bug 的变体。
+    ⚠️ 这条依赖 `data-testid`（见 TaskDetail.tsx）。弹层里「N 分」这个文本
+    会出现四五次（计划值 / 步进器 / 两个快捷键 / 预览），靠文本分不开。
+    ⚠️ 放在【1】之前：【1】会把 CPU 降速 20×，后面的用例都会变慢。
+    另：`TIMER_ENABLED` 翻成 true 时，**没点过「开始」**的任务 `running` 仍是 false，
+    步进器照样渲染 —— 所以这条在两种开关状态下都成立。
+  */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('nav button')].find(
+      (x) => x.innerText.trim().split('\n').pop().trim() === '任务',
+    )
+    b?.click()
+  })
+  await sleep(900)
+
+  const OPEN_ACTION = /我做完啦|开始|去完成/
+  for (let i = 0; i < 3; i++) {
+    await page.evaluate((src) => {
+      const b = [...document.querySelectorAll('button')].find((x) =>
+        new RegExp(src).test(x.innerText),
+      )
+      b?.click()
+    }, OPEN_ACTION.source)
+    await sleep(900)
+    if (await page.evaluate(() => !!document.querySelector('[role="dialog"]'))) break
+  }
+
+  const mins = await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]')
+    if (!d) return null
+    const s = d.querySelector('[data-testid="stepper-minutes"]')
+    const p = d.querySelector('[data-testid="planned-minutes"]')
+    return {
+      stepper: s ? Number((s.textContent ?? '').trim()) : null,
+      planned: p ? Number((p.textContent ?? '').replace(/\D/g, '')) : null,
+    }
+  })
+
+  check(
+    '任务详情能打开，且拿得到步进器 / 计划用时',
+    !!mins && mins.stepper !== null && mins.planned !== null,
+    JSON.stringify(mins),
+  )
+  if (mins && mins.stepper !== null && mins.planned !== null) {
+    check(
+      '用时步进器默认不是 0（否则一路点到底就能拿满分）',
+      mins.stepper > 0,
+      `stepper=${mins.stepper}`,
+    )
+    check(
+      '用时步进器默认 = 计划用时',
+      mins.stepper === mins.planned,
+      `stepper=${mins.stepper} planned=${mins.planned}`,
+    )
+  }
+
+  // 收尾：把弹层关掉，否则它会盖住顶栏，后面【1】点不到设置入口
+  await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]')
+    const b = d
+      ? [...d.querySelectorAll('button')].find(
+          (x) => (x.getAttribute('aria-label') ?? '').includes('关闭'),
+        )
+      : null
+    b?.click()
+  })
+  await sleep(700)
+  check(
+    '弹层关得掉（没把后面的用例挡死）',
+    !(await page.evaluate(() => !!document.querySelector('[role="dialog"]'))),
+  )
 
   /* ============ 1. 名字不再被吃回去 ============ */
   console.log('\n【1】设置页改名字后点头像（20× CPU 降速，模拟真机）')
