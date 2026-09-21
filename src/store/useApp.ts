@@ -330,8 +330,33 @@ export interface NewRedeemInput {
   createdByParent?: boolean
 }
 
+/* ============================================================
+   播种的并发闸门
+   ------------------------------------------------------------
+   `doSeedIfEmpty` 是「先 count 再写」，两步之间**不是原子的**。
+   React 的 StrictMode 在**开发模式**下会把 effect 跑两遍
+   （挂载 → 卸载 → 挂载），于是 `boot()` 被并发调了两次，
+   两次 `count()` 都读到 0 → **各播一遍** → 全新装机直接变成
+   24 条任务（正常 12）、余额 100（正常 50）。
+
+   2026-09-21 实测：dev(5180) 是 24/100，preview 生产构建(4180) 是 12/50 ——
+   因为生产构建不会重复跑 effect，所以它**只在开发时露头**。
+   但它并不只属于 StrictMode：任何「boot 被并发调用 + 库恰好是空的」路径
+   都会中招，所以照 `refreshInFlight` 那套折叠掉。
+   ============================================================ */
+let seedInFlight: Promise<void> | null = null
+
 /** 首次启动时注入的示例任务，让孩子立刻能玩起来 */
 async function seedIfEmpty(): Promise<void> {
+  // 串行化：见上面「播种的并发闸门」
+  if (seedInFlight) return seedInFlight
+  seedInFlight = doSeedIfEmpty().finally(() => {
+    seedInFlight = null
+  })
+  return seedInFlight
+}
+
+async function doSeedIfEmpty(): Promise<void> {
   const now = Date.now()
 
   const taskCount = await db.tasks.count()

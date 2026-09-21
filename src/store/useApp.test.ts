@@ -20,6 +20,7 @@ import {
 import { currentDayKey } from '../domain/recurrence'
 import { periodKeyFor } from '../domain/time'
 import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
+import { SEED_TASKS } from '../domain/seedTasks'
 
 /* ============================================================
    签到 / 长期任务的家长审核
@@ -1108,5 +1109,43 @@ describe('新手引导：落库标记', () => {
 
     expect((await loadSettings()).onboardingDone).toBe(true)
     expect(useApp.getState().settings.onboardingDone).toBe(true)
+  })
+})
+
+/* ============================================================
+   播种的并发闸门
+   ------------------------------------------------------------
+   2026-09-21 发现的真 bug：`seedIfEmpty` 是「先 count 再写」，两步之间
+   不原子。React 的 StrictMode 在**开发模式**下把 effect 跑两遍
+   （挂载 → 卸载 → 挂载），`boot()` 于是被并发调两次，两次 `count()`
+   都读到 0 → **各播一遍** → 全新装机变成 24 条任务 / 余额 100
+   （正常 12 条 / 50）。
+
+   为什么一直没被发现：**生产构建不会重复跑 effect**，所以
+   preview(4180) 是好的 12/50，只有 dev(5180) 是坏的 24/100。
+   人只在 dev 里手工看，很容易当成"种子本来就这么些"。
+
+   这个测试直接构造「两个 boot 并发」——正是 StrictMode 干的事。
+   ============================================================ */
+describe('播种的并发闸门', () => {
+  it('并发 boot 两次也只播一遍（StrictMode 双跑不翻倍）', async () => {
+    await db.delete()
+    await db.open()
+
+    await Promise.all([useApp.getState().boot(), useApp.getState().boot()])
+
+    expect(useApp.getState().tasks.length, '任务数不该翻倍').toBe(SEED_TASKS.length)
+    expect(useApp.getState().balance, '欢迎礼只该发一次').toBe(50)
+  })
+
+  it('串行 boot 两次同样只播一遍（幂等）', async () => {
+    await db.delete()
+    await db.open()
+
+    await useApp.getState().boot()
+    await useApp.getState().boot()
+
+    expect(useApp.getState().tasks.length).toBe(SEED_TASKS.length)
+    expect(useApp.getState().balance).toBe(50)
   })
 })
