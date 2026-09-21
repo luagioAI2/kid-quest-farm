@@ -447,12 +447,21 @@ function ReviewCard({
             按计划 {inst.plannedMinutes} 分
           </button>
           {inst.actualMinutes != null && (
+            /* ⚠️ 说「用时」，不说「计时」。
+               计时器隐藏后（见 ui.tsx 的 TIMER_ENABLED），`actualMinutes` 绝大多数是
+               **孩子自己填的**，不是量出来的 —— 写「宝贝计时」等于向家长宣称
+               「这数是测出来的」，比实际可信度高。
+               ⚠️ 也别改成「宝贝填的」：老任务（计时器还在时点过「开始」、
+               `startedAt` 还留在库里）的 `actualMinutes` 是**真的计时**结果，
+               那样又反过来说错。数据里**没有**「测的 / 填的」这个字段
+               （`actualMinutes` 就是一个数），所以只能用两边都成立的中性说法，
+               并且和上面「宝贝用时」那个标签保持同一个词。 */
             <button
               type="button"
               onClick={() => setMinutes(Math.max(1, Math.round(inst.actualMinutes!)))}
               className="btn rounded-pill bg-white px-2.5 py-1.5 text-xs font-bold text-ink-500 active:btn-press"
             >
-              宝贝计时 {Math.round(inst.actualMinutes)} 分
+              宝贝用时 {Math.round(inst.actualMinutes)} 分
             </button>
           )}
         </div>

@@ -480,6 +480,75 @@ try {
   await wait(800)
   await shot('12-profit-ratio')
 
+  /* 13. 家长确认 · 打分弹层
+     ⚠️ 这个界面以前**不在图集里**。2026-09-21 改它的文案
+     （「宝贝计时 N 分」→「宝贝用时 N 分」）时才发现：走查根本没拍过它，
+     于是第 4 层对这一屏**等于没验**。改过 / 会改的界面必须进图集。
+
+     ⚠️⚠️ 两个踩过的坑（第一版就是这么拍错的，拍出来是「PIN 键盘压在设置页上」）：
+     ① 齿轮进的是**整页**，底栏被盖住 —— 必须先点 `aria-label="返回"` 出去，
+        否则 `clickByText('任务','nav')` 静默失败，人还留在设置页；
+     ② **别开 `protectParentActions`** —— 在设置页当场开，会立刻弹锁把后面
+        所有点击挡住。这里只要密码在，保护关着即可。 */
+  await page.evaluate(() => {
+    const b = document.querySelector('button[aria-label="返回"]')
+    if (b) b.click()
+  })
+  await wait(600)
+
+  await page.evaluate(async () => {
+    const s = window.__kqf__.getState()
+    await s.updateSettings({ parentPin: '1234', protectParentActions: false })
+    const t = await s.addTask({
+      title: '__capture_review',
+      category: 'study',
+      cycle: 'once',
+      plannedMinutes: 20,
+      basePoints: 20,
+      qualityBonusPoints: 0,
+      allowOvertime: true,
+      allowLateNoPenalty: false,
+      qualityRated: false,
+    })
+    const inst = window.__kqf__
+      .getState()
+      .instances.find((i) => i.taskId === t.id && i.status === 'pending')
+    // 14 分 vs 计划 20 分 —— 让「宝贝用时 14 分」那个快捷按钮真的出现
+    if (inst) await window.__kqf__.getState().submitInstance(inst.id, 14, undefined)
+  })
+  await wait(900)
+  await clickByText('任务', 'nav')
+  await wait(700)
+  await page.evaluate(() => {
+    const b = document.querySelector('button[aria-label^="家长确认"]')
+    if (b) b.click()
+  })
+  await wait(900)
+
+  // 保护关着通常直接进打分界面；万一还是要求密码，就把 PIN 打进去
+  const locked = await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]')
+    return !!d && /请爸爸妈妈来一下/.test(d.innerText)
+  })
+  if (locked) {
+    for (const k of ['1', '2', '3', '4']) {
+      await page.evaluate((key) => {
+        const d = document.querySelector('[role="dialog"]')
+        const b = d && [...d.querySelectorAll('button')].find((x) => x.innerText.trim() === key)
+        b?.click()
+      }, k)
+      await wait(200)
+    }
+    // ⚠️ 显式点「确定」—— 4 位自动提交读旧 state 那个 bug 有过前科
+    await page.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]')
+      const b = d && [...d.querySelectorAll('button')].find((x) => x.innerText.trim() === '确定')
+      b?.click()
+    })
+    await wait(1200)
+  }
+  await shot('13-parent-review')
+
   console.log(`\n截图已输出到 ${OUT}/`)
   if (errors.length) {
     console.log('控制台报错：')
