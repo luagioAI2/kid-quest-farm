@@ -497,6 +497,54 @@ export const PRODUCE_BASE_PRICE: Record<string, number> = {
 export const MARKET_GOODS = Object.keys(PRODUCE_BASE_PRICE)
 
 /* ------------------------------------------------------------
+   产出物的**量词**（2026-09-21 补）
+   ------------------------------------------------------------
+   用户报的：「奶牛产奶的**单位**是……虽然单位并没那么重要，
+   只是为了之后注明单位价值。」
+
+   在那之前，所有 UI 一律硬编码「个」—— 于是会出现
+   **「收到 4 个牛奶！」**。牛奶论「个」是错的。
+
+   ⚠️ 为什么挂在**产出物**上而不是标的（作物 / 动物）上：
+   量词是「东西」的属性，不是「谁产的」的属性 —— 同一件东西不论谁产的
+   都该用同一个量词，而且背包 / 市场里显示的是**产出物本身**。
+   `PRODUCE_BASE_PRICE` 也是这个键法，两者并排好对照。
+
+   ⚠️ 默认「个」：加新标的时忘了写也不会显示成空，
+   最多是量词不够讲究 —— 比渲染出 `4  牛奶` 强。
+   ------------------------------------------------------------ */
+export const PRODUCE_UNIT: Record<string, string> = {
+  // 作物 · 果树
+  'produce-radish': '根',
+  'produce-carrot': '根',
+  'rose-bloom': '朵',
+  'produce-strawberry': '颗',
+  'produce-corn': '根',
+  'produce-tomato': '个',
+  'produce-pumpkin': '个',
+  'produce-watermelon': '个',
+  'produce-apple': '个',
+  lemonade: '杯',
+  'produce-sunflower': '朵',
+  'produce-magic-bean': '颗',
+  // 动物
+  egg: '个',
+  feather: '片',
+  wool: '团',
+  truffle: '颗',
+  milk: '瓶',
+}
+
+/**
+ * 该产出物的量词。不是产出物 / 没登记 → 「个」。
+ *
+ * 完整对照表见 docs/farm-economy-design.md §5.7。
+ */
+export function produceUnitOf(itemId: string | undefined): string {
+  return (itemId && PRODUCE_UNIT[itemId]) || '个'
+}
+
+/* ------------------------------------------------------------
    现价硬顶 / 上限回收（2026-09-18 家长定规则，2026-09-19 B1 整数化）
    ------------------------------------------------------------
    家长原话：

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '@/store/useApp'
-import { ANIMALS } from '@/domain/catalog'
+import { ANIMALS, produceUnitOf } from '@/domain/catalog'
 import { humanizeMinutes } from '@/domain/time'
 import {
   animalDefOf,
@@ -144,7 +144,7 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
           <p className="text-xs text-ink-500">🍼 {humanizeMinutes(def.matureMinutes)}长大</p>
           <p className="mt-0.5 text-sm text-ink-700">
             {def.produceEmoji} 每 {humanizeMinutes(def.produceIntervalMinutes)}产{' '}
-            {def.produceAmount} 个
+            {def.produceAmount} {produceUnitOf(def.produceItemId)}
             {def.produceItemName}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -156,7 +156,7 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
             ) : null}
             {perMinute > 0 ? (
               <span className="text-[11px] text-ink-500">
-                每小时约产 {(perMinute * 60).toFixed(1)} 个
+                每小时约产 {(perMinute * 60).toFixed(1)} {produceUnitOf(def.produceItemId)}
               </span>
             ) : null}
           </div>
@@ -313,7 +313,8 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
             </div>
           ) : hasProduce ? (
             <p className="tnum mt-1 text-sm font-bold text-grape-500">
-              攒了 {animal.pendingProduce} 个 {def?.produceEmoji ?? ''}
+              攒了 {animal.pendingProduce} {produceUnitOf(def?.produceItemId)}{' '}
+              {def?.produceEmoji ?? ''}
             </p>
           ) : (
             <p className="tnum mt-1 text-sm text-ink-500">

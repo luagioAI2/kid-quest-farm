@@ -42,6 +42,23 @@ const CHROME = [
 ].find(existsSync)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const results = []
+/**
+ * 产出物的量词集合（`catalog.ts` 的 `PRODUCE_UNIT`，对照表见 docs §5.7）。
+ *
+ * ⚠️ 2026-09-21 起量词**跟着产出物走**，不再一律「个」—— 牛奶是「瓶」、
+ * 萝卜是「根」、羊毛是「团」。断言里**不能写死「个」**，否则量词改对之后
+ * 这套用例反而变红。
+ * 这个字符类只用于**行数不固定**的地方（比如「前 3 行市场」那种）。
+ * 标的已知的地方一律**钉死具体量词**（下面用 `根`）—— 那才能抓到
+ * 「量词没接上、悄悄退回默认『个』」这类回归。
+ */
+const UNIT_CH = '[个根朵颗片团杯瓶]'
+/**
+ * 「有 N 个/根/…」的数量胶囊。
+ * ⚠️ 用 `'\\d'` 而不是模板字面量里的 `\d` —— 后者会被吃掉反斜杠变成字母 d，
+ * 于是这条**恒不匹配**（而且不报错，只是「找不到有货的行」）。
+ */
+const PILL_RE = new RegExp('^有 \\d+ ' + UNIT_CH + '$')
 const check = (name, ok, detail = '') => {
   results.push({ name, ok, detail })
   console.log(`${ok ? '  ✓' : '  ✗'} ${name}${detail ? ` — ${detail}` : ''}`)
@@ -160,11 +177,13 @@ try {
      （`≈{harvestPoints} 🪙`，值是 3.6 这种**连续小数**）的遗留。B1 整数化
      （§6.1.3）+ 甲 产量封顶（§6.1.2）之后，产量只在 0/2/3/4 这些整数上取，
      根本不存在「约等于」，`≈` 只剩噪音。见 `FarmPage.tsx` 那处注释。
-     ⚠️ 判据必须**同时**要求「成熟 + 有数字」，否则空 tile 也算通过。 */
+     ⚠️ 判据必须**同时**要求「成熟 + 有数字」，否则空 tile 也算通过。
+     ⚠️ 2026-09-21：量词改成跟着产出物走。这一段种的是**胡萝卜**，所以钉 `根`
+     —— 用字符类的话，「量词没接上、退回默认『个』」这条会**静默溜过去**。 */
   const flatTile = matureTile.replace(/\s+/g, ' ')
   check(
-    '成熟地块的产量标签是整数、不带 `≈`',
-    /可以收啦/.test(flatTile) && /\d+\s*个/.test(flatTile) && !flatTile.includes('≈'),
+    '成熟地块的产量标签是整数、量词对（胡萝卜 = 根）、不带 `≈`',
+    /可以收啦/.test(flatTile) && /\d+\s*根/.test(flatTile) && !flatTile.includes('≈'),
     `tile「${flatTile || '(空 —— 没切到农场 tab?)'}」`,
   )
 
@@ -186,11 +205,16 @@ try {
   })
   await sleep(900)
 
-  const rowInfo = await page.evaluate(() => {
+  /* ⚠️ 正则必须在**浏览器里**建。`page.evaluate` 的函数是**序列化**过去执行的，
+     闭包里的 Node 常量（`PILL_RE`）在那边**压根不存在** —— 直接 ReferenceError。
+     原来的写法能用，是因为它用的是**正则字面量**（随函数源码一起传过去）。
+     所以把 pattern 当参数传进去，两边共用同一个定义。 */
+  const rowInfo = await page.evaluate((pillSrc) => {
+    const pillRe = new RegExp(pillSrc)
     const lis = [...document.querySelectorAll('li')].filter((li) => li.querySelector('button'))
     return lis.slice(0, 3).map((li) => {
       const btn = li.querySelector('button')
-      const pill = [...btn.querySelectorAll('span')].find((s) => /^有 \d+ 个$/.test(s.textContent.trim()))
+      const pill = [...btn.querySelectorAll('span')].find((s) => pillRe.test(s.textContent.trim()))
       const none = [...btn.querySelectorAll('span')].find((s) => s.textContent.trim() === '没有')
       const dot = [...btn.querySelectorAll('span')].find((s) =>
         s.className.includes('rounded-full') && s.className.includes('size-2'),
@@ -204,7 +228,7 @@ try {
         liRing: li.className.includes('ring-2'),
       }
     })
-  })
+  }, PILL_RE.source)
   const stocked = rowInfo.find((r) => r.pillText)
   const emptyRow = rowInfo.find((r) => r.noneClass)
   check(
@@ -273,7 +297,8 @@ try {
     }
   })
   const allLabel = sellUI.labels.find((l) => l.startsWith('全卖')) ?? ''
-  const m = allLabel.match(/全卖\s*(\d+)\s*个\s*\+(\d+)/)
+  // 这一段卖的是**小萝卜** → 量词钉 `根`（同上：不用字符类，才抓得到「退回默认个」）
+  const m = allLabel.match(/全卖\s*(\d+)\s*根\s*\+(\d+)/)
   const promised = m ? Number(m[1]) : NaN
   check(
     '「全卖」按钮报的个数 <= 背包里的个数（不再超卖）',

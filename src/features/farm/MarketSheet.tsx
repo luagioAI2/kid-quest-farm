@@ -1,7 +1,13 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '@/store/useApp'
-import { DEFAULT_PROFIT_RATIO, ITEM_BY_ID, PRICE_FLOOR, priceCeilingFor } from '@/domain/catalog'
+import {
+  DEFAULT_PROFIT_RATIO,
+  ITEM_BY_ID,
+  PRICE_FLOOR,
+  priceCeilingFor,
+  produceUnitOf,
+} from '@/domain/catalog'
 import { priceSeries, trendOf, valueHint } from '@/domain/market'
 import { maxSellable, remainingCapFor } from '@/domain/economy'
 import { BottomSheet, CoinPill } from './farmUi'
@@ -299,7 +305,7 @@ function MarketRow({
             */}
             {count > 0 ? (
               <span className="tnum shrink-0 rounded-full bg-grass-200 px-2 py-0.5 text-xs font-extrabold text-grass-700">
-                有 {count} 个
+                有 {count} {produceUnitOf(itemId)}
               </span>
             ) : (
               <span className="tnum shrink-0 text-xs text-ink-400">没有</span>
@@ -310,7 +316,7 @@ function MarketRow({
             <span className="tnum font-display text-lg font-extrabold text-ink-900">
               {unit.toFixed(0)}
             </span>
-            <span className="text-xs text-ink-500">🌾/个</span>
+            <span className="text-xs text-ink-500">🌾/{produceUnitOf(itemId)}</span>
             <span
               className={clsx(
                 'tnum rounded-full px-1.5 text-[11px] font-bold',
@@ -360,6 +366,10 @@ function MarketRow({
             贵一点的货（魔法豆 50 🌾/个）连原来的「卖 5 个 +250」都塞不下。
             两行之后每个按钮宽 ~163px / 334px（实测），三、四位数也放得下，
             顺便把点击目标放大了一倍 —— 给孩子点的东西本来就不该这么窄。
+
+            ⚠️ 2026-09-21 把量词从「个」换成 `produceUnitOf(itemId)`。
+            **宽度不变** —— 个/根/朵/颗/片/团/杯/瓶 都是**一个汉字**，
+            上面那条 94px 的结论照旧成立，不用重排。
           */}
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
@@ -368,7 +378,7 @@ function MarketRow({
               onClick={() => void doSell(1)}
               className="btn min-h-[46px] rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
             >
-              卖 1 个 +{p1.total} 🌾
+              卖 1 {produceUnitOf(itemId)} +{p1.total} 🌾
             </button>
             <button
               type="button"
@@ -377,7 +387,9 @@ function MarketRow({
               className="btn min-h-[46px] rounded-2xl border border-ink-900/10 bg-white font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
             >
               {/* 额度卖不动 5 个时**不写价格** —— 灰按钮上挂个拿不到的价就是撒谎 */}
-              {p5.count < 5 ? '卖 5 个' : `卖 5 个 +${p5.total} 🌾`}
+              {p5.count < 5
+                ? `卖 5 ${produceUnitOf(itemId)}`
+                : `卖 5 ${produceUnitOf(itemId)} +${p5.total} 🌾`}
             </button>
             <button
               type="button"
@@ -385,15 +397,16 @@ function MarketRow({
               onClick={() => void doSell(pAll.count)}
               className="btn col-span-2 min-h-[46px] rounded-2xl border border-sun-500/40 bg-gradient-to-b from-sun-300 to-sun-500 font-display font-extrabold text-ink-900 active:btn-press disabled:opacity-40"
             >
-              全卖 {pAll.count} 个 +{pAll.total} 🌾
+              全卖 {pAll.count} {produceUnitOf(itemId)} +{pAll.total} 🌾
             </button>
           </div>
 
           {/* 额度卡住了就说清楚 —— 否则孩子看到「背包 4 个、全卖只卖 3 个」只会困惑 */}
           {clamped && (
             <p className="mt-2 rounded-xl bg-sun-50 px-3 py-2 text-[11px] font-bold leading-relaxed text-ink-700">
-              这一轮还能卖 {Number(remaining.toFixed(1))} 🌾，只够卖 {pAll.count} 个。
-              剩下 {count - pAll.count} 个先留着 —— 换点别的种、或者等这一轮的额度涨上来再卖。
+              这一轮还能卖 {Number(remaining.toFixed(1))} 🌾，只够卖 {pAll.count}{' '}
+              {produceUnitOf(itemId)}。 剩下 {count - pAll.count} {produceUnitOf(itemId)}
+              先留着 —— 换点别的种、或者等这一轮的额度涨上来再卖。
             </p>
           )}
         </div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useShallow } from 'zustand/react/shallow'
 import { useApp, selectFarmLevel } from '@/store/useApp'
-import { CROP_BY_ID, ITEM_BY_ID } from '@/domain/catalog'
+import { CROP_BY_ID, ITEM_BY_ID, produceUnitOf } from '@/domain/catalog'
 import {
   cropDefOf,
   cropProgress,
@@ -538,9 +538,12 @@ function PlotTile({
               `≈` 是数学符号，孩子看不懂，看起来就像个显示错误。
               歉收那几档（2/3 个）是**离散事件**，由收获时的 toast 负责讲
               （「虫灾！这次只收了 2 个」），不该由标签用 `≈` 提前打折扣。
-              动物页 `AnimalHouse.tsx` 一直是 `{produceAmount} 个`，改完两边也一致了。 */}
+              动物页 `AnimalHouse.tsx` 一直是 `{produceAmount} 个`，改完两边也一致了。
+              2026-09-21：量词改成 `produceUnitOf(produceItemId)` —— 原来是硬编码
+              「个」，于是牛奶写「4 个」、萝卜写「4 个」。见 §5.7。 */}
           <span className="tnum rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-extrabold text-sun-700">
-            {ITEM_BY_ID.get(def?.produceItemId ?? '')?.emoji ?? '🧺'} {def?.produceAmount ?? 1} 个
+            {ITEM_BY_ID.get(def?.produceItemId ?? '')?.emoji ?? '🧺'} {def?.produceAmount ?? 1}{' '}
+            {produceUnitOf(def?.produceItemId)}
           </span>
         </>
       ) : (

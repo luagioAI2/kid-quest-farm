@@ -96,6 +96,7 @@ import {
   MARKET_GOODS,
   PRODUCE_BASE_PRICE,
   priceCeilingFor,
+  produceUnitOf,
 } from '../domain/catalog'
 import {
   advanceMarket,
@@ -1560,7 +1561,9 @@ export const useApp = create<AppState>((set, get) => ({
       })
       get().pushToast({
         kind: roll.wipedOut ? 'warn' : roll.multiplier > 1.1 ? 'reward' : 'info',
-        title: roll.wipedOut ? '这次没收到东西…' : `收获 ${def.name} +${amount} 个`,
+        title: roll.wipedOut
+          ? '这次没收到东西…'
+          : `收获 ${def.name} +${amount} ${produceUnitOf(def.produceItemId)}`,
         detail: roll.event.message,
         emoji: roll.event.emoji,
       })
@@ -1570,7 +1573,7 @@ export const useApp = create<AppState>((set, get) => ({
       })
       get().pushToast({
         kind: 'reward',
-        title: `收获 ${def.name} +${amount} 个`,
+        title: `收获 ${def.name} +${amount} ${produceUnitOf(def.produceItemId)}`,
         detail:
           mode === 'sell'
             ? `当场卖掉，+${earned} 丰收币`
@@ -1780,14 +1783,17 @@ export const useApp = create<AppState>((set, get) => ({
         points: 0,
         reason:
           gained > 0
-            ? `收到 ${gained} 个${def.produceItemName}！`
+            ? `收到 ${gained} ${produceUnitOf(def.produceItemId)}${def.produceItemName}！`
             : `这批${def.produceItemName}没保住…`,
         emoji: gained > 0 ? def.produceEmoji : '🪹',
       },
     })
     get().pushToast({
       kind: gained > 0 ? 'reward' : 'warn',
-      title: gained > 0 ? `+${gained} ${def.produceItemName}` : '这批没收到',
+      title:
+        gained > 0
+          ? `+${gained} ${produceUnitOf(def.produceItemId)}${def.produceItemName}`
+          : '这批没收到',
       // 有事件就把事件原文说出来（「这批只剩 70%」就在里面），
       // 没有事件（中性档）才退回原来的提示。
       // 卖产出结的是**丰收币**，不是积分 —— 别写回「换积分」。
@@ -1929,7 +1935,7 @@ export const useApp = create<AppState>((set, get) => ({
       delta: total,
       source: 'farm_market',
       refId: itemId,
-      memo: `市场卖出 ${sellCount} 个${name}（单价 ${current}）`,
+      memo: `市场卖出 ${sellCount} ${produceUnitOf(itemId)}${name}（单价 ${current}）`,
     })
 
     // ---- 扣闸门 ----
@@ -1965,10 +1971,10 @@ export const useApp = create<AppState>((set, get) => ({
     if (!opts?.quiet) {
       get().pushToast({
         kind: 'reward',
-        title: `卖出 ${sellCount} 个${name}，+${total} 丰收币`,
+        title: `卖出 ${sellCount} ${produceUnitOf(itemId)}${name}，+${total} 丰收币`,
         detail:
           sellCount < want
-            ? `这一轮只剩 ${Math.round(remaining)} 丰收币的额度了，先卖了 ${sellCount} 个`
+            ? `这一轮只剩 ${Math.round(remaining)} 丰收币的额度了，先卖了 ${sellCount} ${produceUnitOf(itemId)}`
             : dropPct < -1
               ? `卖得多了，价格跌到 ${newPrice} 丰收币（${dropPct}%）`
               : `当前单价 ${current} 丰收币`,

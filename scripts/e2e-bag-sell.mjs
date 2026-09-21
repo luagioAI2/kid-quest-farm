@@ -37,6 +37,15 @@ if (!CHROME) {
 }
 
 const ITEM = 'produce-carrot'
+/**
+ * `ITEM` 的产出物量词（`catalog.ts` 的 `PRODUCE_UNIT`，对照表见 docs §5.7）。
+ *
+ * ⚠️ 2026-09-21 起，量词**跟着产出物走**，不再一律「个」——
+ * 胡萝卜是「根」、牛奶是「瓶」。所以断言里**不能写死「个」**，
+ * 否则这套用例会在量词改对之后反而变红。
+ * 具体是哪个字由第 2 层单测钉（`economy.test.ts`），这里只要解析得出来就行。
+ */
+const UNIT = '根'
 const errors = []
 const results = []
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -295,10 +304,14 @@ try {
   check('三个卖出按钮都渲染出来', sellBtns.length === 3, sellBtns.map((b) => b.text).join(' | '))
 
   const allBtn = sellBtns.find((b) => /全卖/.test(b.text))
-  const m = allBtn?.text.match(/全卖\s*(\d+)\s*个\s*\+(\d+)/)
+  const m = allBtn?.text.match(new RegExp(`全卖\\s*(\\d+)\\s*${UNIT}\\s*\\+(\\d+)`))
   const sellN = m ? Number(m[1]) : NaN
   const sellX = m ? Number(m[2]) : NaN
-  check('「全卖」按钮上的「N 个 / +X 🌾」解析出来了', Number.isFinite(sellN) && Number.isFinite(sellX), allBtn?.text ?? '(没有全卖按钮)')
+  check(
+    `「全卖」按钮上的「N ${UNIT} / +X 🌾」解析出来了`,
+    Number.isFinite(sellN) && Number.isFinite(sellX),
+    allBtn?.text ?? '(没有全卖按钮)',
+  )
 
   /* ---------- 4. 点「全卖」，对账 ---------- */
   const sellTap = await realClick(page, '全卖')
@@ -340,7 +353,11 @@ try {
     new RegExp(`🌾\\s*${afterSell.harvest}\\b`).test(afterSell.topBar),
     `顶栏="${afterSell.topBar}"`,
   )
-  check('卖完有明确的文字反馈', /卖出\s*\d+\s*个/.test(afterSell.body), (afterSell.body.match(/卖出[^。]{0,40}/) ?? [''])[0])
+  check(
+    '卖完有明确的文字反馈',
+    new RegExp(`卖出\\s*\\d+\\s*${UNIT}`).test(afterSell.body),
+    (afterSell.body.match(/卖出[^。]{0,40}/) ?? [''])[0],
+  )
 
   /* ---------- 5. 空背包走空状态 ---------- */
   const emptyState = /背包还是空的/.test(afterSell.body)

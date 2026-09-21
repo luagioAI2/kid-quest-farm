@@ -10,6 +10,7 @@ import {
   PRICE_FLOOR,
   PRODUCE_BASE_PRICE,
   priceCeilingFor,
+  produceUnitOf,
   roundCap,
   yieldOf,
 } from './catalog'
@@ -120,6 +121,69 @@ describe('配置表：上限回收与基准单价自洽', () => {
         cap,
         `${a.name}：闸门 ${cap} 越过了「成本 × 1.6」= ${roundCap(a.cost)}`,
       ).toBeLessThanOrEqual(roundCap(a.cost) + 1e-9)
+    }
+  })
+
+  /**
+   * ⚠️ **每个产出物都要有量词**（2026-09-21 补）。
+   *
+   * 用户报的：「奶牛产奶的**单位**是……虽然单位并没那么重要」。
+   * 在那之前所有 UI 硬编码「个」—— 于是出现「收到 **4 个**牛奶！」。
+   *
+   * 这条同时钉两件事：
+   *   ① **覆盖率** —— 新加标的时忘了登记量词会红。不钉的话会静默退回默认「个」，
+   *      牛奶又变回「个」了，而且**没有任何地方会报错**。
+   *   ② **具体值** —— 牛奶必须是「瓶」、萝卜必须是「根」。
+   *      只判「非空 / 非默认」的话，全填「个」也照样绿 —— 那等于没改。
+   */
+  it('每个产出物都有量词，且是给对的那个（牛奶「瓶」、萝卜「根」…）', () => {
+    // 期望值**手写一遍**，不从 `PRODUCE_UNIT` 自己推 —— 否则是把实现抄成断言
+    const EXPECTED: Record<string, string> = {
+      // 作物 · 果树
+      'produce-radish': '根',
+      'produce-carrot': '根',
+      'rose-bloom': '朵',
+      'produce-strawberry': '颗',
+      'produce-corn': '根',
+      'produce-tomato': '个',
+      'produce-pumpkin': '个',
+      'produce-watermelon': '个',
+      'produce-apple': '个',
+      lemonade: '杯',
+      'produce-sunflower': '朵',
+      'produce-magic-bean': '颗',
+      // 动物
+      egg: '个',
+      feather: '片',
+      wool: '团',
+      truffle: '颗',
+      milk: '瓶',
+    }
+
+    for (const c of CROPS) {
+      expect(produceUnitOf(c.produceItemId), `${c.name} 的产出物量词`).toBe(
+        EXPECTED[c.produceItemId],
+      )
+    }
+    for (const a of ANIMALS) {
+      expect(produceUnitOf(a.produceItemId), `${a.name} 的产出物量词`).toBe(
+        EXPECTED[a.produceItemId],
+      )
+    }
+
+    // 反向：EXPECTED 里不能留已经不在场的标的（改了 id / 删了标的就是孤儿）
+    const live = new Set([
+      ...CROPS.map((c) => c.produceItemId),
+      ...ANIMALS.map((a) => a.produceItemId),
+    ])
+    for (const id of Object.keys(EXPECTED)) {
+      expect(live.has(id), `EXPECTED 里的 ${id} 已经不是任何标的的产出物了`).toBe(true)
+    }
+
+    // 量词必须是**一个汉字**：多字（「瓶子」）会把市场按钮挤宽，
+    // 见 MarketSheet 里那段「94px / 97px」的宽度注释。
+    for (const [id, u] of Object.entries(EXPECTED)) {
+      expect(u.length, `${id} 的量词「${u}」不是一个汉字`).toBe(1)
     }
   })
 
