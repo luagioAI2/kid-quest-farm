@@ -246,23 +246,34 @@ export async function loadRedeemRecords(limit = 60): Promise<RedeemRecord[]> {
 
 export async function addItem(itemId: string, count = 1): Promise<void> {
   if (count === 0) return
-  const row = await db.inventory.get(itemId)
-  if (row) {
-    const next = row.count + count
-    if (next <= 0) await db.inventory.delete(itemId)
-    else await db.inventory.put({ itemId, count: next })
-  } else if (count > 0) {
-    await db.inventory.put({ itemId, count })
-  }
+  // ⚠️ 必须包事务：`get` 和 `put` 之间**不原子**，并发调用会各自读到同一个旧值
+  // 再各自写回去 → 丢更新。2026-09-21 实测：并发 `addItem` 三次，结果只加了 1。
+  // 理由与 `postLedger` 完全相同（那里也是为此才包的事务）。
+  await db.transaction('rw', db.inventory, async () => {
+    const row = await db.inventory.get(itemId)
+    if (row) {
+      const next = row.count + count
+      if (next <= 0) await db.inventory.delete(itemId)
+      else await db.inventory.put({ itemId, count: next })
+    } else if (count > 0) {
+      await db.inventory.put({ itemId, count })
+    }
+  })
 }
 
 export async function consumeItem(itemId: string, count = 1): Promise<boolean> {
-  const row = await db.inventory.get(itemId)
-  if (!row || row.count < count) return false
-  const next = row.count - count
-  if (next <= 0) await db.inventory.delete(itemId)
-  else await db.inventory.put({ itemId, count: next })
-  return true
+  // ⚠️⚠️ 这里比 `addItem` 更要命：它是一个**守卫**（不够就返回 false）。
+  // 不包事务时，两个并发调用会**都**读到「够」，于是都扣 —— **超卖**。
+  // 2026-09-21 实测（去掉事务后）：库存 1 个时并发卖两次，返回 `[true, true]`、
+  // 库存归零。即「守卫被绕过」，不是简单的数字对不上。
+  return db.transaction('rw', db.inventory, async () => {
+    const row = await db.inventory.get(itemId)
+    if (!row || row.count < count) return false
+    const next = row.count - count
+    if (next <= 0) await db.inventory.delete(itemId)
+    else await db.inventory.put({ itemId, count: next })
+    return true
+  })
 }
 
 /* ---------------- 积分账本 ---------------- */

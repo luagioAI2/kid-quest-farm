@@ -122,6 +122,41 @@ describe('背包操作', () => {
   })
 })
 
+/* ============================================================
+   背包的并发原子性
+   ------------------------------------------------------------
+   与上面 `postLedger 原子性` 同一族问题，只是当初漏了背包这一层：
+   `addItem` / `consumeItem` 都是「先 get 再 put」，中间不原子。
+   2026-09-21 实测（修之前）：
+     并发 addItem ×3        -> count = 1（丢了 2 次）
+     并发 consumeItem ×2（库存 1）-> 两次都成功（超卖）
+   ============================================================ */
+describe('背包并发原子性', () => {
+  it('并发 addItem 不会丢更新', async () => {
+    await Promise.all([addItem('egg', 1), addItem('egg', 1), addItem('egg', 1)])
+    expect((await db.inventory.get('egg'))?.count).toBe(3)
+  })
+
+  it('并发 consumeItem 不会超卖（守卫不能被绕过）', async () => {
+    await addItem('egg', 1)
+    const results = await Promise.all([consumeItem('egg', 1), consumeItem('egg', 1)])
+    // 关键：不是「数字对不上」，而是**守卫被绕过** —— 只有一个该成功
+    expect(results.filter(Boolean)).toHaveLength(1)
+    expect(await db.inventory.get('egg')).toBeUndefined()
+  })
+
+  it('并发加与减混合，结果等于净额', async () => {
+    await addItem('egg', 10)
+    await Promise.all([
+      addItem('egg', 1),
+      consumeItem('egg', 1),
+      addItem('egg', 2),
+      consumeItem('egg', 2),
+    ])
+    expect((await db.inventory.get('egg'))?.count).toBe(10)
+  })
+})
+
 describe('唯一索引约束', () => {
   const base = {
     taskId: 'tk_1',
