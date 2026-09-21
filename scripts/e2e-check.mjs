@@ -182,6 +182,7 @@ try {
       const t = target.getBoundingClientRect()
       const h = holeEl.getBoundingClientRect()
       const b = bubble.getBoundingClientRect()
+      const r = (x) => [x.left, x.top, x.right, x.bottom].map((v) => Math.round(v)).join(',')
       return {
         covers:
           h.left <= t.left + 1 && h.right >= t.right - 1 && h.top <= t.top + 1 && h.bottom >= t.bottom - 1,
@@ -189,12 +190,50 @@ try {
         bubbleBelow: b.top >= h.bottom - 1,
         // 「气泡被推出屏幕下沿」是顶栏目标最容易踩的坑，单独量一次
         bubbleOnScreen: b.top >= -1 && b.bottom <= window.innerHeight + 1,
+        // 三个矩形的**原始值**，只用来判「重排完了没有」（见下面的 waitStable）
+        sig: `${r(t)}|${r(h)}|${r(b)}`,
       }
     }, sel)
 
+  /**
+   * 等「挖洞层 + 气泡」的几何**稳定下来**，再断言。
+   *
+   * ⚠️ 原来切步之后只 `sleep(250)` 就量 —— 切步时 React 还要重排一次
+   * （高亮框挪到新目标、气泡翻面）。250ms 不一定够：2026-09-21 实测出现过
+   * `covers=false bubbleBelow=false`，量到的还是**上一步**的布局
+   * （上一步是底部 tab，气泡是往上放的），原样重跑就 74/74 —— 典型时序抖动。
+   *
+   * ⚠️⚠️ **只判「稳定」是不够的**（第一版就这么修，仍然 1/3 概率红）。
+   * 因为「旧布局稳稳待着、新布局还没算出来」那个窗口本身**也是稳定的** ——
+   * 于是会被判成「已稳定」，然后拿着**上一步**的坐标去断言。
+   * 所以必须再要一个 `prevSig`（**点下一步之前**量到的几何）：
+   * **先确认 sig 变了**（说明真的重排过了），再等它连续几次不变。
+   *
+   * ⚠️ 判据是「连续 N 次采样完全一致」，**不是**「断言通过」。
+   * 后者会把真失败也等成绿的 —— 那是本项目最忌讳的假通过。
+   * 等不到就返回最后一次采样，断言照红，只是给了它足够的时间。
+   */
+  const waitStable = async (sel, prevSig = null, tries = 30) => {
+    let last = null
+    let lastCur = null
+    let same = 0
+    for (let i = 0; i < tries; i++) {
+      const cur = await holeVs(sel)
+      const sig = cur ? cur.sig : null
+      // 只有「和点之前不一样」的采样才算数
+      if (cur && sig !== prevSig && sig === last) same++
+      else same = 0
+      last = sig
+      lastCur = cur
+      if (same >= 2) return cur
+      await sleep(90)
+    }
+    return lastCur
+  }
+
   // 高亮框要真的套在「任务」那一格上，气泡要在它上方 ——
   // 否则孩子看到的只是一块压暗的屏幕，不知道在讲哪儿。
-  const hole = await holeVs('[data-tour="tab-tasks"]')
+  const hole = await waitStable('[data-tour="tab-tasks"]')
   check(
     '高亮框正好套住「任务」那一格，且气泡在它上方',
     !!hole && hole.covers && hole.bubbleAbove,
@@ -207,20 +246,39 @@ try {
    */
   const restSteps = ['farm', 'redeem', 'points', 'review', 'settings']
   for (let n = 0; n < restSteps.length; n++) {
-    await clickByText('下一步')
-    await sleep(250)
     const k = restSteps[n]
-    const ok = await page.evaluate(
-      (key) => !!document.querySelector(`[data-tour-bubble="${key}"]`),
-      k,
-    )
-    check(`导览第 ${n + 2} 步切到「${k}」`, ok)
+    // 最后两步的目标在**顶栏**，其余在底部 tab
+    const isHeader = k === 'review' || k === 'settings'
+    const targetSel = isHeader ? `[data-tour="header-${k}"]` : `[data-tour="tab-${k}"]`
+    /* ⚠️ **点之前**先量一次几何，作为 `waitStable` 的「必须和它不一样」基准。
+       少了这一步，「旧布局还稳稳待着、新布局还没算出来」的窗口会被判成
+       「已稳定」，然后拿着上一步的坐标去断言 —— 见 `waitStable` 的注释。 */
+    const prevSig = (await holeVs(targetSel))?.sig ?? null
+
+    await clickByText('下一步')
+
+    /* ⚠️ 两段等待，缺一不可 —— 原来这里只有 `sleep(250)`，会抖（见 waitStable 注释）。
+       ① 先等**换步**：气泡的 `data-tour-bubble` 变了才说明 React 真的切过去了。
+          不等这个的话，`waitStable` 会对着**上一步**的静止布局判「稳定」并返回它。
+       ② 再等**几何稳定**：换步之后还会再重排一次（挪高亮框 + 气泡翻面）。 */
+    let switched = true
+    try {
+      await page.waitForFunction(
+        (key) => !!document.querySelector(`[data-tour-bubble="${key}"]`),
+        { timeout: 5000 },
+        k,
+      )
+    } catch {
+      // 超时不当成「环境问题跳过」—— 直接判红（本项目最忌讳的假通过）
+      switched = false
+    }
+    const h = await waitStable(targetSel, prevSig)
+    check(`导览第 ${n + 2} 步切到「${k}」`, switched)
 
     // 最后两步的目标在**顶栏**：气泡必须翻到下方、且不能跑出屏幕。
     // 沿用「往上」那套算出来的是 `bottom: 视口高 + 6`，气泡会被推出屏幕下沿 ——
     // 而且 DOM 查询照样找得到它，只有量位置才发现得了。
-    if (k === 'review' || k === 'settings') {
-      const h = await holeVs(`[data-tour="header-${k}"]`)
+    if (isHeader) {
       check(
         `第 ${n + 2} 步「${k}」的高亮框套住顶栏按钮，气泡在它下方且没跑出屏幕`,
         !!h && h.covers && h.bubbleBelow && h.bubbleOnScreen,
