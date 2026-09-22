@@ -423,6 +423,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   farmEventsEnabled: true,
   /** 浮盈倍率 r。数值口径见 catalog.ts 的 `DEFAULT_PROFIT_RATIO` */
   profitRatio: 0.6,
+  /**
+   * 现金 : 积分 的参考汇率：1 元 = 多少积分（2026-09-21）。
+   *
+   * **纯展示，不参与任何计算**（用户明确「不影响数值」）。
+   * `loadSettings` 会和 `DEFAULT_SETTINGS` 合并，所以老库里没有
+   * 这个字段也能拿到默认值 10，不需要数据迁移。
+   * 口径与夹取区间见 `domain/cash.ts`。
+   */
+  pointsPerYuan: 10,
   farmClock: {
     timeScale: 1,
     showClock: true,

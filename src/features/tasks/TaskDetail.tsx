@@ -45,12 +45,15 @@ export function TaskDetail({
 
   const inst = instance
   /**
-   * ⚠️ `TIMER_ENABLED` 放最前面（见 ui.tsx）。
-   * 关掉之后详情页永远走「填时间」那一支：标题是「实际用了多少分钟？」、
-   * 显示的是输入值而不是走动的秒表、步进器一直可见。
-   * 不改 JSX —— 下面所有分支本来就是按 `running` 分流的，把真相源关掉就够了。
+   * 详情页走「实时秒表」还是「手填用时」，全看这一个 `running`。
+   *
+   * ⚠️ `status === 'pending'` 这一项**不能省**，口径必须和 TaskPage 的卡片一致。
+   * 家长打回时会**保留** `startedAt`（见 store 的 `rejectInstance`），
+   * 不卡 pending 的话，一张重做卡片点开会显示一个从**上一次开始**算起的秒表 ——
+   * 可能已经走了好几天，孩子一提交就是 0 分。
+   * 非 pending 一律走「手填」，并用 `actualMinutes` 预填（见下面的 `useEffect`）。
    */
-  const running = TIMER_ENABLED && !!inst?.startedAt
+  const running = TIMER_ENABLED && inst?.status === 'pending' && !!inst?.startedAt
   // 计时是真相源：秒数由 startedAt 派生，切页不丢
   const liveSeconds = useLiveSeconds(inst?.startedAt, running && !result)
   const liveMinutes = liveSeconds / 60
@@ -65,14 +68,14 @@ export function TaskDetail({
     /**
      * 预填用时。
      *
-     * ⚠️ 计时器关掉之后，一个**之前点过「开始」的老任务**在库里还留着 `startedAt`。
-     * 不把已流逝的时间带过来的话，步进器会从 0 开始 —— 而孩子此时**两个地方
-     * 都看不到那个表了**（卡片和详情页的秒表都关了），只能凭记忆重填。
-     * 所以这里直接把「开始到现在」换算成预填值。
+     * ⚠️ 这个值**只在没在计时时**看得见（`running` 为真时步进器整段不渲染，
+     * 用的是实时秒数）。所以它管的是两种没在计时的情形：
+     *   ① 点过「开始」、但现在已经不是 `pending` 的任务（典型是被打回重做）——
+     *      库里还留着 `startedAt`，把「开始到现在」换算过来，孩子不用凭记忆重填；
+     *   ② 从没点过「开始」的任务 —— 预填 `plannedMinutes`。
      *
-     * ⚠️ 2026-09-21：没有 `startedAt` 的新任务原来预填 **0**，
-     * 而 `0 ≤ 计划用时` ⇒ 预览直接显示「按时完成，拿到全部 20 分」。
-     * 计时器隐藏后「填时间」是**唯一**路径，默认值于是成了「一路点到底拿满分」。
+     * ⚠️ ② 的默认值原来是 **0**，而 `0 ≤ 计划用时` ⇒ 预览直接显示
+     * 「✅ 在计划时间内，可拿全部积分」，等于**一路点到底就是满分**。
      * 改成预填 `plannedMinutes`：不再出现「0 分钟」这种不可能是真话的值，
      * 而且和下面那个「按计划 N 分」快捷键**取同一个数**（本来就该一致）。
      *
@@ -185,9 +188,9 @@ export function TaskDetail({
 
               {/* 进度条：计划内 / 超时 / 超一倍。
                   ⚠️ 这里原来是**两个逐字相同**的块，分别挂在 `!running` 和 `running`
-                  上。计时器关掉之后 `running` 恒为 false，第二个块就是死代码。
-                  合并成一个 —— 计时和手填走的是同一套 `tone` / `pct`，
-                  本来就不该分家（分开写迟早有人只改一边）。 */}
+                  上。两块走的是同一套 `tone` / `pct`，本来就该合并 ——
+                  分开写迟早有人只改一边（当年是趁着计时器隐藏、`running` 恒为 false
+                  顺手合掉的，现在计时器回来了，这个合并照样成立）。 */}
               <div className="mt-3 h-3 w-full overflow-hidden rounded-full border border-white/70 bg-white/60">
                 <div
                   className={clsx(

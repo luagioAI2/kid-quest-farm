@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, BackupFile } from '../../domain/types'
 import { useApp } from '../../store/useApp'
 import { DEFAULT_PROFIT_RATIO } from '../../domain/catalog'
+import { clampPointsPerYuan, formatYuan, MAX_POINTS_PER_YUAN, MIN_POINTS_PER_YUAN } from '../../domain/cash'
 import { AVATAR_CHOICES } from '../../domain/avatars'
 import { humanizeAgo } from '../../domain/time'
 import { saveBlob, shareOrDownload } from '../../platform/files'
@@ -42,6 +43,15 @@ export default function SettingsPage({
   /** 家长锁：默认锁定写入型操作，避免孩子乱改规则 */
   const needsPin = !!settings.parentPin
   const gateOpen = !needsPin || !locked
+
+  /**
+   * 现金 : 积分 参考汇率（1 元 = 多少积分）。
+   *
+   * 走 `clampPointsPerYuan` 而不是直接用 `settings.pointsPerYuan`：
+   * 老库 / 手改过的备份里可能是 `undefined` 或越界值，直接除会渲染出
+   * 「¥NaN」。夹一次，UI 上永远不会看到脏数。
+   */
+  const ratio = clampPointsPerYuan(settings.pointsPerYuan)
 
   // 切到 data tab 时自动上锁，防止孩子趁家长没注意时导出/恢复/清空
   useEffect(() => {
@@ -370,6 +380,45 @@ export default function SettingsPage({
                   </p>
                 </Card>
 
+                <Card title="现金对积分" emoji="💱">
+                  <p className="mb-3 text-sm text-ink-500">
+                    定一个「1 块钱大约等于多少积分」。这只是给家长看的参照 ——
+                    孩子来问「这么多分值多少钱」的时候你心里有个数。
+                    <b className="text-ink-700">它不影响积分，也不影响兑换价格。</b>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {([2, 5, 10, 20, 50, 100] as number[]).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        disabled={!gateOpen}
+                        onClick={() => void updateSettings({ pointsPerYuan: v })}
+                        className={
+                          'btn rounded-full px-4 py-2 font-bold shadow-flat disabled:opacity-50 ' +
+                          (ratio === v ? 'bg-grass-300 text-ink-900' : 'bg-white text-ink-500')
+                        }
+                      >
+                        1 元 = {v} 分
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="shrink-0 text-sm font-bold text-ink-500">自己填：1 元 =</span>
+                    <RatioInput
+                      value={ratio}
+                      disabled={!gateOpen}
+                      onCommit={(v) => void updateSettings({ pointsPerYuan: v })}
+                    />
+                    <span className="shrink-0 text-sm font-bold text-ink-500">分</span>
+                  </div>
+                  <p className="tnum mt-2 text-xs font-bold leading-snug text-ink-500">
+                    当前：1 元 ≈ {ratio} 分，也就是 1 分 ≈ {formatYuan(1, ratio)}。
+                    例：30 分的零食 ≈ {formatYuan(30, ratio)}，
+                    600 分的玩具 ≈ {formatYuan(600, ratio)}，
+                    1500 分的大愿望 ≈ {formatYuan(1500, ratio)}。
+                  </p>
+                </Card>
+
                 <Card title="农场的时钟走得有多快" emoji="⏩">
                   <p className="mb-3 text-sm text-ink-500">
                     真实 1 分钟 = 农场里的多少分钟。调快一点，孩子不用等太久就能看到变化；
@@ -611,6 +660,59 @@ function Toggle({
         />
       </button>
     </section>
+  )
+}
+
+/**
+ * 「1 元 = ___ 分」的自定义输入框。
+ *
+ * ⚠️ 用**本地草稿 + 失焦提交**，不要 `onChange` 直接写 store。
+ * 家长想把 10 改成 80 时，中间会经过「8」这个瞬间值：直接落库的话
+ * 输入框会被夹取/回写打断（输到一半值就被改回去了，光标还跳）。
+ * 攒到失焦或回车再提交，中间态不落库。
+ *
+ * 外部值变了（点了预设按钮）用「渲染期同步」而不是 `useEffect` ——
+ * 后者要多写一个依赖数组和 lint 豁免，而且会多跑一帧。
+ */
+function RatioInput({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number
+  disabled?: boolean
+  onCommit: (v: number) => void
+}) {
+  const [draft, setDraft] = useState(String(value))
+  const [synced, setSynced] = useState(value)
+
+  if (value !== synced) {
+    setSynced(value)
+    setDraft(String(value))
+  }
+
+  const commit = () => {
+    const n = clampPointsPerYuan(Number(draft))
+    setDraft(String(n))
+    if (n !== value) onCommit(n)
+  }
+
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      disabled={disabled}
+      value={draft}
+      min={MIN_POINTS_PER_YUAN}
+      max={MAX_POINTS_PER_YUAN}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        // 回车 = 确认。不 blur 的话手机上键盘不会收，家长会以为没生效
+        if (e.key === 'Enter') e.currentTarget.blur()
+      }}
+      className="tnum min-h-[44px] w-24 rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-3 text-center font-display font-extrabold text-ink-900 outline-none focus:border-sky-400 disabled:opacity-50"
+    />
   )
 }
 

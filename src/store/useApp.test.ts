@@ -1113,6 +1113,70 @@ describe('新手引导：落库标记', () => {
 })
 
 /* ============================================================
+   现金 : 积分 参考汇率（2026-09-21）
+   ------------------------------------------------------------
+   家长原话：「设置里添加现金对积分比例。默认 1:10。也要显示到
+   兑换页。主要是让家长看着，兑换能够参照的，不影响数值。」
+
+   守两件事：
+   1. **老库 / 老备份没有这个字段 → 回落到 10。** 靠的还是
+      `loadSettings` 的合并，不需要 Dexie 版本迁移。
+   2. **它不影响任何数值。** 改完之后余额、兑换扣分都不许动 ——
+      这是用户唯一强调的那句「不影响数值」，必须有测试钉住，
+      否则以后有人「顺手」拿它去换算积分就没人拦得住了。
+   ============================================================ */
+describe('现金 : 积分 参考汇率', () => {
+  beforeEach(async () => {
+    await boot()
+  })
+
+  it('默认 1 元 = 10 分', () => {
+    expect(DEFAULT_SETTINGS.pointsPerYuan).toBe(10)
+    expect(useApp.getState().settings.pointsPerYuan).toBe(10)
+  })
+
+  it('老库里没有这个字段 → 读出来是 10，不报错（加字段不需要迁移）', async () => {
+    const old: Record<string, unknown> = { ...DEFAULT_SETTINGS }
+    delete old.pointsPerYuan
+    await setMeta('settings', old)
+
+    const loaded = await loadSettings()
+    expect(loaded.pointsPerYuan, '缺字段必须回落到默认值 10').toBe(10)
+    expect(loaded.childName).toBe(DEFAULT_SETTINGS.childName)
+  })
+
+  it('改完能读回来', async () => {
+    await useApp.getState().updateSettings({ pointsPerYuan: 25 })
+
+    expect((await loadSettings()).pointsPerYuan).toBe(25)
+    expect(useApp.getState().settings.pointsPerYuan).toBe(25)
+  })
+
+  it('**不影响数值**：改汇率不动余额，也不动兑换扣分', async () => {
+    const before = useApp.getState().balance
+
+    await useApp.getState().updateSettings({ pointsPerYuan: 100 })
+    expect(useApp.getState().balance, '改汇率不该动余额').toBe(before)
+
+    // 真的去兑换一件东西，扣的分必须还是「标价」，不是「标价 ÷ 汇率」
+    const item = useApp
+      .getState()
+      .redeemItems.find((i) => i.cost <= useApp.getState().balance)
+    expect(item, '测试前置：至少要有一样换得起的兑换品').toBeDefined()
+
+    const cost = item!.cost
+    await useApp.getState().updateSettings({ pointsPerYuan: 1 })
+    const balanceBeforeRedeem = useApp.getState().balance
+    const ok = await useApp.getState().redeem(item!.id)
+    expect(ok).toBe(true)
+    expect(
+      useApp.getState().balance,
+      '兑换扣分必须等于标价本身，与汇率无关',
+    ).toBe(balanceBeforeRedeem - cost)
+  })
+})
+
+/* ============================================================
    播种的并发闸门
    ------------------------------------------------------------
    2026-09-21 发现的真 bug：`seedIfEmpty` 是「先 count 再写」，两步之间

@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { useApp } from '@/store/useApp'
 import type { RedeemCategory, RedeemItem } from '@/domain/types'
 import { humanizeAgo } from '@/domain/time'
+import { clampPointsPerYuan, formatYuan } from '@/domain/cash'
 import { ParentPinPanel } from '../parent/ParentGate'
 import { BottomSheet, CoinPill } from '../farm/farmUi'
 
@@ -18,8 +19,10 @@ import { BottomSheet, CoinPill } from '../farm/farmUi'
    * 兑换后生成一条"待兑现"记录，家长点一下表示"真的给了"
 
    定价策略见 seedTasks.ts 的注释 —— 目标是把孩子的日收入
-   （约 250 分）映射到「日常小确幸每天可换」、
-   「大件愿望要攒一周」，从而保证兑换始终可控。
+   （约 170~270 分）映射到「日常小确幸每天可换」、
+   「大件愿望要攒一两周」，从而保证兑换始终可控。
+   ⚠️ 2026-09-21 任务积分减半之后，日收入从约 250~330 降到约
+   170~270，而兑换定价没动 —— 攒大件的时间翻倍，见 seedTasks.ts。
    ============================================================ */
 
 const CATEGORY_META: Record<RedeemCategory, { label: string; emoji: string }> = {
@@ -68,6 +71,9 @@ export function RedeemBody() {
 
   const [tab, setTab] = useState<'shop' | 'records' | 'manage'>('shop')
   const [pinOk, setPinOk] = useState(false)
+
+  /** 现金 : 积分 参考汇率（1 元 = 多少积分）。**纯展示**，见 domain/cash.ts */
+  const ratio = clampPointsPerYuan(settings.pointsPerYuan)
 
   const pending = useMemo(() => redeemRecords.filter((r) => !r.fulfilled), [redeemRecords])
 
@@ -121,6 +127,9 @@ export function RedeemBody() {
                   「点了就会扣」这个后果。 */}
               <p className="rounded-2xl bg-sun-50 px-3 py-2 text-xs font-bold text-ink-700">
                 换完就扣分，想清楚再点哦～
+                <span className="mt-1 block text-[11px] font-normal leading-snug text-ink-500">
+                  💱 参考：1 元 ≈ {ratio} 分。这只是给家长的参照，扣多少分还是看标价。
+                </span>
               </p>
               {grouped.map((g) => (
                 <section key={g.category}>
@@ -129,7 +138,7 @@ export function RedeemBody() {
                   </h3>
                   <ul className="space-y-3">
                     {g.items.map((it) => (
-                      <RedeemRow key={it.id} item={it} balance={balance} />
+                      <RedeemRow key={it.id} item={it} balance={balance} ratio={ratio} />
                     ))}
                   </ul>
                 </section>
@@ -189,7 +198,16 @@ export function RedeemBody() {
 
 /* ---------------- 孩子视角：一键兑换 ---------------- */
 
-function RedeemRow({ item, balance }: { item: RedeemItem; balance: number }) {
+function RedeemRow({
+  item,
+  balance,
+  ratio,
+}: {
+  item: RedeemItem
+  balance: number
+  /** 现金 : 积分 参考汇率（1 元 = 多少积分）。只用来在旁边标一句「≈ ¥3」 */
+  ratio: number
+}) {
   const redeem = useApp((s) => s.redeem)
   const redeemedToday = useApp((s) => s.redeemedToday)
   const [busy, setBusy] = useState(false)
@@ -223,6 +241,14 @@ function RedeemRow({ item, balance }: { item: RedeemItem; balance: number }) {
           ) : null}
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <CoinPill amount={item.cost} tone={affordable ? 'sun' : 'danger'} />
+            {/* 现金参考（2026-09-21 家长要求）。⚠️ **纯展示**：
+                扣的还是 `item.cost`，这里只是把同一个数按家长设的汇率
+                换个单位念一遍。别在这里做任何换算后写回数据。
+                ⚠️ 不渲染成「裸数字叶子」—— e2e-check §8 靠「叶子文字 ==
+                余额」来抓重复余额，这里的文字带 `≈ ¥` 前缀，天然不撞。 */}
+            <span className="tnum text-[11px] font-bold text-ink-400">
+              ≈ {formatYuan(item.cost, ratio)}
+            </span>
             {item.limitPerDay != null ? (
               <span className="text-[11px] text-ink-500">
                 每天最多 {item.limitPerDay} 次
@@ -499,6 +525,8 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
   const addRedeemItem = useApp((s) => s.addRedeemItem)
   const updateRedeemItem = useApp((s) => s.updateRedeemItem)
   const pushToast = useApp((s) => s.pushToast)
+  /** 现金 : 积分 参考汇率。给家长定价时一个「值多少钱」的参照，**纯展示** */
+  const ratio = clampPointsPerYuan(useApp((s) => s.settings.pointsPerYuan))
 
   const [name, setName] = useState(item?.name ?? '')
   const [emoji, setEmoji] = useState(item?.emoji ?? '🎁')
@@ -641,8 +669,11 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
             ))}
           </div>
           <p className="mt-2 text-[11px] text-ink-500">
-            参考：孩子一天大约能赚 250 分。30~60 分是"每天都能换"，
-            150~300 分要攒一两天，600 分以上要攒一周左右。
+            参考：孩子一天大约能赚 170~270 分。30~60 分是"每天都能换"，
+            150~300 分要攒一两天，600 分要攒三四天，1500 分要攒一两周。
+            <br />
+            按现在的汇率（1 元 ≈ {ratio} 分），{cost} 分 ≈{' '}
+            <b className="text-ink-700">{formatYuan(cost, ratio)}</b>。
           </p>
         </Field>
 

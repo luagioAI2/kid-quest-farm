@@ -21,6 +21,7 @@ import {
   categoryOf,
   CycleBadge,
   EmptyHint,
+  MANUAL_FILL_ENABLED,
   RewardChips,
   Sheet,
   SheetHead,
@@ -373,10 +374,14 @@ function TaskCard({
   const cat = categoryOf(inst.category)
   const taskDef = useMemo(() => tasks.find((t) => t.id === inst.taskId), [tasks, inst.taskId])
   /**
-   * ⚠️ `TIMER_ENABLED` 必须放在最前面。计时器关掉之后 `running` 恒为 false，
-   * 下面的秒表分支整段都不会渲染 —— 不这么写的话，一个**之前已经点过
-   * 「开始」的老任务**（`startedAt` 还在库里）会继续显示秒表，
-   * 而卡片上已经没有「开始」按钮了，孩子看着一个走动的表不知道怎么停。
+   * 秒表的唯一真相源：**正在计时 = 计时器开着 且 待完成 且 已经点过「开始」**。
+   *
+   * ⚠️ 三个条件缺一不可，尤其**别删 `status === 'pending'`**：
+   *   · 家长打回（`rejected`）时会**保留** `startedAt`（见 store 的
+   *     `rejectInstance`，本意是让孩子接着计时）。不卡 `pending` 的话，
+   *     重做卡片会挂着一个从**上一次**开始算起的秒表 —— 可能已经走了好几天。
+   *   · `startTimer()` 本身只对 `pending` 生效，所以非 pending 上的
+   *     `startedAt` 必然是历史遗留值，不能当「正在计」用。
    */
   const running = TIMER_ENABLED && inst.status === 'pending' && !!inst.startedAt
   const seconds = useLiveSeconds(inst.startedAt, running)
@@ -484,8 +489,36 @@ function TaskCard({
                     ✅ 我做完啦！
                   </Btn>
                 </div>
-              ) : TIMER_ENABLED ? (
-                <div className="flex items-center gap-2">
+              ) : rejected || !TIMER_ENABLED ? (
+                /* 重做 / 计时器关着：直接进提交弹层，不走秒表。
+                   ⚠️ **重做必须走这一支。** `startTimer()` 对非 `pending` 的实例
+                   是直接 return 的，所以重做卡片上那个「▶️ 开始」本来就是个
+                   **点了没反应的死按钮**；而原来唯一能打开提交弹层的入口，
+                   就是它右边那个旁路按钮（`MANUAL_FILL_ENABLED`，现已隐藏）。
+                   只藏不补，重做任务就永远交不上去。
+                   重做也不需要计时：用时在详情页填，家长还能在审核弹层里改。 */
+                <Btn tone="grass" size="md" full onClick={onOpen}>
+                  ✅ 我做完啦！
+                </Btn>
+              ) : (
+                /* 待完成 + 计时器开着：入口是「▶️ 开始」。
+                   右边那个「没用计时器 · 直接填时间」的旁路按钮由
+                   `MANUAL_FILL_ENABLED` 控制（见 ui.tsx），默认藏着。
+                   ⚠️ 「开始」**保持原来的尺寸**（`size="md"`，按内容宽），
+                   不要顺手改成 `full` 撑满整宽 —— 用户明确要求过。
+                   ⚠️ 但要**靠右对齐**（2026-09-21 用户定）：计时中那一行是
+                   「[秒表占满] [✅ 我做完啦！]」、补做那一行是
+                   「[昨天没做] [🌟 现在补做掉]」—— 动作按钮都在右边。
+                   让「开始」也贴右，状态一变按钮就不跳位置；
+                   而它只占内容宽、左边那片空由元信息那一列自然收着，不显得行没占满。
+                   旁路按钮还在时（`MANUAL_FILL_ENABLED = true`）它是 `flex-1`，
+                   本来就把剩余宽度吃满，`justify-end` 落不到实处，两边都成立。 */
+                <div
+                  className={clsx(
+                    'flex items-center gap-2',
+                    !MANUAL_FILL_ENABLED && 'justify-end',
+                  )}
+                >
                   <Btn
                     tone="sky"
                     size="md"
@@ -495,22 +528,15 @@ function TaskCard({
                   >
                     ▶️ 开始
                   </Btn>
-                  <button
-                    onClick={onOpen}
-                    className="min-h-[44px] flex-1 rounded-2xl border border-dashed border-ink-300 px-2 text-xs font-bold text-ink-500"
-                  >
-                    没用计时器 · 直接填时间
-                  </button>
+                  {MANUAL_FILL_ENABLED && (
+                    <button
+                      onClick={onOpen}
+                      className="min-h-[44px] flex-1 rounded-2xl border border-dashed border-ink-300 px-2 text-xs font-bold text-ink-500"
+                    >
+                      没用计时器 · 直接填时间
+                    </button>
+                  )}
                 </div>
-              ) : (
-                /* 计时器关着（见 ui.tsx 的 TIMER_ENABLED）：只剩一条路 ——
-                   点开 → 填用时 → 交上来。
-                   ⚠️ 别把「▶️ 开始」写回来，它是计时器的入口，开关关着没有意义；
-                   也别退回「没用计时器 · 直接填时间」那句 —— 那句是**对比着计时器**
-                   说的，没有计时器之后它就成了一脸问号。 */
-                <Btn tone="grass" size="md" full onClick={onOpen}>
-                  ✅ 我做完啦！
-                </Btn>
               )}
             </div>
           )}

@@ -1163,6 +1163,157 @@ try {
     headerChip.headerText,
   )
 
+  /* ---------- 8b. 现金对积分参考汇率（2026-09-21） ----------
+     用户要求：「设置里 添加 现金对积分 比例。 默认 1:10 。 也要显示到兑换页。
+     主要是让家长看着， 兑换能够参照的， 不影响数值。」
+
+     ⚠️ 这条守的是**界面这条路**，不是那个数本身。
+     单测已经验过 `updateSettings` 落库 + `formatYuan` 的数学（`cash.test.ts`），
+     但**没验**：「点预设按钮 / 自己填 → 真的落库」以及「兑换页真的把 ≈¥X 画出来了」。
+     这正是「驱动手段绕过被测机制」那一类漏法 —— 单测直接调 action，
+     把界面这一层整个跳过去了。
+
+     ⚠️ 自定义输入是**受控输入框 + 失焦提交**，直接 `input.value = '33'`
+     React 收不到 onChange（值会被打回去），必须走原生 setter + 派发 input 事件。 */
+  const ratioUi = await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+    await window.__kqf__.getState().updateSettings({ parentPin: '' })
+    await sleep(500)
+    document.querySelector('button[aria-label="设置"]')?.click()
+    await sleep(700)
+    const tabBtn = [...document.querySelectorAll('button')].find((x) => /规则/.test(x.innerText))
+    tabBtn?.click()
+    await sleep(700)
+
+    const card = [...document.querySelectorAll('section')].find((s) =>
+      /现金对积分/.test(s.querySelector('h2')?.textContent ?? ''),
+    )
+    if (!card) return { noCard: true }
+
+    // ① 点预设「1 元 = 20 分」
+    const preset = [...card.querySelectorAll('button')].find(
+      (b) => b.textContent.trim() === '1 元 = 20 分',
+    )
+    preset?.click()
+    await sleep(600)
+    const afterPreset = window.__kqf__.getState().settings.pointsPerYuan
+    const presetText = card.innerText
+
+    // ② 自己填 33 —— 走原生 setter，React 才收得到
+    const input = card.querySelector('input[type="number"]')
+    let afterType = null
+    let afterBlurText = ''
+    if (input) {
+      // ⚠️ 必须先 focus：`blur()` 对**没有焦点**的元素是空操作，不会派发
+      // blur/focusout，React 的 onBlur 也就不会触发 —— 于是"失焦提交"这条
+      // 根本走不到，用例会以"没提交"的形式假失败（或更糟：假通过）。
+      input.focus()
+      await sleep(120)
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      ).set
+      setter.call(input, '33')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await sleep(300)
+      // ⚠️ 关键：**没失焦之前不许落库**（草稿态）
+      afterType = window.__kqf__.getState().settings.pointsPerYuan
+      input.blur()
+      await sleep(600)
+      afterBlurText = card.innerText
+    }
+
+    return {
+      noCard: false,
+      hasPreset: !!preset,
+      afterPreset,
+      presetLine: /1 元 ≈ 20 分/.test(presetText),
+      presetCash: /30 分的零食 ≈ ¥1\.5/.test(presetText),
+      hasInput: !!input,
+      afterType,
+      committed: window.__kqf__.getState().settings.pointsPerYuan,
+      typedLine: /1 元 ≈ 33 分/.test(afterBlurText),
+    }
+  })
+  check('设置页有「现金对积分」卡片', !ratioUi.noCard)
+  check(
+    '点预设「1 元 = 20 分」→ 落库 + 预览跟着变',
+    ratioUi.afterPreset === 20 && ratioUi.presetLine && ratioUi.presetCash,
+    `store=${ratioUi.afterPreset}；预览「1 元 ≈ 20 分」=${ratioUi.presetLine}；` +
+      `「30 分的零食 ≈ ¥1.5」=${ratioUi.presetCash}`,
+  )
+  check(
+    '自定义输入：失焦前不落库，失焦后才提交',
+    ratioUi.hasInput && ratioUi.afterType === 20 && ratioUi.committed === 33 && ratioUi.typedLine,
+    `失焦前=${ratioUi.afterType}（应为 20，草稿态不许落库）→ 失焦后=${ratioUi.committed}` +
+      `（应为 33）；预览跟着变=${ratioUi.typedLine}`,
+  )
+
+  // ③ 兑换页真的把 ≈¥X 画出来了，且值 = 标价 ÷ 汇率
+  await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+    // 从设置页退出去，再切到「兑换」
+    document.querySelector('button[aria-label="返回"]')?.click()
+    await sleep(700)
+    const nav = [...document.querySelectorAll('button')].find(
+      (x) => x.innerText.trim().split('\n').pop().trim() === '兑换',
+    )
+    nav?.click()
+    await sleep(1000)
+  })
+  const cashOnRedeem = await page.evaluate(() => {
+    const rows = []
+    for (const el of document.querySelectorAll('*')) {
+      if (el.children.length !== 0) continue
+      const t = (el.textContent ?? '').trim()
+      if (!/^≈\s*¥/.test(t)) continue
+      if (el.getBoundingClientRect().width <= 0) continue
+      // 往上找这一行的价签（CoinPill 的 textContent 形如「🪙30」）
+      let pill = null
+      for (let a = el.parentElement, i = 0; a && i < 4; a = a.parentElement, i++) {
+        pill = [...a.querySelectorAll('span')].find((s) => /🪙\s*\d/.test(s.textContent ?? ''))
+        if (pill) break
+      }
+      const cost = pill ? Number((pill.textContent ?? '').replace(/\D/g, '')) : null
+      rows.push({ label: t, cost })
+    }
+    const ratio = window.__kqf__.getState().settings.pointsPerYuan
+    return { ratio, rows: rows.slice(0, 20), total: rows.length }
+  })
+  // 独立重算一遍（不 import 被测实现，避免"用实现验实现"）
+  const fmtYuan = (points, per) => {
+    const yuan = Math.round((points / per) * 100) / 100
+    return '¥' + yuan.toFixed(2).replace(/\.?0+$/, '')
+  }
+  const badCash = cashOnRedeem.rows.filter(
+    (r) => r.cost == null || r.label !== `≈ ${fmtYuan(r.cost, cashOnRedeem.ratio)}`,
+  )
+  check(
+    '兑换页每件商品都标了「≈ ¥X」，且 X = 标价 ÷ 汇率',
+    cashOnRedeem.total > 0 && badCash.length === 0,
+    `汇率=${cashOnRedeem.ratio}；标了 ${cashOnRedeem.total} 条；` +
+      `对不上的 ${badCash.length} 条` +
+      (badCash.length ? `：${JSON.stringify(badCash.slice(0, 3))}` : '') +
+      `；抽样 ${JSON.stringify(cashOnRedeem.rows.slice(0, 3))}`,
+  )
+  check(
+    '「≈ ¥X」只是标签，没有混进价签里（价签还是原来的分）',
+    cashOnRedeem.rows.every((r) => !/分/.test(r.label)),
+    cashOnRedeem.rows.length ? `抽样：${cashOnRedeem.rows[0].label}` : '一条都没有',
+  )
+
+  // 还原：汇率回默认 10、家长密码复原，别影响后面的断言与截图
+  await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+    await window.__kqf__.getState().updateSettings({ pointsPerYuan: 10 })
+    await sleep(400)
+    await window.__kqf__.getState().updateSettings({ parentPin: '0000' })
+    await sleep(400)
+    const b = [...document.querySelectorAll('button')].find((x) => /←|返回/.test(x.innerText))
+    b?.click()
+    await sleep(700)
+  })
+
   /* ---------- 9. 截图留档 ---------- */
   mkdirSync('screenshots', { recursive: true })
   await page.evaluate(() => {

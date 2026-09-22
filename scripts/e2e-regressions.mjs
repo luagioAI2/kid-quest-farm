@@ -6,7 +6,7 @@
  *   这一套验的是「**这几个坑别再踩**」（覆盖窄、按 bug 组织，每条都带日期和病因）。
  *   一个 bug 修完就往这里加一条 —— 它们是回归，不是新功能。
  *
- * 当前守着 6 条：
+ * 当前守着 7 条：
  *   1. 设置页改「孩子的小名」后点头像，名字被吃回去（2026-09-18 家长报的）
  *      → `updateSettings` 的 `set` 落在了 `await` 之后
  *   2. 「设置 → 任务掉落」开关能控制任务编辑页里的「完成后掉落」
@@ -17,7 +17,13 @@
  *   5. 成熟地块的产量标签是整数、不带 `≈`（2026-09-20 用户报的）
  *      → 那个 `≈` 是「积分时代」`≈3.6 🪙` 的遗留，B1 + 甲之后纯属噪音
  *   6. 任务详情的用时步进器默认 = 计划用时，不是 0（2026-09-21）
- *      → 计时器隐藏后「填时间」成唯一路径，默认 0 ⇒ `0 ≤ 计划用时` ⇒ 一点即满分
+ *      → 默认 0 ⇒ `0 ≤ 计划用时` ⇒ 一点即满分。计时器恢复后，这条验的是
+ *        「没在计时」（重做 / 补做）那一支，见用例里的 export/import 说明。
+ *   7. 重做（家长打回）的任务交得上去（2026-09-21）
+ *      → `startTimer()` 对非 `pending` 直接 return，重做卡片上那个「▶️ 开始」
+ *        是个**点了没反应的死按钮**；而唯一能开提交弹层的入口是它右边那个
+ *        旁路按钮，被 `MANUAL_FILL_ENABLED` 藏了之后整条路就断了（且是静默的）
+ *      → 顺带钉住：重做不挂「上一次」留下的秒表（`running` 必须带 pending）
  *
  * 跑法：node scripts/e2e-regressions.mjs [url]   （默认 http://127.0.0.1:4180/）
  * 前置：先 `npm run preview`
@@ -440,17 +446,15 @@ try {
   /* ============ 6. 用时步进器的默认值 ============ */
   console.log('\n【6】任务详情：用时步进器的默认值')
   /*
-    2026-09-21：实时计时器隐藏之后，「填时间」成了**唯一**路径，而步进器默认是 0 ——
-    而 `0 ≤ 计划用时` ⇒ 预览直接写「✅ 在计划时间内，可拿全部积分」，
-    也就是**一路点到底就能拿满分**。已改成默认预填 `plannedMinutes`。
+    2026-09-21：步进器默认原来是 0 —— 而 `0 ≤ 计划用时` ⇒ 预览直接写
+    「✅ 在计划时间内，可拿全部积分」，也就是**一路点到底就能拿满分**。
+    已改成默认预填 `plannedMinutes`。
 
     ⚠️ 判据要**同时**钉住「非 0」和「= 计划用时」。只判「非 0」的话，
     哪天有人改成硬编码 `1` 也照样绿 —— 那正是这个 bug 的变体。
     ⚠️ 这条依赖 `data-testid`（见 TaskDetail.tsx）。弹层里「N 分」这个文本
     会出现四五次（计划值 / 步进器 / 两个快捷键 / 预览），靠文本分不开。
     ⚠️ 放在【1】之前：【1】会把 CPU 降速 20×，后面的用例都会变慢。
-    另：`TIMER_ENABLED` 翻成 true 时，**没点过「开始」**的任务 `running` 仍是 false，
-    步进器照样渲染 —— 所以这条在两种开关状态下都成立。
   */
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('nav button')].find(
@@ -460,6 +464,12 @@ try {
   })
   await sleep(900)
 
+  /*
+    卡片上的入口跟着 `TIMER_ENABLED` / `MANUAL_FILL_ENABLED` 变（见
+    src/features/tasks/ui.tsx）。**当前状态**：待完成卡片只有「▶️ 开始」，
+    点它**只开始计时、弹层不开**；计时开始后卡片才换成「✅ 我做完啦！」。
+    所以不能「点一下就假定弹层开了」，要**点到弹层真的出现**为止。
+  */
   const OPEN_ACTION = /我做完啦|开始|去完成/
   for (let i = 0; i < 3; i++) {
     await page.evaluate((src) => {
@@ -471,6 +481,26 @@ try {
     await sleep(900)
     if (await page.evaluate(() => !!document.querySelector('[role="dialog"]'))) break
   }
+
+  /**
+   * ⚠️ 2026-09-21 补：上面那样点开弹层时，`startedAt` **一定已经被写上**
+   * （入口就是「▶️ 开始」），于是弹层进的是「正在计时中…」那一支 ——
+   * 步进器整段不渲染，直接读 `stepper-minutes` 只会拿到 null。
+   *
+   * 这条守卫验的是「**没在计时**时，步进器默认 = 计划用时」，所以先把
+   * `startedAt` 摘掉。走 export → 改 → import 往返，两个都是公开 action，
+   * 不去戳内部状态；`importBackup` 结尾会 `refresh()`，弹层会就地重渲染成
+   * 「手填」那一支。
+   *
+   * ⚠️ 别改成「点『没用计时器 · 直接填时间』」—— 那个旁路按钮现在藏着
+   * （`MANUAL_FILL_ENABLED`），点了什么都没有。
+   */
+  await page.evaluate(async () => {
+    const backup = await window.__kqf__.exportBackup()
+    for (const i of backup.data.taskInstances) delete i.startedAt
+    await window.__kqf__.importBackup(backup)
+  })
+  await sleep(900)
 
   const mins = await page.evaluate(() => {
     const d = document.querySelector('[role="dialog"]')
@@ -516,6 +546,89 @@ try {
     '弹层关得掉（没把后面的用例挡死）',
     !(await page.evaluate(() => !!document.querySelector('[role="dialog"]'))),
   )
+
+  /* ============ 7. 重做任务的提交入口 ============ */
+  console.log('\n【7】重做（家长打回）的任务交得上去')
+  /*
+    2026-09-21：藏掉「▶️ 开始」右边那个「没用计时器 · 直接填时间」之后
+    暴露出来的坑（见 src/features/tasks/ui.tsx 的 `MANUAL_FILL_ENABLED`）。
+
+    `startTimer()` 对非 `pending` 的实例**直接 return**，所以重做卡片上那个
+    「▶️ 开始」本来就是个**点了没反应的死按钮**；而原来唯一能打开提交弹层的
+    入口，就是它右边那个旁路按钮。只藏不补 ⇒ 重做任务永远交不上去 ——
+    而且是**静默**的：按钮在、文案对、点得动，就是什么也不发生。
+
+    现在重做卡片直接给「✅ 我做完啦！」。
+
+    ⚠️ 造这个状态走 export → 改 → import。不选「提交 + 家长打回」是因为那条路
+    依赖 `parentReviewEnabled`：关着时 `submitInstance` 会直接结算，
+    `settledAt` 一写上就再也打回不了，用例会随家长设置飘。
+  */
+  const rejectSeed = await page.evaluate(async () => {
+    const backup = await window.__kqf__.exportBackup()
+    const inst = backup.data.taskInstances.find((i) => i.status === 'pending')
+    if (!inst) return { ok: false, why: '没有 pending 实例' }
+    inst.status = 'rejected'
+    inst.rejectNote = '再检查一遍'
+    delete inst.startedAt
+    delete inst.actualMinutes
+    delete inst.settledAt
+    const r = await window.__kqf__.importBackup(backup)
+    return { ok: r.ok, why: r.message }
+  })
+  await sleep(900)
+  check('造得出一个「重做」实例', rejectSeed.ok, JSON.stringify(rejectSeed))
+
+  if (rejectSeed.ok) {
+    /*
+      ⚠️ 判据必须落在「**点得动**」上，不能只判「按钮在不在」——
+      这个 bug 的特征恰恰是按钮在、文案也对，点下去毫无反应。
+      所以这里真点一下，然后看提交弹层有没有开。
+
+      此刻页面上只有重做卡片那一个「我做完啦」（待完成卡片全是「▶️ 开始」），
+      所以按文案找是唯一的。
+    */
+    const clicked = await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find((x) =>
+        (x.textContent ?? '').includes('我做完啦'),
+      )
+      if (!b) return null
+      b.click()
+      return (b.textContent ?? '').trim()
+    })
+    await sleep(900)
+
+    const mode = await page.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]')
+      if (!d) return null
+      return {
+        stepper: !!d.querySelector('[data-testid="stepper-minutes"]'),
+        live: (d.textContent ?? '').includes('正在计时中'),
+      }
+    })
+    check(
+      '重做卡片有能打开提交弹层的入口（不是点了没反应的死按钮）',
+      !!mode,
+      clicked ? `点到「${clicked}」，弹层${mode ? '已开' : '没开'}` : '卡片上找不到提交入口',
+    )
+    check(
+      '重做不挂「上一次」留下的秒表（走手填那一支）',
+      !!mode && mode.stepper && !mode.live,
+      JSON.stringify(mode),
+    )
+
+    // 收尾：关掉弹层，否则它会盖住顶栏，后面【1】点不到设置入口
+    await page.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]')
+      const b = d
+        ? [...d.querySelectorAll('button')].find(
+            (x) => (x.getAttribute('aria-label') ?? '').includes('关闭'),
+          )
+        : null
+      b?.click()
+    })
+    await sleep(700)
+  }
 
   /* ============ 1. 名字不再被吃回去 ============ */
   console.log('\n【1】设置页改名字后点头像（20× CPU 降速，模拟真机）')

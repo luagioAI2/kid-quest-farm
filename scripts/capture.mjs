@@ -276,9 +276,15 @@ try {
   await shot('02-tasks')
 
   /* 3. 任务详情弹层滚到底 —— 验底部按钮没被导航盖住
-     ⚠️ 2026-09-21：计时器隐藏后，卡片上的入口从「▶️ 开始 / 没用计时器·直接填时间」
-     两个按钮变成一个「✅ 我做完啦！」（见 src/features/tasks/ui.tsx 的 TIMER_ENABLED）。
-     这里点的是**卡片上**那个（此刻弹层还没开，页面上没有同名按钮）。 */
+     ⚠️ 卡片上的入口跟着 `TIMER_ENABLED` / `MANUAL_FILL_ENABLED` 变
+     （见 src/features/tasks/ui.tsx）。**当前状态**是「计时器开着 + 右边那个
+     旁路按钮藏着」，所以待完成卡片上只有「▶️ 开始」，点它**只会开始计时、
+     弹层不开** —— 必须**先点开始、等卡片换成提交按钮、再点提交**，不能一步到位。
+     两个 `clickByText` 找的都是**卡片上**的按钮（此刻弹层还没开，页面上没有同名按钮）。 */
+  await clickByText('开始')
+  await wait(800)
+  await shot('02b-task-running')
+
   await clickByText('我做完啦')
   await wait(700)
   await page.evaluate(() => {
@@ -440,6 +446,17 @@ try {
   ]) {
     await clickByText(label, 'nav')
     await wait(700)
+    /* ⚠️ 切 tab **不会**重置滚动位置 —— 前面几步把页面滚下去了，
+       直接拍的话 09-redeem 是从中间开始的，顶部那句
+       「💱 参考：1 元 ≈ N 分」根本不在图里，走查等于没看到它。
+       （2026-09-21 加现金参考时发现的：第一版图集就是从这个位置开始拍的。） */
+    await page.evaluate(() => {
+      window.scrollTo(0, 0)
+      for (const el of document.querySelectorAll('main, .overflow-y-auto')) {
+        el.scrollTop = 0
+      }
+    })
+    await wait(300)
     await shot(name)
   }
 
@@ -479,6 +496,18 @@ try {
   })
   await wait(800)
   await shot('12-profit-ratio')
+
+  /* 12c. 设置 · 规则 tab：家长设「现金对积分」参考汇率（2026-09-21 新增）
+     ⚠️ 新加的界面必须进图集 —— 否则第 4 层走查对这一屏**等于没验**
+     （§13 那条注释就是踩过这个坑之后写的）。 */
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('*')].find(
+      (x) => x.children.length === 0 && /现金对积分/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'center' })
+  })
+  await wait(800)
+  await shot('12c-cash-ratio')
 
   /* 13. 家长确认 · 打分弹层
      ⚠️ 这个界面以前**不在图集里**。2026-09-21 改它的文案

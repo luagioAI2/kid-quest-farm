@@ -14,6 +14,9 @@ import type { RedeemItem, Task } from './types'
    这是"作业"最自然的形态 —— 晚一点做完不扣分，拖太久按比例
    衰减，做完由家长打质量分。免扣分的形态在「学会一项新本领」
    里示范（`allowLateNoPenalty: true`）。
+
+   ⚠️ 2026-09-21：用户要求把任务积分整体减半（每日任务改成 10 分）。
+   逐条对照表见下面 `SEED_REDEEM_ITEMS` 上方的定价锚点注释。
    ============================================================ */
 
 type SeedTask = Omit<Task, 'id' | 'createdAt' | 'updatedAt'>
@@ -27,8 +30,8 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'study',
     cycle: 'daily',
     plannedMinutes: 45,
-    basePoints: 20,
-    qualityBonusPoints: 8,
+    basePoints: 10,
+    qualityBonusPoints: 4,
     allowOvertime: true,
     allowLateNoPenalty: false,
     qualityRated: true,
@@ -40,8 +43,8 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'study',
     cycle: 'daily',
     plannedMinutes: 45,
-    basePoints: 20,
-    qualityBonusPoints: 8,
+    basePoints: 10,
+    qualityBonusPoints: 4,
     allowOvertime: true,
     allowLateNoPenalty: false,
     qualityRated: true,
@@ -53,8 +56,8 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'study',
     cycle: 'daily',
     plannedMinutes: 45,
-    basePoints: 20,
-    qualityBonusPoints: 8,
+    basePoints: 10,
+    qualityBonusPoints: 4,
     allowOvertime: true,
     allowLateNoPenalty: false,
     qualityRated: true,
@@ -66,8 +69,8 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'study',
     cycle: 'daily',
     plannedMinutes: 45,
-    basePoints: 20,
-    qualityBonusPoints: 8,
+    basePoints: 10,
+    qualityBonusPoints: 4,
     allowOvertime: true,
     allowLateNoPenalty: false,
     qualityRated: true,
@@ -78,8 +81,8 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'study',
     cycle: 'daily',
     plannedMinutes: 45,
-    basePoints: 20,
-    qualityBonusPoints: 8,
+    basePoints: 10,
+    qualityBonusPoints: 4,
     allowOvertime: true,
     allowLateNoPenalty: false,
     qualityRated: true,
@@ -90,8 +93,8 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'study',
     cycle: 'daily',
     plannedMinutes: 45,
-    basePoints: 20,
-    qualityBonusPoints: 8,
+    basePoints: 10,
+    qualityBonusPoints: 4,
     allowOvertime: true,
     allowLateNoPenalty: false,
     qualityRated: true,
@@ -102,8 +105,8 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'chore',
     cycle: 'daily',
     plannedMinutes: 15,
-    basePoints: 12,
-    qualityBonusPoints: 6,
+    basePoints: 6,
+    qualityBonusPoints: 3,
     allowOvertime: true,
     allowLateNoPenalty: false,
     qualityRated: true,
@@ -117,7 +120,7 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'art',
     cycle: 'weekly',
     plannedMinutes: 15,
-    basePoints: 8,
+    basePoints: 4,
     qualityBonusPoints: 0,
     allowOvertime: false,
     allowLateNoPenalty: true,
@@ -131,7 +134,7 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'art',
     cycle: 'weekly',
     plannedMinutes: 15,
-    basePoints: 8,
+    basePoints: 4,
     qualityBonusPoints: 0,
     allowOvertime: false,
     allowLateNoPenalty: true,
@@ -145,7 +148,7 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'reading',
     cycle: 'weekly',
     plannedMinutes: 15,
-    basePoints: 8,
+    basePoints: 4,
     qualityBonusPoints: 0,
     allowOvertime: false,
     allowLateNoPenalty: true,
@@ -162,8 +165,8 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'reading',
     cycle: 'monthly',
     plannedMinutes: 40,
-    basePoints: 30,
-    qualityBonusPoints: 15,
+    basePoints: 15,
+    qualityBonusPoints: 8,
     allowOvertime: true,
     allowLateNoPenalty: false,
     qualityRated: true,
@@ -177,8 +180,8 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'habit',
     cycle: 'yearly',
     plannedMinutes: 60,
-    basePoints: 100,
-    qualityBonusPoints: 50,
+    basePoints: 50,
+    qualityBonusPoints: 25,
     allowOvertime: true,
     allowLateNoPenalty: true,
     qualityRated: true,
@@ -192,20 +195,48 @@ export const SEED_TASKS: SeedTask[] = [
    ------------------------------------------------------------
    定价锚点说明（重要）：
    孩子一天的稳定收入大约是
-     6 个每日任务 × 20 分 + 1 个家务 12 分 = 132 分
-     （家长打了质量分后最高约 186 分）
+     6 个每日任务 × 10 分 + 1 个家务 6 分 = 66 分
+     （家长打了质量分后最高 93 分）
      + 农场 1~2 小时 ≈ 100~200 分
-     ≈ 250~330 分/天左右（有连击和签到奖励时更高）。
+     ≈ 166~266 分/天（有连击和签到奖励时更高）。
 
-   注：每日任务从「6 个 × 10~20 分」改成「6 个 × 20 分 + 家务」
-   之后，每日收入上浮了约 30%。下面这几档价格**没有跟着涨** ——
-   相当于整体便宜了一点，孩子攒大件更快。若要维持原来的攒钱
-   节奏，把 600 / 1500 两档各上调约 30% 即可。
+   **2026-09-21：任务积分整体减半。** 用户原话：
 
-   所以：
+   > 「帮我把现在的固定的默认的每日任务改成 10 积分，其他的也缩小
+   >   2 倍吧。现有的。积分取整。」
+
+   改动范围是**任务**这一侧（每日 / 签到 / 长期），逐条：
+     学科任务   20 + 8  →  10 + 4
+     家务       12 + 6  →   6 + 3
+     签到        8      →   4
+     月度       30 + 15 →  15 + 8    ← 15 ÷ 2 = 7.5，按「取整」进到 8
+     年度      100 + 50 →  50 + 25
+   于是每日任务收入从 132 分（打质量分 186 分）降到 66 分（93 分）。
+
+   ⚠️ **下面这几档价格没有跟着降，农场收入也没动 —— 这是有意的，不是漏改。**
+   后果要说清楚：孩子的攒钱速度大致减半，所以
+     · 「大件愿望」从攒一周左右变成**攒两周左右**；
+     · 收入结构从「任务 ≈ 农场」变成**农场占大头**（66 vs 100~200）。
+   这是把经济**收紧**了 —— 家长谈判空间更大，但孩子的即时反馈也变慢了。
+   若只想让数字变小、不想动难度，就把下面所有 cost 和农场 `seedCost` /
+   `cost` / 解锁价一起减半（那样整体是等比缩放，难度不变）。
+
+   ⚠️ **还有两处积分来源这次没动，是有意留着等家长确认的**（不要以为减半
+   已经覆盖了全部任务侧收入）：
+     · **签到阶梯奖励** —— `domain/recurrence.ts` 的 `defaultTiers()`：
+       每周 10 / 30 / 60、每月 50 / 150 / 400、每年 300 / 1500 / 5000。
+       三个签到任务加起来 ≈ 300 分/周 ≈ 43 分/天，**不是小数目**。
+       用户说的是「每日任务改成 10 分、其他的也缩小 2 倍」，阶梯奖励是
+       **规则模板**（任何签到任务都用），不是种子任务里的数值，所以没算进去。
+     · **连击奖励** —— `DEFAULT_SETTINGS.streakBonusPerDay/Cap`（2 / 20）。
+       同上，是全局规则默认值。
+   要一起减半的话说一声，两处都是单点改动。
+
+   所以（保持原档位不变）：
    * 「日常小确幸」定在 30~60 分 —— 每天都能换到一次，保持动力
    * 「周末特权」定在 150~300 分 —— 需要攒一两天
    * 「大件愿望」定在 600~1500 分 —— 需要攒一周左右
+     ⚠️ 2026-09-21 起实际要攒**两周左右**，见上面的减半说明。
 
    这样「积分不会膨胀到兑换失控」：孩子每次想换大件都得等，
    家长就有充足的谈判空间。
