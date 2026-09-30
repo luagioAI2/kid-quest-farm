@@ -1,0 +1,1154 @@
+<!doctype html>
+<html lang="zh-CN" class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- ==========================================================
+         ★ 上线前必改（4 处，全部搜 "REPLACE" 就能找到）
+         1. 域名：把 https://www.kidquestfarm.cn/ 换成你自己的域名
+            （canonical / og:url / og:image / JSON-LD 里都要换）
+         2. 备案号：搜 "京ICP备" 与 "京公网安备"，换成你自己的号
+         3. 联系邮箱：搜 "hello@kidquestfarm.cn"
+         4. 下载链接：若 APK 放在别处，改 href 里的 download/xxx.apk
+         ========================================================== -->
+
+    <title>小任务农场｜儿童任务激励与财商启蒙 App — 完成任务，经营大农场</title>
+    <meta
+      name="description"
+      content="小任务农场是一款给 6–9 岁孩子的任务激励 App：把作业、家务、阅读变成可计时、可评分的任务，再用积分经营一座会生长的农场，让孩子在玩中学会时间管理、延迟满足与投资思维。无广告、无内购、数据只存本机，支持安卓 APK 与手机浏览器。"
+    />
+    <meta
+      name="keywords"
+      content="儿童任务app,孩子做家务奖励,积分奖励表,儿童财商启蒙,时间管理训练,延迟满足,番茄钟儿童版,农场游戏,家长管控,无广告儿童应用,安卓APK下载"
+    />
+    <link rel="canonical" href="https://www.kidquestfarm.cn/" />
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1" />
+    <meta name="theme-color" content="#fffaf2" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="author" content="小任务农场" />
+    <meta name="application-name" content="小任务农场" />
+
+    <!-- 搜索引擎站长平台校验（拿到验证码后取消注释并替换） -->
+    <!-- <meta name="baidu-site-verification" content="code-REPLACE" /> -->
+    <!-- <meta name="google-site-verification" content="REPLACE" /> -->
+    <!-- <meta name="msvalidate.01" content="REPLACE" /> -->
+
+    <link rel="icon" href="favicon.png" sizes="any" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="小任务农场" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content="小任务农场｜完成任务，经营大农场" />
+    <meta
+      property="og:description"
+      content="给 6–9 岁孩子的任务激励 App：完成任务拿积分，用积分经营一座会长大的农场。时间管理、延迟满足、投资思维，一次玩明白。无广告、无内购、数据只存本机。"
+    />
+    <meta property="og:url" content="https://www.kidquestfarm.cn/" />
+    <meta property="og:image" content="https://www.kidquestfarm.cn/og-cover.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="小任务农场 App 图标与手机界面" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="小任务农场｜完成任务，经营大农场" />
+    <meta
+      name="twitter:description"
+      content="给 6–9 岁孩子的任务激励 App：完成任务拿积分，用积分经营一座会长大的农场。无广告、无内购、数据只存本机。"
+    />
+    <meta name="twitter:image" content="https://www.kidquestfarm.cn/og-cover.png" />
+
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preload" as="image" href="img/shot-tasks.png" />
+
+    <!-- 结构化数据：软件信息 + 站点 + 组织 + 常见问题 -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://www.kidquestfarm.cn/#website",
+            "url": "https://www.kidquestfarm.cn/",
+            "name": "小任务农场",
+            "alternateName": "Kid Quest Farm",
+            "inLanguage": "zh-CN",
+            "description": "给 6–9 岁孩子的任务激励与财商启蒙 App",
+            "publisher": { "@id": "https://www.kidquestfarm.cn/#org" }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://www.kidquestfarm.cn/#org",
+            "name": "小任务农场",
+            "url": "https://www.kidquestfarm.cn/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://www.kidquestfarm.cn/img/icon-512.png",
+              "width": 512,
+              "height": 512
+            }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://www.kidquestfarm.cn/#app",
+            "name": "小任务农场",
+            "alternateName": "Kid Quest Farm",
+            "applicationCategory": "EducationalApplication",
+            "applicationSubCategory": "儿童任务管理与财商启蒙",
+            "operatingSystem": "Android 7.0+, iOS, Web",
+            "softwareVersion": "1.0.0",
+            "inLanguage": "zh-CN",
+            "isAccessibleForFree": true,
+            "description": "把作业、家务、阅读变成可计时、可评分的任务，再用积分经营一座会生长的农场。帮助 6–9 岁孩子建立时间管理、延迟满足与投资思维。无广告、无内购、数据只存本机。",
+            "url": "https://www.kidquestfarm.cn/",
+            "downloadUrl": "https://www.kidquestfarm.cn/download/kid-quest-farm.apk",
+            "installUrl": "https://www.kidquestfarm.cn/app/",
+            "image": "https://www.kidquestfarm.cn/img/icon-512.png",
+            "screenshot": [
+              "https://www.kidquestfarm.cn/img/shot-tasks.png",
+              "https://www.kidquestfarm.cn/img/shot-farm.png",
+              "https://www.kidquestfarm.cn/img/shot-market.png",
+              "https://www.kidquestfarm.cn/img/shot-redeem.png"
+            ],
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "CNY",
+              "availability": "https://schema.org/InStock"
+            },
+            "audience": {
+              "@type": "PeopleAudience",
+              "suggestedMinAge": 6,
+              "suggestedMaxAge": 9,
+              "audienceType": "6–9 岁儿童及其家长"
+            },
+            "featureList": [
+              "任务计时与按时间衰减的积分结算",
+              "每天 / 每周 / 每月 / 每年周期任务与签到阶梯奖励",
+              "家长审核与质量打分",
+              "农场经营：12 块地、8 种作物、5 种动物",
+              "市场行情波动与背包待售",
+              "积分与丰收币双账本",
+              "兑换愿望清单与参考汇率",
+              "全量数据导出与恢复",
+              "完全离线可用，无广告无内购"
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://www.kidquestfarm.cn/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "适合几岁的孩子？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "主要面向 6–9 岁（小学低年级）。这个年龄段刚好开始有作业和固定的家务，也需要一个看得见的即时反馈。更小的孩子可以在家长陪同下玩农场部分；更大的孩子可以自己调整任务和积分规则。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "需要联网吗？要注册账号吗？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "都不需要。小任务农场是单机应用，所有数据存在你自己的设备上，不注册、不登录、不联网也能完整使用。飞机上、没 WiFi 的爷爷奶奶家都能照常玩。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "孩子的数据会被上传吗？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "不会。应用没有任何服务端，也没有第三方统计和广告 SDK。任务、积分、农场记录全部保存在本机的浏览器数据库里，只有通过「导出备份」你才能把数据拿出来。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "有广告吗？需要内购吗？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "没有广告，也没有任何内购和付费解锁。全部内容（12 块地、8 种作物、5 种动物、全部任务类型）都在应用内，不需要额外付费。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "孩子会不会自己偷偷加分？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "不会。孩子端只能提交任务、不能自评分数。打开「家长审核」后，孩子提交的任务会停在「等爸爸妈妈看」，必须由家长输入密码、给出质量分并点确认奖励，积分才真正入账。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "换手机或换浏览器，数据会丢吗？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "可以用「导出备份」把全部数据（任务、实例、积分流水、背包、农场、设置）存成一个 JSON 文件，在新设备上用「导入备份」恢复，接着玩。建议每隔一段时间导出一次。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "积分和真实零花钱怎么对应？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "家长可以在设置里定一个参考汇率（默认 1 元 ≈ 10 分），兑换页的每件商品旁边就会标出「≈ ¥3」。这只是给家长的参照，扣多少分永远看标价本身，不影响任何数值。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "农场里的「丰收币」是什么？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "丰收币是卖出农产品后得到的第二种货币，和积分是两本独立的账。它只能用来兑换愿望，不能换回积分、也不能买种子和土地——这样设计是为了避免出现「种地→赚钱→买更多地→赚更多钱」的无限循环，让孩子明白投入和回报是有边界的。"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+
+  <body>
+    <!-- 页面顶部柔光。必须在 <body> 的第一位：它要铺到 y=0，
+         从透明导航条后面透上来，hero 里那个 overflow:hidden 会把它切断。 -->
+    <div class="page-glow" aria-hidden="true"></div>
+
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <div class="progress" id="progress" aria-hidden="true"></div>
+
+    <!-- ================= 导航 ================= -->
+    <header class="nav" id="nav">
+      <div class="wrap nav__inner">
+        <a class="brand" href="./">
+          <img
+            class="brand__mark"
+            src="img/icon-192.png"
+            width="38"
+            height="38"
+            alt="小任务农场 应用图标"
+          />
+          <span>
+            <span class="brand__name">小任务农场</span>
+            <span class="brand__sub">Kid Quest Farm</span>
+          </span>
+        </a>
+
+        <button
+          class="nav__burger"
+          id="burger"
+          type="button"
+          aria-label="打开导航菜单"
+          aria-expanded="false"
+          aria-controls="navlinks"
+        >
+          ☰
+        </button>
+
+        <nav class="nav__links" id="navlinks" aria-label="主导航">
+          <a class="nav__link" href="#why">它帮孩子什么</a>
+          <a class="nav__link" href="#how">怎么玩</a>
+          <a class="nav__link" href="#money">财商启蒙</a>
+          <a class="nav__link" href="#shots">界面预览</a>
+          <a class="nav__link" href="#parents">给家长</a>
+          <a class="nav__link" href="#faq">常见问题</a>
+          <a class="btn nav__cta" href="#download">免费下载</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ================= Hero ================= -->
+      <section class="hero">
+        <div class="wrap">
+          <div class="hero__grid">
+            <div>
+              <p class="eyebrow">🌾 6–9 岁 · 家长放心 · 完全离线</p>
+
+              <h1 class="h1 hero__title">完成小任务，<br /><em>经营大农场</em></h1>
+
+              <p class="hero__lead">
+                催作业、催家务，催到最后两个人都累。小任务农场把「完成任务」变成一座
+                <strong>会长大的农场</strong>：领任务 → 计时完成 → 家长确认 → 拿到积分 →
+                种地养动物 → 卖个好价钱 → 兑换愿望。
+                <span class="mark">孩子自己就愿意做了。</span>
+              </p>
+
+              <ul class="hero__trust">
+                <li>🚫 无广告</li>
+                <li>💳 无内购</li>
+                <li>🔒 数据只存本机</li>
+                <li>✈️ 不联网也能玩</li>
+              </ul>
+
+              <div class="hero__cta">
+                <div class="btn-row">
+                  <a class="btn btn--lg" href="#download">⬇️ 下载安卓版</a>
+                  <a class="btn btn--lg btn--ghost" href="app/">🌐 在线体验</a>
+                </div>
+                <p class="hero__note">免费 · 不用注册 · 安装包约 5.5 MB · 安卓 7.0 及以上</p>
+              </div>
+            </div>
+
+            <!-- 手机模型 + 浮动徽章 -->
+            <div class="showcase">
+              <div class="phone">
+                <div class="phone__screen">
+                  <img
+                    src="img/shot-tasks.png"
+                    width="390"
+                    height="844"
+                    alt="小任务农场「任务」页：今日任务列表，每张任务卡显示计划用时与积分，右侧是「开始」按钮"
+                  />
+                </div>
+              </div>
+
+              <div class="float-card float-card--a">
+                <span class="float-card__emoji">🪙</span>
+                <span
+                  >+10 积分<span class="float-card__sub">语文作业 · 按时完成</span></span
+                >
+              </div>
+              <div class="float-card float-card--b">
+                <span class="float-card__emoji">🌾</span>
+                <span>丰收 +8<span class="float-card__sub">胡萝卜 · 卖在好价</span></span>
+              </div>
+              <div class="float-card float-card--c">
+                <span class="float-card__emoji">🔥</span>
+                <span>连击 3 天<span class="float-card__sub">每天都完成，奖励递增</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 数据条 -->
+          <ul class="stats reveal">
+            <li class="stat">
+              <div class="stat__num tnum" data-count="12">12</div>
+              <div class="stat__label">块土地，从 4 块免费开始</div>
+            </li>
+            <li class="stat">
+              <div class="stat__num tnum" data-count="8">8</div>
+              <div class="stat__label">种作物，最短 3 分钟就能收</div>
+            </li>
+            <li class="stat">
+              <div class="stat__num tnum" data-count="5">5</div>
+              <div class="stat__label">种动物，养大后持续产出</div>
+            </li>
+            <li class="stat">
+              <div class="stat__num tnum" data-count="0">0</div>
+              <div class="stat__label">条广告 · 0 次内购 · 0 个账号</div>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================= 四大支柱 ================= -->
+      <section class="section section--paper" id="why">
+        <div class="wrap">
+          <div class="section-head section-head--center reveal">
+            <p class="eyebrow">🎯 它到底帮孩子什么</p>
+            <h2 class="h2">不只是「做完给奖励」，而是四件事一起长</h2>
+            <p class="lead">
+              市面上的积分表大多停在「做完加分」。小任务农场把加分之后的每一步也做成了玩法 ——
+              时间、反馈、账本、投资，四件事互相咬合。
+            </p>
+          </div>
+
+          <div class="pillars">
+            <article class="card card--hover pillar reveal">
+              <div class="ico ico--sky">📋</div>
+              <h3 class="pillar__title">计划 · 让时间看得见</h3>
+              <p class="pillar__desc">
+                <strong>「什么时间做完，决定拿多少分」</strong>——这是整个 App 的心脏。
+                任务卡自带秒表，按时完成拿全额，超时按比例衰减，超出一倍归零。
+                孩子第一次直观感受到「拖延是有代价的」。
+              </p>
+              <ul class="pillar__list">
+                <li>每天 / 每周 / 每月 / 每年四种周期，自动生成不用手填</li>
+                <li>漏几天补几天，不会因为忘了一天就把进度清零</li>
+                <li>可自定义「一天从几点开始」—— 熬夜到 1 点做的作业仍算昨天</li>
+              </ul>
+            </article>
+
+            <article class="card card--hover pillar reveal">
+              <div class="ico ico--sun">🔥</div>
+              <h3 class="pillar__title">激励 · 反馈快到孩子看得懂</h3>
+              <p class="pillar__desc">
+                做完了要立刻有响动。加分有飘分动画、音效和震动，连续完成有连击奖励，
+                完成还会掉落贴纸、奖章、宝石进背包收藏。
+              </p>
+              <ul class="pillar__list">
+                <li>连续完成有 🔥 连击奖励，每天递增、有上限</li>
+                <li>0 分时给的是鼓励文案而不是责备，未到阈值也至少留 1 分</li>
+                <li>练字、阅读这类习惯任务按累计天数给阶梯奖励，坚持 3 天、5 天各有惊喜</li>
+              </ul>
+            </article>
+
+            <article class="card card--hover pillar reveal">
+              <div class="ico ico--grass">🪙</div>
+              <h3 class="pillar__title">资产管理 · 积分是一本真账</h3>
+              <p class="pillar__desc">
+                积分不是随手写在纸上的数字。每一分都有流水，能查、能对、能导出，
+                花之前还能看到「换完还剩多少」。
+              </p>
+              <ul class="pillar__list">
+                <li>完整积分流水，每一次加分扣分都有据可查</li>
+                <li>家长可设「1 元 ≈ 10 分」的参考汇率，商品旁标出「≈ ¥3」，让分数和钱建立联系</li>
+                <li>全量导出 JSON 备份，换手机、换浏览器都能接着玩</li>
+              </ul>
+            </article>
+
+            <article class="card card--hover pillar reveal">
+              <div class="ico ico--grape">📈</div>
+              <h3 class="pillar__title">投资 · 农场是一座沙盘</h3>
+              <p class="pillar__desc">
+                买种子是投入，收成是回报，<strong>什么时候卖决定回报多少</strong>。
+                市场行情每天都在波动，孩子要学会等、学会判断，也学会接受偶尔的坏运气。
+              </p>
+              <ul class="pillar__list">
+                <li>收获时二选一：当场卖掉，或收进背包等一个好价钱</li>
+                <li>市场有行情指数、涨跌箭头和 7 日走势，价格低了就是低了</li>
+                <li>虫灾、减产真实存在，但动物不会死，只是这一批少收一点</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 结算机制 ================= -->
+      <section class="section" id="rule">
+        <div class="wrap">
+          <div class="section-head reveal">
+            <p class="eyebrow">⏱️ 核心机制</p>
+            <h2 class="h2">不是「做完就满分」，而是「多快做完，拿多少分」</h2>
+            <p class="lead">
+              把时间显式地写进结算里，孩子才会开始自己安排节奏 ——
+              这是整套玩法里最值钱的一条规则。
+            </p>
+          </div>
+
+          <div class="rule-grid">
+            <article class="rule rule--good reveal">
+              <div class="rule__head">
+                <span class="rule__label">在计划时间内完成</span>
+                <span class="rule__score tnum">100%</span>
+              </div>
+              <p class="rule__desc">45 分钟的作业，45 分钟内做完 —— 基础分一分不少。</p>
+              <div class="rule__bar" data-bar="100"><span></span></div>
+            </article>
+
+            <article class="rule rule--mid reveal">
+              <div class="rule__head">
+                <span class="rule__label">超时，但没超一倍</span>
+                <span class="rule__score tnum">50%</span>
+              </div>
+              <p class="rule__desc">
+                超出计划用时 50%，就只拿一半分。拖得越久，衰减越多。
+              </p>
+              <div class="rule__bar" data-bar="50"><span></span></div>
+            </article>
+
+            <article class="rule rule--zero reveal">
+              <div class="rule__head">
+                <span class="rule__label">超过计划时间一倍</span>
+                <span class="rule__score tnum">0</span>
+              </div>
+              <p class="rule__desc">
+                45 分钟的作业拖到 90 分钟以上，这一轮就是 0 分。
+                <br />（「学会一项新本领」这类任务可以勾选「超期不扣分」。）
+              </p>
+              <div class="rule__bar" data-bar="3"><span></span></div>
+            </article>
+          </div>
+
+          <div class="formula reveal">
+            <div>得分 = <b>round</b>( 基础分 × ( <em>2</em> − 实际用时 ÷ 计划用时 ) )</div>
+            <div>质量达标 → 在基础分之上<b>额外加积分</b>（用时与质量是两个独立维度）</div>
+            <div>只要还没到归零阈值 → <em>至少保留 1 分</em>，不让「差几秒就颗粒无收」挫伤积极性</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 玩法闭环 ================= -->
+      <section class="section section--paper" id="how">
+        <div class="wrap">
+          <div class="section-head section-head--center reveal">
+            <p class="eyebrow">🔄 一天的样子</p>
+            <h2 class="h2">一个能自己转起来的闭环</h2>
+            <p class="lead">
+              孩子不需要理解「激励机制」这四个字。他只需要知道：今天做完，农场就会变大一点。
+            </p>
+          </div>
+
+          <ol class="loop reveal">
+            <li class="loop__step"><span class="loop__idx">1</span><i>📋</i>领任务</li>
+            <li class="loop__arrow" aria-hidden="true">→</li>
+            <li class="loop__step"><span class="loop__idx">2</span><i>▶️</i>开秒表做</li>
+            <li class="loop__arrow" aria-hidden="true">→</li>
+            <li class="loop__step"><span class="loop__idx">3</span><i>🙋</i>提交完成</li>
+            <li class="loop__arrow" aria-hidden="true">→</li>
+            <li class="loop__step"><span class="loop__idx">4</span><i>👀</i>家长确认</li>
+            <li class="loop__arrow" aria-hidden="true">→</li>
+            <li class="loop__step"><span class="loop__idx">5</span><i>🪙</i>积分到账</li>
+            <li class="loop__arrow" aria-hidden="true">→</li>
+            <li class="loop__step"><span class="loop__idx">6</span><i>🌱</i>买种子种地</li>
+            <li class="loop__arrow" aria-hidden="true">→</li>
+            <li class="loop__step"><span class="loop__idx">7</span><i>🥕</i>收获</li>
+            <li class="loop__arrow" aria-hidden="true">→</li>
+            <li class="loop__step"><span class="loop__idx">8</span><i>🌾</i>卖个好价</li>
+            <li class="loop__arrow" aria-hidden="true">→</li>
+            <li class="loop__step"><span class="loop__idx">9</span><i>🎁</i>兑换愿望</li>
+          </ol>
+
+          <div class="dl-note reveal" style="max-width: 780px; margin-inline: auto">
+            💡 <strong>为什么家长确认这一步不能省：</strong>孩子端只能提交、不能自评分数。
+            打开「家长审核」后，任务会停在「等爸爸妈妈看」，必须由家长给质量分并点确认，
+            积分才真正入账。结算引擎是同一套，家长只是最后一公里的确认人。
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 财商启蒙 ================= -->
+      <section class="section" id="money">
+        <div class="wrap">
+          <div class="section-head reveal">
+            <p class="eyebrow">💰 财商启蒙</p>
+            <h2 class="h2">一座农场，就是一堂能玩的投资课</h2>
+            <p class="lead">
+              课本里讲不清的「成本、收益、风险、等待」，在这里每天都要亲手做一次决定。
+            </p>
+          </div>
+
+          <div class="money">
+            <div class="money__list">
+              <article class="money__item reveal">
+                <div class="ico ico--sm ico--sun">🌱</div>
+                <div>
+                  <h3>先投入，才有回报</h3>
+                  <p>
+                    种子要用积分买。想多种一块地，得先攒钱解锁。孩子第一次明白：
+                    手里的积分不是只能花掉，也可以拿去「生钱」。
+                  </p>
+                </div>
+              </article>
+
+              <article class="money__item reveal">
+                <div class="ico ico--sm ico--grass">⏳</div>
+                <div>
+                  <h3>等待是有价值的</h3>
+                  <p>
+                    作物和动物按真实时间生长，关掉 App 也在长。收成的时候要做一个选择：
+                    <strong>当场卖掉，还是收进背包等好价？</strong>——这就是延迟满足最具体的一次练习。
+                  </p>
+                </div>
+              </article>
+
+              <article class="money__item reveal">
+                <div class="ico ico--sm ico--tangerine">📉</div>
+                <div>
+                  <h3>价格会涨，也会跌</h3>
+                  <p>
+                    市场每天更新行情，有涨有跌，还有「好价」和「便宜」的提示。
+                    同一批胡萝卜，早卖和晚卖能差出不少。孩子会自己学会看行情，而不是随手就卖。
+                  </p>
+                </div>
+              </article>
+
+              <article class="money__item reveal">
+                <div class="ico ico--sm ico--berry">🐛</div>
+                <div>
+                  <h3>风险是真实存在的</h3>
+                  <p>
+                    每次收获都会掷一次骰子，可能丰收，也可能遇上虫灾减产。
+                    动物不会死，只是这一批少收点 —— 让孩子体验「运气会影响结果，但不至于全盘皆输」。
+                  </p>
+                </div>
+              </article>
+            </div>
+
+            <!-- 价格区间示意 -->
+            <div class="band reveal">
+              <div class="band__title">价格每天都在动，但不会无边无际</div>
+              <div class="band__hint">
+                每种农产品都有自己的价格区间：上不去天花板，也跌不到零。
+                每一轮能卖回的钱还有一个上限 —— 卖满了就得换个东西种，
+                不会出现「一直种同一样东西就能无限刷钱」。
+              </div>
+
+              <svg viewBox="0 0 520 250" role="img" aria-label="农产品价格区间示意图：价格在硬顶与下限之间波动">
+                <defs>
+                  <linearGradient id="bandFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#dcfce7" stop-opacity="0.95" />
+                    <stop offset="100%" stop-color="#f0fdf4" stop-opacity="0.6" />
+                  </linearGradient>
+                  <linearGradient id="lineStroke" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#22c55e" />
+                    <stop offset="100%" stop-color="#f59e0b" />
+                  </linearGradient>
+                </defs>
+
+                <!-- 区间带 -->
+                <rect x="42" y="46" width="446" height="152" rx="14" fill="url(#bandFill)" />
+
+                <!-- 硬顶 / 下限 -->
+                <line
+                  x1="42"
+                  y1="46"
+                  x2="488"
+                  y2="46"
+                  stroke="#16a34a"
+                  stroke-width="2"
+                  stroke-dasharray="7 6"
+                />
+                <line
+                  x1="42"
+                  y1="198"
+                  x2="488"
+                  y2="198"
+                  stroke="#f43f5e"
+                  stroke-width="2"
+                  stroke-dasharray="7 6"
+                />
+
+                <!-- 基准价 -->
+                <line
+                  x1="42"
+                  y1="122"
+                  x2="488"
+                  y2="122"
+                  stroke="#cbbba8"
+                  stroke-width="1.5"
+                  stroke-dasharray="3 5"
+                />
+
+                <text x="496" y="51" font-size="13" fill="#15803d" font-weight="700">硬顶</text>
+                <text x="496" y="127" font-size="13" fill="#9a8875" font-weight="700">基准价</text>
+                <text x="496" y="203" font-size="13" fill="#e11d48" font-weight="700">下限</text>
+
+                <!-- 价格折线（7 天） -->
+                <polyline
+                  points="66,168 126,150 186,88 246,58 306,104 366,142 426,74 470,64"
+                  fill="none"
+                  stroke="url(#lineStroke)"
+                  stroke-width="3.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <g fill="#fff" stroke="#f59e0b" stroke-width="3">
+                  <circle cx="66" cy="168" r="5" />
+                  <circle cx="126" cy="150" r="5" />
+                  <circle cx="186" cy="88" r="5" />
+                  <circle cx="246" cy="58" r="5" />
+                  <circle cx="306" cy="104" r="5" />
+                  <circle cx="366" cy="142" r="5" />
+                  <circle cx="426" cy="74" r="5" />
+                  <circle cx="470" cy="64" r="5" />
+                </g>
+
+                <!-- 「好价」标注 -->
+                <g>
+                  <rect x="392" y="20" width="72" height="26" rx="13" fill="#fde68a" />
+                  <text x="428" y="38" font-size="13" fill="#b45309" font-weight="800" text-anchor="middle">
+                    好价
+                  </text>
+                </g>
+
+                <!-- 天数刻度 -->
+                <g font-size="12" fill="#b3a08c" font-weight="700" text-anchor="middle">
+                  <text x="66" y="228">D1</text>
+                  <text x="186" y="228">D3</text>
+                  <text x="306" y="228">D5</text>
+                  <text x="426" y="228">D7</text>
+                </g>
+              </svg>
+
+              <p class="band__hint" style="margin: 6px 0 0">
+                示意用，实际数值由 App 内的行情引擎按天生成。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 界面预览 ================= -->
+      <section class="section section--paper" id="shots">
+        <div class="wrap">
+          <div class="section-head section-head--center reveal">
+            <p class="eyebrow">📱 界面预览</p>
+            <h2 class="h2">真正在用的界面，不是设计稿</h2>
+            <p class="lead">
+              所有插画、天空、草地和地块都是用代码画的，没有一张图片素材 ——
+              所以包体很小，而且完全离线可用。
+            </p>
+          </div>
+
+          <div class="shots">
+            <figure class="shot reveal">
+              <div class="shot__frame">
+                <img
+                  src="img/shot-tasks.png"
+                  width="390"
+                  height="844"
+                  loading="lazy"
+                  alt="任务页：今日任务列表，显示计划用时、积分和开始按钮"
+                />
+              </div>
+              <figcaption><b>任务</b>今天要做的事，一目了然</figcaption>
+            </figure>
+
+            <figure class="shot reveal">
+              <div class="shot__frame">
+                <img
+                  src="img/shot-running.png"
+                  width="390"
+                  height="844"
+                  loading="lazy"
+                  alt="任务进行中：卡片上显示实时秒表和「我做完啦」按钮"
+                />
+              </div>
+              <figcaption><b>计时</b>秒表一开，时间就有价</figcaption>
+            </figure>
+
+            <figure class="shot reveal">
+              <div class="shot__frame">
+                <img
+                  src="img/shot-farm.png"
+                  width="390"
+                  height="844"
+                  loading="lazy"
+                  alt="农场页：12 块土地网格，部分已解锁，底部有种子、动物、市场三个入口"
+                />
+              </div>
+              <figcaption><b>农场</b>12 块地，从 4 块开始</figcaption>
+            </figure>
+
+            <figure class="shot reveal">
+              <div class="shot__frame">
+                <img
+                  src="img/shot-harvest.png"
+                  width="390"
+                  height="844"
+                  loading="lazy"
+                  alt="收获弹层：可以选择「收进背包」等好价，或「当场卖掉」按今天的市价结算"
+                />
+              </div>
+              <figcaption><b>收获</b>当场卖，还是等好价？</figcaption>
+            </figure>
+
+            <figure class="shot reveal">
+              <div class="shot__frame">
+                <img
+                  src="img/shot-market.png"
+                  width="390"
+                  height="844"
+                  loading="lazy"
+                  alt="农场市场：今日行情指数、涨跌百分比，以及每种农产品的单价和「好价」标签"
+                />
+              </div>
+              <figcaption><b>市场</b>行情涨跌，自己判断</figcaption>
+            </figure>
+
+            <figure class="shot reveal">
+              <div class="shot__frame">
+                <img
+                  src="img/shot-redeem.png"
+                  width="390"
+                  height="844"
+                  loading="lazy"
+                  alt="兑换页：愿望清单，每件商品显示所需积分、参考人民币金额，以及先花丰收币再花积分的付款明细"
+                />
+              </div>
+              <figcaption><b>兑换</b>积分和丰收币，一起付</figcaption>
+            </figure>
+
+            <figure class="shot reveal">
+              <div class="shot__frame">
+                <img
+                  src="img/shot-points.png"
+                  width="390"
+                  height="844"
+                  loading="lazy"
+                  alt="积分页：当前余额、7 日获得柱状图和完整的积分流水记录"
+                />
+              </div>
+              <figcaption><b>积分</b>每一分都有流水</figcaption>
+            </figure>
+
+            <figure class="shot reveal">
+              <div class="shot__frame">
+                <img
+                  src="img/shot-review.png"
+                  width="390"
+                  height="844"
+                  loading="lazy"
+                  alt="家长审核页：家长可以给出质量评分、微调用时，然后点确认奖励让积分入账"
+                />
+              </div>
+              <figcaption><b>家长审核</b>分给多少，家长说了算</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 给家长 ================= -->
+      <section class="section" id="parents">
+        <div class="wrap">
+          <div class="parents">
+            <div class="reveal">
+              <p class="eyebrow">👨‍👩‍👧 给家长</p>
+              <h2 class="h2">该管的都管住了，该放手的也放手了</h2>
+              <p class="lead">
+                这款应用是单机软件：没有服务端、没有账号、没有统计和广告 SDK。
+                你不用担心孩子在玩什么，也不用担心数据去了哪里。
+              </p>
+
+              <ul class="check-list">
+                <li>
+                  <div class="ico ico--sm ico--sky">👀</div>
+                  <div>
+                    <h3>家长审核，分数最后由你定</h3>
+                    <p>
+                      孩子提交后停在「等爸爸妈妈看」，家长给质量分、微调用时、点确认奖励才入账。
+                      也可以在设置里关掉审核，回到「提交即结算」。
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div class="ico ico--sm ico--sun">🔐</div>
+                  <div>
+                    <h3>家长密码锁</h3>
+                    <p>
+                      规则、兑换、数据、审核这些入口都在密码后面，孩子点不进去，
+                      也不能自己给自己加分或改价。
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div class="ico ico--sm ico--grass">💾</div>
+                  <div>
+                    <h3>数据只存本机，还能一键带走</h3>
+                    <p>
+                      任务、积分、背包、农场全部存在设备本地。随时可以「导出备份」存成 JSON 文件，
+                      换设备时导入恢复。
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div class="ico ico--sm ico--grape">⚙️</div>
+                  <div>
+                    <h3>规则可以按自家情况调</h3>
+                    <p>
+                      参考汇率、音效与震动、是否审核、一天从几点开始、孩子昵称和头像，
+                      都在设置里；任务和积分也能自己增删改。
+                    </p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <div class="parents__shot reveal">
+              <div class="phone">
+                <div class="phone__screen">
+                  <img
+                    src="img/shot-review.png"
+                    width="390"
+                    height="844"
+                    loading="lazy"
+                    alt="家长审核界面：家长为已完成的任务选择质量档位并确认奖励"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 下载 ================= -->
+      <section class="section section--paper" id="download">
+        <div class="wrap">
+          <div class="section-head section-head--center reveal">
+            <p class="eyebrow">⬇️ 下载与体验</p>
+            <h2 class="h2">三端都能玩，数据自己说了算</h2>
+            <p class="lead">
+              不用注册、不用付费。想先看看效果，直接点「在线体验」就能打开，不用装任何东西。
+            </p>
+          </div>
+
+          <div class="dl-grid">
+            <article class="dl dl--feature reveal">
+              <div class="dl__head">
+                <div class="ico ico--sm ico--grass">🤖</div>
+                <div>
+                  <div class="dl__name">安卓版 APK</div>
+                  <div class="dl__meta">v1.0.0 · 约 5.5 MB · 免费</div>
+                </div>
+              </div>
+              <p class="dl__desc">
+                直接下载安装包，装到手机上就是一个独立 App。音效和震动在安卓端最完整，
+                支持完全离线使用。
+              </p>
+              <ul class="dl__specs">
+                <li>系统要求：Android 7.0 及以上</li>
+                <li>权限：不需要联网、通讯录、相机等任何权限</li>
+                <li>安装：下载后允许「安装未知来源应用」即可</li>
+              </ul>
+              <a class="btn btn--grass btn--block" href="download/kid-quest-farm.apk" download>
+                ⬇️ 下载 APK
+              </a>
+            </article>
+
+            <article class="dl reveal">
+              <div class="dl__head">
+                <div class="ico ico--sm ico--sky">🌐</div>
+                <div>
+                  <div class="dl__name">网页版（手机 / 电脑）</div>
+                  <div class="dl__meta">打开即用 · 免安装</div>
+                </div>
+              </div>
+              <p class="dl__desc">
+                用手机或电脑的浏览器直接打开就能玩，数据存在浏览器本地。
+                在手机上可以用「添加到主屏幕」，看起来和 App 一样。
+              </p>
+              <ul class="dl__specs">
+                <li>手机：Chrome / Edge / Safari / 夸克 等现代浏览器</li>
+                <li>电脑：Chrome / Edge / Firefox / Safari</li>
+                <li>提示：换浏览器或清理数据前，记得先导出备份</li>
+              </ul>
+              <a class="btn btn--block" href="app/">🌐 立即打开网页版</a>
+            </article>
+
+            <article class="dl reveal">
+              <div class="dl__head">
+                <div class="ico ico--sm ico--grape">🍎</div>
+                <div>
+                  <div class="dl__name">iPhone / iPad</div>
+                  <div class="dl__meta">即将推出</div>
+                </div>
+              </div>
+              <p class="dl__desc">
+                iOS 版本还在准备中。在那之前，iPhone 上可以先用 Safari 打开网页版，
+                体验是完整的。
+              </p>
+              <ul class="dl__specs">
+                <li>Safari 打开网页版 → 分享 → 添加到主屏幕</li>
+                <li>iOS 上震动会被系统忽略，音效需要先点一下屏幕</li>
+                <li>上线后会在本页公布下载方式</li>
+              </ul>
+              <a class="btn btn--block" href="app/" aria-disabled="false">📱 先用网页版</a>
+            </article>
+          </div>
+
+          <div class="dl-note reveal">
+            🔒 <strong>数据存在哪？</strong>全部存在你自己的设备里，我们拿不到、也不会拿。
+            这款应用没有任何服务端接口，也没有第三方统计或广告 SDK。
+            唯一的例外是你主动点「导出备份」——那会把数据存成一个文件交到你手上。
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= FAQ ================= -->
+      <section class="section" id="faq">
+        <div class="wrap">
+          <div class="section-head section-head--center reveal">
+            <p class="eyebrow">❓ 常见问题</p>
+            <h2 class="h2">家长最常问的几件事</h2>
+          </div>
+
+          <div class="faq">
+            <details class="reveal" open>
+              <summary>适合几岁的孩子？</summary>
+              <div class="faq__body">
+                <p>
+                  主要面向 <strong>6–9 岁</strong>（小学低年级）。这个年龄段刚好开始有固定的作业和家务，
+                  也需要一个看得见的即时反馈。
+                </p>
+                <p>
+                  更小的孩子可以在家长陪同下玩农场部分；更大的孩子可以自己调整任务内容和积分规则，
+                  把它当成一个自我管理的工具。
+                </p>
+              </div>
+            </details>
+
+            <details class="reveal">
+              <summary>需要联网吗？要注册账号吗？</summary>
+              <div class="faq__body">
+                <p>
+                  <strong>都不需要。</strong>小任务农场是单机应用，所有数据存在你自己的设备上，
+                  不注册、不登录、不联网也能完整使用。飞机上、没 WiFi 的爷爷奶奶家都能照常玩。
+                </p>
+              </div>
+            </details>
+
+            <details class="reveal">
+              <summary>孩子的数据会被上传吗？</summary>
+              <div class="faq__body">
+                <p>
+                  不会。应用没有任何服务端，也没有第三方统计和广告 SDK。任务、积分、农场记录
+                  全部保存在本机的浏览器数据库里。
+                </p>
+                <p>只有你主动点「导出备份」，数据才会变成一个文件交到你手上。</p>
+              </div>
+            </details>
+
+            <details class="reveal">
+              <summary>有广告吗？需要内购吗？</summary>
+              <div class="faq__body">
+                <p>
+                  <strong>没有广告，也没有任何内购。</strong>全部内容（12 块地、8 种作物、5 种动物、
+                  全部任务类型）都在应用内，不需要额外付费解锁。
+                </p>
+              </div>
+            </details>
+
+            <details class="reveal">
+              <summary>孩子会不会自己偷偷加分？</summary>
+              <div class="faq__body">
+                <p>
+                  不会。孩子端<strong>只能提交任务、不能自评分数</strong>。打开「家长审核」后，
+                  任务会停在「等爸爸妈妈看」，必须由家长输入密码、给出质量分并点确认奖励，
+                  积分才真正入账。
+                </p>
+                <p>孩子提交前看到的分数一律写着「大约能拿到」——因为质量分还没定。</p>
+              </div>
+            </details>
+
+            <details class="reveal">
+              <summary>换手机或换浏览器，数据会丢吗？</summary>
+              <div class="faq__body">
+                <p>
+                  可以用「导出备份」把全部数据（任务、实例、积分流水、背包、农场、设置）
+                  存成一个 JSON 文件，在新设备上用「导入备份」恢复，接着玩。
+                </p>
+                <p>建议每隔一段时间导出一次，尤其是准备换设备或清理浏览器数据之前。</p>
+              </div>
+            </details>
+
+            <details class="reveal">
+              <summary>积分和真实零花钱怎么对应？</summary>
+              <div class="faq__body">
+                <p>
+                  家长可以在设置里定一个参考汇率（默认 <strong>1 元 ≈ 10 分</strong>），
+                  兑换页的每件商品旁边就会标出「≈ ¥3」。
+                </p>
+                <p>
+                  这只是给家长的参照，<strong>扣多少分永远看标价本身</strong>，
+                  改汇率不会影响任何数值。
+                </p>
+              </div>
+            </details>
+
+            <details class="reveal">
+              <summary>农场里的「丰收币」是什么？为什么不直接给积分？</summary>
+              <div class="faq__body">
+                <p>
+                  丰收币是卖出农产品后得到的第二种货币，和积分是<strong>两本独立的账</strong>。
+                </p>
+                <p>
+                  它只能用来兑换愿望，不能换回积分，也不能买种子和土地。这样设计是为了避免出现
+                  「种地 → 赚钱 → 买更多地 → 赚更多钱」的无限循环，让孩子明白投入和回报是有边界的。
+                </p>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 结尾 CTA ================= -->
+      <section class="section section--tight">
+        <div class="wrap">
+          <div class="final-cta reveal">
+            <div class="final-cta__glow" aria-hidden="true"></div>
+            <h2 class="h2">今天就让孩子自己开始吧 🌱</h2>
+            <p>免费、无广告、不用注册。装好之后，第一份任务清单已经在那里等着了。</p>
+            <div class="btn-row">
+              <a class="btn btn--lg" href="download/kid-quest-farm.apk" download>⬇️ 下载安卓版</a>
+              <a class="btn btn--lg btn--ghost" href="app/">🌐 先在线试试</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ================= 页脚 ================= -->
+    <footer class="footer">
+      <div class="wrap">
+        <div class="footer__grid">
+          <div class="footer__brand">
+            <a class="brand" href="./">
+              <img
+                class="brand__mark"
+                src="img/icon-192.png"
+                width="38"
+                height="38"
+                alt=""
+                aria-hidden="true"
+              />
+              <span>
+                <span class="brand__name">小任务农场</span>
+                <span class="brand__sub">Kid Quest Farm</span>
+              </span>
+            </a>
+            <p>
+              一个给 6–9 岁孩子的「每日任务 + 积分 + 农场经营」激励应用。
+              单机运行，数据全部存在本机，无广告、无内购。
+            </p>
+          </div>
+
+          <div>
+            <h3>产品</h3>
+            <ul class="footer__list">
+              <li><a href="#why">它帮孩子什么</a></li>
+              <li><a href="#how">玩法闭环</a></li>
+              <li><a href="#money">财商启蒙</a></li>
+              <li><a href="#shots">界面预览</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h3>下载</h3>
+            <ul class="footer__list">
+              <li><a href="download/kid-quest-farm.apk" download>安卓版 APK</a></li>
+              <li><a href="app/">网页版</a></li>
+              <li><a href="#download">iPhone / iPad</a></li>
+              <li><a href="#faq">常见问题</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h3>关于</h3>
+            <ul class="footer__list">
+              <li><a href="privacy.html">隐私政策</a></li>
+              <li><a href="terms.html">用户协议</a></li>
+              <li><a href="mailto:hello@kidquestfarm.cn">联系我们</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer__legal">
+          <span>© <span id="year">2026</span> 小任务农场 · Kid Quest Farm</span>
+          <span class="sep" aria-hidden="true">|</span>
+          <!-- ★ REPLACE：换成你自己的备案号 -->
+          <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener nofollow"
+            >京ICP备00000000号-1</a
+          >
+          <span class="sep" aria-hidden="true">|</span>
+          <!-- ★ REPLACE：公安备案（拿到后填，没有可整行删掉） -->
+          <a
+            href="https://beian.mps.gov.cn/"
+            target="_blank"
+            rel="noopener nofollow"
+            >京公网安备 11010502000000号</a
+          >
+          <span class="sep" aria-hidden="true">|</span>
+          <span>本站为静态介绍页，不收集任何访问者信息</span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="main.js" defer></script>
+  </body>
+</html>

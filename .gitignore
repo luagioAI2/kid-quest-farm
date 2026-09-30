@@ -52,6 +52,16 @@ screenshots/
 # 打包出来的 APK 副本（供直接分发，体积大不入库）
 dist-apk/
 
+# 官网里的两块**产物**（site/ 其余部分都入库）：
+#   site/app/       App 的 Web 构建产物（「在线体验」按钮指向它）
+#   site/download/  安装包副本
+# 两者都能用 `npm run site`（scripts/build-site.mjs）从 src/ 和 dist-apk/ 重新生成。
+# ⚠️ 但 site/img/ 是**入库**的：那些界面图要从「跑起来的 App」截出来
+#    （capture.mjs + make-site-assets.py），链条比 build 长得多，
+#    而且页面 HTML 直接引它们，不入库的话克隆下来就是一片破图。
+site/app/
+site/download/
+
 # 测试
 coverage/
 

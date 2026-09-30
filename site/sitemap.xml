@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 小任务农场 · 官网 sitemap -->
+<!-- ★ REPLACE：把 www.kidquestfarm.cn 换成你自己的域名，并同步修改 lastmod -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://www.kidquestfarm.cn/</loc>
+    <lastmod>2026-09-30</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://www.kidquestfarm.cn/og-cover.png</image:loc>
+      <image:title>小任务农场 · 完成任务，经营大农场</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.kidquestfarm.cn/img/shot-tasks.png</image:loc>
+      <image:title>任务页：今日任务列表</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://www.kidquestfarm.cn/img/shot-farm.png</image:loc>
+      <image:title>农场页：12 块土地</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://www.kidquestfarm.cn/privacy.html</loc>
+    <lastmod>2026-09-30</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://www.kidquestfarm.cn/terms.html</loc>
+    <lastmod>2026-09-30</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+</urlset>

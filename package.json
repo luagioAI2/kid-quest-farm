@@ -17,7 +17,9 @@
     "apk": "bash scripts/build-apk.sh",
     "apk:release": "bash scripts/build-apk.sh release",
     "splash:measure": "node scripts/measure-splash.mjs",
-    "splash:check": "node scripts/measure-splash.mjs --check"
+    "splash:check": "node scripts/measure-splash.mjs --check",
+    "site": "node scripts/build-site.mjs",
+    "site:check": "node scripts/check-site.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",

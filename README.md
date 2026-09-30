@@ -12,6 +12,7 @@
 | 安卓 APK | ✅ `dist-apk/kid-quest-farm-debug.apk`（5.5 MB，可直接安装） |
 | Web 产物 | ✅ `npm run build` → `dist/`（约 579 kB / 173 kB gzip） |
 | 手机浏览器 | ✅ `npm run dev -- --host` 后同网段访问即可 |
+| 官网 | ✅ `site/`（纯静态：介绍 + 多平台下载 + 隐私政策/用户协议），`npm run site` 重建 |
 | 单元测试 | ✅ 310 项通过 / 16 个文件（结算 41 · 经济 46 · 状态 57 · 市场 27 · 周期 14 · 种子 18 · 汇率 13） |
 | 端到端测试 | ✅ 79 渲染 + 49 玩法 + 12 升级 + 23 背包卖出 + 28 回归守卫 + 18 清空，控制台零报错 |
 
@@ -259,6 +260,35 @@ npm run lint         # 类型检查
 
 开发服务器已开 `--host`，手机连同一个 WiFi，访问 `http://<电脑IP>:5180` 即可。
 
+### 调试句柄（浏览器控制台）
+
+调农场不用真去种地攒钱 —— 应用在 `window.__kqf__` 上挂了一组命令，
+F12 → Console 直接敲（Chrome 支持顶层 `await`）：
+
+```js
+await __kqf__.unlockAll()       // ★ 一键全解锁（见下表），末尾自动 reload
+await __kqf__.addPoints(5000)   // 加积分（不 reload，只刷新内存快照）
+await __kqf__.syncSeedTasks()   // 把 seedTasks.ts 里新加的任务同步进当前账号
+```
+
+| 命令 | 作用 |
+| --- | --- |
+| `__kqf__.unlockAll()` | 12 块地全开 · 每种种子 ×99 · 5 种动物全部入园 · 收获/种植/剪毛次数写成 500（足以解锁全部作物）· 末尾 `location.reload()` |
+| `__kqf__.addPoints(delta)` | 加积分，写一条 `manual_adjust` 流水 |
+| `__kqf__.syncSeedTasks()` | 同步新增的种子任务（按标题去重），末尾 reload |
+| `__kqf__.getState()` | 读整个 store 快照（排查用） |
+| `__kqf__.exportBackup()` / `importBackup(raw)` | 备份往返 |
+| `__kqf__.catalog.*` | 读**真实**数值：`cropSeedCost` / `animalCost` / `remainingCap` / `priceCeiling` |
+
+⚠️ **`unlockAll` 不发积分** —— 开地、塞种子、放动物都是**直接写库、不扣钱**，
+所以不需要先 `addPoints`。要钱得另外敲。
+
+⚠️ 这一组在**生产构建 / APK 里也在**（没有 `import.meta.env.DEV` 守卫），
+装到手机上可以用 `chrome://inspect` 远程调试。
+
+⚠️ 定义在 `src/store/useApp.ts` 文件末尾的「调试句柄」块里 —— 加命令时
+**同步更新这张表**，否则下次又想不起来怎么用。
+
 ### 打包 APK
 
 见 [`TOOLCHAIN.md`](./TOOLCHAIN.md) 准备 JDK 与 Android SDK，然后：
@@ -472,6 +502,93 @@ node scripts/capture.mjs                 # → screenshots/redesign/，30 张
 
 ---
 
+## 官网（`site/`）
+
+面向家长的产品介绍页，同时承担 **备案 / 介绍 / 多平台下载** 三件事。
+
+**它是纯静态的**：没有构建步骤，把整个 `site/` 丢到任意静态托管就能跑，
+备案需要的也正好就是这一个目录。
+
+```
+site/
+  index.html            落地页（介绍 + 玩法 + 财商 + 界面预览 + 下载 + FAQ）
+  privacy.html          隐私政策 ← 备案与上架都要
+  terms.html            用户协议 / 家长须知
+  styles.css  main.js   样式与交互（零依赖、零外部请求）
+  robots.txt  sitemap.xml  manifest.webmanifest
+  og-cover.png          社交分享卡片（1200×630）
+  favicon.png  apple-touch-icon.png
+  img/                  图标 + 从 App 截图压出来的界面图
+  app/                  App 的 Web 构建产物 ←「在线体验」按钮指向这里
+  download/             安装包
+```
+
+### 常用命令
+
+```bash
+node scripts/build-site.mjs              # 重建 site/app + site/download + 重新出图（会先 npm run build）
+node scripts/build-site.mjs --no-build   # 跳过 vite build
+node scripts/build-site.mjs --no-shots   # 只重建 site/app 和安装包，不重出图
+
+python -m http.server 5190 --directory site          # 本地预览
+node scripts/check-site.mjs http://127.0.0.1:5190/   # 自检（50 项）
+```
+
+### 哪些入库、哪些不入库
+
+| 路径 | 入库 | 为什么 |
+| --- | --- | --- |
+| `site/*.html` `styles.css` `main.js` `robots.txt` `sitemap.xml` `manifest.webmanifest` | ✅ | 站点的源码 |
+| `site/img/` `og-cover.png` `favicon.png` `apple-touch-icon.png` | ✅ | HTML 直接引用它们；且要从「跑起来的 App」截图才能重出，链条长 |
+| `site/app/` | ❌ | App 构建产物，`npm run site` 从 `src/` 重出 |
+| `site/download/` | ❌ | 安装包副本，体积大（和 `dist-apk/` 同理） |
+
+> 部署时如果是从 git 拉代码，**记得先跑一次 `npm run site`** ——
+> 否则「在线体验」和「下载 APK」两个按钮会是 404。
+> 直接拷本地 `site/` 目录的话就没这个问题。
+
+`check-site.mjs` 查四类东西：**SEO 元信息**（title / description / canonical /
+OG / JSON-LD 能不能解析）、**结构完整性**（图片真的加载了、锚点有落点、
+法务页和备案号在不在）、**渲染健康**（控制台零报错、四个视口都无横向溢出、
+揭示动画真的揭示了）、以及**出图**（桌面整页 + 手机逐屏，供人肉眼看）。
+
+### 上线前必改的 4 处
+
+在 `site/*.html` 里搜 `REPLACE` 或下面这些字符串，逐个替换：
+
+| 要改什么 | 出现在哪 |
+| --- | --- |
+| 域名 `https://www.kidquestfarm.cn/` | canonical、`og:url`、`og:image`、JSON-LD、`robots.txt`、`sitemap.xml` |
+| `京ICP备00000000号-1` | 三个页面页脚（链接要指向 `beian.miit.gov.cn`） |
+| `京公网安备 11010502000000号` | 页脚（没办就整行删掉） |
+| `hello@kidquestfarm.cn` | 页脚与两个法务页 |
+
+站长平台的校验 meta 也留好了注释位（百度 / Google / Bing），拿到验证码取消注释即可。
+
+### ⚠️ 两个坑（改脚本时别踩回去）
+
+1. **`html { scroll-behavior: smooth }` 会让检查器假失败。**
+   它是全局生效的，`window.scrollTo()` 也跟着变成一段动画 ——
+   滚到底之后等 600ms，页面其实还在半路（实测 9206 的目标只走到 9044），
+   页面最底部那一两个元素**从来没进过视口**，reveal 永远不触发，
+   于是报「揭示元素没显示出来」，而人手动滚一遍完全正常。
+   检查器里 `primePage()` 会先把它临时改成 `auto`。
+   同一个原因还会让 **lazy 图**在检查时全是 0×0 —— 所以「图片真的加载了」
+   这条必须放在滚完之后查，不能放在前面。
+
+2. **手机端不要用 `fullPage` 整页截图。**
+   这页在 390 宽下高约 14300 CSS px，`deviceScaleFactor: 2` 就是 28600 设备像素，
+   超出 Chrome 单次截图的能力：PNG 尺寸是对的，但**内容被压缩错位** ——
+   按 2× 推算裁 y=26400 本该是页脚，拿到的却是页面中段的「玩法闭环」，
+   而同一张图 y=0 附近又完全正确（上下比例不一致，没法按比例定位）。
+   所以 `check-site.mjs` 手机端改成**逐屏拍**（`mobile-01..17.png`），
+   每屏位置由 `scrollTop` 显式给定。
+
+> 页面上的 emoji 一律是**文本 emoji**，不是图片；所有插画、光晕、走势图
+> 都是 CSS 渐变和手写 SVG —— 和 App 一样，**一个外部请求都没有**。
+
+---
+
 ## 项目结构
 
 ```
@@ -496,6 +613,8 @@ src/
   platform/files.ts 浏览器与 APK 的文件导出适配 / 合成音效
   components/       Portal（弹层挂 body）、ErrorBoundary 等通用组件
   styles/theme.css  设计令牌（颜色 / 圆角 / 阴影 / 动画）
+site/               官网：纯静态介绍页 + 下载 + 隐私政策/用户协议（见上）
+scripts/            构建与验证脚本（e2e-*.mjs / capture.mjs / check-site.mjs / build-site.mjs …）
 ```
 
 **分层原则**：`domain/` 不依赖任何框架或 IO，业务规则集中在这里并被测试覆盖；

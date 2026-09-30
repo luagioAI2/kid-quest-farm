@@ -1,0 +1,11 @@
+# 小任务农场 · 官网 robots.txt
+# ★ REPLACE：把 www.kidquestfarm.cn 换成你自己的域名
+
+User-agent: *
+Allow: /
+Disallow: /app/
+
+# 应用本体是 SPA，对搜索引擎没有可索引的独立内容，
+# 且与官网页面共用同一批关键词容易造成重复收录，故屏蔽。
+
+Sitemap: https://www.kidquestfarm.cn/sitemap.xml
