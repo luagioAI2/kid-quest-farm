@@ -1,5 +1,24 @@
 apply plugin: 'com.android.application'
 
+// ---------------------------------------------------------------
+// 发布签名
+// ---------------------------------------------------------------
+// scripts/build-apk.sh 的 release 分支只检查 android/keystore.properties 存不存在，
+// 然后提示你按模板创建 —— 但**光有那个文件是没用的**：Capacitor 生成的这份
+// build.gradle 里原本既没有 signingConfigs，也没给 release 指定 signingConfig，
+// 所以 ./gradlew assembleRelease 只会产出 app-release-unsigned.apk，
+// 而脚本找的是 app-release.apk —— 最后报「打包失败，未找到产物」，
+// 看着像密码写错了，其实是**根本没接线**。
+//
+// 下面把线接上。keystore.properties 不存在时整块静默跳过：
+// 全新克隆、或只想打 debug 包的人，不该因为缺一个密码文件就构建失败。
+def keystorePropsFile = rootProject.file('keystore.properties')
+def hasReleaseSigning = keystorePropsFile.exists()
+def keystoreProps = new Properties()
+if (hasReleaseSigning) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace = "com.kidquestfarm.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,10 +35,27 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                // storeFile 相对 android/ 解析，与 keystore.properties 模板里的
+                // 「storeFile=../kid-quest-farm.keystore」一致
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
