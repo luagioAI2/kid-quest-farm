@@ -156,8 +156,55 @@ export const SEED_TASKS: SeedTask[] = [
     checkInEnabled: true,
     checkInTargetCount: 5,
   },
+  {
+    /* 2026-09-30 家长要求：「再帮我添加一个 每周的打卡 数学计算练习。」
+       走的是**签到**这条路（和晨读 / 日记 / 练字签到同一档）：
+       每周记 5 次，攒够天数拿阶梯奖励。
+       ⚠️ 积分刻意保持 4 分 —— 签到的奖励主要来自**阶梯**（10 / 30 / 60），
+       基础分只是「点一下」的即时反馈。调高这里会让签到比正课还赚。 */
+    title: '数学计算练习',
+    note: '每天一页口算或竖式，掐着表做更快',
+    category: 'study',
+    cycle: 'weekly',
+    plannedMinutes: 15,
+    basePoints: 4,
+    qualityBonusPoints: 0,
+    allowOvertime: false,
+    allowLateNoPenalty: true,
+    qualityRated: false,
+    checkInEnabled: true,
+    checkInTargetCount: 5,
+  },
 
   /* ---------------- 长期任务：一段时间内做满若干次 ---------------- */
+
+  {
+    /* 2026-09-30 家长要求：「再帮我添加一个长期任务， 每周 2 次，背诵。」
+
+       ⚠️ 为什么「长期任务」却写 `cycle: 'weekly'`：这个 App 里
+       「长期任务」指的是**不预先展开成实例**的那一类（见 recurrence.ts
+       的 isPreGenerated），周 / 月 / 年都算。所以「每周 2 次」就是
+       weekly + checkInTargetCount: 2 —— 卡片上显示「本周进度 0/2」。
+       ⚠️ 必须显式写 `checkInEnabled: false`：selectPeriodTasks() 会把
+       checkInEnabled 的任务排除掉，写 true 的话它会跑到「坚持签到」区块。
+
+       ⚠️ 积分选 10 + 4（= 每日学科任务的档位），**不按分钟折算**：
+       背诵 15 分钟拿 10 分，看着比 45 分钟的作业划算，但每周只有 2 次，
+       一周上限 28 分；而「晨读」这类签到虽然基础分只有 4，加上阶梯
+       一周能到 ~120 分。所以这个数其实偏保守，不用再往下压。 */
+    title: '背诵',
+    note: '古诗、课文都行，背完讲给爸爸妈妈听',
+    category: 'study',
+    cycle: 'weekly',
+    plannedMinutes: 15,
+    basePoints: 10,
+    qualityBonusPoints: 4,
+    allowOvertime: true,
+    allowLateNoPenalty: false,
+    qualityRated: true,
+    checkInEnabled: false,
+    checkInTargetCount: 2,
+  },
 
   {
     title: '读一本完整的故事书',

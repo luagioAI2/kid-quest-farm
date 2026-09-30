@@ -374,7 +374,13 @@ async function doSeedIfEmpty(): Promise<void> {
     }))
     await db.tasks.bulkPut(rows)
     await postLedger({
-      delta: 2000,
+      /* ⚠️ 50 是设计值，别为了「方便测试」把它调大。
+         2026-09-29 曾临时改成 2000 用来试兑换，本来标注了「仅本地、不提交」，
+         结果 2026-09-30 的 fce9ba1 把它一起提交了 —— 于是新装机的孩子
+         一开局就有 2000 分，直接能换 1500 的「大愿望」，
+         「大件要攒两周」这条设计当场作废。
+         要测试就用调试句柄：`await __kqf__.addPoints(5000)`（见 README）。 */
+      delta: 50,
       source: 'manual_adjust',
       memo: '欢迎来到小任务农场！这是给你的启动积分 🎁',
     })

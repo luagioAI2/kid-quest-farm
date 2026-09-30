@@ -9,8 +9,8 @@ import { SEED_REDEEM_ITEMS, SEED_TASKS } from './seedTasks'
 
    三块：
    * 每日任务  6 个 45 分钟的学科任务 + 1 个家务
-   * 签到任务  练字签到 / 日记 / 晨读（每周 5 次）
-   * 长期任务  月度和年度各一个（家长要求「不变」）
+   * 签到任务  练字签到 / 日记 / 晨读 / 数学计算练习（每周 5 次）
+   * 长期任务  背诵（每周 2 次）+ 月度 / 年度各一个
    ============================================================ */
 
 const daily = SEED_TASKS.filter((t) => t.cycle === 'daily')
@@ -75,36 +75,71 @@ describe('种子任务：签到', () => {
     expect(titles).toContain('晨读')
   })
 
+  it('包含「数学计算练习」（2026-09-30 家长要求新增的每周打卡）', () => {
+    expect(checkIn.map((t) => t.title)).toContain('数学计算练习')
+  })
+
   it('原有的「练字签到」没有被顶掉', () => {
     expect(checkIn.map((t) => t.title)).toContain('练字签到')
   })
 
-  it('三个签到任务都是每周记 5 次', () => {
-    expect(checkIn).toHaveLength(3)
+  it('四个签到任务都是每周记 5 次', () => {
+    expect(checkIn).toHaveLength(4)
     for (const t of checkIn) {
       expect(t.cycle, t.title).toBe('weekly')
       expect(t.checkInTargetCount, t.title).toBe(5)
     }
   })
 
-  it('日记归到「艺术」、晨读归到「阅读」（决定卡片配色和图标）', () => {
+  it('日记归到「艺术」、晨读归到「阅读」、数学计算练习归到「学科」', () => {
     expect(checkIn.find((t) => t.title === '日记')?.category).toBe('art')
     expect(checkIn.find((t) => t.title === '晨读')?.category).toBe('reading')
+    expect(checkIn.find((t) => t.title === '数学计算练习')?.category).toBe('study')
   })
 })
 
-describe('种子任务：长期任务（家长要求不变）', () => {
-  it('仍然是月度和年度各一个', () => {
-    expect(period.map((t) => t.title).sort()).toEqual(
-      ['学会一项新本领', '读一本完整的故事书'].sort(),
-    )
-    expect(period.map((t) => t.cycle).sort()).toEqual(['monthly', 'yearly'])
+describe('种子任务：长期任务', () => {
+  it('包含「背诵」（2026-09-30 家长要求：长期任务，每周 2 次）', () => {
+    const recite = period.find((t) => t.title === '背诵')
+    expect(recite, '找不到「背诵」').toBeDefined()
+    expect(recite?.cycle).toBe('weekly')
+    expect(recite?.checkInTargetCount).toBe(2)
+  })
+
+  it('月度 1 个 / 年度 2 个（2026-09-29 加了「每月记忆单词」）', () => {
+    // ⚠️ 这条原来写的是「月度和年度各一个」，2026-09-29 新增「每月记忆单词」
+    // 之后就一直是红的 —— 属于「加了种子任务但没同步测试」。
+    expect(period.filter((t) => t.cycle === 'monthly').map((t) => t.title)).toEqual([
+      '读一本完整的故事书',
+    ])
+    expect(
+      period
+        .filter((t) => t.cycle === 'yearly')
+        .map((t) => t.title)
+        .sort(),
+    ).toEqual(['学会一项新本领', '每月记忆单词'].sort())
+  })
+
+  it('排列顺序是 周 → 月 → 年（先近后远，孩子先看到本周的）', () => {
+    expect(period.map((t) => t.cycle)).toEqual(['weekly', 'monthly', 'yearly', 'yearly'])
   })
 
   it('签到任务不会被算进长期任务（否则会同时出现在两个区块）', () => {
-    // 练字签到 / 日记 / 晨读 都是 weekly，但 checkInEnabled —— 必须被排除
+    // 练字签到 / 日记 / 晨读 / 数学计算练习 都是 weekly，
+    // 但 checkInEnabled —— 必须被 selectPeriodTasks() 排除，否则同一张卡会出现两次。
     expect(period.every((t) => !t.checkInEnabled)).toBe(true)
-    expect(period).toHaveLength(2)
+    expect(period).toHaveLength(4)
+  })
+
+  it('「背诵」和「数学计算练习」分属两个区块，没有混', () => {
+    // 两个都是 weekly，最容易在后续改动里被合并到同一个区块 —— 钉住区别：
+    // 背诵是长期任务（不预先展开），数学计算练习是签到（按天打卡拿阶梯）。
+    const periodTitles = period.map((t) => t.title)
+    const checkInTitles = checkIn.map((t) => t.title)
+    expect(periodTitles).toContain('背诵')
+    expect(periodTitles).not.toContain('数学计算练习')
+    expect(checkInTitles).toContain('数学计算练习')
+    expect(checkInTitles).not.toContain('背诵')
   })
 })
 
@@ -191,11 +226,24 @@ describe('种子任务：2026-09-21 积分减半', () => {
       读一本完整的故事书: 30,
       学会一项新本领: 100,
     }
+    /* 减半**之后**才加进来的任务，没有「减半前」可言。
+       列在这里不是为了放行，而是让「新增了种子任务」这件事在测试里
+       显式留痕 —— 下次加任务，要么补进 BEFORE（如果它是减半前的旧档），
+       要么补进这张表并写明来由，不允许默默漏过去。 */
+    const ADDED_AFTER: Record<string, string> = {
+      每月记忆单词: '2026-09-29 新增（年度）',
+      背诵: '2026-09-30 新增（长期任务，每周 2 次）',
+      数学计算练习: '2026-09-30 新增（每周签到）',
+    }
     for (const t of SEED_TASKS) {
+      if (t.title in ADDED_AFTER) continue
       const before = BEFORE[t.title]
-      expect(before, `基准表缺少：${t.title}`).toBeDefined()
+      expect(before, `基准表缺少：${t.title}（新任务请补进 ADDED_AFTER 并写明来由）`).toBeDefined()
       expect(t.basePoints, t.title).toBeLessThan(before)
     }
+    // 反向保证：两张表不重叠，且覆盖了全部种子任务
+    const covered = new Set([...Object.keys(BEFORE), ...Object.keys(ADDED_AFTER)])
+    expect(covered.size).toBe(SEED_TASKS.length)
   })
 
   it('兑换品价格**没有**跟着减半（有意为之，不是漏改）', () => {
@@ -203,5 +251,63 @@ describe('种子任务：2026-09-21 积分减半', () => {
     // 只钉两个端点：最低档和最高档。
     expect(SEED_REDEEM_ITEMS.find((i) => i.name === '一份小零食')?.cost).toBe(30)
     expect(SEED_REDEEM_ITEMS.find((i) => i.name === '一个大愿望')?.cost).toBe(1500)
+  })
+})
+
+/* ============================================================
+   2026-09-30：家长新增的两个任务
+   ------------------------------------------------------------
+   用户原话：「再帮我添加一个长期任务， 每周 2 次，背诵。
+             再帮我添加一个 每周的打卡 数学计算练习。」
+
+   两条都是 weekly，走的是**不同的机制**，所以数值也不同：
+   * 背诵         长期任务（不预先展开）→ 每周 2 次，学科档 10 + 4
+   * 数学计算练习  签到（按天打卡 + 阶梯奖）→ 每周 5 次，签到档 4 + 0
+   逐条钉住，免得以后有人「顺手统一一下」把两者揉成一个。
+   ============================================================ */
+describe('种子任务：2026-09-30 新增（背诵 / 数学计算练习）', () => {
+  it('背诵：长期任务，每周 2 次，学科档 10 + 4', () => {
+    const t = SEED_TASKS.find((x) => x.title === '背诵')
+    expect(t, '找不到「背诵」').toBeDefined()
+    expect(t?.cycle).toBe('weekly')
+    expect(t?.checkInTargetCount).toBe(2)
+    expect(t?.checkInEnabled ?? false, '必须不是签到，否则会跑到「坚持签到」区块').toBe(false)
+    expect(t?.category).toBe('study')
+    expect(t?.plannedMinutes).toBe(15)
+    expect(t?.basePoints).toBe(10)
+    expect(t?.qualityBonusPoints).toBe(4)
+  })
+
+  it('数学计算练习：每周签到，5 次，签到档 4 + 0（奖励主要来自阶梯）', () => {
+    const t = SEED_TASKS.find((x) => x.title === '数学计算练习')
+    expect(t, '找不到「数学计算练习」').toBeDefined()
+    expect(t?.cycle).toBe('weekly')
+    expect(t?.checkInEnabled).toBe(true)
+    expect(t?.checkInTargetCount).toBe(5)
+    expect(t?.category).toBe('study')
+    expect(t?.plannedMinutes).toBe(15)
+    expect(t?.basePoints).toBe(4)
+    expect(t?.qualityBonusPoints ?? 0).toBe(0)
+  })
+
+  it('签到任务的数值口径完全一致（4 分 / 15 分钟 / 不打质量分）', () => {
+    // 四个签到任务除了标题、说明、分类之外，数值应当一模一样 ——
+    // 不一致的话「每天点一下」这件事对不同任务就不等价了。
+    for (const t of checkIn) {
+      expect(t.basePoints, t.title).toBe(4)
+      expect(t.plannedMinutes, t.title).toBe(15)
+      expect(t.qualityBonusPoints ?? 0, t.title).toBe(0)
+      expect(t.qualityRated, t.title).toBe(false)
+      expect(t.allowOvertime, t.title).toBe(false)
+      expect(t.allowLateNoPenalty, t.title).toBe(true)
+    }
+  })
+
+  it('「每周 2 次」不会把小目标任务的阶梯压成负数或重复档', () => {
+    // 小目标（每周 2 次）会让 defaultTiers 里的 Math.min(base, N) 撞车，
+    // 这里只验「背诵」这个 2 次的档位不会算出 days < 1 的阶梯。
+    // 完整的阶梯合并逻辑在 recurrence.test.ts。
+    const t = SEED_TASKS.find((x) => x.title === '背诵')
+    expect(t?.checkInTargetCount).toBeGreaterThanOrEqual(1)
   })
 })

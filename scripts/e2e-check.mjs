@@ -1177,9 +1177,12 @@ try {
 
      ⚠️ 这条守的是**界面这条路**，不是那个数本身。
      单测已经验过 `updateSettings` 落库 + `formatYuan` 的数学（`cash.test.ts`），
-     但**没验**：「点预设按钮 / 自己填 → 真的落库」以及「兑换页真的把 ≈¥X 画出来了」。
-     这正是「驱动手段绕过被测机制」那一类漏法 —— 单测直接调 action，
-     把界面这一层整个跳过去了。
+     但**没验**：「点预设按钮 / 自己填 → 真的落库」以及「设置页的预览真的跟着变」。
+
+     ⚠️ 2026-09-30 用户把**兑换页**上的 ≈¥X 去掉了（原话：「🪙120 ≈¥12 兑换页
+     这种感觉不用显示。有付款了。」）。所以第 ③ 段从「必须标」**反转**成
+     「不许标」—— 反转而不是删除，否则将来谁把这段 UI 加回来都没人拦。
+     设置页那一半（①②）不受影响，汇率功能本身还在。
 
      ⚠️ 自定义输入是**受控输入框 + 失焦提交**，直接 `input.value = '33'`
      React 收不到 onChange（值会被打回去），必须走原生 setter + 派发 input 事件。 */
@@ -1257,7 +1260,7 @@ try {
       `（应为 33）；预览跟着变=${ratioUi.typedLine}`,
   )
 
-  // ③ 兑换页真的把 ≈¥X 画出来了，且值 = 标价 ÷ 汇率
+  // ③ 兑换页**不再**标「≈ ¥X」（2026-09-30 用户要求去掉）
   await page.evaluate(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
     // 从设置页退出去，再切到「兑换」
@@ -1270,44 +1273,37 @@ try {
     await sleep(1000)
   })
   const cashOnRedeem = await page.evaluate(() => {
-    const rows = []
+    const hits = []
     for (const el of document.querySelectorAll('*')) {
       if (el.children.length !== 0) continue
       const t = (el.textContent ?? '').trim()
-      if (!/^≈\s*¥/.test(t)) continue
+      // ⚠️ 这里**故意不锚定行首**（原来是 /^≈\s*¥/）—— 现在要抓的是
+      // 「任何地方出现了 ≈¥」，锚定了反而可能漏掉被包了一层前缀的写法。
+      if (!/≈\s*¥/.test(t)) continue
       if (el.getBoundingClientRect().width <= 0) continue
-      // 往上找这一行的价签（CoinPill 的 textContent 形如「🪙30」）
-      let pill = null
-      for (let a = el.parentElement, i = 0; a && i < 4; a = a.parentElement, i++) {
-        pill = [...a.querySelectorAll('span')].find((s) => /🪙\s*\d/.test(s.textContent ?? ''))
-        if (pill) break
-      }
-      const cost = pill ? Number((pill.textContent ?? '').replace(/\D/g, '')) : null
-      rows.push({ label: t, cost })
+      hits.push(t)
     }
-    const ratio = window.__kqf__.getState().settings.pointsPerYuan
-    return { ratio, rows: rows.slice(0, 20), total: rows.length }
+    return {
+      ratio: window.__kqf__.getState().settings.pointsPerYuan,
+      hits: hits.slice(0, 10),
+      total: hits.length,
+      // 替代 ≈¥ 的那条信息 —— 它必须在，否则删掉 ≈¥ 就是纯粹的信息缺失。
+      hasPayLine: /付款[:：]/.test(document.body.innerText),
+    }
   })
-  // 独立重算一遍（不 import 被测实现，避免"用实现验实现"）
-  const fmtYuan = (points, per) => {
-    const yuan = Math.round((points / per) * 100) / 100
-    return '¥' + yuan.toFixed(2).replace(/\.?0+$/, '')
-  }
-  const badCash = cashOnRedeem.rows.filter(
-    (r) => r.cost == null || r.label !== `≈ ${fmtYuan(r.cost, cashOnRedeem.ratio)}`,
+  check(
+    '兑换页不再标「≈ ¥X」（2026-09-30 去掉：已经有付款行了）',
+    cashOnRedeem.total === 0,
+    cashOnRedeem.total
+      ? `汇率=${cashOnRedeem.ratio}；还标着 ${cashOnRedeem.total} 条：${JSON.stringify(cashOnRedeem.hits)}`
+      : `一条都没有（汇率=${cashOnRedeem.ratio}）`,
   )
   check(
-    '兑换页每件商品都标了「≈ ¥X」，且 X = 标价 ÷ 汇率',
-    cashOnRedeem.total > 0 && badCash.length === 0,
-    `汇率=${cashOnRedeem.ratio}；标了 ${cashOnRedeem.total} 条；` +
-      `对不上的 ${badCash.length} 条` +
-      (badCash.length ? `：${JSON.stringify(badCash.slice(0, 3))}` : '') +
-      `；抽样 ${JSON.stringify(cashOnRedeem.rows.slice(0, 3))}`,
-  )
-  check(
-    '「≈ ¥X」只是标签，没有混进价签里（价签还是原来的分）',
-    cashOnRedeem.rows.every((r) => !/分/.test(r.label)),
-    cashOnRedeem.rows.length ? `抽样：${cashOnRedeem.rows[0].label}` : '一条都没有',
+    '取代它的「付款：🌾 x + 🪙 y」还在（这是删 ≈¥ 的前提）',
+    cashOnRedeem.hasPayLine,
+    cashOnRedeem.hasPayLine
+      ? '在'
+      : '不在 —— 那 ≈¥ 就不该删（否则孩子看不到「怎么付」）',
   )
 
   // 还原：汇率回默认 10、家长密码复原，别影响后面的断言与截图

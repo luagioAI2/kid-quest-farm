@@ -102,8 +102,9 @@ export function RedeemBody() {
   const [tab, setTab] = useState<'shop' | 'records' | 'manage'>('shop')
   const [pinOk, setPinOk] = useState(false)
 
-  /** 现金 : 积分 参考汇率（1 元 = 多少积分）。**纯展示**，见 domain/cash.ts */
-  const ratio = clampPointsPerYuan(settings.pointsPerYuan)
+  // ⚠️ 这里原来读了一次 `settings.pointsPerYuan` 算「现金 : 积分」汇率，
+  // 用来在商城头部和每张卡片上标「≈ ¥12」。2026-09-30 用户要求去掉这两处，
+  // 所以这一页**不再需要**汇率 —— 汇率现在只在「设置」和家长端编辑器里用。
 
   const pending = useMemo(() => redeemRecords.filter((r) => !r.fulfilled), [redeemRecords])
 
@@ -159,8 +160,6 @@ export function RedeemBody() {
                 换完就扣币，想清楚再点哦～
                 <span className="mt-1 block text-[11px] font-normal leading-snug text-ink-500">
                   🌾 丰收币先花，不够再用 🪙 积分 —— 两种币 1 比 1 等价，可以一起付。
-                  <br />
-                  💱 参考：1 元 ≈ {ratio} 分。这只是给家长的参照，扣多少还是看标价。
                 </span>
               </p>
               {grouped.map((g) => (
@@ -175,7 +174,6 @@ export function RedeemBody() {
                         item={it}
                         balance={balance}
                         harvestBalance={harvestBalance}
-                        ratio={ratio}
                       />
                     ))}
                   </ul>
@@ -263,14 +261,11 @@ function RedeemRow({
   item,
   balance,
   harvestBalance,
-  ratio,
 }: {
   item: RedeemItem
   balance: number
   /** 丰收币余额。兑换**优先花它**，见 domain/redeem.ts */
   harvestBalance: number
-  /** 现金 : 积分 参考汇率（1 元 = 多少积分）。只用来在旁边标一句「≈ ¥3」 */
-  ratio: number
 }) {
   const redeem = useApp((s) => s.redeem)
   const redeemedToday = useApp((s) => s.redeemedToday)
@@ -310,14 +305,14 @@ function RedeemRow({
           ) : null}
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <CoinPill amount={item.cost} tone={affordable ? 'sun' : 'danger'} />
-            {/* 现金参考（2026-09-21 家长要求）。⚠️ **纯展示**：
-                扣的还是 `item.cost`，这里只是把同一个数按家长设的汇率
-                换个单位念一遍。别在这里做任何换算后写回数据。
-                ⚠️ 不渲染成「裸数字叶子」—— e2e-check §8 靠「叶子文字 ==
-                余额」来抓重复余额，这里的文字带 `≈ ¥` 前缀，天然不撞。 */}
-            <span className="tnum text-[11px] font-bold text-ink-400">
-              ≈ {formatYuan(item.cost, ratio)}
-            </span>
+            {/* ⚠️ 这里原来还有一句「≈ ¥12」的现金参考（2026-09-21 加的）。
+                2026-09-30 用户要求去掉，原话：
+                  「🪙120 ≈¥12 兑换页 这种感觉不用显示。有付款了。」
+                理由成立：下面那行「付款：🌾 x + 🪙 y」已经把「这件东西
+                怎么付」说清楚了，再标一个人民币数字只是卡片上的噪音 ——
+                而且孩子要理解的是「我攒的币够不够」，不是「值几块钱」。
+                ⚠️ 家长端（RedeemEditor）的定价参照**保留** —— 那是家长
+                给自己定价时用的参照，不是给孩子看的。 */}
             {item.limitPerDay != null ? (
               <span className="text-[11px] text-ink-500">
                 每天最多 {item.limitPerDay} 次

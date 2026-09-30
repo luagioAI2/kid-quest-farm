@@ -273,9 +273,16 @@ describe('长期任务：家长审核', () => {
   it('待审次数占位：交满目标次数后不再接受提交', async () => {
     const task = periodTask()
     const target = task.checkInTargetCount ?? 1
-    const pk = periodKeyFor(task.cycle, Date.now(), useApp.getState().settings.dayStartHour)
+    /* ⚠️ 周期键必须**每次现算**，不能在开头算一次存下来。
+       下面会 vi.useFakeTimers 把日期拨到 9/8 附近，而开头的 `Date.now()`
+       还是真实时间（跑测试那天）—— 对**月度**任务两者同月、碰巧相等，
+       所以以前一直是对的；2026-09-30 新增了一个 **weekly** 的「背诵」并排在
+       长期任务最前，periodTask() 于是选中它，跨周之后 periodKey 对不上，
+       rows() 直接变成空数组。这是**测试里的隐患**，不是产品 bug。 */
+    const pk = () =>
+      periodKeyFor(task.cycle, Date.now(), useApp.getState().settings.dayStartHour)
     const rows = () =>
-      useApp.getState().instances.filter((i) => i.taskId === task.id && i.periodKey === pk)
+      useApp.getState().instances.filter((i) => i.taskId === task.id && i.periodKey === pk())
 
     // 每次换一天，才能记满 target 次（同一天只允许一条）
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -679,22 +686,29 @@ describe('首次启动：今日任务', () => {
 
   it('签到任务不会混进今日任务（它们走「坚持签到」区块）', () => {
     const titles = todayTitles()
-    for (const t of ['练字签到', '日记', '晨读']) expect(titles).not.toContain(t)
+    for (const t of ['练字签到', '日记', '晨读', '数学计算练习']) {
+      expect(titles).not.toContain(t)
+    }
   })
 
-  it('三个签到任务都能在「坚持签到」里找到', () => {
+  it('四个签到任务都能在「坚持签到」里找到', () => {
     const titles = selectCheckInTasks(useApp.getState()).map((t) => t.title)
-    expect([...titles].sort()).toEqual(['晨读', '日记', '练字签到'].sort())
+    expect([...titles].sort()).toEqual(
+      ['晨读', '日记', '练字签到', '数学计算练习'].sort(),
+    )
   })
 
-  it('长期任务仍然是那两个，且没混进签到', () => {
+  it('长期任务里没有混进签到（背诵是长期任务，数学计算练习不是）', () => {
     const period = useApp
       .getState()
       .tasks.filter(
         (t) => !t.checkInEnabled && ['weekly', 'monthly', 'yearly'].includes(t.cycle),
       )
       .map((t) => t.title)
-    expect([...period].sort()).toEqual(['学会一项新本领', '读一本完整的故事书'].sort())
+    expect([...period].sort()).toEqual(
+      ['背诵', '学会一项新本领', '每月记忆单词', '读一本完整的故事书'].sort(),
+    )
+    expect(period).not.toContain('数学计算练习')
   })
 })
 
@@ -1376,16 +1390,29 @@ describe('现金 : 积分 参考汇率', () => {
    2026-09-21 发现的真 bug：`seedIfEmpty` 是「先 count 再写」，两步之间
    不原子。React 的 StrictMode 在**开发模式**下把 effect 跑两遍
    （挂载 → 卸载 → 挂载），`boot()` 于是被并发调两次，两次 `count()`
-   都读到 0 → **各播一遍** → 全新装机变成 24 条任务 / 余额 100
-   （正常 12 条 / 50）。
+   都读到 0 → **各播一遍** → 全新装机变成双份任务 / 双份欢迎礼。
 
    为什么一直没被发现：**生产构建不会重复跑 effect**，所以
-   preview(4180) 是好的 12/50，只有 dev(5180) 是坏的 24/100。
+   preview(4180) 是好的，只有 dev(5180) 是坏的。
    人只在 dev 里手工看，很容易当成"种子本来就这么些"。
 
    这个测试直接构造「两个 boot 并发」——正是 StrictMode 干的事。
    ============================================================ */
 describe('播种的并发闸门', () => {
+  /**
+   * 账本里的欢迎礼条数。
+   *
+   * ⚠️ 断言分两层，别只写「等于某个数」：
+   *  1. **条数 == 1** —— 这才是「只播一遍」的正题。金额怎么调都不影响它。
+   *  2. **金额 == 50** —— 单独钉一下。50 是设计值（开局只够换一件 30 分的小零食，
+   *     「大件愿望」要攒两周）；2026-09-29 有人为了试兑换临时改成 2000 并
+   *     注明「仅本地、不提交」，2026-09-30 却被 fce9ba1 误提交了 ——
+   *     于是新装机一开局就有 2000 分，设计当场作废。
+   *     两层分开写，就是为了让「重复播种」和「金额被改」报出不同的错。
+   */
+  const welcomeRows = () =>
+    db.ledger.filter((r) => r.memo.includes('欢迎来到小任务农场')).toArray()
+
   it('并发 boot 两次也只播一遍（StrictMode 双跑不翻倍）', async () => {
     await db.delete()
     await db.open()
@@ -1393,7 +1420,10 @@ describe('播种的并发闸门', () => {
     await Promise.all([useApp.getState().boot(), useApp.getState().boot()])
 
     expect(useApp.getState().tasks.length, '任务数不该翻倍').toBe(SEED_TASKS.length)
-    expect(useApp.getState().balance, '欢迎礼只该发一次').toBe(50)
+    const welcome = await welcomeRows()
+    expect(welcome, '欢迎礼只该发一次').toHaveLength(1)
+    expect(welcome[0].delta, '欢迎礼金额是设计值 50，不是 2000').toBe(50)
+    expect(useApp.getState().balance, '余额 = 那一笔欢迎礼（没被重复发）').toBe(welcome[0].delta)
   })
 
   it('串行 boot 两次同样只播一遍（幂等）', async () => {
@@ -1404,6 +1434,9 @@ describe('播种的并发闸门', () => {
     await useApp.getState().boot()
 
     expect(useApp.getState().tasks.length).toBe(SEED_TASKS.length)
-    expect(useApp.getState().balance).toBe(50)
+    const welcome = await welcomeRows()
+    expect(welcome, '欢迎礼只该发一次').toHaveLength(1)
+    expect(welcome[0].delta).toBe(50)
+    expect(useApp.getState().balance).toBe(welcome[0].delta)
   })
 })
