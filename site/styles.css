@@ -35,6 +35,18 @@
   --tangerine-400: #fb923c;
   --tangerine-500: #f97316;
 
+  /* 主色：全站**只用一个**彩色。
+     上一版把品牌色（阳光黄）、点缀色（天空蓝 / 葡萄紫 / 树莓红 / 橙）
+     一起铺到页面各处，加上三色光晕和渐变标题，结果是「热闹但看不清」。
+     家长要的是「清晰明了」：所以收成单主色 —— 草地绿，它同时承担
+     「安全 / 通过 / 正向」的语义，正好压在家长最关心的几条上。
+     其余位置一律退回墨色与纸色，靠字重和留白拉层级，而不是靠颜色。 */
+  --accent: #16a34a;
+  --accent-strong: #15803d;
+  --accent-ink: #14532d;
+  --accent-soft: #eef7f0;
+  --accent-line: #cfe8d8;
+
   /* 中性：偏暖的纸感 */
   --ink-900: #33281e;
   --ink-700: #574838;
@@ -66,11 +78,16 @@
   --sh-1: 0 1px 2px rgb(51 40 30 / 0.05), 0 6px 16px -10px rgb(51 40 30 / 0.18);
   --sh-2: 0 8px 28px -10px rgb(51 40 30 / 0.22), 0 2px 6px -2px rgb(51 40 30 / 0.08);
   --sh-3: 0 26px 60px -22px rgb(51 40 30 / 0.3), 0 8px 20px -12px rgb(51 40 30 / 0.16);
-  --sh-sun: 0 14px 30px -12px rgb(217 119 6 / 0.5);
+  /* 按钮的投影也去掉了橙色泛光 —— 彩色阴影是「眼花」的隐形来源之一，
+     换成同色系的极浅投影，按钮还在，但不再往外散光。 */
+  --sh-accent: 0 1px 2px rgb(20 83 45 / 0.16), 0 10px 20px -14px rgb(20 83 45 / 0.6);
 
   /* 布局 */
   --wrap: 1160px;
   --gutter: clamp(18px, 4vw, 40px);
+  /* 手机模型宽度。提到根上是因为 hero 的两张说明卡要靠它定位 ——
+     它们必须贴在手机两侧，而「贴住」这件事跟容器宽度无关。 */
+  --phone-w: clamp(232px, 25vw, 286px);
 }
 
 /* ---------- 2. 基础 ---------- */
@@ -90,23 +107,14 @@ body {
   margin: 0;
   font-family: var(--font-body);
   font-size: 16px;
-  line-height: 1.75;
+  line-height: 1.85;
   color: var(--ink-900);
   background-color: var(--paper);
-  /* 两层背景：
-     1) 固定暖光（营造顶部柔和氛围）
-     2) 极淡的纸质噪点纹理（用 CSS 渐变模拟，不是真图片）
-     让背景有「手工纸」的触感，而不是平滑的数字化平面。 */
-  background-image:
-    radial-gradient(120% 55% at 50% -8%, rgb(253 230 138 / 0.35) 0, transparent 62%),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0px,
-      transparent 2px,
-      rgb(51 40 30 / 0.015) 2px,
-      rgb(51 40 30 / 0.015) 4px
-    );
-  background-attachment: fixed, scroll;
+  /* 上一版这里叠了「径向暖光 + 每 4px 一条的噪点条纹」，再叠上 .page-glow 的
+     三色光斑 —— 三层纹理互相打架，滚起来整页都在微微闪。
+     现在只留一层几乎看不见的竖向暖色过渡，让页面有温度但没有图案。 */
+  background-image: linear-gradient(180deg, #fff7ec 0, var(--paper) 560px);
+  background-attachment: scroll;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
@@ -118,21 +126,51 @@ img {
   display: block;
 }
 
+/* ---------- 2.5 图标 ----------
+   全站的图标都来自 index.html 顶部那个内联 <svg class="sprite">，
+   用 <use> 引用。不用 emoji、不用 icon font、不发任何请求。
+   线条统一 1.7px、圆头圆角，颜色一律 currentColor ——
+   所以图标永远跟着所在文字的颜色走，不会出现「一块地方五种配色」。 */
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--accent-strong);
+}
+
 a {
-  color: var(--sun-700);
+  color: var(--accent-strong);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
 
+/* 中文标题不再用负字距。
+   负字距是给拉丁字母的（字母之间本来就有空隙，收一点更紧凑）；
+   汉字是满格的方块，收字距只会让字挤在一起，显得粗、显得吵。
+   字重也从 800/900 收到 700 —— 中文黑体的 Bold 已经足够重，
+   再往上加就只剩「喊」的感觉了。 */
 h1,
 h2,
 h3,
 h4 {
   font-family: var(--font-display);
-  line-height: 1.22;
+  line-height: 1.3;
   margin: 0;
-  letter-spacing: -0.015em;
-  font-weight: 800;
+  letter-spacing: 0.005em;
+  font-weight: 700;
 }
 
 p {
@@ -206,18 +244,8 @@ ol {
   padding-block: clamp(40px, 5vw, 64px);
 }
 
-/* 超大留白区块：让重点内容「呼吸」 */
-.section--airy {
-  padding-block: clamp(96px, 14vw, 180px);
-}
-
 .section--paper {
   background: linear-gradient(180deg, var(--paper-2), var(--paper));
-}
-
-/* 带顶部装饰分隔线的区块 */
-.section--ruled {
-  border-top: 1px dashed var(--ink-200);
 }
 
 .section-head {
@@ -230,76 +258,74 @@ ol {
   text-align: center;
 }
 
-/* 章节 eyebrow 的另一种形态：无底色、只有文字 + 小装饰 */
-.eyebrow--minimal {
-  background: none;
-  box-shadow: none;
-  padding: 0;
-  color: var(--grass-600);
-  letter-spacing: 0.08em;
-}
-.eyebrow--minimal::before {
-  content: '';
-  display: inline-block;
-  width: 24px;
-  height: 3px;
-  background: var(--grass-400);
-  border-radius: 2px;
-  margin-right: 8px;
-  vertical-align: middle;
-}
-
+/* 章节小标签。
+   上一版是一枚黄色胶囊 + emoji，页面上有 9 个 —— 每个都在抢注意力，
+   而且黄色胶囊和主标题的颜色互相打架。
+   现在退成一枚素色文字标签：一条短横线 + 绿色小字。
+   层级还在（读者一眼知道「这是本节主题」），但不再是一个视觉块。 */
 .eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-family: var(--font-display);
   font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--sun-700);
-  background: var(--sun-100);
-  border-radius: var(--r-pill);
-  padding: 7px 15px 7px 12px;
-  margin-bottom: 18px;
-  box-shadow: var(--hairline);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent-strong);
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 14px;
+  box-shadow: none;
+}
+.eyebrow::before {
+  content: '';
+  flex: none;
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.6;
 }
 
-/* 排版尺度：刻意拉大跳跃，制造视觉张力。
-   参考 impeccable 的「极端尺度」原则：标题和正文之间要差 3-5 倍，
-   而不是舒服的 1.5 倍。 */
+/* 排版尺度。
+   上一版按「极端尺度」把标题和正文拉到 3-5 倍差，还配了 900 字重 ——
+   那套是给英文营销页的。中文标题在这个比例下变成了一堵墙，
+   读者先感到「被推销」，才轮到读内容。
+   现在把跳跃收到 2-2.5 倍：层级仍然清楚，但语气从「喊」变成「说」。 */
 .h0 {
-  font-size: clamp(2.8rem, 7.5vw, 5.6rem);
-  font-weight: 900;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
+  line-height: 1.16;
 }
 
 .h1 {
-  font-size: clamp(2.4rem, 6vw, 4.6rem);
-  font-weight: 900;
-  line-height: 1.08;
-  letter-spacing: -0.025em;
+  font-size: clamp(2rem, 4.2vw, 3.1rem);
+  line-height: 1.2;
 }
 
 .h2 {
-  font-size: clamp(1.75rem, 3.8vw, 2.9rem);
-  font-weight: 800;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  font-size: clamp(1.45rem, 2.7vw, 2rem);
+  line-height: 1.32;
 }
 
 .h3 {
-  font-size: clamp(1.15rem, 2vw, 1.45rem);
-  font-weight: 700;
+  font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+  line-height: 1.5;
 }
 
+/* 引导段：字号不再放大，靠行高和颜色跟正文区分。
+   中文在 1.9 倍行高下读起来最舒服，1.75 会显得紧。 */
 .lead {
-  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  font-size: clamp(0.98rem, 1.25vw, 1.08rem);
   color: var(--ink-600);
-  margin-top: 18px;
-  line-height: 1.75;
+  margin-top: 16px;
+  max-width: 36em;
+  line-height: 1.95;
   font-weight: 400;
+  text-wrap: pretty;
+}
+.section-head--center .lead {
+  margin-inline: auto;
 }
 
 .muted {
@@ -310,21 +336,28 @@ ol {
   font-variant-numeric: tabular-nums;
 }
 
+/* 强调：不再用荧光笔高亮。
+   正文里出现黄色底纹会让整段文字变成「花斑」，读者要先把底纹滤掉才能读字。
+   改成只加字重 + 深墨色 —— 一样能跳出来，但不增加任何图案。 */
 .mark {
-  /* 高亮：模仿荧光笔，但用暖色、只压一半高度 */
-  background: linear-gradient(180deg, transparent 58%, var(--sun-200) 58%);
-  padding-inline: 2px;
+  background: none;
+  padding: 0;
+  color: var(--ink-900);
+  font-weight: 700;
 }
 
-/* ---------- 4. 按钮 ---------- */
+/* ---------- 4. 按钮 ----------
+   上一版是「橙黄渐变 + 橙色泛光投影」，点一下就往外散光。
+   现在改成实心单色：主按钮一个颜色、次要按钮描边，
+   不用渐变、不用彩色阴影 —— 页面上只剩一处饱和色，视线自然落上去。 */
 .btn {
-  --btn-bg: linear-gradient(135deg, var(--sun-400), var(--sun-500));
+  --btn-bg: var(--accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 16px;
   line-height: 1;
   padding: 16px 26px;
@@ -334,19 +367,19 @@ ol {
   color: #fff;
   text-decoration: none;
   cursor: pointer;
-  box-shadow: var(--sh-sun);
-  transition: transform 0.14s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  box-shadow: var(--sh-accent);
+  transition: transform 0.14s ease, box-shadow 0.18s ease, background-color 0.18s ease;
 }
 
 .btn:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.04);
-  box-shadow: 0 20px 38px -14px rgb(217 119 6 / 0.55);
+  transform: translateY(-1px);
+  background: var(--accent-strong);
+  box-shadow: 0 2px 4px rgb(20 83 45 / 0.18), 0 14px 26px -14px rgb(20 83 45 / 0.6);
 }
 
 .btn:active {
-  transform: scale(0.975);
-  filter: brightness(0.96);
+  transform: translateY(0);
+  background: var(--accent-ink);
 }
 
 .btn--lg {
@@ -356,22 +389,24 @@ ol {
 
 .btn--ghost {
   --btn-bg: #fff;
-  color: var(--ink-700);
-  box-shadow: var(--sh-1), var(--hairline);
+  color: var(--ink-900);
+  box-shadow: none;
+  border: 1.5px solid var(--ink-200);
 }
 
 .btn--ghost:hover {
-  box-shadow: var(--sh-2), var(--hairline);
+  background: var(--paper-2);
+  border-color: var(--ink-300);
+  box-shadow: none;
 }
 
+.btn--ghost:active {
+  background: var(--ink-100);
+}
+
+/* 主色已经是草地绿了，.btn--grass 保留成别名，避免调用处失效 */
 .btn--grass {
-  --btn-bg: linear-gradient(135deg, var(--grass-400), var(--grass-600));
-  box-shadow: 0 14px 30px -12px rgb(22 163 74 / 0.5);
-}
-
-.btn--dark {
-  --btn-bg: linear-gradient(135deg, #4a3a2b, var(--ink-900));
-  box-shadow: 0 14px 30px -12px rgb(51 40 30 / 0.5);
+  --btn-bg: var(--accent);
 }
 
 .btn--block {
@@ -392,33 +427,12 @@ ol {
   align-items: center;
 }
 
-/* 文字链 */
-.link-more {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 15px;
-  color: var(--sun-700);
-  text-decoration: none;
-  border-bottom: 2px solid var(--sun-200);
-  padding-bottom: 2px;
-  transition: border-color 0.18s ease, gap 0.18s ease;
-}
-.link-more:hover {
-  border-color: var(--sun-500);
-  gap: 10px;
-}
 
 /* ---------- 5. 卡片 ----------
-   刻意打破「所有卡片长得一样」的单调感 —— 这是 AI  landing page
-   的典型 fingerprint。混合使用：
-   · 标准圆角 + 柔和投影（默认）
-   · 小圆角 + 粗边框（card--bold）
-   · 大圆角 + 厚底色（card--pill）
-   · 重叠上浮（card--lift）
-   让页面有节奏，而不是一张一张的克隆体。 */
+   上一版这里塞了 4 种卡片变体（粗边框 / 胶囊 / 顶部色条 / 重叠上浮），
+   注释说是为了「打破克隆体感」。但实际排查下来，这些变体在 index.html 里
+   **一个都没用上** —— 也就是说页面看到的「乱」，不是来自卡片差异化，
+   而是来自配色和装饰。变体已删，只留下面这一种。 */
 .card {
   background: #fff;
   border-radius: var(--r-lg);
@@ -430,148 +444,39 @@ ol {
     box-shadow 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-.card--flat {
-  background: var(--paper-2);
-}
-
 .card--hover:hover {
-  transform: translateY(-6px);
-  box-shadow: var(--sh-2), var(--hairline);
-}
-
-/* 粗边框卡片：像一本厚纸笔记本的封面，更「手工感」 */
-.card--bold {
-  border-radius: var(--r-sm);
-  box-shadow: none;
-  border: 2.5px solid var(--ink-200);
-  background: var(--paper);
-}
-.card--bold:hover {
-  border-color: var(--sun-300);
   transform: translateY(-3px);
-}
-
-/* 大圆角「胶囊」卡片：更俏皮，适合儿童产品 */
-.card--pill {
-  border-radius: var(--r-xl);
-  box-shadow: var(--sh-1), var(--hairline);
-}
-.card--pill:hover {
-  transform: translateY(-4px) scale(1.01);
   box-shadow: var(--sh-2), var(--hairline);
 }
 
-/* 带顶部色条的卡片 */
-.card--stripe {
-  padding-top: clamp(28px, 3vw, 36px);
-}
-.card--stripe::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 5px;
-  background: linear-gradient(90deg, var(--sun-400), var(--grass-400));
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
-}
-.card--bold.card--stripe::before {
-  border-radius: var(--r-sm) var(--r-sm) 0 0;
-}
-
-/* ---------- 5.5 装饰元素 ----------
-   用纯 CSS 做出不规则有机形状，点缀在关键位置，打破「全是矩形」的单调。 */
-
-/* 手绘风格小圆点 */
-.dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: var(--sun-400);
-  border-radius: 50%;
-  vertical-align: middle;
-  margin: 0 6px;
-}
-.dot--grass { background: var(--grass-400); }
-.dot--berry { background: var(--berry-400); }
-.dot--sky   { background: var(--sky-400); }
-
-/* 波浪分隔线（SVG data URI，纯 CSS，无外部请求） */
-.wave {
-  display: block;
-  width: 100%;
-  height: 24px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 24' preserveAspectRatio='none'%3E%3Cpath d='M0 12 Q 150 0, 300 12 T 600 12 T 900 12 T 1200 12' fill='none' stroke='%23e2d6c6' stroke-width='1.5'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
-  opacity: 0.6;
-  margin: 8px 0;
-}
-
-/* 图标圆牌 */
+/* 图标圆牌。
+   上一版有 6 种彩色底（黄 / 绿 / 蓝 / 紫 / 粉 / 橙），一页铺开就是
+   六种颜色互相叫喊。现在统一成一种极浅的主色底 ——
+   区分交给图标形状本身，底色只负责把图标从白卡上托起来。 */
 .ico {
-  --ico-bg: var(--sun-100);
   width: 54px;
   height: 54px;
   flex: none;
   display: grid;
   place-items: center;
-  font-size: 26px;
-  line-height: 1;
-  border-radius: 17px;
-  background: var(--ico-bg);
+  border-radius: 16px;
+  background: var(--accent-soft);
   box-shadow: var(--hairline);
   margin-bottom: 16px;
+}
+.ico .icon {
+  width: 27px;
+  height: 27px;
 }
 .ico--sm {
   width: 42px;
   height: 42px;
-  font-size: 20px;
   border-radius: 13px;
   margin-bottom: 0;
 }
-.ico--sun {
-  --ico-bg: var(--sun-100);
-}
-.ico--grass {
-  --ico-bg: var(--grass-100);
-}
-.ico--sky {
-  --ico-bg: #e0f2fe;
-}
-.ico--grape {
-  --ico-bg: #ede9fe;
-}
-.ico--berry {
-  --ico-bg: #ffe4e6;
-}
-.ico--tangerine {
-  --ico-bg: #ffedd5;
-}
-
-/* 小标签 */
-.tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--font-display);
-  font-size: 12.5px;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: var(--r-pill);
-  background: var(--ink-100);
-  color: var(--ink-600);
-  white-space: nowrap;
-}
-.tag--sun {
-  background: var(--sun-100);
-  color: var(--sun-700);
-}
-.tag--grass {
-  background: var(--grass-100);
-  color: var(--grass-700);
-}
-.tag--grape {
-  background: #ede9fe;
-  color: #6d28d9;
+.ico--sm .icon {
+  width: 21px;
+  height: 21px;
 }
 
 /* ---------- 6. 顶部导航 ---------- */
@@ -618,7 +523,7 @@ ol {
 }
 .brand__name {
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 18px;
   letter-spacing: -0.01em;
 }
@@ -649,8 +554,8 @@ ol {
   transition: background 0.16s ease, color 0.16s ease;
 }
 .nav__link:hover {
-  background: var(--sun-100);
-  color: var(--sun-700);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 .nav__cta {
@@ -681,7 +586,7 @@ ol {
   height: 3px;
   width: 0;
   z-index: 120;
-  background: linear-gradient(90deg, var(--grass-400), var(--sun-400), var(--tangerine-400));
+  background: var(--accent);
   transition: width 0.1s linear;
 }
 
@@ -691,24 +596,20 @@ ol {
    放在 .hero 里时，.hero 的 overflow:hidden 会把光晕从导航条下沿一刀切断 ——
    实测那一行的像素从 (255,250,238) 直接跳到 (223,246,215)，是一条肉眼可见的硬边。
    放到页面层之后，光晕一直铺到 y=0，导航条在未吸顶时是透明的，两边就接上了。 */
-/* 顶部背景：从「三个径向渐变 blob」改成一张有意的有机形状。
-   径向渐变是 AI  landing page 的最典型 fingerprint —— 几乎每张 AI 生成的
-   营销页都有。改成用 CSS conic-gradient + mask 拼出一个不规则的
-   「阳光泼洒」形状，既保留了温暖感，又打破了可预测性。 */
+/* 顶部背景。
+   上一版是「三个 conic-gradient 光斑 + blur(60px)」，黄 / 绿 / 橙同时出现，
+   手机上一屏就占了半屏 —— 这是用户说「眼花缭乱」的头号来源。
+   现在换成一层单一色相、极低不透明度的暖光，只负责告诉眼睛
+   「页面从上面开始」，不再自己成为一个视觉主体。 */
 .page-glow {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  height: clamp(920px, 72vw, 1140px);
+  height: clamp(420px, 34vw, 560px);
   pointer-events: none;
   z-index: 0;
-  background:
-    conic-gradient(from 200deg at 65% 25%, rgb(252 211 77 / 0.55) 0deg 80deg, transparent 80deg),
-    conic-gradient(from 310deg at 22% 35%, rgb(134 239 172 / 0.42) 0deg 60deg, transparent 60deg),
-    conic-gradient(from 100deg at 50% 8%, rgb(253 186 116 / 0.32) 0deg 50deg, transparent 50deg);
-  filter: blur(60px) saturate(120%);
-  opacity: 0.85;
+  background: linear-gradient(180deg, rgb(253 230 138 / 0.28) 0, rgb(253 230 138 / 0) 100%);
 }
 
 main {
@@ -732,114 +633,117 @@ main {
   align-items: center;
 }
 
-/* 标题：用 .h0 的极端尺度，但加一层装饰性 text-shadow 制造「手绘
-   厚描边」的错觉 —— 不用额外 font，纯 CSS 做出辨识度。 */
+/* 标题：尺寸仍然大（大 = 一眼读到），但不再做任何花活。
+   上一版第二行是「黄→橙→粉」三色渐变文字，还跟了一个小圆点装饰；
+   渐变文字在浅底上对比度不稳，颜色多也分散注意力。
+   现在第一行墨色、第二行纯色主绿 —— 两个色，层级反而更清楚。 */
 .hero__title {
-  font-size: clamp(2.6rem, 6.8vw, 5rem);
-  font-weight: 900;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  font-size: clamp(2.1rem, 4.4vw, 3.2rem);
+  line-height: 1.22;
   text-wrap: balance;
+  color: var(--ink-900);
 }
 
 .hero__title em {
   font-style: normal;
-  background: linear-gradient(135deg, var(--sun-500) 0%, var(--tangerine-500) 50%, var(--berry-400) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  /* 渐变文字上加一层极细的描边，让它在浅色背景上更「跳」 */
-  -webkit-text-stroke: 1.5px transparent;
+  color: var(--accent-strong);
 }
 
-/* 用 CSS 伪内容给标题加一个小装饰标记，打破纯文字的沉闷 */
-.hero__title::after {
-  content: '';
-  display: inline-block;
-  width: 0.45em;
-  height: 0.45em;
-  margin-left: 0.15em;
-  margin-bottom: 0.15em;
-  background: var(--sun-400);
-  border-radius: 50% 50% 50% 2px;
-  transform: rotate(-15deg);
-  vertical-align: baseline;
-}
-
+/* 导语：家长是来「看明白」的，不是来读广告的。
+   所以字号不再拉大，行高放宽，颜色压深，把重点留给内容本身。 */
 .hero__lead {
-  font-size: clamp(1.05rem, 1.7vw, 1.28rem);
-  color: var(--ink-600);
-  margin-top: 24px;
+  font-size: clamp(0.98rem, 1.25vw, 1.08rem);
+  color: var(--ink-700);
+  margin-top: 22px;
   max-width: 32em;
-  line-height: 1.7;
+  line-height: 1.95;
   font-weight: 400;
+  text-wrap: pretty;
 }
 
-.hero__trust {
+/* 闭环一行：用箭头把机制串起来，读起来像一句话而不是一串徽章。
+   用 flex 换行（而不是让浏览器在任意字之间断行），保证每一步都是完整的。 */
+.hero__flow {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 22px;
-  margin-top: 28px;
-  font-size: 14px;
-  color: var(--ink-600);
-  font-family: var(--font-display);
+  align-items: baseline;
+  gap: 4px 9px;
+  margin-top: 14px;
+  font-size: clamp(0.86rem, 1.3vw, 0.95rem);
+  color: var(--ink-700);
+  line-height: 1.8;
+}
+.hero__flow span {
+  white-space: nowrap;
   font-weight: 700;
+}
+.hero__flow i {
+  font-style: normal;
+  color: var(--ink-400);
+}
+
+/* 家长最关心的四条，做成 2×2 的清单。
+   上一版是四个带 emoji 的徽章横排 —— 颜色各异、还得靠 emoji 认意思；
+   现在统一成绿色对勾，扫一眼就能看完，不需要「翻译」图标。 */
+.hero__trust {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  gap: 10px 34px;
+  margin-top: 26px;
+  font-size: 15px;
+  color: var(--ink-900);
+  font-family: var(--font-body);
+  font-weight: 600;
 }
 .hero__trust li {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
+}
+.hero__trust li::before {
+  content: '✓';
+  flex: none;
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .hero__cta {
-  margin-top: 34px;
+  margin-top: 32px;
 }
 
 .hero__note {
-  margin-top: 16px;
+  margin-top: 14px;
   font-size: 13.5px;
   color: var(--ink-500);
 }
 
-/* 数据条 */
-.stats {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-top: clamp(38px, 5vw, 60px);
-}
-
-.stat {
-  background: #fff;
-  border-radius: var(--r-md);
-  box-shadow: var(--sh-1), var(--hairline);
-  padding: 18px 20px;
-}
-.stat__num {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: clamp(1.5rem, 2.6vw, 2rem);
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-.stat__label {
-  font-size: 13.5px;
-  color: var(--ink-500);
-  margin-top: 4px;
-}
+/* （原来的「数据条」.stats / .stat 已删除：用户说农场里有多少块地、
+   多少种作物不需要在首屏报数 —— 那是容量清单，不是决策信息。
+   农场规模交给「界面预览」里的截图说明。） */
 
 /* ---------- 8. 手机模型 ---------- */
+/* 展示区：把宽度收在手机模型附近，两张说明卡才不会「飘」到老远。
+   桌面双栏时这一列本来就 ~430px，所以限宽只对单栏（平板 / 手机）生效。
+   上一版没限宽，834px 时展示区有 768px 宽，卡片被推到离手机 160px 的空中。 */
 .showcase {
   position: relative;
   display: grid;
   place-items: center;
   min-height: 460px;
+  max-width: 460px;
+  margin-inline: auto;
 }
 
 .phone {
-  --w: clamp(232px, 25vw, 286px);
+  --w: var(--phone-w);
   width: var(--w);
   aspect-ratio: 390 / 844;
   background: linear-gradient(160deg, #4b3a2a, #241b13);
@@ -880,7 +784,11 @@ main {
   z-index: 2;
 }
 
-/* 浮动徽章 */
+/* 说明卡：贴在手机模型旁边的两小块界面切片。
+   上一版有三张、各自上下漂浮、延迟错开 —— 一屏里三个东西同时在动，
+   而且每一张都压住了手机屏幕上的内容。
+   现在减到两张、停掉漂浮（动的东西最抓眼睛，也最累眼睛），
+   位置挪到手机外侧，不再遮挡截图。 */
 .float-card {
   position: absolute;
   z-index: 3;
@@ -888,60 +796,69 @@ main {
   align-items: center;
   gap: 10px;
   background: #fff;
-  border-radius: 16px;
+  border-radius: 14px;
   padding: 11px 15px;
-  box-shadow: var(--sh-2), var(--hairline);
+  box-shadow: var(--sh-1), var(--hairline);
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 14px;
   white-space: nowrap;
-  animation: kqf-float 4.4s ease-in-out infinite;
 }
-.float-card__emoji {
-  font-size: 22px;
-  line-height: 1;
+.float-card .icon {
+  width: 21px;
+  height: 21px;
 }
 .float-card__sub {
   display: block;
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ink-500);
   margin-top: -2px;
 }
 
+/* 定位方式：从「容器百分比」改成「贴着手机边缘」。
+   百分比在不同宽度下含义不一样 —— 桌面双栏时展示区 430px、
+   平板单栏时 460px、手机时 350px，同一个 -6% 会算出三种距离，
+   卡片要么压住截图、要么飘到离手机很远的地方。
+   现在直接算：卡片左边缘 = 手机左边缘 − 104px，
+   而卡片本身约 120px 宽，于是永远只压住手机 16px 左右。 */
 .float-card--a {
-  top: 8%;
-  left: -2%;
-  animation-delay: -0.2s;
+  top: 11%;
+  left: calc(50% - var(--phone-w) / 2 - 104px);
 }
 .float-card--b {
-  top: 40%;
-  right: -4%;
-  animation-delay: -1.4s;
-}
-.float-card--c {
-  bottom: 9%;
-  left: 1%;
-  animation-delay: -2.6s;
+  bottom: 13%;
+  right: calc(50% - var(--phone-w) / 2 - 104px);
 }
 
-@keyframes kqf-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-9px);
-  }
+/* ---------- 8.5 首屏插画 ----------
+   纯 SVG 的田野地平线，铺在 hero 底部、通栏。
+   它承担两件事：① 让页面有真正的「图案」而不是一堆白卡片；
+   ② 把 hero 收住，下面接的 section--paper 像是从这条地平线里长出来的。
+   用 xMidYMax slice 裁切，所以窄屏只会裁掉两侧，山丘和太阳一直在。 */
+.horizon {
+  margin-top: clamp(28px, 4vw, 52px);
+  line-height: 0;
+}
+.horizon svg {
+  display: block;
+  width: 100%;
+  /* 插画 viewBox 是 1440×320（比例 4.5）。高度必须跟着比例走 ——
+     上一版这里写死 clamp(104px, 14vw, 178px)，配的是 1440×240 的老插画；
+     现在插画变高变丰富，沿用旧高度会把天空、太阳、云整条裁掉
+     （slice 是从底部对齐裁的，裁掉的全是上半部分）。 */
+  height: clamp(190px, 23vw, 320px);
 }
 
-/* ---------- 9. 四大支柱 ----------
-   从「2×2 等宽网格」改成不对称布局：左大右小，打破可预测性。
-   参考 impeccable：让重要元素 3-5 倍于周围，用空间张力代替对称平衡。 */
+/* ---------- 9. 四张功能卡 ----------
+   上一版是「左大右小 + 第一张跨两行」的不对称网格。
+   不对称本身没问题，但这里四张卡是**并列**关系（任务 / 反馈 / 积分 / 农场），
+   硬分出主次会让人以为第一张更重要，读起来要额外判断一次。
+   改回等宽 2×2，四张一样大，顺序即层级。 */
 .pillars {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  gap: clamp(16px, 2.2vw, 28px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(16px, 2.2vw, 26px);
 }
 
 .pillar {
@@ -949,47 +866,40 @@ main {
   flex-direction: column;
 }
 
-/* 第一个支柱（计划）作为「主角」——更大、更醒目 */
-.pillar:first-child {
-  grid-row: span 2;
-}
-.pillar:first-child .card {
-  padding: clamp(28px, 3.2vw, 38px);
-}
-.pillar:first-child .pillar__title {
-  font-size: clamp(1.3rem, 2.2vw, 1.6rem);
-}
-
 .pillar__title {
-  font-size: clamp(1.1rem, 1.6vw, 1.3rem);
+  font-size: clamp(1.05rem, 1.5vw, 1.22rem);
   margin-bottom: 10px;
-  font-weight: 800;
 }
 .pillar__desc {
   color: var(--ink-600);
   font-size: 15px;
-  line-height: 1.75;
+  line-height: 1.9;
 }
 .pillar__list {
   margin-top: 18px;
   padding-top: 16px;
   border-top: 1px dashed var(--ink-200);
   display: grid;
-  gap: 9px;
+  gap: 10px;
 }
 .pillar__list li {
   display: flex;
-  gap: 9px;
+  gap: 10px;
   font-size: 14px;
   color: var(--ink-700);
-  line-height: 1.65;
+  line-height: 1.85;
 }
+/* 列表前面的勾不再用字符「✓」（字体不同、大小不一），
+   改成一条细的绿色短横 —— 更安静，也不会跟正文抢字号。 */
 .pillar__list li::before {
-  content: '✓';
-  font-family: var(--font-display);
-  font-weight: 800;
-  color: var(--grass-600);
+  content: '';
   flex: none;
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: 0.5;
+  margin-top: 0.72em;
 }
 
 /* ---------- 10. 结算机制 ----------
@@ -1021,7 +931,7 @@ main {
   border: 2.5px solid var(--ink-200);
 }
 .rule:nth-child(1):hover {
-  border-color: var(--sun-300);
+  border-color: var(--accent-line);
 }
 
 /* 第二张：顶部色条 */
@@ -1035,7 +945,7 @@ main {
   left: 0;
   right: 0;
   height: 5px;
-  background: linear-gradient(90deg, var(--sun-400), var(--grass-400));
+  background: var(--accent);
 }
 
 /* 第三张：大圆角 */
@@ -1052,12 +962,12 @@ main {
 }
 .rule__label {
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 15px;
 }
 .rule__score {
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 26px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -1065,7 +975,7 @@ main {
 .rule__desc {
   font-size: 14.5px;
   color: var(--ink-600);
-  line-height: 1.7;
+  line-height: 1.9;
 }
 .rule__bar {
   height: 9px;
@@ -1100,10 +1010,12 @@ main {
   background: linear-gradient(90deg, var(--berry-400), var(--berry-500));
 }
 
+/* 公式块：深底 + 两种强调色（黄 + 绿）改成一主一白，
+   在一段代码里出现两种彩色数字，眼睛要来回切两次。 */
 .formula {
   margin-top: clamp(18px, 2.4vw, 26px);
   background: var(--ink-900);
-  color: var(--sun-200);
+  color: rgb(255 250 242 / 0.8);
   border-radius: var(--r-md);
   padding: 20px 24px;
   font-family: 'Consolas', 'SFMono-Regular', 'Menlo', monospace;
@@ -1113,7 +1025,7 @@ main {
   box-shadow: var(--sh-2);
 }
 .formula b {
-  color: var(--sun-400);
+  color: #fff;
   font-weight: 700;
 }
 .formula em {
@@ -1144,22 +1056,17 @@ main {
   box-shadow: var(--sh-1), var(--hairline);
   padding: 11px 18px 11px 12px;
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 14.5px;
 }
-.loop__step i {
-  font-style: normal;
-  font-size: 19px;
-  line-height: 1;
+.loop__step .icon {
+  width: 19px;
+  height: 19px;
 }
 .loop__arrow {
   color: var(--ink-300);
   font-size: 16px;
   padding-inline: 2px;
-}
-.loop__step:nth-child(4n + 1) .loop__idx {
-  background: var(--sun-100);
-  color: var(--sun-700);
 }
 .loop__idx {
   width: 21px;
@@ -1200,7 +1107,7 @@ main {
 .money__item p {
   font-size: 14.5px;
   color: var(--ink-600);
-  line-height: 1.7;
+  line-height: 1.9;
 }
 
 /* 价格区间示意（纯 SVG，无外部依赖） */
@@ -1212,7 +1119,7 @@ main {
 }
 .band__title {
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 15px;
   margin-bottom: 4px;
 }
@@ -1260,7 +1167,7 @@ main {
   font-size: 13.5px;
   color: var(--ink-600);
   text-align: center;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 .shot figcaption b {
   display: block;
@@ -1298,7 +1205,7 @@ main {
 .check-list p {
   font-size: 14.5px;
   color: var(--ink-600);
-  line-height: 1.7;
+  line-height: 1.9;
 }
 
 .parents__shot {
@@ -1335,10 +1242,12 @@ main {
 }
 
 /* 主角卡片：粗边框 + 大圆角 + 顶部色条 */
+/* 主推卡片：只靠一条绿色顶边 + 主色描边表示「这个是要下载的」，
+   不再用「黄边 + 黄绿渐变条 + 放大 1.01」三重强调。 */
 .dl--feature {
   border-radius: var(--r-xl);
   box-shadow: var(--sh-2), var(--hairline);
-  border: 2.5px solid var(--sun-300);
+  border: 2px solid var(--accent-line);
   position: relative;
   overflow: hidden;
 }
@@ -1349,11 +1258,11 @@ main {
   left: 0;
   right: 0;
   height: 5px;
-  background: linear-gradient(90deg, var(--sun-400), var(--grass-400));
+  background: var(--accent);
 }
 .dl--feature:hover {
-  border-color: var(--sun-400);
-  transform: translateY(-6px) scale(1.01);
+  border-color: var(--accent);
+  transform: translateY(-4px);
 }
 
 /* 第二张：小圆角 */
@@ -1361,9 +1270,9 @@ main {
   border-radius: var(--r-sm);
 }
 
-/* 第三张：标准但带左侧色条 */
+/* 第三张：标准但带左侧墨色细条（原来是天蓝，现在是全站唯一彩色的「降级版」） */
 .dl:nth-child(3) {
-  border-left: 4px solid var(--sky-400);
+  border-left: 4px solid var(--ink-200);
 }
 
 .dl__head {
@@ -1375,7 +1284,7 @@ main {
 .dl__name {
   font-size: 17px;
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
 }
 .dl__meta {
   font-size: 12.5px;
@@ -1385,7 +1294,7 @@ main {
 .dl__desc {
   font-size: 14.5px;
   color: var(--ink-600);
-  line-height: 1.75;
+  line-height: 1.9;
   flex: 1;
 }
 .dl__specs {
@@ -1402,17 +1311,17 @@ main {
 .dl__specs li::before {
   content: '·';
   color: var(--ink-300);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .dl-note {
   margin-top: 22px;
-  background: var(--sun-100);
+  background: var(--accent-soft);
   border-radius: var(--r-md);
   padding: 16px 20px;
   font-size: 14px;
-  color: var(--sun-700);
-  line-height: 1.75;
+  color: var(--accent-ink);
+  line-height: 1.9;
   box-shadow: var(--hairline);
 }
 
@@ -1435,7 +1344,7 @@ main {
   list-style: none;
   padding: 19px 24px;
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 16px;
   display: flex;
   align-items: center;
@@ -1449,7 +1358,7 @@ main {
   margin-left: auto;
   font-size: 22px;
   font-weight: 700;
-  color: var(--sun-500);
+  color: var(--accent);
   line-height: 1;
   transition: transform 0.2s ease;
 }
@@ -1457,7 +1366,7 @@ main {
   transform: rotate(45deg);
 }
 .faq details[open] summary {
-  color: var(--sun-700);
+  color: var(--accent-strong);
 }
 .faq__body {
   padding: 0 24px 22px;
@@ -1488,11 +1397,13 @@ main {
   margin-top: 14px;
   font-size: clamp(15px, 1.6vw, 17px);
 }
+/* 结尾卡片底部的暖光：保留一点「灯光」的感觉，
+   但把橙色泛光压到几乎只是明度变化，不再是第二块颜色。 */
 .final-cta__glow {
   position: absolute;
   inset: auto -10% -60% -10%;
   height: 90%;
-  background: radial-gradient(50% 60% at 50% 100%, rgb(251 191 36 / 0.4), transparent 70%);
+  background: radial-gradient(50% 60% at 50% 100%, rgb(255 250 242 / 0.16), transparent 70%);
   pointer-events: none;
 }
 .final-cta .btn-row {
@@ -1529,7 +1440,7 @@ main {
 .footer h3 {
   font-size: 14px;
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   color: var(--ink-900);
   margin-bottom: 12px;
 }
@@ -1543,7 +1454,7 @@ main {
   font-size: 13.5px;
 }
 .footer__list a:hover {
-  color: var(--sun-700);
+  color: var(--accent-strong);
   text-decoration: underline;
 }
 
@@ -1564,7 +1475,7 @@ main {
   text-decoration: none;
 }
 .footer__legal a:hover {
-  color: var(--sun-700);
+  color: var(--accent-strong);
   text-decoration: underline;
 }
 .footer__legal .sep {
@@ -1572,27 +1483,20 @@ main {
 }
 
 /* ---------- 19. 滚动揭示 ----------
-   加大位移和缓动曲线，让揭示更有「弹出来」的戏剧感。
-   同时加入错落延迟，避免所有元素同时动（那是 AI 生成的典型特征）。 */
+   上一版是 32px 位移 + scale(0.97) 的「弹出来」，还带 70ms 递增的错落延迟。
+   位移和缩放叠在一起，手机滚动时整页像在抖。
+   现在只保留一点向上的淡入：够用、不抢戏。
+   （错落延迟在 main.js 里，那边也一并收小了。） */
 .reveal {
   opacity: 0;
-  transform: translateY(32px) scale(0.97);
-  transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
+  transform: translateY(14px);
+  transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .reveal.is-in {
   opacity: 1;
   transform: none;
 }
-
-/* 错落：同一块里的元素依次出现，制造「编排好的」节奏感 */
-.reveal.is-in:nth-child(1) { transition-delay: 0ms; }
-.reveal.is-in:nth-child(2) { transition-delay: 70ms; }
-.reveal.is-in:nth-child(3) { transition-delay: 140ms; }
-.reveal.is-in:nth-child(4) { transition-delay: 210ms; }
-.reveal.is-in:nth-child(5) { transition-delay: 280ms; }
-.reveal.is-in:nth-child(6) { transition-delay: 350ms; }
 
 /* 没有 JS 时不能把内容永久藏起来 */
 .no-js .reveal {
@@ -1602,9 +1506,8 @@ main {
 
 /* ---------- 20. 响应式 ---------- */
 @media (max-width: 1080px) {
-  /* 单列布局下 hero 高得多，光晕也要跟着长，否则铺不到手机模型那一段 */
   .page-glow {
-    height: clamp(900px, 150vw, 1400px);
+    height: clamp(360px, 90vw, 520px);
   }
   .hero__grid {
     grid-template-columns: 1fr;
@@ -1614,6 +1517,7 @@ main {
     margin-inline: auto;
   }
   .hero__trust,
+  .hero__flow,
   .hero__cta .btn-row {
     justify-content: center;
   }
@@ -1674,25 +1578,15 @@ main {
 }
 
 @media (max-width: 620px) {
-  .stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
   .shots {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
+  /* 手机上直接把两张说明卡收掉。
+     窄屏里它们无论放哪都会压住手机截图里的任务列表 ——
+     而那张截图恰恰是这一屏最该看清的东西。 */
   .float-card {
-    font-size: 12.5px;
-    padding: 9px 12px;
-  }
-  .float-card__emoji {
-    font-size: 18px;
-  }
-  .float-card--a {
-    left: -1%;
-  }
-  .float-card--b {
-    right: -1%;
+    display: none;
   }
   .footer__grid {
     grid-template-columns: 1fr;
@@ -1776,8 +1670,8 @@ main {
 }
 .doc ul li::before {
   content: '·';
-  color: var(--sun-500);
-  font-weight: 800;
+  color: var(--accent);
+  font-weight: 700;
   flex: none;
 }
 .doc__callout {
@@ -1802,13 +1696,13 @@ main {
 }
 .doc__back a {
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: 700;
   font-size: 15px;
   color: var(--ink-600);
   text-decoration: none;
 }
 .doc__back a:hover {
-  color: var(--sun-700);
+  color: var(--accent-strong);
 }
 
 /* ---------- 23. 打印（备案材料有时要打出来） ---------- */

@@ -293,8 +293,13 @@ try {
   })
   check(`揭示元素全部显示出来（共 ${revealStats.total} 个）`, revealOk, revealStats.cls.join(' | '))
 
-  // 进度条是另一套 IntersectionObserver（threshold 0.4）+ 260ms 延迟，同样轮询
-  const barsOk = await waitFor(page, () =>
+  // 进度条是另一套 IntersectionObserver（threshold 0.4）+ 260ms 延迟。
+  // ⚠️ 必须和揭示动画一样用 primeUntil，不能只 waitFor ——
+  //   primePage 最后一次「滚到底」读的是**那一刻**的页高，图加载完页面变高之后，
+  //   结算卡片就可能整批没进过视口，进度条永远停在 width:0。
+  //   实测：同一份代码连着跑，出现过「100%, 50%, 3%」和「, , 3%」两种结果，
+  //   也就是前两条没拉到、第三条拉到了 —— 典型的「只滚到一半」。
+  const barsOk = await primeUntil(page, () =>
     Array.from(document.querySelectorAll('[data-bar] span')).every(
       (s) => s.style.width && s.style.width !== '0%',
     ),
@@ -304,10 +309,19 @@ try {
   )
   check('结算规则进度条都拉起来了', barsOk, bars.join(', '))
 
-  const counts = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('[data-count]')).map((e) => e.textContent.trim()),
+  // 首屏那条「数据条」（12 块土地 / 8 种作物 / 5 种动物 / 0 条广告）已整块删除。
+  // 这里反过来断言它**真的删干净了**：
+  // 只删 HTML 不删 JS 的话，main.js 会留一段永远匹配不到元素的死代码 ——
+  // 那种残留不会报错，只会一直躺在那里骗下一个人。
+  const leftoverCounts = await page.evaluate(
+    () => document.querySelectorAll('[data-count]').length,
   )
-  check('数字滚动落在目标值上', counts.join(',') === '12,8,5,0', counts.join(','))
+  const mainJsSrc = readFileSync(resolve(SITE_DIR, 'main.js'), 'utf8')
+  check('首屏数据条已移除（HTML 无 data-count）', leftoverCounts === 0, `${leftoverCounts} 个残留`)
+  check(
+    '首屏数据条已移除（main.js 无 countUp 残留）',
+    !/countUp|data-count/.test(mainJsSrc),
+  )
 
   for (const vp of [
     { name: '桌面 1440', width: 1440, height: 960 },

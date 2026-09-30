@@ -147,7 +147,7 @@ def build_og():
     x = 76
 
     # --- 顶部小胶囊
-    pill_text = "6–9 岁 · 家长放心 · 完全离线"
+    pill_text = "6–14 岁 · 完全离线 · 不用注册"
     tw = d.textlength(pill_text, font=f_pill)
     d.rounded_rectangle((x, 78, x + tw + 46, 78 + 50), 25, fill=SUN_100)
     d.text((x + 23, 78 + 11), pill_text, font=f_pill, fill=SUN_700)
@@ -162,7 +162,7 @@ def build_og():
     y += 74
 
     # --- 描述
-    d.text((x, y), "给 6–9 岁孩子的任务激励与财商启蒙 App", font=f_desc, fill=INK_700)
+    d.text((x, y), "给 6–14 岁孩子的任务激励 App", font=f_desc, fill=INK_700)
     y += 56
 
     # --- 三个特性胶囊

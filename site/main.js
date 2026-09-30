@@ -72,13 +72,15 @@ document.addEventListener('keydown', (e) => {
 /* ---------- 5. 滚动揭示 ---------- */
 const revealEls = Array.from(document.querySelectorAll('.reveal'))
 
-/* 同一组里的元素依次出现，而不是一起冒出来 */
+/* 同一组里的元素依次出现，而不是一起冒出来。
+   间隔从 90ms / 上限 540ms 收到 55ms / 上限 275ms：
+   原来是「一列元素排队登台」，现在只是「别同时出现」。 */
 function stagger(el) {
   const parent = el.parentElement
   if (!parent) return 0
   const siblings = Array.from(parent.children).filter((c) => c.classList.contains('reveal'))
   const i = siblings.indexOf(el)
-  return i > 0 ? Math.min(i * 90, 540) : 0
+  return i > 0 ? Math.min(i * 55, 275) : 0
 }
 
 function show(el) {
@@ -108,27 +110,7 @@ if (reduceMotion || !('IntersectionObserver' in window)) {
   revealEls.forEach((el) => io.observe(el))
 }
 
-/* ---------- 6. 数字滚动 ---------- */
-function countUp(el) {
-  const target = Number(el.dataset.count)
-  if (!Number.isFinite(target)) return
-  if (reduceMotion || target === 0) {
-    el.textContent = String(target)
-    return
-  }
-  const dur = 900
-  const t0 = performance.now()
-  function tick(now) {
-    const p = Math.min(1, (now - t0) / dur)
-    // easeOutCubic
-    const eased = 1 - Math.pow(1 - p, 3)
-    el.textContent = String(Math.round(target * eased))
-    if (p < 1) requestAnimationFrame(tick)
-  }
-  requestAnimationFrame(tick)
-}
-
-/* ---------- 7. 结算规则进度条 ---------- */
+/* ---------- 6. 结算规则进度条 ---------- */
 // 宽度由 data-bar 给出（百分比），滚动到视野里才拉出来
 function fillBar(el) {
   const span = el.firstElementChild
@@ -157,27 +139,7 @@ if (reduceMotion || !('IntersectionObserver' in window)) {
   barEls.forEach((el) => barIO.observe(el))
 }
 
-/* ---------- 8. 数字滚动挂到视野 ---------- */
-const countEls = Array.from(document.querySelectorAll('[data-count]'))
-
-if (reduceMotion || !('IntersectionObserver' in window)) {
-  countEls.forEach(countUp)
-} else {
-  const countIO = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          countUp(entry.target)
-          countIO.unobserve(entry.target)
-        }
-      })
-    },
-    { threshold: 0.6 },
-  )
-  countEls.forEach((el) => countIO.observe(el))
-}
-
-/* ---------- 9. FAQ：一次只展开一个 ---------- */
+/* ---------- 7. FAQ：一次只展开一个 ---------- */
 // 手机上一屏放不下两个展开项，展开第二个时自动收起上一个。
 const faqItems = Array.from(document.querySelectorAll('.faq details'))
 faqItems.forEach((item) => {
@@ -189,14 +151,14 @@ faqItems.forEach((item) => {
   })
 })
 
-/* ---------- 10. APK 下载：给个反馈 ---------- */
+/* ---------- 8. APK 下载：给个反馈 ---------- */
 // 5.5 MB 的包点了没反应会让人以为按钮坏了。
 const apkLinks = Array.from(document.querySelectorAll('a[download]'))
 apkLinks.forEach((a) => {
   a.addEventListener('click', () => {
     const original = a.dataset.label ?? a.textContent
     a.dataset.label = original
-    a.textContent = '⬇️ 开始下载…'
+    a.textContent = '开始下载…'
     window.setTimeout(() => {
       a.textContent = original
     }, 2600)
