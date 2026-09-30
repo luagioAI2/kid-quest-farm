@@ -776,48 +776,56 @@ try {
   })
   await new Promise((r) => setTimeout(r, 700))
 
-  /* ---------- 5c. 走势图上的「上限」必须是引擎真用的硬顶 ----------
+  /* ---------- 5c. 走势图不许暴露价格边界（上限 / 下限） ----------
      ------------------------------------------------------------
-     2026-09-18 修：`MarketSheet` 给 `PriceChart` 传的还是**旧口径**
-     `q.base * 1.6`（基准价的 1.6 倍），而引擎早就不在那儿封顶了。
-     三个后果，一个比一个明显：
+     2026-09-30 改：这条断言**反过来了**。
 
-       ① 那条「上限」虚线画在真上限**上方 60%**，价格永远够不到 —— 是条假上限；
-       ② `PriceChart` 用 `Math.max(...series, ceiling)` 定 y 轴标尺，
-          多出来的那截空白把 7 天走势**压进图的下半部分**，看着像一条平线；
-       ③ 标签印「上限 2.6」，而小胡萝卜的真上限是 1.6。
+     它以前是「图上的『上限』必须 == 引擎的硬顶」—— 钉的是 2026-09-18
+     那次 UI 接线错误（`MarketSheet` 给 `PriceChart` 传的还是旧口径
+     `q.base * 1.6`）。
 
-     `priceCeilingFor` 一直是对的，错的是 **UI 接线** —— 所以只能靠
-     **渲染出来的字**钉住，和 5b 那两条同一个道理（第 4 层界面走查）。
+     但 2026-09-29 用户明确要求**把上限/下限整个拿掉**：
+     「走势图上的『上限/下限』标签直接暴露了价格边界，孩子一看就知道
+      底价和天花板。」—— 于是 `PriceChart` 的 `ceiling` / `floor`
+     两个参数被删掉，虚线、标签、以及用 `Math.max(series, ceiling)`
+     撑出来的那段空白一起没了。
 
-     期望值**不写死**：向 `window.__kqf__.catalog.priceCeiling()` 要真实数值。
-     写死的话，下次调经济数值这条就会变成「假失败」。 */
+     所以判据从「上限印得对不对」变成「**根本不许印**」。
+     期望值仍然不写死，向 `catalog.priceCeiling()` 要真实数值 ——
+     万一哪天有人把上限又画回去，这里要立刻红，
+     而不是等孩子看图学会「这价到底了」。
+
+     ⚠️ 判据用 `/上限/` 而不是 `/上限\s*[\d.]+/`：只要出现「上限」两个字
+     就算暴露，不要求它带数字（标签先回来、数字后补的情况也要拦得住）。 */
   const chartRes = await page.evaluate(() => {
     const ITEM = 'produce-carrot' // 本段只收过胡萝卜，展开的就是它
     const row = [...document.querySelectorAll('li')].find((li) =>
       /最近\s*7\s*天价格/.test(li.innerText),
     )
+    const text = row?.innerText ?? ''
     return {
       rowFound: !!row,
       rowName: (row?.querySelector('p')?.textContent ?? '').trim(),
-      capText: row?.innerText.match(/上限\s*([\d.]+)/)?.[1] ?? null,
+      hasCeilingLabel: /上限/.test(text),
+      hasFloorLabel: /下限/.test(text),
       expected: window.__kqf__.catalog.priceCeiling(ITEM),
       base:
         window.__kqf__.getState().market.quotes.find((q) => q.itemId === ITEM)?.base ?? null,
     }
   })
   check('展开的行渲染出了走势图', chartRes.rowFound === true, `行名：${chartRes.rowName}`)
-  {
-    // 图上是按显示精度印的（< 10 保留一位小数，见 `price1`），所以按同精度比
-    const dec = chartRes.expected < 10 ? 1 : 0
-    const shown = Number(chartRes.capText)
-    check(
-      '走势图的「上限」== 引擎的硬顶（不是写死的基准价 × 1.6）',
-      Number.isFinite(shown) &&
-        Number(shown.toFixed(dec)) === Number(chartRes.expected.toFixed(dec)),
-      `图上 ${chartRes.capText} / 引擎 ${chartRes.expected}（基准价 ${chartRes.base}）`,
-    )
-  }
+  check(
+    '走势图不暴露价格上限（孩子不该看见天花板）',
+    !chartRes.hasCeilingLabel,
+    chartRes.hasCeilingLabel
+      ? `图上出现了「上限」（引擎硬顶 ${chartRes.expected}，基准价 ${chartRes.base}）`
+      : `没有「上限」· 引擎硬顶 ${chartRes.expected} · 基准价 ${chartRes.base}`,
+  )
+  check(
+    '走势图不暴露价格下限（孩子不该看见地板价）',
+    !chartRes.hasFloorLabel,
+    chartRes.hasFloorLabel ? '图上出现了「下限」' : '',
+  )
 
   const sellBtns = await page.evaluate(() => {
     const btns = [...document.querySelectorAll('li button')].filter((b) => /卖|全卖/.test(b.innerText))
@@ -1313,6 +1321,148 @@ try {
     b?.click()
     await sleep(700)
   })
+
+  /* ---------- 8c. 兑换付款：丰收币优先 + 可混合（2026-09-30） ----------
+     ------------------------------------------------------------
+     用户要求：「兑换页面，优先用丰收币兑换。价值和积分等价的。
+     用完丰收币再用积分，可混合。」
+
+     ⚠️ **这一段必须自己造丰收币余额。** e2e 跑的是全新 profile、没种过地 →
+     `harvestBalance === 0` → 兑换页永远走「纯积分」那一支，
+     `PaySplit` 里 `harvestPaid > 0` 的那一半**从来没被渲染过**。
+     这正是 §11 说的「图集没盖住的分支 = 没验过的分支」，只不过发生在 e2e 上。
+
+     造余额走的是**账本本身**（往 harvestLedger 写一笔）而不是改 store：
+     改 store 只动内存快照，`refresh()` 一跑就没了；而且那属于
+     「驱动手段比真实路径更有权限」（形态 H）。
+
+     判据锚在 **ASCII 的 `+`** 上，不锚 emoji：混合那一行是
+     「付款：🌾 250 + 🪙 10」，纯一种币的那几行没有 `+`。
+     （实测：拿 `/🌾/` 这种 emoji 正则当判据时灵时不灵 ——
+      同一份脚本里，前一个 evaluate 用它找到了行、后一个找不到。
+      ASCII 判据两次都稳。这类"锚在 emoji 上"的坑和形态 F 同源。）
+
+     跑完**故意不把丰收币还原成 0** —— 下面第 9 段的兑换页截图正好能
+     拍到混合付款那一支，图集才盖得住这个新分支。 */
+  const MIX_SEED = 250
+  await page.evaluate(async (seed) => {
+    const req = indexedDB.open('kid-quest-farm')
+    const db = await new Promise((res, rej) => {
+      req.onsuccess = () => res(req.result)
+      req.onerror = () => rej(req.error)
+    })
+    const tx = db.transaction('harvestLedger', 'readwrite')
+    tx.objectStore('harvestLedger').put({
+      id: 'hv_e2e_paymix',
+      delta: seed,
+      balanceAfter: seed,
+      source: 'manual_adjust',
+      memo: 'E2E：造混合付款场景',
+      createdAt: Date.now(),
+    })
+    await new Promise((res, rej) => {
+      tx.oncomplete = res
+      tx.onerror = () => rej(tx.error)
+    })
+    db.close()
+    // 用真实的 refresh 让 store 读到这笔账（不刷新页面，省一次入场页）
+    await window.__kqf__.getState().refresh()
+  }, MIX_SEED)
+  await new Promise((r) => setTimeout(r, 600))
+
+  // ⚠️ §8b 收尾时点了「返回」，停在这个面板的「管理」tab 上 ——
+  //    不切回来的话，下面一条「付款：」都找不到，
+  //    会红成「新分支压根没渲染」，指错方向。
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => /能换什么/.test(x.innerText))
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 800))
+
+  const payProbe = await page.evaluate(() => {
+    /** Range 的行盒数：1 = 单行，≥2 = 被挤到换行了（§12.1） */
+    const lineBoxes = (el) => {
+      const r = document.createRange()
+      r.selectNodeContents(el)
+      return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size
+    }
+    const state = window.__kqf__.getState()
+    const pays = [...document.querySelectorAll('p')].filter((x) =>
+      (x.innerText ?? '').startsWith('付款：'),
+    )
+    /** 从这一行的祖先 li 里读出商品标价（价签 CoinPill 的 textContent 形如「🪙260」） */
+    const costOf = (p) => {
+      const pill = [...(p.closest('li')?.querySelectorAll('span') ?? [])].find((s) =>
+        /🪙\s*\d/.test(s.textContent ?? ''),
+      )
+      return pill ? Number((pill.textContent ?? '').replace(/\D/g, '')) : null
+    }
+    const parse = (p) => {
+      const t = p.innerText.replace(/\s+/g, ' ').trim()
+      return {
+        text: t,
+        cost: costOf(p),
+        harvestPaid: Number(t.match(/🌾\s*(\d+)/)?.[1] ?? 0),
+        pointsPaid: Number(t.match(/🪙\s*(\d+)/)?.[1] ?? 0),
+        lines: lineBoxes(p),
+      }
+    }
+    return {
+      harvest: state.harvestBalance,
+      points: state.balance,
+      count: pays.length,
+      pureHarvest: pays.filter(
+        (p) => /🌾/.test(p.innerText) && !p.innerText.includes('+'),
+      ).length,
+      mixed: pays.filter((p) => p.innerText.includes('+')).map(parse),
+      all: pays.map(parse),
+      docOverflow:
+        document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    }
+  })
+
+  check(
+    '兑换页渲染出了「付款：」这一行',
+    payProbe.count > 0,
+    `共 ${payProbe.count} 条 · 丰收币 ${payProbe.harvest} / 积分 ${payProbe.points}`,
+  )
+  check(
+    '丰收币够的商品走「纯丰收币」一支（不写 +0 积分）',
+    payProbe.pureHarvest > 0,
+    `纯丰收币 ${payProbe.pureHarvest} 条`,
+  )
+  check(
+    '丰收币不够的商品走「混合」一支（🌾 + 🪙 同时出现）',
+    payProbe.mixed.length > 0,
+    payProbe.mixed.length
+      ? `抽样 ${JSON.stringify(payProbe.mixed.slice(0, 3).map((m) => m.text))}`
+      : '一条混合的都没有 —— 新分支压根没被渲染到',
+  )
+  {
+    // 独立重算一遍分账，不 import 被测实现（避免"用实现验实现"）
+    const wrong = payProbe.all.filter((r) => {
+      if (r.cost == null) return false
+      const expectHarvest = Math.min(payProbe.harvest, r.cost)
+      return r.harvestPaid !== expectHarvest || r.pointsPaid !== r.cost - expectHarvest
+    })
+    check(
+      '每条的「🌾 X + 🪙 Y」都等于「先花光丰收币、差额用积分」且 X+Y = 标价',
+      wrong.length === 0,
+      wrong.length
+        ? `对不上 ${wrong.length} 条：${JSON.stringify(wrong.slice(0, 3))}`
+        : `核了 ${payProbe.all.length} 条`,
+    )
+  }
+  check(
+    '「付款：」这一行没被挤到换行',
+    payProbe.all.every((r) => r.lines === 1),
+    `行盒数 ${JSON.stringify([...new Set(payProbe.all.map((r) => r.lines))])}`,
+  )
+  check(
+    '加了分账文案后仍然没有横向溢出',
+    payProbe.docOverflow <= 2,
+    `scrollWidth - clientWidth = ${payProbe.docOverflow}`,
+  )
 
   /* ---------- 9. 截图留档 ---------- */
   mkdirSync('screenshots', { recursive: true })

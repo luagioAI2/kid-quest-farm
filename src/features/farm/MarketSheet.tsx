@@ -4,8 +4,6 @@ import { useApp } from '@/store/useApp'
 import {
   DEFAULT_PROFIT_RATIO,
   ITEM_BY_ID,
-  PRICE_FLOOR,
-  priceCeilingFor,
   produceUnitOf,
 } from '@/domain/catalog'
 import { priceSeries, trendOf, valueHint } from '@/domain/market'
@@ -228,25 +226,6 @@ function MarketRow({
   const unit = priceFor(itemId)
 
   /*
-    ⚠️ 图上的「上限」必须是**引擎真用的那条硬顶**（`上限回收 ÷ 满产`）。
-    ------------------------------------------------------------
-    2026-09-18 之前这里传的是 `q.base * 1.6` —— 那是**已经被删掉的旧口径**
-    （基准价的 1.6 倍）。三个后果，一个比一个明显：
-
-      ① 那条「上限」虚线画在真上限**上方 60%**，价格永远够不到 —— 是条假上限；
-      ② `PriceChart` 用 `Math.max(...series, ceiling)` 定 y 轴标尺，
-         多出来的那截空白把 7 天走势**压进图的下半部分**，看着像一条平线；
-      ③ 标签写「上限 1」，而小萝卜的真上限是 0.8。
-
-    所以这里跟 `priceOf` / `sellQuote` 用同一个来源，别再手写倍数。
-    `priceCeilingFor` 对没有产出定义的 item 返回 `Infinity` —— 理论上不该发生
-    （由 `market.test.ts` 的不变量钉住），这里退回基准价兜底：
-    真发生了也只是画得保守一点，不会把标尺和标签带崩。
-  */
-  const rawCeiling = priceCeilingFor(itemId, r)
-  const ceiling = Number.isFinite(rawCeiling) ? rawCeiling : q.base
-
-  /*
     ⚠️ **按钮上写的数字必须是真能拿到的。**
     ------------------------------------------------------------
     家长 2026-09-18 报：「买了萝卜种子，收成后收进背包，去市场卖不能全部卖掉」。
@@ -354,8 +333,6 @@ function MarketRow({
           <PriceChart
             series={series}
             base={q.base}
-            ceiling={ceiling}
-            floor={q.base * PRICE_FLOOR}
           />
 
           {/*
@@ -432,13 +409,9 @@ function price1(v: number): string {
 function PriceChart({
   series,
   base,
-  ceiling,
-  floor,
 }: {
   series: number[]
   base: number
-  ceiling: number
-  floor: number
 }) {
   if (series.length < 2) {
     return (
@@ -448,8 +421,8 @@ function PriceChart({
     )
   }
 
-  const max = Math.max(...series, ceiling)
-  const min = Math.min(...series, floor)
+  const max = Math.max(...series, base * 1.05)
+  const min = Math.min(...series, base * 0.95)
   const span = Math.max(1, max - min)
 
   const H = 88 // 图表高度（px）
@@ -473,20 +446,10 @@ function PriceChart({
     <div>
       <div className="mb-1 flex items-center justify-between">
         <span className="text-[11px] font-bold text-ink-500">最近 {series.length} 天价格</span>
-        <span className="text-[11px] text-ink-500">
-          上限 {price1(ceiling)} / 下限 {price1(floor)}
-        </span>
       </div>
 
       <div className="relative overflow-hidden rounded-2xl border border-ink-900/10 bg-white">
-        {/* 上限线 */}
-        <div
-          className="absolute inset-x-0 border-t-2 border-dashed border-berry-300"
-          style={{ top: `${yOf(ceiling)}px` }}
-        >
-          <span className="absolute right-1 -top-4 text-[9px] font-bold text-berry-400">上限</span>
-        </div>
-        {/* 基准线 */}
+        {/* 基准线（虚线，只作参考，不标数字） */}
         <div
           className="absolute inset-x-0 border-t-2 border-dotted border-ink-300"
           style={{ top: `${yOf(base)}px` }}

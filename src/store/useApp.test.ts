@@ -434,6 +434,200 @@ describe('兑换品管理', () => {
 })
 
 /* ============================================================
+   兑换分账：丰收币优先 + 可混合（用户 2026-09-30）
+   ------------------------------------------------------------
+   用户要求：「兑换页面，优先用丰收币兑换。价值和积分等价的。
+   用完丰收币再用积分，可混合。」
+
+   规则本身在 `domain/redeem.test.ts` 里逐条钉过（纯函数）。这一层要证的是
+   **它真的落到了账本上**：该扣哪张表、扣多少、记录里留没留痕、
+   以及「买不起时一个字都不许动」。
+
+   为什么必须在这一层再测一遍：`planRedeemPayment` 算得再对，
+   只要 store 里少写一笔 `harvestLedger`，孩子就是**白拿**；
+   多写一笔积分账，就是**多扣**。纯函数测试看不见这两件事。
+   ============================================================ */
+
+describe('兑换：丰收币优先，可混合', () => {
+  /** 取一个种子兑换品并改价，返回改完之后的它 */
+  async function itemAtCost(cost: number) {
+    await useApp.getState().updateSettings({ redeemEnabled: true })
+    const seed = useApp.getState().allRedeemItems[0]
+    expect(seed, '种子里应该有一份默认兑换清单').toBeTruthy()
+    await useApp.getState().updateRedeemItem(seed.id, { cost, limitPerDay: undefined })
+    return useApp.getState().allRedeemItems.find((i) => i.id === seed.id)!
+  }
+
+  async function setHarvestTo(target: number) {
+    const cur = await currentHarvestBalance()
+    if (cur !== target) {
+      await postHarvest({ delta: target - cur, source: 'manual_adjust', memo: '测试校准丰收币' })
+    }
+    await useApp.getState().refresh()
+  }
+
+  async function setPointsTo(target: number) {
+    const cur = await currentBalance()
+    if (cur !== target) {
+      await postLedger({ delta: target - cur, source: 'manual_adjust', memo: '测试校准积分' })
+    }
+    await useApp.getState().refresh()
+  }
+
+  const harvestSpendRows = async () =>
+    (await db.harvestLedger.toArray()).filter((r) => r.source === 'harvest_redeem')
+  const pointSpendRows = async () =>
+    (await db.ledger.toArray()).filter((r) => r.source === 'redeem')
+
+  it('丰收币够 —— 全用丰收币，积分一分不动', async () => {
+    const item = await itemAtCost(50)
+    await setHarvestTo(80)
+    await setPointsTo(300)
+
+    await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
+
+    expect(useApp.getState().harvestBalance, '丰收币扣 50').toBe(30)
+    expect(useApp.getState().balance, '积分一分都不该动').toBe(300)
+
+    const rec = useApp.getState().redeemRecords[0]
+    expect(rec).toMatchObject({ cost: 50, harvestPaid: 50, pointsPaid: 0, harvestBalanceAfter: 30 })
+  })
+
+  it('丰收币不够 —— 差额用积分补（这就是「可混合」）', async () => {
+    const item = await itemAtCost(50)
+    await setHarvestTo(20)
+    await setPointsTo(300)
+
+    await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
+
+    expect(useApp.getState().harvestBalance, '丰收币花光').toBe(0)
+    expect(useApp.getState().balance, '只补差额 30').toBe(270)
+
+    const rec = useApp.getState().redeemRecords[0]
+    expect(rec).toMatchObject({ harvestPaid: 20, pointsPaid: 30 })
+    expect(rec.harvestBalanceAfter).toBe(0)
+  })
+
+  it('没有丰收币 —— 退回纯积分，跟改动前的行为一模一样', async () => {
+    const item = await itemAtCost(50)
+    await setHarvestTo(0)
+    await setPointsTo(300)
+
+    await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
+
+    expect(useApp.getState().balance).toBe(250)
+    expect(useApp.getState().redeemRecords[0]).toMatchObject({
+      harvestPaid: 0,
+      pointsPaid: 50,
+    })
+  })
+
+  it('两种币加起来刚好够 —— 边界，算买得起，两个余额都归零', async () => {
+    const item = await itemAtCost(50)
+    await setHarvestTo(20)
+    await setPointsTo(30)
+
+    await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
+
+    expect(useApp.getState().harvestBalance).toBe(0)
+    expect(useApp.getState().balance).toBe(0)
+  })
+
+  it('两种币加起来差 1 —— 换不了，且账本 / 记录一个字都不许动', async () => {
+    const item = await itemAtCost(50)
+    await setHarvestTo(20)
+    await setPointsTo(29)
+
+    await expect(useApp.getState().redeem(item.id)).resolves.toBe(false)
+
+    expect(useApp.getState().harvestBalance, '丰收币不能被扣').toBe(20)
+    expect(useApp.getState().balance, '积分不能被扣').toBe(29)
+    expect(useApp.getState().redeemRecords, '不该留下记录').toHaveLength(0)
+    expect(await harvestSpendRows()).toHaveLength(0)
+    expect(await pointSpendRows()).toHaveLength(0)
+  })
+
+  it('丰收币那笔走 harvest_redeem —— 这个 source 定义了半个月，终于用上了', async () => {
+    const item = await itemAtCost(50)
+    await setHarvestTo(80)
+    await setPointsTo(300)
+
+    await useApp.getState().redeem(item.id)
+
+    const rows = await harvestSpendRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].delta).toBe(-50)
+    expect(rows[0].balanceAfter).toBe(30)
+  })
+
+  it('纯丰收币付账时**不写**积分流水（不能凭空多一条「兑换 0 分」）', async () => {
+    const item = await itemAtCost(50)
+    await setHarvestTo(80)
+    await setPointsTo(300)
+
+    const before = (await db.ledger.toArray()).length
+    await useApp.getState().redeem(item.id)
+
+    expect((await db.ledger.toArray()).length, '积分账本长度不该变').toBe(before)
+    expect(await pointSpendRows()).toHaveLength(0)
+  })
+
+  it('混合付账时两条流水都在，各自扣对数额', async () => {
+    const item = await itemAtCost(50)
+    await setHarvestTo(20)
+    await setPointsTo(300)
+
+    await useApp.getState().redeem(item.id)
+
+    const hv = await harvestSpendRows()
+    const pt = await pointSpendRows()
+    expect(hv).toHaveLength(1)
+    expect(hv[0].delta).toBe(-20)
+    expect(pt).toHaveLength(1)
+    expect(pt[0].delta).toBe(-30)
+  })
+
+  it('记录里两笔之和恒等于标价 —— 账要平', async () => {
+    for (const [harvest, points] of [
+      [80, 300],
+      [20, 300],
+      [0, 300],
+      [20, 30],
+    ] as const) {
+      await boot()
+      const item = await itemAtCost(50)
+      await setHarvestTo(harvest)
+      await setPointsTo(points)
+
+      await useApp.getState().redeem(item.id)
+
+      const rec = useApp.getState().redeemRecords[0]
+      expect(
+        (rec.harvestPaid ?? 0) + (rec.pointsPaid ?? 0),
+        `harvest=${harvest} points=${points}`,
+      ).toBe(rec.cost)
+    }
+  })
+
+  it('丰收币够但今天换满了 —— 还是换不了（次数闸门不受分账影响）', async () => {
+    await useApp.getState().updateSettings({ redeemEnabled: true })
+    const seed = useApp.getState().allRedeemItems[0]
+    await useApp.getState().updateRedeemItem(seed.id, { cost: 50, limitPerDay: 1 })
+    const item = useApp.getState().allRedeemItems.find((i) => i.id === seed.id)!
+    await setHarvestTo(500)
+    await setPointsTo(0)
+
+    await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
+    await expect(useApp.getState().redeem(item.id), '同一天第二次应该被拦住').resolves.toBe(
+      false,
+    )
+
+    // 第一次扣了 50，第二次不该再扣
+    expect(useApp.getState().harvestBalance).toBe(450)
+  })
+})
+
+/* ============================================================
    首次启动的任务清单（家长指定的规格）
    ------------------------------------------------------------
    `domain/seedTasks.test.ts` 只证明「种子里写了什么」；

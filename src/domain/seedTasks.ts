@@ -188,6 +188,20 @@ export const SEED_TASKS: SeedTask[] = [
     checkInTargetCount: 6,
     rewardItemIds: ['medal'],
   },
+  {
+    title: '每月记忆单词',
+    note: '每月背新单词，积少成多 📚',
+    category: 'study',
+    cycle: 'yearly',
+    plannedMinutes: 30,
+    basePoints: 20,
+    qualityBonusPoints: 10,
+    allowOvertime: true,
+    allowLateNoPenalty: false,
+    qualityRated: true,
+    checkInTargetCount: 12,
+    rewardItemIds: ['medal'],
+  },
 ]
 
 /* ============================================================

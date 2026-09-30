@@ -137,10 +137,6 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
             </span>
           </button>
         </div>
-
-        <p className="mt-3 text-center text-[11px] text-ink-400">
-          两条路共用同一个额度，先存起来也不能多卖钱
-        </p>
       </div>
     </BottomSheet>
   )

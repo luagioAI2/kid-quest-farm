@@ -38,6 +38,7 @@ import {
   ledgerTip,
   loadSettings,
   logFarmEvents,
+  harvestTip,
   postHarvest,
   postLedger,
   QUOTA_CARRY_KEY,
@@ -98,6 +99,7 @@ import {
   priceCeilingFor,
   produceUnitOf,
 } from '../domain/catalog'
+import { describeRedeemPayment, planRedeemPayment } from '../domain/redeem'
 import {
   advanceMarket,
   applySell,
@@ -372,7 +374,7 @@ async function doSeedIfEmpty(): Promise<void> {
     }))
     await db.tasks.bulkPut(rows)
     await postLedger({
-      delta: 50,
+      delta: 2000,
       source: 'manual_adjust',
       memo: '欢迎来到小任务农场！这是给你的启动积分 🎁',
     })
@@ -2053,12 +2055,24 @@ export const useApp = create<AppState>((set, get) => ({
   /**
    * 兑换。
    *
-   * 原子性很关键：扣积分 + 写兑换记录必须在一个事务里，
-   * 否则会出现「积分扣了但没记录」（家长不知道要兑现什么）
-   * 或「有记录但没扣分」（白拿）的不一致。
+   * 原子性很关键：扣钱 + 写兑换记录必须在一个事务里，
+   * 否则会出现「钱扣了但没记录」（家长不知道要兑现什么）
+   * 或「有记录但没扣钱」（白拿）的不一致。
+   *
+   * ## 分账：丰收币优先（用户 2026-09-30）
+   *
+   * 「优先用丰收币兑换。价值和积分等价的。用完丰收币再用积分，可混合。」
+   *
+   * 于是这里最多要动**三张表**：`harvestLedger`（丰收币那笔）、
+   * `ledger`（积分那笔）、`redeemRecords`（记录）。三张必须同一个事务 ——
+   * 只扣了丰收币却没写记录，孩子的东西就凭空没了。
+   *
+   * ⚠️ **分账要在事务内用实时余额重算一遍**，不能用外面那份。
+   * 外面那份只是给 UI 看的预览；两个标签页同时点「换」时，
+   * 用旧余额算出的分账会把已经花掉的丰收币又花一次。
    */
   redeem: async (itemId) => {
-    const { balance, settings, redeemItems } = get()
+    const { balance, harvestBalance, settings, redeemItems } = get()
     if (!settings.redeemEnabled) {
       get().pushToast({ kind: 'info', title: '兑换还没开放哦', emoji: '🔒' })
       return false
@@ -2067,12 +2081,13 @@ export const useApp = create<AppState>((set, get) => ({
     const item = redeemItems.find((i) => i.id === itemId)
     if (!item) return false
 
-    if (balance < item.cost) {
+    const preview = planRedeemPayment(item.cost, harvestBalance, balance)
+    if (!preview.affordable) {
       get().pushToast({
         kind: 'warn',
-        title: '积分还不够',
-        detail: `还差 ${item.cost - balance} 分，加油攒一攒`,
-        emoji: '🪙',
+        title: '还差一点点',
+        detail: `丰收币和积分加起来还差 ${preview.shortfall}，加油攒一攒`,
+        emoji: '🌾',
       })
       return false
     }
@@ -2092,45 +2107,98 @@ export const useApp = create<AppState>((set, get) => ({
 
     const now = Date.now()
     let ok = true
-    let balanceAfter = balance - item.cost
+    /**
+     * 事务里实际用掉的分账。买不起时保持 `null`，下面的 toast 就不会误报。
+     *
+     * ⚠️ 用**对象包一层**而不是裸 `let paid = null`：事务回调是在闭包里赋值的，
+     * TS 的控制流分析看不到，会把 `paid` 一直当成 `null`，于是
+     * `if (!paid) return` 之后它被收窄成 `never`，读字段直接报 TS2339。
+     * 包成对象后按属性读，函数调用会重置属性的收窄，类型就对了。
+     */
+    const box: { paid: { harvestPaid: number; pointsPaid: number } | null } = { paid: null }
+    let balanceAfter = balance
+    let harvestAfter = harvestBalance
 
-    await db.transaction('rw', [db.ledger, db.redeemRecords], async () => {
+    await db.transaction('rw', [db.ledger, db.harvestLedger, db.redeemRecords], async () => {
       // 余额以「delta 之和」为准，时间戳严格递增 —— 见 db.ts 的 ledgerTip
-      const tip = await ledgerTip()
-      if (tip.balance < item.cost) {
+      const pTip = await ledgerTip()
+      const hTip = await harvestTip()
+
+      // 事务内**重新分账**：以实时余额为准，理由见函数头注释
+      const live = planRedeemPayment(item.cost, hTip.balance, pTip.balance)
+      if (!live.affordable) {
         ok = false
         return
       }
-      balanceAfter = tip.balance - item.cost
-      await db.ledger.put({
-        id: `lg_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
-        delta: -item.cost,
-        balanceAfter,
-        source: 'redeem',
-        refId: item.id,
-        memo: `兑换：${item.name}`,
-        createdAt: tip.createdAt,
-      })
+
+      balanceAfter = pTip.balance - live.pointsPaid
+      harvestAfter = hTip.balance - live.harvestPaid
+
+      // 丰收币那笔。`harvest_redeem` 这个 source 从 09-15 定义起就一直空着，
+      // 就是留给这条路的 —— 见 types.ts 的 HarvestSource。
+      if (live.harvestPaid > 0) {
+        await db.harvestLedger.put({
+          id: `hv_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+          delta: -live.harvestPaid,
+          balanceAfter: harvestAfter,
+          source: 'harvest_redeem',
+          refId: item.id,
+          memo: `兑换：${item.name}`,
+          createdAt: hTip.createdAt,
+        })
+      }
+
+      // 积分那笔。`pointsPaid === 0` 时**不写** ——
+      // 写一笔 delta 0 的账会在流水里凭空多出一条「兑换 0 分」。
+      if (live.pointsPaid > 0) {
+        await db.ledger.put({
+          id: `lg_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+          delta: -live.pointsPaid,
+          balanceAfter,
+          source: 'redeem',
+          refId: item.id,
+          memo: `兑换：${item.name}`,
+          createdAt: pTip.createdAt,
+        })
+      }
+
       await db.redeemRecords.put({
         id: uid('rr'),
         itemId: item.id,
         name: item.name,
         emoji: item.emoji,
         cost: item.cost,
+        harvestPaid: live.harvestPaid,
+        pointsPaid: live.pointsPaid,
         balanceAfter,
+        harvestBalanceAfter: harvestAfter,
         fulfilled: false,
         createdAt: now,
       })
+
+      box.paid = { harvestPaid: live.harvestPaid, pointsPaid: live.pointsPaid }
     })
 
-    if (!ok) {
-      get().pushToast({ kind: 'warn', title: '积分不够啦', emoji: '🪙' })
+    const paid = box.paid
+    if (!ok || !paid) {
+      get().pushToast({
+        kind: 'warn',
+        title: '丰收币和积分不够啦',
+        detail: '再攒一攒吧',
+        emoji: '🌾',
+      })
       return false
     }
 
+    const howPaid = describeRedeemPayment({
+      cost: item.cost,
+      harvestPaid: paid.harvestPaid,
+      pointsPaid: paid.pointsPaid,
+    })
+
     set({
       settleFlash: {
-        points: -item.cost,
+        points: -paid.pointsPaid,
         reason: `兑换了「${item.name}」`,
         emoji: item.emoji,
       },
@@ -2138,7 +2206,7 @@ export const useApp = create<AppState>((set, get) => ({
     get().pushToast({
       kind: 'reward',
       title: `兑换成功：${item.name}`,
-      detail: '记得找爸爸妈妈兑现哦',
+      detail: `花了 ${howPaid} · 记得找爸爸妈妈兑现哦`,
       emoji: item.emoji,
     })
     await get().refresh()
@@ -2590,6 +2658,12 @@ export { formatClock, periodKeyFor }
    ------------------------------------------------------------
    暴露给 E2E 脚本与家长排查用。仅挂在 window 上，不参与业务逻辑，
    生产环境保留亦无副作用（不含敏感数据）。
+
+   ⚠️ **没有 `import.meta.env.DEV` 守卫** —— 生产构建 / APK 里也有，
+   装到手机上可以用 `chrome://inspect` 远程调试。
+   ⚠️ **加了新命令要同步更新 README 的「调试句柄（浏览器控制台）」那张表**
+   —— 2026-09-29 家长回来问「之前那个 await unlock 怎么用来着」，
+   就是因为当时只写了代码、没写文档。
    ============================================================ */
 declare global {
   interface Window {
@@ -2620,6 +2694,26 @@ declare global {
          */
         priceCeiling: (itemId: string) => number
       }
+      /**
+       * 测试专用：给当前账号加积分。
+       * 只用于本地调试，不参与业务逻辑。
+       */
+      addPoints: (delta: number) => Promise<void>
+      /**
+       * 测试专用：一键解锁全部内容。
+       * - 开满 12 块地
+       * - 背包里塞满所有种子
+       * - 农场里放进所有动物
+       * - 农场等级提到 10+（解锁全部作物）
+       * 只用于本地调试，不参与业务逻辑。
+       */
+      unlockAll: () => Promise<void>
+      /**
+       * 测试专用：把 seedTasks.ts 里新增的任务同步进当前账号。
+       * 已有任务（按标题匹配）不会重复添加。
+       * 只用于本地调试，不参与业务逻辑。
+       */
+      syncSeedTasks: () => Promise<void>
     }
   }
 }
@@ -2649,6 +2743,82 @@ if (typeof window !== 'undefined') {
           itemId,
           useApp.getState().settings.profitRatio ?? DEFAULT_PROFIT_RATIO,
         ),
+    },
+    addPoints: async (delta) => {
+      await postLedger({
+        delta,
+        source: 'manual_adjust',
+        memo: `调试加积分 +${delta}`,
+      })
+      await useApp.getState().refresh()
+    },
+    unlockAll: async () => {
+      console.log('[kqf-cheat] 开始一键解锁...')
+      const now = Date.now()
+      const s = useApp.getState()
+
+      // 1. 开满 12 块地
+      const allPlots = s.plots.map((p) => ({ ...p, unlocked: true }))
+      await savePlots(allPlots)
+      console.log('[kqf-cheat] 地块已全开:', allPlots.length)
+
+      // 2. 背包里塞满所有种子（各 99 个）
+      for (const crop of CROPS) {
+        await addItem(`seed-${crop.id}`, 99)
+      }
+      console.log('[kqf-cheat] 种子已入库:', CROPS.length, '种')
+
+      // 3. 农场里放进所有动物（跳过已有的）
+      const existingIds = new Set(s.animals.map((a) => a.animalId))
+      let added = 0
+      for (const def of ANIMALS) {
+        if (existingIds.has(def.id)) continue
+        await db.animals.put({
+          id: uid('an'),
+          animalId: def.id,
+          name: def.name,
+          bornAt: now,
+          lastFedAt: now,
+          lastProduceAt: now,
+          pendingProduce: 0,
+          feedCount: 0,
+          careCount: 0,
+        })
+        added++
+      }
+      console.log('[kqf-cheat] 动物已入园:', added, '只')
+
+      // 4. 农场等级提到 10+（解锁全部作物，等级显示拉满）
+      //    level 6 需要约 80 次收获，写 500 保险
+      await saveFarmTotals({ harvests: 500, planted: 500, sheared: 500 })
+      console.log('[kqf-cheat] 农场等级已设为 500 次收获')
+
+      // 5. 刷新内存快照
+      await useApp.getState().refresh()
+      console.log('[kqf-cheat] 完成！页面即将刷新...')
+
+      // 6. 强制刷新页面，确保所有组件读到最新状态
+      window.location.reload()
+    },
+    syncSeedTasks: async () => {
+      console.log('[kqf-cheat] 同步种子任务...')
+      const existing = await db.tasks.toArray()
+      const existingTitles = new Set(existing.map((t) => t.title))
+      const missing = SEED_TASKS.filter((t) => !existingTitles.has(t.title))
+      if (missing.length === 0) {
+        console.log('[kqf-cheat] 所有种子任务都已存在，无需添加')
+        return
+      }
+      const now = Date.now()
+      const rows = missing.map((t, i) => ({
+        ...t,
+        id: uid('tk'),
+        createdAt: now + i,
+        updatedAt: now + i,
+      }))
+      await db.tasks.bulkPut(rows)
+      console.log('[kqf-cheat] 已添加', missing.length, '个新任务:', missing.map((t) => t.title).join(', '))
+      window.location.reload()
     },
   }
 }

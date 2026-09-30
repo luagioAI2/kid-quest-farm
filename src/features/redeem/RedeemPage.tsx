@@ -28,7 +28,7 @@ export default function RedeemPage() {
             <p className="font-display text-xl font-extrabold leading-tight text-ink-900">
               兑换愿望
             </p>
-            <p className="text-xs font-bold text-ink-500">用攒下来的积分，换想要的东西</p>
+            <p className="text-xs font-bold text-ink-500">用攒下来的丰收币和积分，换想要的东西</p>
           </div>
         </div>
       </header>

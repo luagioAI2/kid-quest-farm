@@ -551,9 +551,28 @@ export interface RedeemRecord {
   itemId: string
   name: string
   emoji: string
+  /** 总价 = harvestPaid + pointsPaid */
   cost: number
+  /**
+   * 这次用丰收币付掉的部分（🌾）。
+   *
+   * 可选：2026-09-30 之前的老记录没有这个字段 —— 那时候只能用积分付，
+   * 所以「缺省」必须读成 **0**，而不是 `cost`。读取处请一律走
+   * `domain/redeem.ts` 的 `paidOf()` / `describeRedeemPayment()`，别手写 `?? cost`。
+   */
+  harvestPaid?: number
+  /**
+   * 这次用积分付掉的部分（🪙）。
+   *
+   * 可选：老记录缺省时**等于 `cost`**（当年全额走积分）。
+   * ⚠️ 两个字段的缺省方向**是相反的**（一个默认 0、一个默认 cost），
+   * 因为老记录全都是「纯积分」。别把这条记反了。
+   */
+  pointsPaid?: number
   /** 兑换时的积分余额（快照，便于回溯） */
   balanceAfter: number
+  /** 兑换时的丰收币余额（快照）。老记录没有 */
+  harvestBalanceAfter?: number
   /** 家长是否已经"兑现"（比如真的给了零食） */
   fulfilled: boolean
   fulfilledAt?: number

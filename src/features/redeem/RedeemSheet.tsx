@@ -4,6 +4,7 @@ import { useApp } from '@/store/useApp'
 import type { RedeemCategory, RedeemItem } from '@/domain/types'
 import { humanizeAgo } from '@/domain/time'
 import { clampPointsPerYuan, formatYuan } from '@/domain/cash'
+import { describeRedeemPayment, planRedeemPayment, type RedeemPayment } from '@/domain/redeem'
 import { ParentPinPanel } from '../parent/ParentGate'
 import { BottomSheet, CoinPill } from '../farm/farmUi'
 
@@ -23,7 +24,14 @@ import { BottomSheet, CoinPill } from '../farm/farmUi'
    「大件愿望要攒一两周」，从而保证兑换始终可控。
    ⚠️ 2026-09-21 任务积分减半之后，日收入从约 250~330 降到约
    170~270，而兑换定价没动 —— 攒大件的时间翻倍，见 seedTasks.ts。
+
+   ## 付款规则（2026-09-30 用户要求）
+   「优先用丰收币兑换。价值和积分等价的。用完丰收币再用积分，可混合。」
+   标价只有一个数（比如 50），但这个 50 可以**一半丰收币一半积分**地付。
+   规则本身在 `domain/redeem.ts` 的 `planRedeemPayment()` 里，
+   和 store 扣款用的是**同一个函数** —— 界面预览和真实扣款不会算出两个结果。
    ============================================================ */
+
 
 const CATEGORY_META: Record<RedeemCategory, { label: string; emoji: string }> = {
   snack: { label: '零食饮料', emoji: '🍪' },
@@ -50,10 +58,31 @@ export function RedeemSheet({ open, onClose }: { open: boolean; onClose: () => v
       onClose={onClose}
       emoji="🎁"
       title="兑换愿望"
-      headerRight={<CoinPill amount={useApp((s) => s.balance)} />}
+      headerRight={<WalletPills />}
     >
       <RedeemBody />
     </BottomSheet>
+  )
+}
+
+/**
+ * 弹层头部的两个钱包。
+ *
+ * 以前只挂积分 —— 但兑换现在**两种币都能付**，只报积分会让孩子以为
+ * 「我只有 12 分，换不了」，而他兜里其实还有 80 枚丰收币。
+ *
+ * ⚠️ 图标一律走 `CoinPill`（它的图标带 `aria-hidden`）。
+ * e2e-check §8 靠「不带 aria-hidden 的 🪙 叶子节点 + 同级有个数字 == 余额」
+ * 来抓「同一个数显示两次」；手写裸 🪙 会被误判成余额牌。
+ */
+function WalletPills() {
+  const balance = useApp((s) => s.balance)
+  const harvestBalance = useApp((s) => s.harvestBalance)
+  return (
+    <div className="flex items-center gap-1.5">
+      <CoinPill amount={harvestBalance} icon="🌾" tone="grass" />
+      <CoinPill amount={balance} />
+    </div>
   )
 }
 
@@ -67,6 +96,7 @@ export function RedeemBody() {
   const redeemItems = useApp((s) => s.redeemItems)
   const redeemRecords = useApp((s) => s.redeemRecords)
   const balance = useApp((s) => s.balance)
+  const harvestBalance = useApp((s) => s.harvestBalance)
   const settings = useApp((s) => s.settings)
 
   const [tab, setTab] = useState<'shop' | 'records' | 'manage'>('shop')
@@ -124,11 +154,13 @@ export function RedeemBody() {
             <div className="space-y-4 pb-4">
               {/* ⚠️ 这里**不再写「🪙 你有 N 分」** —— 全局顶栏已经常驻显示余额，
                   在正文里再报一遍同一个数只是噪音。留下的这句才是这里独有的信息：
-                  「点了就会扣」这个后果。 */}
+                  「点了就会扣」这个后果，以及**两种币怎么分摊**。 */}
               <p className="rounded-2xl bg-sun-50 px-3 py-2 text-xs font-bold text-ink-700">
-                换完就扣分，想清楚再点哦～
+                换完就扣币，想清楚再点哦～
                 <span className="mt-1 block text-[11px] font-normal leading-snug text-ink-500">
-                  💱 参考：1 元 ≈ {ratio} 分。这只是给家长的参照，扣多少分还是看标价。
+                  🌾 丰收币先花，不够再用 🪙 积分 —— 两种币 1 比 1 等价，可以一起付。
+                  <br />
+                  💱 参考：1 元 ≈ {ratio} 分。这只是给家长的参照，扣多少还是看标价。
                 </span>
               </p>
               {grouped.map((g) => (
@@ -138,7 +170,13 @@ export function RedeemBody() {
                   </h3>
                   <ul className="space-y-3">
                     {g.items.map((it) => (
-                      <RedeemRow key={it.id} item={it} balance={balance} ratio={ratio} />
+                      <RedeemRow
+                        key={it.id}
+                        item={it}
+                        balance={balance}
+                        harvestBalance={harvestBalance}
+                        ratio={ratio}
+                      />
                     ))}
                   </ul>
                 </section>
@@ -154,7 +192,7 @@ export function RedeemBody() {
             <div className="surface flex flex-col items-center gap-2 px-6 py-10 text-center">
               <span className="text-5xl">📜</span>
               <p className="font-display font-extrabold text-ink-900">还没有兑换过</p>
-              <p className="text-sm text-ink-500">完成任务的积分，可以来这里换想要的东西</p>
+              <p className="text-sm text-ink-500">做任务攒积分、种地攒丰收币，都能来这里换</p>
             </div>
           ) : (
             redeemRecords.map((r) => (
@@ -165,7 +203,7 @@ export function RedeemBody() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-extrabold text-ink-900">{r.name}</p>
                   <p className="text-[11px] text-ink-500">
-                    -{r.cost} 分 · {humanizeAgo(r.createdAt)}
+                    -{describeRedeemPayment(r)} · {humanizeAgo(r.createdAt)}
                   </p>
                 </div>
                 <span
@@ -198,13 +236,39 @@ export function RedeemBody() {
 
 /* ---------------- 孩子视角：一键兑换 ---------------- */
 
+/**
+ * 付款拆分：`🌾 30 + 🪙 20`。只出一种币时不显示另一种的 0。
+ *
+ * ⚠️ 不把 🪙 渲染成**独占一个叶子节点**（`<span>🪙</span>`）——
+ * e2e-check §8 靠「textContent 恰好等于 🪙 的叶子」来定位余额牌，
+ * 这里的文字是 `🪙 20`，天然不撞。
+ */
+function PaySplit({ plan }: { plan: RedeemPayment }) {
+  return (
+    <span className="tnum">
+      {plan.harvestPaid > 0 ? (
+        <span className="font-extrabold text-grass-700">🌾 {plan.harvestPaid}</span>
+      ) : null}
+      {plan.harvestPaid > 0 && plan.pointsPaid > 0 ? (
+        <span className="font-normal text-ink-400"> + </span>
+      ) : null}
+      {plan.pointsPaid > 0 ? (
+        <span className="font-extrabold text-sun-700">🪙 {plan.pointsPaid}</span>
+      ) : null}
+    </span>
+  )
+}
+
 function RedeemRow({
   item,
   balance,
+  harvestBalance,
   ratio,
 }: {
   item: RedeemItem
   balance: number
+  /** 丰收币余额。兑换**优先花它**，见 domain/redeem.ts */
+  harvestBalance: number
   /** 现金 : 积分 参考汇率（1 元 = 多少积分）。只用来在旁边标一句「≈ ¥3」 */
   ratio: number
 }) {
@@ -213,7 +277,12 @@ function RedeemRow({
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
 
-  const affordable = balance >= item.cost
+  /**
+   * 分账。**和 store 扣款调的是同一个函数** —— 所以按钮上写的
+   * 「🌾 30 + 🪙 20」跟实际扣的一定是同一组数，不会各算各的。
+   */
+  const plan = planRedeemPayment(item.cost, harvestBalance, balance)
+  const affordable = plan.affordable
   const usedToday = redeemedToday(item.id)
   const maxed = item.limitPerDay != null && usedToday >= item.limitPerDay
   const meta = CATEGORY_META[item.category]
@@ -257,16 +326,28 @@ function RedeemRow({
             ) : null}
             <span className="text-[11px] text-ink-400">{meta.emoji}</span>
           </div>
+
+          {/* 这一件**具体怎么付**。规则：丰收币优先、1:1、可混合。 */}
+          <p className="mt-1 text-[11px] font-bold text-ink-500">
+            付款：<PaySplit plan={plan} />
+          </p>
+          {!affordable ? (
+            <p className="mt-0.5 text-[11px] font-bold text-berry-500">
+              两种币加起来还差 {plan.shortfall}
+            </p>
+          ) : null}
         </div>
       </div>
 
       {confirming ? (
         <div className="border-t-2 border-ink-900/5 bg-sun-50/70 p-3">
           <p className="mb-2 text-center text-sm font-bold text-ink-700">
-            用 {item.cost} 分换「{item.name}」？
+            换「{item.name}」？
             <br />
             <span className="text-xs font-normal text-ink-500">
-              换完还剩 {balance - item.cost} 分
+              付款：{describeRedeemPayment({ cost: item.cost, ...plan })}
+              <br />
+              换完还剩 🌾 {harvestBalance - plan.harvestPaid} · 🪙 {balance - plan.pointsPaid}
             </span>
           </p>
           <div className="flex gap-2">
@@ -304,7 +385,7 @@ function RedeemRow({
               ? '今天已经换过了'
               : affordable
                 ? '🎁 换这个'
-                : `还差 ${item.cost - balance} 分`}
+                : `还差 ${plan.shortfall}`}
           </button>
         </div>
       )}
@@ -373,7 +454,7 @@ function ManagePanel() {
             <p className="font-display text-sm font-extrabold text-ink-900">
               🔔 有 {pending.length} 个愿望等兑现
             </p>
-            <p className="text-[11px] text-ink-500">孩子已经用积分换好了，记得兑现哦</p>
+            <p className="text-[11px] text-ink-500">孩子已经换好了，记得兑现哦</p>
           </div>
           <ul className="divide-y-2 divide-ink-900/5">
             {pending.map((r) => (
@@ -384,7 +465,7 @@ function ManagePanel() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-extrabold text-ink-900">{r.name}</p>
                   <p className="text-[11px] text-ink-500">
-                    {humanizeAgo(r.createdAt)} · 花了 {r.cost} 分
+                    {humanizeAgo(r.createdAt)} · 花了 {describeRedeemPayment(r)}
                   </p>
                 </div>
                 <button
@@ -629,7 +710,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
           </div>
         </Field>
 
-        <Field label="需要多少积分">
+        <Field label="需要多少（丰收币和积分 1 比 1，都能付）">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -671,6 +752,10 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
           <p className="mt-2 text-[11px] text-ink-500">
             参考：孩子一天大约能赚 170~270 分。30~60 分是"每天都能换"，
             150~300 分要攒一两天，600 分要攒三四天，1500 分要攒一两周。
+            <br />
+            ⚠️ 孩子手里还有 <b className="text-ink-700">丰收币</b>（种地赚的）。
+            兑换时<b className="text-ink-700">先花丰收币</b>，
+            花光了才动积分 —— 所以实际能换的东西比上面这个"攒几天"要早。
             <br />
             按现在的汇率（1 元 ≈ {ratio} 分），{cost} 分 ≈{' '}
             <b className="text-ink-700">{formatYuan(cost, ratio)}</b>。
