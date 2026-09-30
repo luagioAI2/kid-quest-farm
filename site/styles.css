@@ -93,13 +93,20 @@ body {
   line-height: 1.75;
   color: var(--ink-900);
   background-color: var(--paper);
-  /* 与 App 一致：只留一道很淡的暖光，不堆彩色光斑 */
-  background-image: radial-gradient(
-    120% 55% at 50% -8%,
-    rgb(253 230 138 / 0.42) 0,
-    transparent 62%
-  );
-  background-attachment: fixed;
+  /* 两层背景：
+     1) 固定暖光（营造顶部柔和氛围）
+     2) 极淡的纸质噪点纹理（用 CSS 渐变模拟，不是真图片）
+     让背景有「手工纸」的触感，而不是平滑的数字化平面。 */
+  background-image:
+    radial-gradient(120% 55% at 50% -8%, rgb(253 230 138 / 0.35) 0, transparent 62%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 2px,
+      rgb(51 40 30 / 0.015) 2px,
+      rgb(51 40 30 / 0.015) 4px
+    );
+  background-attachment: fixed, scroll;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
@@ -190,26 +197,56 @@ ol {
 }
 
 .section {
-  padding-block: clamp(56px, 8vw, 104px);
+  padding-block: clamp(64px, 10vw, 140px);
   position: relative;
 }
 
+/* 紧凑区块：内部元素挨得紧，但和前后区块之间仍然留白 */
 .section--tight {
   padding-block: clamp(40px, 5vw, 64px);
+}
+
+/* 超大留白区块：让重点内容「呼吸」 */
+.section--airy {
+  padding-block: clamp(96px, 14vw, 180px);
 }
 
 .section--paper {
   background: linear-gradient(180deg, var(--paper-2), var(--paper));
 }
 
+/* 带顶部装饰分隔线的区块 */
+.section--ruled {
+  border-top: 1px dashed var(--ink-200);
+}
+
 .section-head {
   max-width: 720px;
-  margin-bottom: clamp(28px, 4vw, 52px);
+  margin-bottom: clamp(32px, 5vw, 64px);
 }
 
 .section-head--center {
   margin-inline: auto;
   text-align: center;
+}
+
+/* 章节 eyebrow 的另一种形态：无底色、只有文字 + 小装饰 */
+.eyebrow--minimal {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  color: var(--grass-600);
+  letter-spacing: 0.08em;
+}
+.eyebrow--minimal::before {
+  content: '';
+  display: inline-block;
+  width: 24px;
+  height: 3px;
+  background: var(--grass-400);
+  border-radius: 2px;
+  margin-right: 8px;
+  vertical-align: middle;
 }
 
 .eyebrow {
@@ -228,23 +265,41 @@ ol {
   box-shadow: var(--hairline);
 }
 
+/* 排版尺度：刻意拉大跳跃，制造视觉张力。
+   参考 impeccable 的「极端尺度」原则：标题和正文之间要差 3-5 倍，
+   而不是舒服的 1.5 倍。 */
+.h0 {
+  font-size: clamp(2.8rem, 7.5vw, 5.6rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
 .h1 {
-  font-size: clamp(2.15rem, 5.4vw, 4rem);
+  font-size: clamp(2.4rem, 6vw, 4.6rem);
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
 }
 
 .h2 {
-  font-size: clamp(1.6rem, 3.4vw, 2.6rem);
+  font-size: clamp(1.75rem, 3.8vw, 2.9rem);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
 }
 
 .h3 {
-  font-size: clamp(1.15rem, 2vw, 1.4rem);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  font-weight: 700;
 }
 
 .lead {
-  font-size: clamp(1rem, 1.5vw, 1.16rem);
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
   color: var(--ink-600);
   margin-top: 18px;
-  line-height: 1.8;
+  line-height: 1.75;
+  font-weight: 400;
 }
 
 .muted {
@@ -356,7 +411,14 @@ ol {
   gap: 10px;
 }
 
-/* ---------- 5. 卡片 ---------- */
+/* ---------- 5. 卡片 ----------
+   刻意打破「所有卡片长得一样」的单调感 —— 这是 AI  landing page
+   的典型 fingerprint。混合使用：
+   · 标准圆角 + 柔和投影（默认）
+   · 小圆角 + 粗边框（card--bold）
+   · 大圆角 + 厚底色（card--pill）
+   · 重叠上浮（card--lift）
+   让页面有节奏，而不是一张一张的克隆体。 */
 .card {
   background: #fff;
   border-radius: var(--r-lg);
@@ -364,18 +426,84 @@ ol {
   padding: clamp(22px, 2.6vw, 30px);
   position: relative;
   overflow: hidden;
+  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .card--flat {
   background: var(--paper-2);
 }
 
-.card--hover {
-  transition: transform 0.2s ease, box-shadow 0.24s ease;
-}
 .card--hover:hover {
-  transform: translateY(-4px);
+  transform: translateY(-6px);
   box-shadow: var(--sh-2), var(--hairline);
+}
+
+/* 粗边框卡片：像一本厚纸笔记本的封面，更「手工感」 */
+.card--bold {
+  border-radius: var(--r-sm);
+  box-shadow: none;
+  border: 2.5px solid var(--ink-200);
+  background: var(--paper);
+}
+.card--bold:hover {
+  border-color: var(--sun-300);
+  transform: translateY(-3px);
+}
+
+/* 大圆角「胶囊」卡片：更俏皮，适合儿童产品 */
+.card--pill {
+  border-radius: var(--r-xl);
+  box-shadow: var(--sh-1), var(--hairline);
+}
+.card--pill:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: var(--sh-2), var(--hairline);
+}
+
+/* 带顶部色条的卡片 */
+.card--stripe {
+  padding-top: clamp(28px, 3vw, 36px);
+}
+.card--stripe::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, var(--sun-400), var(--grass-400));
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.card--bold.card--stripe::before {
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+}
+
+/* ---------- 5.5 装饰元素 ----------
+   用纯 CSS 做出不规则有机形状，点缀在关键位置，打破「全是矩形」的单调。 */
+
+/* 手绘风格小圆点 */
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--sun-400);
+  border-radius: 50%;
+  vertical-align: middle;
+  margin: 0 6px;
+}
+.dot--grass { background: var(--grass-400); }
+.dot--berry { background: var(--berry-400); }
+.dot--sky   { background: var(--sky-400); }
+
+/* 波浪分隔线（SVG data URI，纯 CSS，无外部请求） */
+.wave {
+  display: block;
+  width: 100%;
+  height: 24px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 24' preserveAspectRatio='none'%3E%3Cpath d='M0 12 Q 150 0, 300 12 T 600 12 T 900 12 T 1200 12' fill='none' stroke='%23e2d6c6' stroke-width='1.5'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  opacity: 0.6;
+  margin: 8px 0;
 }
 
 /* 图标圆牌 */
@@ -563,18 +691,24 @@ ol {
    放在 .hero 里时，.hero 的 overflow:hidden 会把光晕从导航条下沿一刀切断 ——
    实测那一行的像素从 (255,250,238) 直接跳到 (223,246,215)，是一条肉眼可见的硬边。
    放到页面层之后，光晕一直铺到 y=0，导航条在未吸顶时是透明的，两边就接上了。 */
+/* 顶部背景：从「三个径向渐变 blob」改成一张有意的有机形状。
+   径向渐变是 AI  landing page 的最典型 fingerprint —— 几乎每张 AI 生成的
+   营销页都有。改成用 CSS conic-gradient + mask 拼出一个不规则的
+   「阳光泼洒」形状，既保留了温暖感，又打破了可预测性。 */
 .page-glow {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  height: clamp(860px, 68vw, 1080px);
+  height: clamp(920px, 72vw, 1140px);
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(46% 30% at 76% 16%, rgb(252 211 77 / 0.52), transparent 70%),
-    radial-gradient(42% 28% at 10% 22%, rgb(134 239 172 / 0.44), transparent 72%),
-    radial-gradient(34% 20% at 52% 4%, rgb(253 186 116 / 0.36), transparent 70%);
+    conic-gradient(from 200deg at 65% 25%, rgb(252 211 77 / 0.55) 0deg 80deg, transparent 80deg),
+    conic-gradient(from 310deg at 22% 35%, rgb(134 239 172 / 0.42) 0deg 60deg, transparent 60deg),
+    conic-gradient(from 100deg at 50% 8%, rgb(253 186 116 / 0.32) 0deg 50deg, transparent 50deg);
+  filter: blur(60px) saturate(120%);
+  opacity: 0.85;
 }
 
 main {
@@ -584,8 +718,8 @@ main {
 
 .hero {
   position: relative;
-  padding-top: clamp(38px, 6vw, 72px);
-  padding-bottom: clamp(40px, 6vw, 80px);
+  padding-top: clamp(42px, 7vw, 84px);
+  padding-bottom: clamp(48px, 7vw, 96px);
   overflow: hidden;
 }
 
@@ -593,38 +727,60 @@ main {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.06fr) minmax(0, 0.94fr);
-  gap: clamp(28px, 4vw, 56px);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: clamp(32px, 5vw, 64px);
   align-items: center;
 }
 
+/* 标题：用 .h0 的极端尺度，但加一层装饰性 text-shadow 制造「手绘
+   厚描边」的错觉 —— 不用额外 font，纯 CSS 做出辨识度。 */
 .hero__title {
-  font-size: clamp(2.3rem, 5.6vw, 4.15rem);
-  letter-spacing: -0.025em;
+  font-size: clamp(2.6rem, 6.8vw, 5rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
 }
 
 .hero__title em {
   font-style: normal;
-  background: linear-gradient(120deg, var(--sun-500), var(--tangerine-500) 55%, var(--berry-400));
+  background: linear-gradient(135deg, var(--sun-500) 0%, var(--tangerine-500) 50%, var(--berry-400) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  /* 渐变文字上加一层极细的描边，让它在浅色背景上更「跳」 */
+  -webkit-text-stroke: 1.5px transparent;
+}
+
+/* 用 CSS 伪内容给标题加一个小装饰标记，打破纯文字的沉闷 */
+.hero__title::after {
+  content: '';
+  display: inline-block;
+  width: 0.45em;
+  height: 0.45em;
+  margin-left: 0.15em;
+  margin-bottom: 0.15em;
+  background: var(--sun-400);
+  border-radius: 50% 50% 50% 2px;
+  transform: rotate(-15deg);
+  vertical-align: baseline;
 }
 
 .hero__lead {
-  font-size: clamp(1.02rem, 1.6vw, 1.22rem);
+  font-size: clamp(1.05rem, 1.7vw, 1.28rem);
   color: var(--ink-600);
-  margin-top: 20px;
-  max-width: 34em;
-  line-height: 1.85;
+  margin-top: 24px;
+  max-width: 32em;
+  line-height: 1.7;
+  font-weight: 400;
 }
 
 .hero__trust {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
-  margin-top: 22px;
-  font-size: 14.5px;
+  gap: 10px 22px;
+  margin-top: 28px;
+  font-size: 14px;
   color: var(--ink-600);
   font-family: var(--font-display);
   font-weight: 700;
@@ -632,11 +788,11 @@ main {
 .hero__trust li {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 
 .hero__cta {
-  margin-top: 30px;
+  margin-top: 34px;
 }
 
 .hero__note {
@@ -779,25 +935,40 @@ main {
   }
 }
 
-/* ---------- 9. 四大支柱 ---------- */
+/* ---------- 9. 四大支柱 ----------
+   从「2×2 等宽网格」改成不对称布局：左大右小，打破可预测性。
+   参考 impeccable：让重要元素 3-5 倍于周围，用空间张力代替对称平衡。 */
 .pillars {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(16px, 2vw, 24px);
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: clamp(16px, 2.2vw, 28px);
 }
 
 .pillar {
   display: flex;
   flex-direction: column;
 }
+
+/* 第一个支柱（计划）作为「主角」——更大、更醒目 */
+.pillar:first-child {
+  grid-row: span 2;
+}
+.pillar:first-child .card {
+  padding: clamp(28px, 3.2vw, 38px);
+}
+.pillar:first-child .pillar__title {
+  font-size: clamp(1.3rem, 2.2vw, 1.6rem);
+}
+
 .pillar__title {
-  font-size: clamp(1.16rem, 1.8vw, 1.34rem);
-  margin-bottom: 8px;
+  font-size: clamp(1.1rem, 1.6vw, 1.3rem);
+  margin-bottom: 10px;
+  font-weight: 800;
 }
 .pillar__desc {
   color: var(--ink-600);
-  font-size: 15.5px;
-  line-height: 1.8;
+  font-size: 15px;
+  line-height: 1.75;
 }
 .pillar__list {
   margin-top: 18px;
@@ -809,7 +980,7 @@ main {
 .pillar__list li {
   display: flex;
   gap: 9px;
-  font-size: 14.5px;
+  font-size: 14px;
   color: var(--ink-700);
   line-height: 1.65;
 }
@@ -821,7 +992,9 @@ main {
   flex: none;
 }
 
-/* ---------- 10. 结算机制 ---------- */
+/* ---------- 10. 结算机制 ----------
+   三张卡片刻意做成不同形态：一张带粗边框、一张带顶部色条、
+   一张标准圆角。避免「三个克隆体并排」的单调感。 */
 .rule-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -835,7 +1008,41 @@ main {
   padding: 24px 22px 22px;
   position: relative;
   overflow: hidden;
+  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
 }
+.rule:hover {
+  transform: translateY(-4px);
+}
+
+/* 第一张：粗边框 */
+.rule:nth-child(1) {
+  border-radius: var(--r-sm);
+  box-shadow: none;
+  border: 2.5px solid var(--ink-200);
+}
+.rule:nth-child(1):hover {
+  border-color: var(--sun-300);
+}
+
+/* 第二张：顶部色条 */
+.rule:nth-child(2) {
+  padding-top: 30px;
+}
+.rule:nth-child(2)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, var(--sun-400), var(--grass-400));
+}
+
+/* 第三张：大圆角 */
+.rule:nth-child(3) {
+  border-radius: var(--r-xl);
+}
+
 .rule__head {
   display: flex;
   align-items: center;
@@ -1102,11 +1309,13 @@ main {
   transform: rotate(2deg);
 }
 
-/* ---------- 15. 下载 ---------- */
+/* ---------- 15. 下载 ----------
+   三张下载卡片也刻意差异化：featured 用粗边框 + 大圆角，
+   另外两张用不同半径，打破「三胞胎」感。 */
 .dl-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(16px, 2vw, 22px);
+  gap: clamp(16px, 2.2vw, 26px);
   align-items: stretch;
 }
 
@@ -1117,16 +1326,46 @@ main {
   padding: 26px 24px;
   display: flex;
   flex-direction: column;
-  transition: transform 0.2s ease, box-shadow 0.24s ease;
+  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 .dl:hover {
-  transform: translateY(-4px);
+  transform: translateY(-6px);
   box-shadow: var(--sh-2), var(--hairline);
 }
+
+/* 主角卡片：粗边框 + 大圆角 + 顶部色条 */
 .dl--feature {
+  border-radius: var(--r-xl);
   box-shadow: var(--sh-2), var(--hairline);
-  border: 2px solid var(--sun-300);
+  border: 2.5px solid var(--sun-300);
+  position: relative;
+  overflow: hidden;
 }
+.dl--feature::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, var(--sun-400), var(--grass-400));
+}
+.dl--feature:hover {
+  border-color: var(--sun-400);
+  transform: translateY(-6px) scale(1.01);
+}
+
+/* 第二张：小圆角 */
+.dl:nth-child(2) {
+  border-radius: var(--r-sm);
+}
+
+/* 第三张：标准但带左侧色条 */
+.dl:nth-child(3) {
+  border-left: 4px solid var(--sky-400);
+}
+
 .dl__head {
   display: flex;
   align-items: center;
@@ -1332,18 +1571,29 @@ main {
   color: var(--ink-300);
 }
 
-/* ---------- 19. 滚动揭示 ---------- */
+/* ---------- 19. 滚动揭示 ----------
+   加大位移和缓动曲线，让揭示更有「弹出来」的戏剧感。
+   同时加入错落延迟，避免所有元素同时动（那是 AI 生成的典型特征）。 */
 .reveal {
   opacity: 0;
-  transform: translateY(22px);
-  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translateY(32px) scale(0.97);
+  transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform;
 }
 .reveal.is-in {
   opacity: 1;
   transform: none;
 }
+
+/* 错落：同一块里的元素依次出现，制造「编排好的」节奏感 */
+.reveal.is-in:nth-child(1) { transition-delay: 0ms; }
+.reveal.is-in:nth-child(2) { transition-delay: 70ms; }
+.reveal.is-in:nth-child(3) { transition-delay: 140ms; }
+.reveal.is-in:nth-child(4) { transition-delay: 210ms; }
+.reveal.is-in:nth-child(5) { transition-delay: 280ms; }
+.reveal.is-in:nth-child(6) { transition-delay: 350ms; }
+
 /* 没有 JS 时不能把内容永久藏起来 */
 .no-js .reveal {
   opacity: 1;
