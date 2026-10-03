@@ -177,6 +177,36 @@ export function ChildTour({
    */
   const bubbleBelow = rect ? rect.top + rect.height / 2 < window.innerHeight / 2 : true
 
+  /**
+   * 气泡的**水平位置**：跟着锚点走，再夹回视口内。
+   *
+   * ⚠️ 2026-10-03 平板适配。原来气泡是 `left:0; right:0` + 内部 `mx-auto max-w-sm`，
+   * **恒定在视口正中**，完全不看锚点在哪儿。
+   * 手机上 384px 的气泡几乎占满 390px 宽，居中 ≈ 对齐，看不出问题；
+   * 但 iPad Pro 13" 横屏（1366px）实测：
+   *
+   *   · 讲底部第一个 tab —— 气泡中心 x=683、高亮框中心 x=497，偏 186px
+   *   · 讲顶栏「设置」   —— 锚点 x≈1093，偏 **410px**
+   *
+   * 孩子看到的是「屏幕中间一张卡片，左下角/右上角一个亮框」，联系不起来。
+   *
+   * 夹取范围 `[16, vw - W - 16]` 就是原来 `px-4` 给的那条内边距，所以
+   * **手机上两个边界相等**（390 − 358 − 16 = 16），算出来恒为 16 ——
+   * 手机观感一个像素都不变，只是平板起开始跟随锚点。
+   *
+   * 只动水平方向：上下翻面（`bubbleBelow`）和「气泡不跑出屏幕」的
+   * 断言都在 e2e-check 里锁着，不碰。
+   */
+  const GUTTER = 16 // 原 `px-4`
+  const CARD_MAX = 384 // 原 `max-w-sm`
+  const cardW = Math.min(CARD_MAX, window.innerWidth - GUTTER * 2)
+  const cardLeft = rect
+    ? Math.min(
+        Math.max(rect.left + rect.width / 2 - cardW / 2, GUTTER),
+        window.innerWidth - cardW - GUTTER,
+      )
+    : (window.innerWidth - cardW) / 2
+
   return (
     <Portal>
       {/* 1) 点击拦截层：导览期间不让孩子乱点（放在最底下，压住整屏） */}
@@ -197,21 +227,26 @@ export function ChildTour({
         />
       )}
 
-      {/* 3) 气泡：贴在挖出来的那个洞旁边（上下按 bubbleBelow 翻面） */}
+      {/* 3) 气泡：贴在挖出来的那个洞旁边（上下按 bubbleBelow 翻面，水平跟随锚点） */}
       <div
-        className="fixed z-[62] px-4"
+        /* ⚠️ 这里**没有** `px-4` 了 —— 内边距已经折算进下面的 `left` / `width`
+           （见 cardLeft 的注释）。两个一起写会让卡片再窄 32px，手机观感就变了。 */
+        className="fixed z-[62]"
         /* e2e 靠这两个属性定位，不靠「第几个 div」（同上，别用顺序假设） */
         data-tour-bubble={step.id}
         data-tour-side={bubbleBelow ? 'below' : 'above'}
         role="dialog"
         aria-label={`功能导览：${step.title}`}
-        style={
-          bubbleBelow
-            ? { left: 0, right: 0, top: rect ? rect.bottom + 16 : 120 }
-            : { left: 0, right: 0, bottom: rect ? window.innerHeight - rect.top + 16 : 120 }
-        }
+        style={{
+          left: cardLeft,
+          width: cardW,
+          ...(bubbleBelow
+            ? { top: rect ? rect.bottom + 16 : 120 }
+            : { bottom: rect ? window.innerHeight - rect.top + 16 : 120 }),
+        }}
       >
-        <div className="surface anim-bounce-in mx-auto max-w-sm border border-ink-900/10 bg-white p-4 shadow-float">
+        {/* 宽度由外层给了，卡片自身不再 `mx-auto max-w-sm`（会和上面的 width 打架） */}
+        <div className="surface anim-bounce-in border border-ink-900/10 bg-white p-4 shadow-float">
           <div className="flex items-start gap-3">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-sun-200 text-2xl">
               {step.emoji}
