@@ -176,68 +176,86 @@ export default function App() {
   if (!ready || !splashMinElapsed) return <SplashPage />
 
   return (
-    <div className="relative mx-auto flex min-h-screen max-w-2xl flex-col">
+    <div className="relative flex min-h-screen flex-col">
       {showSettings ? (
         <SettingsPage onBack={() => setShowSettings(false)} onReplayGuide={replayGuide} />
       ) : (
         <>
-          {/* 顶部状态条：两种币常驻可见，让孩子随时看到自己的收获 */}
-          <header className="sticky top-0 z-30 flex items-center gap-1.5 border-b border-ink-900/10 bg-paper/95 px-4 py-2.5 backdrop-blur pt-safe">
-            <span className="text-2xl">{settings.avatar}</span>
-            <span className="mr-auto truncate font-display text-lg font-extrabold text-ink-900">
-              {settings.childName}
-            </span>
-            {/*
-              两个币种并排。**图标和底色必须能区分开**：
-                🪙 积分 = 奖励色（sun），能买种子/幼崽/地块，也能进兑换商城
-                🌾 丰收币 = 草色（grass），只能进兑换商城的丰收档，买不了农场投入
-              用农场页同一个色（bg-grass-100 / text-grass-700），
-              孩子从农场切到任务页时不会觉得是两个东西。
-            */}
-            <div
-              className="flex shrink-0 items-center gap-1 rounded-full bg-sun-200 px-2.5 py-1.5 shadow-flat"
-              aria-label={`积分 ${balance}`}
-            >
-              <span className="text-base leading-none">🪙</span>
-              <span className="tnum font-display text-base font-extrabold leading-none text-ink-900">
-                {balance}
+          {/* 顶部状态条：两种币常驻可见，让孩子随时看到自己的收获。
+              2026-10-03 平板适配：顶栏**通栏**（背景铺满整个宽度），
+              内容再收进 `page-col`。原来顶栏和内容一起被 `max-w-2xl` 卡住，
+              在 iPad 上会变成「中间悬着一条 672px 的横条」，两边各空一大块。
+              同理，底部导航也改成通栏。 */}
+          <header className="sticky top-0 z-30 border-b border-ink-900/10 bg-paper/95 backdrop-blur">
+            {/* `pl-safe pr-safe` 是 calc(env(...) + 1rem)，正好等于原来的 px-4，
+                但横屏刘海屏上会多让出安全区。横屏时刘海就在顶栏左右两端，
+                所以这两个必须加在**顶栏**上（底栏在底部中间，够不到刘海）。 */}
+            <div className="page-col flex items-center gap-1.5 py-2.5 pl-safe pr-safe pt-safe">
+              <span className="text-2xl">{settings.avatar}</span>
+              {/* `data-child-name` 是给 e2e-check 定位用的。
+                  原来是 `header.children[1]` —— 平板适配给顶栏加了一层
+                  `page-col` 包裹之后这个下标就失效了（量出来 -1，断言假失败）。
+                  换成属性定位，以后再怎么调结构都不会断。 */}
+              <span
+                data-child-name
+                className="mr-auto truncate font-display text-lg font-extrabold text-ink-900"
+              >
+                {settings.childName}
               </span>
-            </div>
-            <div
-              className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
-              aria-label={`丰收币 ${harvestBalance}`}
-            >
-              <span className="text-base leading-none">🌾</span>
-              <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">
-                {harvestBalance}
-              </span>
-            </div>
-            {/* 家长确认：放在设置旁边，和「家长相关」的事聚在一起 */}
-            <button
-              onClick={() => setReviewOpen(true)}
-              aria-label={pendingReview > 0 ? `家长确认，有 ${pendingReview} 个待办` : '家长确认'}
-              /* 导览最后两步要讲这个按钮（见 ChildTour 的 STEPS），同样靠属性定位 */
-              data-tour="header-review"
-              className={
-                'btn active:btn-press relative flex h-10 w-10 items-center justify-center rounded-full text-xl shadow-flat ' +
-                (pendingReview > 0 ? 'bg-sun-300' : 'bg-white')
-              }
-            >
-              👀
-              {pendingReview > 0 && (
-                <span className="tnum anim-pop absolute -right-1 -top-1 grid min-w-[20px] place-items-center rounded-full border border-white bg-berry-500 px-1 text-[10px] font-extrabold leading-tight text-white">
-                  {pendingReview}
+              {/*
+                两个币种并排。**图标和底色必须能区分开**：
+                  🪙 积分 = 奖励色（sun），能买种子/幼崽/地块，也能进兑换商城
+                  🌾 丰收币 = 草色（grass），只能进兑换商城的丰收档，买不了农场投入
+                用农场页同一个色（bg-grass-100 / text-grass-700），
+                孩子从农场切到任务页时不会觉得是两个东西。
+              */}
+              <div
+                className="flex shrink-0 items-center gap-1 rounded-full bg-sun-200 px-2.5 py-1.5 shadow-flat"
+                aria-label={`积分 ${balance}`}
+              >
+                <span className="text-base leading-none">🪙</span>
+                <span className="tnum font-display text-base font-extrabold leading-none text-ink-900">
+                  {balance}
                 </span>
-              )}
-            </button>
-            <button
-              onClick={() => setShowSettings(true)}
-              aria-label="设置"
-              data-tour="header-settings"
-              className="btn flex h-10 w-10 items-center justify-center rounded-full bg-white text-xl shadow-flat active:btn-press"
-            >
-              ⚙️
-            </button>
+              </div>
+              <div
+                className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
+                aria-label={`丰收币 ${harvestBalance}`}
+              >
+                <span className="text-base leading-none">🌾</span>
+                <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">
+                  {harvestBalance}
+                </span>
+              </div>
+              {/* 家长确认：放在设置旁边，和「家长相关」的事聚在一起。
+                  尺寸从 40 提到 44 —— 44 是触控目标的下限，
+                  这两个按钮孩子也会点（👀 能看自己交了什么）。 */}
+              <button
+                onClick={() => setReviewOpen(true)}
+                aria-label={pendingReview > 0 ? `家长确认，有 ${pendingReview} 个待办` : '家长确认'}
+                /* 导览最后两步要讲这个按钮（见 ChildTour 的 STEPS），同样靠属性定位 */
+                data-tour="header-review"
+                className={
+                  'btn active:btn-press relative flex h-11 w-11 items-center justify-center rounded-full text-xl shadow-flat ' +
+                  (pendingReview > 0 ? 'bg-sun-300' : 'bg-white')
+                }
+              >
+                👀
+                {pendingReview > 0 && (
+                  <span className="tnum anim-pop absolute -right-1 -top-1 grid min-w-[20px] place-items-center rounded-full border border-white bg-berry-500 px-1 text-[10px] font-extrabold leading-tight text-white">
+                    {pendingReview}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                aria-label="设置"
+                data-tour="header-settings"
+                className="btn flex h-11 w-11 items-center justify-center rounded-full bg-white text-xl shadow-flat active:btn-press"
+              >
+                ⚙️
+              </button>
+            </div>
           </header>
 
           <main key={tab} className="flex flex-1 flex-col anim-fade-in">
@@ -249,9 +267,11 @@ export default function App() {
             </ErrorBoundary>
           </main>
 
-          {/* 底部导航 */}
-          <nav className="sticky bottom-0 z-30 border-t border-ink-900/10 bg-paper/95 pb-safe backdrop-blur">
-            <div className="mx-auto flex max-w-2xl items-stretch gap-1 px-2 py-2">
+          {/* 底部导航：同样通栏 + `page-col` 收内容（理由见顶栏注释）。
+              底栏保留在底部而不是改成侧边栏 —— 孩子两手握平板时，
+              拇指够得着底边，够不着侧边中段。 */}
+          <nav className="sticky bottom-0 z-30 border-t border-ink-900/10 bg-paper/95 backdrop-blur">
+            <div className="page-col flex items-stretch justify-center gap-1 px-2 py-2 pb-safe">
               {TABS.map((t) => {
                 const active = tab === t.key
                 return (
@@ -261,7 +281,11 @@ export default function App() {
                     /* 新手导览靠这个属性定位，不靠「第几个 button」（见 ChildTour 注释） */
                     data-tour={`tab-${t.key}`}
                     className={
-                      'btn flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 ' +
+                      /* `max-w-[7.5rem]`：不加上限的话，tab 在平板上会被 flex-1
+                         拉到 192~256px 宽，选中态那个圆角药丸会胖成一条。
+                         120px 大致等于手机上的观感（390/4 ≈ 97），
+                         配合外层的 justify-center，宽屏上就是一条居中的底栏。 */
+                      'btn flex max-w-[7.5rem] flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 ' +
                       (active
                         ? 'bg-sun-300 shadow-flat'
                         : 'bg-transparent text-ink-500')

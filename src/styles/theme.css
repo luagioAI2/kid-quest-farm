@@ -243,6 +243,84 @@
   padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
 }
 
+/* 左右安全区：横屏刘海 / 圆角屏用。
+   ⚠️ 和 pb-safe / pt-safe 一样是**叠加**写法（calc(env + N)）。
+   用在已经有水平内边距的元素上时，直接**替换**掉那个 px-*，
+   不要两个一起写 —— 它们都设 padding-left，谁生效只看样式表顺序，非常难查。 */
+@utility pl-safe {
+  padding-left: calc(env(safe-area-inset-left, 0px) + 1rem);
+}
+
+@utility pr-safe {
+  padding-right: calc(env(safe-area-inset-right, 0px) + 1rem);
+}
+
+/* ============================================================
+   内容列宽 —— 手机 / 平板分档
+   ------------------------------------------------------------
+   背景：原来宽度是**两层硬编码**的 ——
+     · App.tsx 外壳 `max-w-2xl`（672px）
+     · TaskPage / PointsPage / RedeemPage 各自又套一层 `max-w-[430px]`
+   所以平板上真正的内容宽度只有 **430px**：
+     · iPad 竖屏 768px  → 浪费 44%
+     · iPad Pro 13" 横屏 1366px → **浪费 68%**（两边各 468px 空着）
+   同时农场地块（没有 max-w，撑满 672px）在平板上被拉到 210px 一格，
+   而手机上只有 120px —— 一屏只看得到 2.5 行。
+
+   所以宽度改成跟着设备分档，**并且**页面里的栅格也分档：
+   平板靠「更多列」吃掉多出来的空间，而不是把格子吹大。
+
+   ⚠️ 这是**无 layer 的普通 CSS**，优先级高于 Tailwind 的 utilities ——
+   这是故意的：这个类要能压住残留的 max-w-* 写法。改它之前先确认没有页面
+   还在自己写宽度（`grep -rn "max-w-\[" src/features/`）。
+   ============================================================ */
+.page-col {
+  width: 100%;
+  margin-inline: auto;
+  max-width: 430px; /* 手机：保持原有观感不变 */
+}
+@media (min-width: 768px) {
+  .page-col {
+    max-width: 42rem; /* 672px —— 竖屏平板，两侧各留 48px */
+  }
+}
+@media (min-width: 1024px) {
+  .page-col {
+    max-width: 56rem; /* 896px —— 横屏平板 */
+  }
+}
+@media (min-width: 1280px) {
+  .page-col {
+    max-width: 64rem; /* 1024px —— 大平板横屏，两侧仍留 171px */
+  }
+}
+
+/* 卡片列表：手机单列，平板起两列
+   ------------------------------------------------------------
+   任务卡在手机上是 390px 宽（内容刚好铺满），到平板上如果还是单列，
+   一张卡会被拉到 896px —— 左边标题、右边按钮，中间一大片空白，
+   看着像没做完。两列之后每张卡回到 440px，和手机上的密度一致，
+   而且一屏能多看一倍的条目。
+
+   为什么用普通 CSS 而不是 Tailwind 的 `md:grid`：
+   `space-y-*` 是靠 `> * + *` 的 margin-top 生效的，切成 grid 之后
+   必须**同时**把它清零，否则行距会叠加成两倍。
+   两件事写在同一个媒体查询里才不会漏。 */
+.card-list > * + * {
+  margin-top: 0.75rem;
+}
+@media (min-width: 768px) {
+  .card-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 0.75rem;
+  }
+  .card-list > * + * {
+    margin-top: 0;
+  }
+}
+
 /* ============================================================
    动画
    ============================================================ */

@@ -51,7 +51,7 @@ export default function PointsPage() {
   const unlocked = achievements.filter((a) => a.unlocked).length
 
   return (
-    <div className="mx-auto w-full max-w-[430px] px-4 pb-28">
+    <div className="page-col px-4 pb-28">
       {/*
         ⚠️ 这里**不再有「🪙 现在一共有 N」那张余额大卡**。
         全局顶栏（`App.tsx` 的 sticky header）已经常驻显示同一个数，
@@ -120,7 +120,7 @@ export default function PointsPage() {
             {unlocked}/{achievements.length}
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-3 gap-2.5 md:grid-cols-4 xl:grid-cols-6">
           {achievements.map((a) => (
             <div
               key={a.id}

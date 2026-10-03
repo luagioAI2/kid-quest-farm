@@ -18,7 +18,7 @@ import { RedeemBody } from './RedeemSheet'
 
 export default function RedeemPage() {
   return (
-    <div className="mx-auto w-full max-w-[430px] px-4 pb-28">
+    <div className="page-col px-4 pb-28">
       <header className="pt-safe pt-4">
         <div className="flex items-center gap-3">
           <span className="anim-float flex h-14 w-14 items-center justify-center rounded-full border border-grape-300 bg-grape-100 text-3xl shadow-flat">

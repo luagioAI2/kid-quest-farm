@@ -85,7 +85,7 @@ export default function TaskPage() {
   const needsPin = !!settings.parentPin && settings.protectParentActions !== false
 
   return (
-    <div className="mx-auto w-full max-w-[430px] px-4 pb-32">
+    <div className="page-col px-4 pb-32">
       {/* ================= 今日进度 =================
           原来这里还有一大块「头部」：熊头 + 你好宝贝 + 我的积分卡。
           三样东西全在顶栏重复了一遍（头像、名字、🪙），却把「今日任务」
@@ -128,7 +128,7 @@ export default function TaskPage() {
         {todayInstances.length === 0 ? (
           <EmptyHint emoji="🌤️" title="今天还没有任务" detail="点上面的「加任务」就能加一个" />
         ) : (
-          <div className="space-y-3">
+          <div className="card-list">
             {todayInstances.map((inst) => (
               <TaskCard
                 key={inst.id}
@@ -147,7 +147,7 @@ export default function TaskPage() {
       {/* ================= 长期任务 ================= */}
       {periodTasks.length > 0 && (
         <Section title="长期任务" emoji="🗓️" count={periodTasks.length}>
-          <div className="space-y-3">
+          <div className="card-list">
             {periodTasks.map((t) => (
               <PeriodCard
                 key={t.id}
@@ -165,7 +165,7 @@ export default function TaskPage() {
       {/* ================= 签到 ================= */}
       {checkInTasks.length > 0 && (
         <Section title="坚持签到" emoji="📅" count={checkInTasks.length}>
-          <div className="space-y-3">
+          <div className="card-list">
             {checkInTasks.map((t) => (
               <CheckInCard key={t.id} task={t} todayKey={todayKey} />
             ))}
@@ -444,7 +444,10 @@ function TaskCard({
               <button
                 onClick={() => onEdit(taskDef)}
                 aria-label="编辑任务"
-                className="min-h-[28px] shrink-0 rounded-pill border border-ink-100 bg-white px-2 text-[11px] font-bold text-ink-500 active:scale-95"
+                /* 2026-10-03：原来只有 33×28（`min-h-[28px]` + 11px 的 emoji），
+                   远低于 44×44 的触控下限 —— 孩子手指点不准，会误触到卡片本身。
+                   改成 44×44、emoji 放到 text-base。 */
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border border-ink-100 bg-white text-base font-bold text-ink-500 active:scale-95"
               >
                 ✏️
               </button>
@@ -707,7 +710,8 @@ function PeriodCard({ task, onEdit }: { task: Task; onEdit: () => void }) {
               <button
                 onClick={onEdit}
                 aria-label="编辑任务"
-                className="min-h-[32px] shrink-0 rounded-pill border border-ink-100 bg-white px-2 text-[11px] font-bold text-ink-500"
+                /* 同 TaskCard 的编辑按钮：33×32 → 44×44，理由见那边注释 */
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border border-ink-100 bg-white text-base font-bold text-ink-500"
               >
                 ✏️
               </button>
@@ -1079,7 +1083,8 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
                 disabled={!can || busy}
                 onClick={() => handleClaim(t.days)}
                 className={clsx(
-                  'flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors',
+                  /* py-2.5 而不是 py-2：这一行原来是 278×42，差 2px 到 44 的触控下限 */
+                  'flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors',
                   got
                     ? 'border-grass-300 bg-grass-100'
                     : can

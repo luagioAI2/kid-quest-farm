@@ -98,7 +98,9 @@ export default function FarmPage() {
       <div className="pointer-events-none absolute inset-x-0 top-32 h-3 rounded-t-[3rem] bg-grass-200" />
 
       {/* ------- 内容 ------- */}
-      <div className="relative z-10 flex flex-1 flex-col px-3 pt-safe">
+      {/* 天空 / 草地 / 山丘是**通栏**的（它们是场景，铺满才自然），
+          但地块和按钮收进 `page-col` —— 否则平板上 12 块地会被拉成一整排大格子。 */}
+      <div className="page-col relative z-10 flex flex-1 flex-col px-3 pt-safe">
         <TopBar
           level={level}
           animalCount={animals.length}
@@ -133,18 +135,29 @@ export default function FarmPage() {
           </div>
         ) : null}
 
-        {/* 地块网格 */}
-        <div className="mt-3 grid grid-cols-3 gap-2.5 lg:grid-cols-4">
-          {plots.map((plot) => (
-            <PlotTile
-              key={plot.index}
-              plot={plot}
-              now={now}
-              pendingCropId={pendingCropId}
-              onPlanted={() => setPendingCropId(null)}
-              onHarvestRequest={setHarvestPlot}
-            />
-          ))}
+        {/* 地块网格
+            ⚠️ `grid-cols-3` 这个类名**必须保留**：四个 e2e 脚本靠
+               `document.querySelector('div.grid.grid-cols-3')` 定位地块网格
+               （capture.mjs / e2e-bag-sell / e2e-gameplay / e2e-regressions）。
+               所以响应式是在它**基础上加** md:/xl:，不能换掉。
+            12 块地：手机 3×4 / 平板 4×3 / 大平板 6×2。
+
+            外面这层 `my-auto` 是给**横屏平板**用的：竖屏手机上内容本来就占满，
+            auto 边距解析成 0，间距仍由里层的 mt-3 给（12px），观感不变；
+            横屏平板上 1024px 高只放得下两行地块，不居中就会在下方留一大块空地。 */}
+        <div className="my-auto">
+          <div className="mt-3 grid grid-cols-3 gap-2.5 md:grid-cols-4 xl:grid-cols-6">
+            {plots.map((plot) => (
+              <PlotTile
+                key={plot.index}
+                plot={plot}
+                now={now}
+                pendingCropId={pendingCropId}
+                onPlanted={() => setPendingCropId(null)}
+                onHarvestRequest={setHarvestPlot}
+              />
+            ))}
+          </div>
         </div>
 
         {/* 底部操作区 */}

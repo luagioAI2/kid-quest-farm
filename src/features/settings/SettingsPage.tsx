@@ -102,41 +102,47 @@ export default function SettingsPage({
 
   return (
     <div className="pb-10">
-      <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-ink-900/10 bg-paper/95 px-4 py-3 backdrop-blur">
-        <button
-          onClick={onBack}
-          className="btn flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-flat active:btn-press"
-          aria-label="返回"
-        >
-          ←
-        </button>
-        <h1 className="font-display text-2xl font-extrabold text-ink-900">⚙️ 设置</h1>
+      {/* 设置页自己就是一层外壳（打开设置时 App 的顶栏不渲染），
+          所以这里也要「顶栏通栏 + 内容收进 page-col」，理由同 App.tsx 顶栏注释。 */}
+      <header className="sticky top-0 z-20 border-b border-ink-900/10 bg-paper/95 backdrop-blur">
+        <div className="page-col flex items-center gap-3 px-4 py-3 pt-safe">
+          <button
+            onClick={onBack}
+            className="btn flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-flat active:btn-press"
+            aria-label="返回"
+          >
+            ←
+          </button>
+          <h1 className="font-display text-2xl font-extrabold text-ink-900">⚙️ 设置</h1>
+        </div>
       </header>
 
-      <nav className="flex gap-2 overflow-x-auto px-4 py-3 no-scrollbar">
-        {(
-          [
-            ['child', '👦 孩子'],
-            ['rules', '📏 规则'],
-            ['data', '💾 数据'],
-          ] as [Tab, string][]
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={
-              'btn shrink-0 rounded-full px-5 py-2.5 text-base font-bold ' +
-              (tab === k
-                ? 'bg-sun-300 text-ink-900 shadow-flat'
-                : 'bg-white text-ink-500 shadow-flat')
-            }
-          >
-            {label}
-          </button>
-        ))}
+      <nav>
+        <div className="page-col flex gap-2 overflow-x-auto px-4 py-3 no-scrollbar">
+          {(
+            [
+              ['child', '👦 孩子'],
+              ['rules', '📏 规则'],
+              ['data', '💾 数据'],
+            ] as [Tab, string][]
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={
+                'btn shrink-0 rounded-full px-5 py-2.5 text-base font-bold ' +
+                (tab === k
+                  ? 'bg-sun-300 text-ink-900 shadow-flat'
+                  : 'bg-white text-ink-500 shadow-flat')
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </nav>
 
-      <main className="space-y-4 px-4 pb-10">
+      <main className="page-col space-y-4 px-4 pb-10">
         {tab === 'child' && (
           <>
             <Card title="孩子的小名" emoji="✏️">

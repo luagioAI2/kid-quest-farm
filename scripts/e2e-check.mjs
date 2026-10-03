@@ -364,7 +364,9 @@ try {
     const header = () => document.querySelector('header')
     const measure = () => {
       const h = header()
-      const nameEl = h?.children?.[1]
+      // ⚠️ 用属性定位，别用 `h.children[1]` —— 2026-10-03 平板适配给顶栏
+      // 加了一层 page-col 包裹，下标直接失效（量出 -1，断言假失败）。
+      const nameEl = document.querySelector('[data-child-name]')
       return {
         h: h ? Math.round(h.getBoundingClientRect().height) : -1,
         nameW: nameEl ? Math.round(nameEl.getBoundingClientRect().width) : -1,

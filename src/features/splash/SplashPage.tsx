@@ -279,7 +279,8 @@ export function SplashPage() {
         }}
       />
 
-      <div className="relative flex w-full max-w-[300px] flex-col items-center">
+      {/* 平板上把这张卡放大一点：300px 在 13 寸 iPad 上会显得很空 */}
+      <div className="relative flex w-full max-w-[300px] flex-col items-center md:max-w-[360px] lg:max-w-[420px]">
         {/* 插画：外面这层 .surface 负责圆角 + 发丝线 + 柔投影，
             SVG 直接铺满，省得在 SVG 里再画一圈圆角裁切。
             白卡在暖金背景上自己就跳出来了，不用再加描边。 */}

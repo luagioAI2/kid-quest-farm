@@ -266,7 +266,12 @@ export function Sheet({
   return (
     <Portal>
       <div
-        className="fixed inset-0 z-50 flex items-end justify-center"
+        /* 平板起改成**居中对话框**：底部弹层是手机范式，在 1366px 的平板上
+           要么被限成 430px 一条窄纸片，要么（farmUi 那套）铺满整屏。
+           居中 + 限宽 672px 才是平板上该有的样子。
+           ⚠️ 结构不能动：`[role="dialog"] > div:nth-child(2)` 是
+           capture.mjs 定位弹层的选择器 —— 遮罩必须是第 1 个孩子，弹层第 2 个。 */
+        className="fixed inset-0 z-50 flex items-end justify-center md:items-center md:p-6"
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}
@@ -274,9 +279,12 @@ export function Sheet({
         <button
           aria-label="关闭"
           onClick={onClose}
-          className="anim-fade-in absolute inset-0 bg-ink-900/35 backdrop-blur-[2px]"
+          /* `fixed` 而不是 `absolute`：外层 md:p-6 之后，absolute inset-0 是相对
+             **padding box** 解析的，遮罩会跟着缩进 24px、四周露出一圈没盖住的地方。
+             fixed 直接对视口定位，不受父级 padding 影响。 */
+          className="anim-fade-in fixed inset-0 bg-ink-900/35 backdrop-blur-[2px]"
         />
-        <div className="anim-sheet-up pb-safe relative max-h-[92vh] w-full max-w-[430px] overflow-y-auto overscroll-contain rounded-t-2xl bg-paper shadow-float">
+        <div className="anim-sheet-up pb-safe relative max-h-[92vh] w-full max-w-[430px] overflow-y-auto overscroll-contain rounded-t-2xl bg-paper shadow-float md:max-h-[85vh] md:max-w-2xl md:rounded-2xl">
           {children}
         </div>
       </div>
@@ -299,8 +307,10 @@ export function SheetHead({
   sub?: string
 }) {
   return (
-    <div className="sticky top-0 z-10 bg-paper px-5 pb-3 pt-3">
-      <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-ink-300" />
+    <div className="sticky top-0 z-10 bg-paper px-5 pb-3 pt-3 md:pt-5">
+      {/* 抓手是「底部弹层」的暗示（可以往下拖），平板起居中对话框就没有意义了。
+          `md:pt-5` 是补上它消失后少掉的那点顶部留白。 */}
+      <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-ink-300 md:hidden" />
       <div className="flex items-center gap-3">
         {emoji && <span className="text-3xl leading-none">{emoji}</span>}
         <div className="min-w-0 flex-1">

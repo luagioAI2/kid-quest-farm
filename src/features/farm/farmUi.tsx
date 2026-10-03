@@ -104,16 +104,19 @@ export function BottomSheet({
   // 页面外壳的 anim-fade-in 是层叠上下文，弹层留在里面就压不过底部导航。
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div className="fixed inset-0 z-50 flex flex-col justify-end md:items-center md:justify-center md:p-6">
         <button
           type="button"
           aria-label="关闭"
-          className="anim-fade-in absolute inset-0 bg-ink-900/35 backdrop-blur-[2px]"
+          /* `fixed` 而不是 `absolute` —— 理由同 tasks/ui.tsx 的 Sheet 遮罩 */
+          className="anim-fade-in fixed inset-0 bg-ink-900/35 backdrop-blur-[2px]"
           onClick={onClose}
         />
-        <div className="anim-sheet-up relative flex max-h-[88vh] flex-col overflow-hidden rounded-t-2xl bg-paper shadow-float">
-          {/* 抓手 */}
-          <div className="flex justify-center pt-2.5">
+        {/* 平板起居中 + 限宽 672px，理由同 tasks/ui.tsx 的 Sheet。
+            ⚠️ 这套原来**完全没写 max-w**，在平板上会直接铺满整个宽度。 */}
+        <div className="anim-sheet-up relative flex max-h-[88vh] w-full max-w-[430px] flex-col overflow-hidden rounded-t-2xl bg-paper shadow-float md:max-h-[85vh] md:max-w-2xl md:rounded-2xl">
+          {/* 抓手：只有底部弹层需要，居中对话框上是个多余的小横杠 */}
+          <div className="flex justify-center pt-2.5 md:hidden">
             <span className="h-1.5 w-12 rounded-full bg-ink-300/70" />
           </div>
 
