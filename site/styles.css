@@ -1079,7 +1079,7 @@ main {
   color: var(--ink-600);
 }
 
-/* ---------- 12. 财商 ---------- */
+/* ---------- 12. 农场里的取舍 ---------- */
 .money {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

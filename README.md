@@ -530,7 +530,7 @@ node scripts/capture.mjs                 # → screenshots/redesign/，30 张
 
 ```
 site/
-  index.html            落地页（介绍 + 玩法 + 财商 + 界面预览 + 下载 + FAQ）
+  index.html            落地页（介绍 + 玩法 + 农场里的取舍 + 界面预览 + 下载 + FAQ）
   privacy.html          隐私政策 ← 备案与上架都要
   terms.html            用户协议 / 家长须知
   styles.css  main.js   样式与交互（零依赖、零外部请求）

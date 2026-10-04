@@ -97,12 +97,26 @@ cd "$PROJECT_ROOT"
 
 if [ -f "android/$APK" ]; then
   SIZE=$(du -h "android/$APK" | cut -f1)
+
+  # ---------------- 发布到 dist-apk/ ----------------
+  # ⚠️ 2026-10-03：这一步原来**不存在**。dist-apk/ 里的包一直是手工拷的，
+  # 于是它和 gradle 的产物悄悄走散了 —— 官网「下载 APK」给出去的是几天前的
+  # 旧包，而 `build-site.mjs` 的 APK_CANDIDATES **优先读 dist-apk/**，
+  # 手工拷的那份就一直赢，新包永远发布不出去（而且全程没有任何报错）。
+  #
+  # 同一份产物存在两处就一定会走散，所以在这里**自动同步**，别再手工拷。
+  mkdir -p "$PROJECT_ROOT/dist-apk"
+  cp "android/$APK" "$PROJECT_ROOT/dist-apk/kid-quest-farm-$MODE.apk"
+
   echo ""
   echo "✅ 打包成功"
   echo "   APK : $PROJECT_ROOT/android/$APK"
   echo "   大小: $SIZE"
+  echo "   ↳ 已同步到 dist-apk/kid-quest-farm-$MODE.apk（官网下载读这个）"
   echo ""
   echo "   安装到手机：adb install -r android/$APK"
+  echo ""
+  echo "   发布官网：node scripts/build-site.mjs --no-build --no-shots"
 else
   echo "✗ 打包失败，未找到产物 $APK"
   exit 1

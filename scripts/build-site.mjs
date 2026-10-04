@@ -73,10 +73,15 @@ console.log(`② dist/ → site/app/  ✓`)
 // site/download/ 在 .gitignore 里（安装包是产物，不该进版本库），
 // 所以这一步是**唯一的**生成方式 —— 少了它，克隆下来点「下载 APK」就是 404。
 const DL_OUT = resolve(SITE, 'download')
+/* ⚠️ 顺序 = 优先级：**release 在前**。
+   2026-10-03 之前 debug 排第一，于是官网「下载 APK」给出去的是
+   `kid-quest-farm-debug.apk`（5.8 MB、可调试），而 release 只有 4.4 MB。
+   给用户试用的包不该是 debug 包。debug 保留为兜底（还没签过名时）。 */
 const APK_CANDIDATES = [
+  resolve(ROOT, 'dist-apk', 'kid-quest-farm-release.apk'),
+  resolve(ROOT, 'android/app/build/outputs/apk/release/app-release.apk'),
   resolve(ROOT, 'dist-apk', 'kid-quest-farm-debug.apk'),
   resolve(ROOT, 'android/app/build/outputs/apk/debug/app-debug.apk'),
-  resolve(ROOT, 'android/app/build/outputs/apk/release/app-release.apk'),
 ]
 const apk = APK_CANDIDATES.find((p) => existsSync(p))
 if (apk) {
@@ -89,7 +94,8 @@ if (apk) {
 } else {
   console.warn(
     '⚠️ 没找到 APK，site/download/ 会是空的（页面上「下载 APK」会 404）。\n' +
-      '   先跑一次 bash scripts/build-apk.sh，或手动把包放到 dist-apk/kid-quest-farm-debug.apk。',
+      '   先跑一次 bash scripts/build-apk.sh release，或手动把包放到\n' +
+      '   dist-apk/kid-quest-farm-release.apk（没签名时 debug 包也能兜底）。',
   )
 }
 
