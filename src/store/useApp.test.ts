@@ -14,6 +14,8 @@ import {
 import {
   selectCheckInTasks,
   selectPendingCheckIns,
+  selectPeriodTasks,
+  selectStreak,
   selectTodayInstances,
   useApp,
 } from './useApp'
@@ -632,6 +634,55 @@ describe('兑换：丰收币优先，可混合', () => {
     // 第一次扣了 50，第二次不该再扣
     expect(useApp.getState().harvestBalance).toBe(450)
   })
+
+  /* ==========================================================
+     日切点（dayStartHour = 4）之前的那四个小时
+     ----------------------------------------------------------
+     2026-10-08 凌晨发现：这两条用例在白天跑是绿的，凌晨跑必红。
+     根因是同一个 —— `todayKey` 是**逻辑日**（`appDayKey(now, dayStartHour)`），
+     而记录/完成时间被拿**日历日**（`toDateKey`）去比。日切点默认凌晨 4 点，
+     于是 00:00–04:00 之间两者差一天：
+
+       · `redeemedToday` 恒为 0 → `limitPerDay` 闸门静默失效
+       · 连击把凌晨完成的算成「明天」→ 孩子刚做完反而显示 0
+
+     用 `toFake: ['Date']` 只假 Date，不碰 setTimeout —— Dexie / fake-indexeddb
+     要靠真定时器，整体假掉会挂。
+     ========================================================== */
+
+  /** 把系统时间钉在 2026-10-08 01:00（本地），此时逻辑日还是 10-07 */
+  async function bootAtOneAm() {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 8, 1, 0, 0))
+    await boot()
+    expect(useApp.getState().todayKey, '01:00 时逻辑日应该是前一天').toBe('2026-10-07')
+  }
+
+  it('凌晨兑换：次数闸门照样生效（不受分账影响）', async () => {
+    await bootAtOneAm()
+
+    await useApp.getState().updateSettings({ redeemEnabled: true })
+    const seed = useApp.getState().allRedeemItems[0]
+    await useApp.getState().updateRedeemItem(seed.id, { cost: 50, limitPerDay: 1 })
+    const item = useApp.getState().allRedeemItems.find((i) => i.id === seed.id)!
+    await setHarvestTo(500)
+    await setPointsTo(0)
+
+    await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
+    await expect(useApp.getState().redeem(item.id), '凌晨第二次也该被拦住').resolves.toBe(false)
+    expect(useApp.getState().harvestBalance).toBe(450)
+  })
+
+  it('凌晨完成第一个任务：连击是 1，不是 0', async () => {
+    await bootAtOneAm()
+    expect(selectStreak(useApp.getState())).toBe(0)
+
+    const inst = selectTodayInstances(useApp.getState())[0]
+    await useApp.getState().submitInstance(inst.id, 10, undefined)
+    await useApp.getState().reviewInstance(inst.id, undefined, 10)
+
+    expect(selectStreak(useApp.getState()), '刚做完却显示断了连击').toBe(1)
+  })
 })
 
 /* ============================================================
@@ -709,6 +760,135 @@ describe('首次启动：今日任务', () => {
       ['背诵', '学会一项新本领', '每月记忆单词', '读一本完整的故事书'].sort(),
     )
     expect(period).not.toContain('数学计算练习')
+  })
+})
+
+/* ============================================================
+   编辑任务：定义改了，今天那张卡也得跟着改
+   ------------------------------------------------------------
+   2026-10-03 用户报的 bug：「任务点编辑，修改得分好像不生效」。
+
+   根因：daily / once 任务在创建时就 `makeInstance()` 落了一条 TaskInstance，
+   实例里的 title / plannedMinutes / basePoints … 是**那一刻的快照**
+   （见 domain/recurrence.ts 的 makeInstance）。之后 updateTask 只写
+   db.tasks，从不碰已经存在的实例，于是同一个改动有两个读不到的读者：
+
+     · 今天那张卡显示实例上的旧分（TaskPage 读 inst.basePoints）
+     · 结算喂给 settleInstance 的也是实例（settleNow 传的是 `{ ...inst }`）
+
+   两处都读实例 → 改任务定义等于白改。周期任务（周/月/年）**不预生成实例**，
+   直接读 task 定义，所以只有它们「改了就生效」——
+   这也解释了为什么这个 bug 看起来时灵时不灵。
+
+   另一条不能越过的线：**已结算的实例是历史**。积分已经进账本，
+   回写它的快照会让「卡片显示」与「实际发出去的分」对不上。
+   ============================================================ */
+
+describe('编辑任务：改动要落到还没结算的实例上', () => {
+  const dailyTask = () => {
+    const t = useApp.getState().tasks.find((x) => x.title === '完成语文作业')
+    if (!t) throw new Error('种子里应该有「完成语文作业」')
+    return t
+  }
+
+  const todayInst = (taskId: string) => {
+    const i = selectTodayInstances(useApp.getState()).find((x) => x.taskId === taskId)
+    if (!i) throw new Error('每日任务应该预生成了今天的实例')
+    return i
+  }
+
+  it('前提：每日任务预生成了今天的实例，且各项与任务定义一致', () => {
+    const task = dailyTask()
+    const inst = todayInst(task.id)
+    expect(inst.basePoints).toBe(task.basePoints)
+    expect(inst.plannedMinutes).toBe(task.plannedMinutes)
+    expect(inst.title).toBe(task.title)
+  })
+
+  it('改基础积分 → 今天那张卡立刻显示新分', async () => {
+    const task = dailyTask()
+    await useApp.getState().updateTask(task.id, { basePoints: 99 })
+    expect(todayInst(task.id).basePoints).toBe(99)
+  })
+
+  it('改计划时长 / 标题 / 分类 / 免扣分 也要跟着走', async () => {
+    const task = dailyTask()
+    await useApp.getState().updateTask(task.id, {
+      plannedMinutes: 7,
+      title: '改过的标题',
+      category: 'chore',
+      allowLateNoPenalty: true,
+      qualityBonusPoints: 33,
+    })
+    const inst = todayInst(task.id)
+    expect(inst.plannedMinutes).toBe(7)
+    expect(inst.title).toBe('改过的标题')
+    expect(inst.category).toBe('chore')
+    expect(inst.allowLateNoPenalty).toBe(true)
+    expect(inst.qualityBonusPoints).toBe(33)
+  })
+
+  it('改完再结算，发出去的是新分 —— 不是建实例时的旧分', async () => {
+    const task = dailyTask()
+    const inst = todayInst(task.id)
+    await useApp.getState().updateTask(task.id, { basePoints: 99 })
+
+    await useApp.getState().submitInstance(inst.id, 10, undefined)
+    const paid = await useApp.getState().reviewInstance(inst.id, undefined, 10)
+    expect(paid).toBe(99)
+  })
+
+  it('已结算的实例是历史：改任务定义不许回写它的快照', async () => {
+    const task = dailyTask()
+    const original = task.basePoints
+    const inst = todayInst(task.id)
+
+    await useApp.getState().submitInstance(inst.id, 10, undefined)
+    const paid = await useApp.getState().reviewInstance(inst.id, undefined, 10)
+    expect(paid).toBe(original)
+
+    await useApp.getState().updateTask(task.id, { basePoints: 99 })
+
+    const settled = useApp.getState().instances.find((i) => i.id === inst.id)
+    expect(settled?.basePoints).toBe(original) // 快照保持原样
+    expect(settled?.earnedPoints).toBe(paid) // 已发的分没变
+  })
+
+  it('周期任务（不预生成实例）改分本来就生效，别被这次改动弄坏', async () => {
+    const t = useApp.getState().tasks.find((x) => x.cycle === 'weekly' && !x.checkInEnabled)
+    if (!t) throw new Error('种子里应该有每周任务')
+    await useApp.getState().updateTask(t.id, { basePoints: 77 })
+    const after = useApp.getState().tasks.find((x) => x.id === t.id)
+    expect(after?.basePoints).toBe(77)
+  })
+
+  it('每日 → 每周：今天的卡要收走，不能「今日任务」「长期任务」各一张', async () => {
+    const task = dailyTask()
+    const hasCard = () =>
+      selectTodayInstances(useApp.getState()).some((i) => i.taskId === task.id)
+    expect(hasCard()).toBe(true)
+
+    await useApp.getState().updateTask(task.id, { cycle: 'weekly', checkInTargetCount: 3 })
+
+    expect(hasCard()).toBe(false)
+    expect(useApp.getState().instances.filter((i) => i.taskId === task.id)).toHaveLength(0)
+    expect(selectPeriodTasks(useApp.getState()).some((t) => t.id === task.id)).toBe(true)
+  })
+
+  it('每周 → 每日：孩子已经交上来的周期提交记录不能被删掉', async () => {
+    const t = useApp.getState().tasks.find((x) => x.cycle === 'weekly' && !x.checkInEnabled)
+    if (!t) throw new Error('种子里应该有每周任务')
+
+    await useApp.getState().submitPeriodTask(t.id, 10, undefined)
+    const before = useApp.getState().instances.filter((i) => i.taskId === t.id)
+    expect(before).toHaveLength(1)
+
+    await useApp.getState().updateTask(t.id, { cycle: 'daily' })
+
+    const after = useApp.getState().instances.filter((i) => i.taskId === t.id)
+    expect(after.some((i) => i.id === before[0].id)).toBe(true)
+    // 那条周期提交记录不能被翻成一张「今日卡」，否则会和新建的每日卡撞车
+    expect(after.find((i) => i.id === before[0].id)?.cycle).toBe('weekly')
   })
 })
 

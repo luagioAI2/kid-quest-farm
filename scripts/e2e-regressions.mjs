@@ -6,7 +6,7 @@
  *   这一套验的是「**这几个坑别再踩**」（覆盖窄、按 bug 组织，每条都带日期和病因）。
  *   一个 bug 修完就往这里加一条 —— 它们是回归，不是新功能。
  *
- * 当前守着 7 条：
+ * 当前守着 8 条：
  *   1. 设置页改「孩子的小名」后点头像，名字被吃回去（2026-09-18 家长报的）
  *      → `updateSettings` 的 `set` 落在了 `await` 之后
  *   2. 「设置 → 任务掉落」开关能控制任务编辑页里的「完成后掉落」
@@ -24,6 +24,10 @@
  *        是个**点了没反应的死按钮**；而唯一能开提交弹层的入口是它右边那个
  *        旁路按钮，被 `MANUAL_FILL_ENABLED` 藏了之后整条路就断了（且是静默的）
  *      → 顺带钉住：重做不挂「上一次」留下的秒表（`running` 必须带 pending）
+ *   8. 编辑任务改「基础积分」，今天那张卡要跟着变（2026-10-08 用户报的）
+ *      → 实例里的 basePoints 是建卡那一刻的快照，而卡片显示和结算读的都是
+ *        实例；`updateTask` 只写 db.tasks，从不回头同步实例 ⇒ 改了等于白改。
+ *        周期任务不预生成实例、直接读 task，所以只有它们「改了就生效」。
  *
  * 跑法：node scripts/e2e-regressions.mjs [url]   （默认 http://127.0.0.1:4180/）
  * 前置：先 `npm run preview`
@@ -698,6 +702,119 @@ try {
     race.childName === '同Tick' && race.avatar === '🦄',
     JSON.stringify(race),
   )
+
+  /* ============ 8. 编辑任务改「基础积分」 ============ */
+  /* 2026-10-08 用户报的：「任务点编辑，修改得分好像不生效」。
+     根因：单次 / 每日任务在创建时就 `makeInstance()` 落了一条 TaskInstance，
+     实例里的 basePoints / plannedMinutes / title … 是**那一刻的快照**；
+     而卡片显示（TaskPage 读 inst.basePoints）和结算（settleNow 把 `{...inst}`
+     喂给 settleInstance）读的都是实例。`updateTask` 只写 db.tasks，
+     从不回头同步实例 —— 于是改任务定义等于白改。
+     周期任务（周/月/年）不预生成实例、卡片直接读 task，所以只有它们
+     「改了就生效」，这也是这个 bug 看起来时灵时不灵的原因。 */
+  console.log('\n【8】编辑任务改「基础积分」→ 今天那张卡要跟着变')
+  {
+    // ⚠️ 上一节【1】结束时停在「设置」页 —— 那一页**没有底部导航栏**，
+    // 不先退出来，下面的 tab 点击会**静默落空**：`b?.click()` 找不到按钮、
+    // 什么也不做、也不报错，然后所有断言都拿着一个空页面去比。
+    // （探针第一版就栽在这，报的是「找不到编辑按钮」，看着像 App 的锅。）
+    await closeSettings()
+    await sleep(700)
+
+    // 切回「任务」tab
+    const navHit = await page.evaluate(() => {
+      const b = [...document.querySelectorAll('nav button')].find(
+        (x) => x.innerText.trim().split('\n').pop().trim() === '任务',
+      )
+      if (!b) return false
+      b.click()
+      return true
+    })
+    await sleep(1200)
+
+    /** 读「有编辑按钮的那张卡」的标题 —— 用它当身份，避免拿错卡 */
+    const target = await page.evaluate(() => {
+      const btn = [...document.querySelectorAll('button')].find(
+        (x) => x.getAttribute('aria-label') === '编辑任务',
+      )
+      const card = btn?.closest('.surface')
+      return {
+        title: card?.querySelector('h3')?.textContent?.trim() ?? null,
+        hasEdit: !!btn,
+        cards: document.querySelectorAll('.surface').length,
+      }
+    })
+
+    const pointsOfCard = (title) =>
+      page.evaluate((t) => {
+        const card = [...document.querySelectorAll('.surface')].find(
+          (c) => c.querySelector('h3')?.textContent?.trim() === t,
+        )
+        const span = card
+          ? [...card.querySelectorAll('span')].find((x) => /^🪙 \d+ 分$/.test((x.textContent ?? '').trim()))
+          : null
+        return span ? Number((span.textContent ?? '').replace(/\D/g, '')) : null
+      }, title)
+
+    const beforePoints = target.title ? await pointsOfCard(target.title) : null
+
+    // 打开编辑弹层（家长密码锁着，先过闸）
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(
+        (x) => x.getAttribute('aria-label') === '编辑任务',
+      )
+      b?.click()
+    })
+    await sleep(700)
+    await enterPinIfLocked()
+    await sleep(700)
+
+    const opened = await page.evaluate(() =>
+      [...document.querySelectorAll('button')].some((x) => x.textContent?.trim() === '✅ 保存修改'),
+    )
+
+    const NEW_POINTS = 137
+    const typed = await page.evaluate((v) => {
+      // 「基础积分」那一格 = 该 Field 里唯一的 number input
+      const label = [...document.querySelectorAll('p')].find((x) =>
+        (x.textContent ?? '').trim().endsWith('基础积分'),
+      )
+      const input = label?.closest('div')?.querySelector('input[type="number"]')
+      if (!input) return false
+      // ⚠️ React 受控 input：必须走原型上的 setter + 派发 input 事件。
+      // 直接 `input.value = v` 不会触发 onChange，界面看着改了、state 没改 ——
+      // 这正是「假绿」的经典来源。
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+      setter.call(input, String(v))
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      return true
+    }, NEW_POINTS)
+    await sleep(500)
+
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(
+        (x) => x.textContent?.trim() === '✅ 保存修改',
+      )
+      b?.click()
+    })
+    await sleep(1400)
+
+    const afterPoints = target.title ? await pointsOfCard(target.title) : null
+
+    check(
+      '退出了设置页、切回任务页',
+      navHit && target.cards > 0,
+      navHit ? `页面上 ${target.cards} 张卡` : '底部导航栏不存在 —— 大概率还停在设置页',
+    )
+    check('找得到一张带「编辑任务」按钮的卡', target.hasEdit && !!target.title, target.title ?? '')
+    check('编辑弹层能打开（家长密码过了）', opened, opened ? '' : '没找到「✅ 保存修改」按钮')
+    check('「基础积分」输入框能填进去', typed, typed ? '' : '没定位到那一格 number input')
+    check(
+      '保存后，今天那张卡显示的是新分',
+      afterPoints === NEW_POINTS,
+      `「${target.title}」改前 ${beforePoints} → 改后 ${afterPoints}（期望 ${NEW_POINTS}）`,
+    )
+  }
 
   console.log('\n' + '─'.repeat(58))
   const failed = results.filter((r) => !r.ok)

@@ -58,7 +58,6 @@ import {
   formatClock,
   humanizeMinutes,
   periodKeyFor,
-  toDateKey,
 } from '../domain/time'
 import {
   advanceAnimals,
@@ -82,6 +81,7 @@ import {
   computeStreak,
   currentDayKey,
   defaultTiers,
+  isPreGenerated,
   makeInstance,
   planMissingInstances,
   uid,
@@ -899,6 +899,99 @@ const TOAST_TONE: Record<Toast['kind'], ToneKind | null> = {
   info: null,
 }
 
+/* ============================================================
+   编辑任务 → 同步到「今天的卡」
+   ------------------------------------------------------------
+   2026-10-08 用户报的 bug：「任务点编辑，修改得分好像不生效」。
+
+   根因：单次 / 每日任务在创建时就 `makeInstance()` 落了一条 TaskInstance，
+   而实例里的 title / plannedMinutes / basePoints … 是**那一刻的快照**
+   （见 domain/recurrence.ts 的 makeInstance）。之后 updateTask 只写
+   db.tasks，从不碰已经存在的实例，于是同一个改动有两个读不到的读者：
+
+     · 今天那张卡显示的是实例上的旧值（TaskPage 读 inst.basePoints）
+     · 结算喂给 settleInstance 的也是实例（settleNow 传的是 `{ ...inst }`）
+
+   两处都读实例 → 改任务定义等于白改。周期任务（周/月/年）**不预生成实例**，
+   卡片直接读 task 定义，所以只有它们「改了就生效」——
+   这也解释了为什么这个 bug 看起来时灵时不灵。
+
+   另一条不能越过的线：**过去的日子是历史**。settled 的积分已经进账本，
+   expired 的是「那天没做」的记录，改任务定义都不该回写它们，
+   否则卡片显示会和账本对不上。
+   ============================================================ */
+
+/**
+ * 实例上「从任务定义快照过来」的字段。
+ *
+ * ⚠️ 必须和 `domain/recurrence.ts` 的 `makeInstance()` 一一对应：
+ * 那里抄了哪些字段，这里就得同步哪些，漏一个就是那个字段「改了不生效」。
+ * 返回类型写成 `Pick<TaskInstance, MirroredField>`，于是两边都有编译期护栏：
+ * 少写一个字段、或写了一个 TaskInstance 上没有的字段，tsc 都会报错。
+ */
+type MirroredField =
+  | 'title'
+  | 'category'
+  | 'cycle'
+  | 'plannedMinutes'
+  | 'basePoints'
+  | 'qualityBonusPoints'
+  | 'allowOvertime'
+  | 'allowLateNoPenalty'
+  | 'qualityRated'
+  | 'rewardItemIds'
+
+function mirroredFrom(task: Task): Pick<TaskInstance, MirroredField> {
+  return {
+    title: task.title,
+    category: task.category,
+    cycle: task.cycle,
+    plannedMinutes: task.plannedMinutes,
+    basePoints: task.basePoints,
+    qualityBonusPoints: task.qualityBonusPoints,
+    allowOvertime: task.allowOvertime,
+    allowLateNoPenalty: task.allowLateNoPenalty,
+    qualityRated: task.qualityRated,
+    rewardItemIds: task.rewardItemIds ?? [],
+  }
+}
+
+/**
+ * 把任务定义的最新值写到「还没结算的今天的卡」上。
+ *
+ * 只处理 `date >= todayKey` 且 `settledAt == null` 的实例 —— 也就是
+ * 「今天及以后、还没发过分」的那些。过去的、已结算的一律不动。
+ */
+async function syncLiveInstances(task: Task, todayKey: string, now: number): Promise<void> {
+  const rows = await db.taskInstances.where('taskId').equals(task.id).toArray()
+  const live = rows.filter((i) => i.settledAt == null && i.date >= todayKey)
+  if (live.length === 0) return
+
+  // 改成「周 / 月 / 年」之后，这条任务不再有「今天那张卡」：
+  // 进度改由任务定义驱动（selectPeriodTasks / periodUnitsFor）。
+  // 留着旧卡会让同一个任务同时出现在「今日任务」和「长期任务」两个区块。
+  //
+  // 只删「本来就是预生成卡片」的那些（cycle 是单次/每日）——
+  // 周期任务的提交记录是孩子交上来的作业，不能顺手删掉。
+  if (!isPreGenerated(task.cycle)) {
+    const cards = live.filter((i) => isPreGenerated(i.cycle))
+    if (cards.length > 0) await db.taskInstances.bulkDelete(cards.map((i) => i.id))
+    return
+  }
+
+  const mirror = mirroredFrom(task)
+  await db.taskInstances.bulkPut(
+    live.map((i) => ({
+      ...i,
+      ...mirror,
+      // cycle 只往「本来就是卡片」的实例上写。把一条周期提交记录翻成卡片，
+      // 会和 planMissingInstances 新建的那张撞车 —— 同一个任务两张卡。
+      cycle: isPreGenerated(i.cycle) ? mirror.cycle : i.cycle,
+      updatedAt: now,
+    })),
+  )
+}
+
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
   loading: true,
@@ -1009,7 +1102,15 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   updateTask: async (id, patch) => {
-    await db.tasks.update(id, { ...patch, updatedAt: Date.now() })
+    const now = Date.now()
+    await db.tasks.update(id, { ...patch, updatedAt: now })
+
+    // 任务定义改了，已经落库的「今天的卡」不会自己跟着变 —— 实例里的
+    // title / plannedMinutes / basePoints 都是建卡那一刻的快照，而卡片显示
+    // 和结算读的都是实例。少了这一步，就是用户报的「改得分不生效」。
+    const task = await db.tasks.get(id)
+    if (task) await syncLiveInstances(task, currentDayKey(get().settings.dayStartHour), now)
+
     await get().refresh()
   },
 
@@ -2052,9 +2153,20 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   redeemedToday: (itemId) => {
-    const { redeemRecords, todayKey } = get()
+    const { redeemRecords, todayKey, settings } = get()
+    /**
+     * ⚠️ 用**逻辑日**（`appDayKey`）比，不能用日历日（`toDateKey`）。
+     *
+     * `todayKey` 是 `currentDayKey(dayStartHour)` 算出来的逻辑日。日切点默认
+     * 凌晨 4 点，于是 00:00–04:00 这段时间里两者差一天：凌晨 1 点兑换的记录
+     * 日历日是「今天」，逻辑日却是「昨天」——拿日历日去比永远不相等，
+     * `redeemedToday` 恒为 0，`limitPerDay` 闸门在凌晨静默失效
+     * （孩子可以在这个窗口里把「一天只能换 1 次」的东西换到饱）。
+     *
+     * 2026-10-08 发现：这条断言本来只在白天跑得绿，凌晨跑必红。
+     */
     return redeemRecords.filter(
-      (r) => r.itemId === itemId && toDateKey(r.createdAt) === todayKey,
+      (r) => r.itemId === itemId && appDayKey(r.createdAt, settings.dayStartHour) === todayKey,
     ).length
   },
 
@@ -2646,7 +2758,10 @@ export function selectStreak(s: AppState): number {
   const dates = new Set<string>()
   for (const i of s.instances) {
     if (i.earnedPoints && i.earnedPoints > 0 && i.completedAt) {
-      dates.add(toDateKey(i.completedAt))
+      // ⚠️ 同 `redeemedToday`：必须用**逻辑日**。`computeStreak` 的第二个参数
+      // 是 `s.todayKey`（逻辑日），这里若用日历日 `toDateKey`，凌晨完成的
+      // 那次会被记成「明天」——孩子刚做完，连击反而显示 0。
+      dates.add(appDayKey(i.completedAt, s.settings.dayStartHour))
     }
   }
   return computeStreak([...dates], s.todayKey)
