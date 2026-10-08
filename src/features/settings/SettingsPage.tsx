@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, BackupFile } from '../../domain/types'
 import { useApp } from '../../store/useApp'
 import { DEFAULT_PROFIT_RATIO } from '../../domain/catalog'
+import { QUALITY_META, QUALITY_ORDER, formatMultiplier } from '../../domain/settlement'
 import { clampPointsPerYuan, formatYuan, MAX_POINTS_PER_YUAN, MIN_POINTS_PER_YUAN } from '../../domain/cash'
 import { AVATAR_CHOICES } from '../../domain/avatars'
 import { humanizeAgo } from '../../domain/time'
@@ -252,29 +253,37 @@ export default function SettingsPage({
                   disabled={!gateOpen}
                   onChange={(v) => void updateSettings({ qualityBonusEnabled: v })}
                 />
-                <Card title="质量加分的门槛" emoji="🤔">
-                  <div className="flex gap-2">
-                    {(
-                      [
-                        ['ok', '🙂 不错以上'],
-                        ['great', '🤩 只有特别棒'],
-                      ] as const
-                    ).map(([v, label]) => (
-                      <button
-                        key={v}
-                        disabled={!gateOpen}
-                        onClick={() => void updateSettings({ qualityBonusThreshold: v })}
-                        className={
-                          'btn flex-1 rounded-2xl px-3 py-3 font-bold shadow-flat disabled:opacity-50 ' +
-                          (settings.qualityBonusThreshold === v
-                            ? 'bg-grass-300 text-ink-900'
-                            : 'bg-white text-ink-500')
-                        }
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                <Card title="五档加减分" emoji="⚖️">
+                  <ul className="space-y-1">
+                    {QUALITY_ORDER.map((q) => {
+                      const meta = QUALITY_META[q]
+                      return (
+                        <li
+                          key={q}
+                          className="flex items-center justify-between text-sm font-bold text-ink-700"
+                        >
+                          <span>
+                            {meta.emoji} {meta.label}
+                          </span>
+                          <span
+                            className={
+                              meta.multiplier > 0
+                                ? 'text-grass-700'
+                                : meta.multiplier < 0
+                                  ? 'text-berry-500'
+                                  : 'text-ink-500'
+                            }
+                          >
+                            {formatMultiplier(q)}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  <p className="mt-2 text-xs font-bold leading-snug text-ink-500">
+                    按每个任务的「基础积分」乘算。中间「良好」不加不减；
+                    最差也只是扣光，不会变成负数。
+                  </p>
                 </Card>
 
                 <Toggle

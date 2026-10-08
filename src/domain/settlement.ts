@@ -25,15 +25,51 @@ import type {
               得分 = round(基础分 × (2 - 实际/计划))
            实际用时 >= 计划时长 × 2 → 0 分（"时间超出一倍则无积分"）
 
-   4) 质量加分
-      仅在 qualityRated 为 true 且评级达到阈值时叠加，且**不因超时而消失**
-      （质量与用时是两个独立维度）。
+   4) 质量系数（五档，见 QUALITY_META）
+      很差 -100% / 一般 -50% / 良好 0 / 很好 +10% / 特别棒 +20%
+      乘在**时间衰减之后**的分数上：
 
-   5) 绝不出现负分：最终得分下限为 0。
+          得分 = round(时间分 × (1 + 系数))
+
+      「良好」是中间档，不加不减。
+      ⚠️ 时间分已经被扣成 0 时，乘任何系数都还是 0 ——
+      超时归零的任务不会因为评「特别棒」而重新拿到分。
+
+   5) 绝不出现负分：最终得分下限为 0（所以「很差」是扣光，不是倒扣）。
    ============================================================ */
 
 /** 超时归零的倍数阈值 */
 export const OVERTIME_ZERO_MULTIPLIER = 2
+
+/* ---------------- 质量评级（五档） ---------------- */
+
+/**
+ * 名称、表情、系数。
+ * 由低到高，`ok`（良好）是中间档，系数 0。
+ */
+export const QUALITY_META: Record<
+  QualityGrade,
+  { emoji: string; label: string; multiplier: number }
+> = {
+  awful: { emoji: '😞', label: '很差', multiplier: -1 },
+  poor: { emoji: '😕', label: '一般', multiplier: -0.5 },
+  ok: { emoji: '🙂', label: '良好', multiplier: 0 },
+  good: { emoji: '😃', label: '很好', multiplier: 0.1 },
+  great: { emoji: '🤩', label: '特别棒', multiplier: 0.2 },
+}
+
+/** 由低到高。UI 排列 / 默认值 / 遍历一律用它，别再手写数组 */
+export const QUALITY_ORDER: QualityGrade[] = ['awful', 'poor', 'ok', 'good', 'great']
+
+/** 中间档：不加不减的那一档 */
+export const QUALITY_NEUTRAL: QualityGrade = 'ok'
+
+/** 把系数格式化成「+10%」「-50%」「不加不减」 */
+export function formatMultiplier(grade: QualityGrade): string {
+  const m = QUALITY_META[grade].multiplier
+  if (m === 0) return '不加不减'
+  return `${m > 0 ? '+' : ''}${Math.round(m * 100)}%`
+}
 
 export interface SettleParams {
   /** 计划时长（分钟） */
@@ -42,11 +78,9 @@ export interface SettleParams {
   actualMinutes?: number
   /** 基础积分 */
   basePoints: number
-  /** 质量奖励积分 */
-  qualityBonusPoints: number
   /** 质量评级 */
   quality?: QualityGrade
-  /** 是否启用质量加分 */
+  /** 是否启用质量评级 */
   qualityRated: boolean
   /** 是否允许超时按比例结算 */
   allowOvertime: boolean
@@ -54,17 +88,10 @@ export interface SettleParams {
   allowLateNoPenalty: boolean
   /** 全局：是否启用超时衰减（家长可一键关闭） */
   overtimeEnabled?: boolean
-  /** 全局：质量加分的评级阈值 */
-  qualityBonusThreshold?: QualityGrade
+  /** 全局：是否启用质量加减分（关闭后五档系数一律按 0 算） */
+  qualityBonusEnabled?: boolean
   /** 全局：超时衰减最低保留比例（0-1），低于该比例直接归零 */
   minRatioForPoints?: number
-}
-
-const GRADE_ORDER: Record<QualityGrade, number> = { poor: 0, ok: 1, great: 2 }
-
-/** 评级是否达到阈值 */
-export function gradeReaches(grade: QualityGrade, threshold: QualityGrade): boolean {
-  return GRADE_ORDER[grade] >= GRADE_ORDER[threshold]
 }
 
 /** 把浮点分钟规整为 1 位小数的整数（避免 12.0000001 > 12 的误判） */
@@ -83,137 +110,118 @@ export function settle(p: SettleParams): SettlementResult {
   const actual = Number.isFinite(actualRaw) ? normalizeMinutes(actualRaw) : Number.POSITIVE_INFINITY
 
   const base = Math.max(0, Math.round(p.basePoints))
-  const qualityBonus = Math.max(0, Math.round(p.qualityBonusPoints))
 
-  // ---------- 质量分（独立维度） ----------
-  const threshold = p.qualityBonusThreshold ?? 'ok'
-  const qualityEarned =
-    p.qualityRated && p.quality && gradeReaches(p.quality, threshold) && qualityBonus > 0
-      ? qualityBonus
-      : 0
+  // ---------- 第一步：时间维度，先算出「时间分」 ----------
+  // 质量是独立维度，但按约定乘在**时间衰减之后**的分数上（见文件头规则 4）。
+  let timePoints = base
+  let overtime = false
+  let zeroed = false
+  let zeroReason: SettlementResult['zeroReason']
+  let ratio = 0
+  let timeReason = ''
 
-  // ---------- 免扣分：全额 ----------
   if (p.allowLateNoPenalty) {
-    const overtime = actual > planned
-    return {
-      points: base + qualityEarned,
-      overtime,
-      ratio: planned > 0 && Number.isFinite(actual) ? actual / planned : 0,
-      zeroed: false,
-      reason:
-        base + qualityEarned > 0
-          ? overtime
-            ? `虽然晚了一点，但这类任务不扣分，拿到全部 ${base} 分`
-            : `按时完成，拿到全部 ${base} 分`
-          : '没有积分奖励，但完成啦！',
+    // 免扣分：无论超时多久都给全额
+    overtime = actual > planned
+    ratio = planned > 0 && Number.isFinite(actual) ? actual / planned : 0
+    timeReason = overtime ? '虽然晚了一点，但这类任务不扣分' : '按时完成'
+  } else if (!Number.isFinite(actual)) {
+    // 没开始 / 没有用时记录
+    overtime = true
+    zeroed = true
+    zeroReason = 'not_returned'
+    ratio = Number.POSITIVE_INFINITY
+    timePoints = 0
+    timeReason = '没有在规定时间内记录完成'
+  } else if (planned <= 0 || actual <= planned) {
+    overtime = false
+    ratio = planned > 0 ? actual / planned : 0
+    timeReason = '按时完成'
+  } else {
+    overtime = true
+    ratio = actual / planned
+    if (p.overtimeEnabled === false) {
+      // 全局关闭超时衰减 → 全额
+      timeReason = '超时了但今天不扣分'
+    } else if (!p.allowOvertime) {
+      // 严格限时任务：超时即 0
+      zeroed = true
+      zeroReason = 'overtime_limit'
+      timePoints = 0
+      timeReason = '超出时间了'
+    } else if (ratio >= OVERTIME_ZERO_MULTIPLIER) {
+      // 宽容任务：超出计划一倍归零
+      zeroed = true
+      zeroReason = 'overtime_limit'
+      timePoints = 0
+      timeReason = `用时超过 ${planned * OVERTIME_ZERO_MULTIPLIER} 分钟了，明天早一点开始吧`
+    } else {
+      // 线性衰减：ratio=1 → 100%，ratio→2 → 0%
+      const decay = 2 - ratio
+      const minRatio = p.minRatioForPoints ?? 0
+      if (decay <= minRatio) {
+        zeroed = true
+        zeroReason = 'overtime_limit'
+        timePoints = 0
+        timeReason = '超出时间太多了'
+      } else {
+        const decayedBase = Math.round(base * decay)
+        // 只要还在惩罚区间内，至少给 1 分 —— 否则孩子会看到"差 6 秒"却颗粒无收，
+        // 这是最打击积极性的一种反馈。归零只发生在真正到达阈值时。
+        timePoints = base > 0 ? Math.max(1, decayedBase) : 0
+        timeReason = `用了 ${Math.round(actual)} 分钟，比计划的 ${planned} 分钟慢了一点`
+      }
     }
   }
 
-  // ---------- 没开始 / 没有用时记录 ----------
-  if (!Number.isFinite(actual)) {
-    return {
-      points: qualityEarned,
-      overtime: true,
-      ratio: Number.POSITIVE_INFINITY,
-      zeroed: true,
-      zeroReason: 'not_returned',
-      reason:
-        qualityEarned > 0
-          ? `没有在规定时间内记录完成，基础分没有了，但质量很棒还是有 ${qualityEarned} 分`
-          : '没有在规定时间内记录完成，这次没有积分哦',
-    }
-  }
+  // ---------- 第二步：质量系数乘在时间分上 ----------
+  const grade = p.qualityRated && p.qualityBonusEnabled !== false ? p.quality : undefined
+  const mult = grade ? QUALITY_META[grade].multiplier : 0
+  const points = Math.max(0, Math.round(timePoints * (1 + mult)))
 
-  // ---------- 未超时 ----------
-  if (planned <= 0 || actual <= planned) {
-    return {
-      points: base + qualityEarned,
-      overtime: false,
-      ratio: planned > 0 ? actual / planned : 0,
-      zeroed: false,
-      reason:
-        qualityEarned > 0
-          ? `又快又好！${base} + 质量奖励 ${qualityEarned} = ${base + qualityEarned} 分`
-          : `按时完成，拿到全部 ${base} 分`,
-    }
-  }
-
-  // ---------- 超时 ----------
-  const ratio = actual / planned
-
-  // 全局关闭超时衰减 → 全额
-  if (p.overtimeEnabled === false) {
-    return {
-      points: base + qualityEarned,
-      overtime: true,
-      ratio,
-      zeroed: false,
-      reason: `超时了但今天不扣分，拿到全部 ${base} 分`,
-    }
-  }
-
-  // 严格限时任务：超时即 0
-  if (!p.allowOvertime) {
-    return {
-      points: qualityEarned,
-      overtime: true,
-      ratio,
-      zeroed: true,
-      zeroReason: 'overtime_limit',
-      reason:
-        qualityEarned > 0
-          ? `超出时间了，基础分没有啦，质量奖励保留 ${qualityEarned} 分`
-          : `超出时间了，这次没有积分哦，下次准时试试`,
-    }
-  }
-
-  // 宽容任务：超出计划一倍（ratio >= 2）归零
-  if (ratio >= OVERTIME_ZERO_MULTIPLIER) {
-    return {
-      points: qualityEarned,
-      overtime: true,
-      ratio,
-      zeroed: true,
-      zeroReason: 'overtime_limit',
-      reason:
-        qualityEarned > 0
-          ? `用时超过一倍了，基础分没有了，质量奖励保留 ${qualityEarned} 分`
-          : `用时超过 ${
-              planned * OVERTIME_ZERO_MULTIPLIER
-            } 分钟了，这次没有积分，明天早一点开始吧`,
-    }
-  }
-
-  // 线性衰减：ratio=1 → 100%，ratio→2 → 0%
-  const decay = 2 - ratio
-  const minRatio = p.minRatioForPoints ?? 0
-  if (decay <= minRatio) {
-    return {
-      points: qualityEarned,
-      overtime: true,
-      ratio,
-      zeroed: true,
-      zeroReason: 'overtime_limit',
-      reason: `超出时间太多了，这次没有积分`,
-    }
-  }
-
-  const decayedBase = Math.round(base * decay)
-  // 只要还在惩罚区间内，至少给 1 分 —— 否则孩子会看到"差 6 秒"却颗粒无收，
-  // 这是最打击积极性的一种反馈。归零只发生在真正到达阈值时。
-  const flooredBase = base > 0 ? Math.max(1, decayedBase) : 0
-  const total = flooredBase + qualityEarned
   return {
-    points: total,
-    overtime: true,
+    points,
+    overtime,
     ratio,
-    zeroed: false,
-    reason:
-      `用了 ${Math.round(actual)} 分钟，比计划的 ${planned} 分钟慢了一点，` +
-      `拿到 ${flooredBase} 分` +
-      (qualityEarned > 0 ? `，加上质量奖励 ${qualityEarned} 分，共 ${total} 分` : ''),
+    zeroed,
+    zeroReason,
+    reason: composeReason(timeReason, timePoints, points, grade, zeroed),
   }
 }
+
+/**
+ * 拼结算文案。
+ * 质量分要能看出「乘在多少上」，否则家长看到 10 分变 5 分会以为算错了。
+ */
+function composeReason(
+  timeReason: string,
+  timePoints: number,
+  points: number,
+  grade: QualityGrade | undefined,
+  zeroed: boolean,
+): string {
+  const meta = grade ? QUALITY_META[grade] : undefined
+  const adjusted = meta !== undefined && meta.multiplier !== 0
+
+  if (zeroed) {
+    return adjusted && meta.multiplier > 0
+      ? `${timeReason}，这次没有积分哦（时间分已经是 0，质量再好也乘不出来）`
+      : `${timeReason}，这次没有积分哦`
+  }
+  if (adjusted) {
+    return `${timeReason}，${timePoints} 分，质量「${meta.label}」${formatMultiplier(
+      grade as QualityGrade,
+    )} → ${points} 分`
+  }
+  if (points > 0) return `${timeReason}，拿到全部 ${points} 分`
+  return '没有积分奖励，但完成啦！'
+}
+
+/** 全局结算开关（由 settings 派生，保证预览与真实结算同源） */
+export type GlobalSettleParams = Pick<
+  SettleParams,
+  'overtimeEnabled' | 'qualityBonusEnabled' | 'minRatioForPoints'
+>
 
 /** 便捷重载：直接从任务定义 + 实际用时结算 */
 export function settleTask(
@@ -221,20 +229,18 @@ export function settleTask(
     Task,
     | 'plannedMinutes'
     | 'basePoints'
-    | 'qualityBonusPoints'
     | 'allowOvertime'
     | 'allowLateNoPenalty'
     | 'qualityRated'
   >,
   actualMinutes: number | undefined,
   quality: QualityGrade | undefined,
-  global?: Pick<SettleParams, 'overtimeEnabled' | 'qualityBonusThreshold' | 'minRatioForPoints'>,
+  global?: GlobalSettleParams,
 ): SettlementResult {
   return settle({
     plannedMinutes: task.plannedMinutes,
     actualMinutes,
     basePoints: task.basePoints,
-    qualityBonusPoints: task.qualityBonusPoints,
     quality,
     qualityRated: task.qualityRated,
     allowOvertime: task.allowOvertime,
@@ -246,19 +252,19 @@ export function settleTask(
 /** 便捷重载：从任务实例结算 */
 export function settleInstance(
   inst: TaskInstance,
-  global?: Pick<SettleParams, 'overtimeEnabled' | 'qualityBonusThreshold' | 'minRatioForPoints'>,
+  global?: GlobalSettleParams,
 ): SettlementResult {
   return settleTask(inst, inst.actualMinutes, inst.quality, global)
 }
 
 /**
- * 由实际用时推算质量评级的建议值（给 UI 做默认选中，孩子仍可改）。
- * 低龄友好：默认给"不错"，避免孩子因为不懂而全选最差。
+ * 由实际用时推算质量评级的建议值（给 UI 做默认选中，家长仍可改）。
+ * 低龄友好：默认给中间档「良好」，避免因为不懂而全选最差。
  */
 export function suggestQuality(result: SettlementResult): QualityGrade {
-  if (!result.overtime) return 'great'
-  if (result.zeroed) return 'ok'
-  return 'ok'
+  if (!result.overtime) return QUALITY_NEUTRAL
+  if (result.zeroed) return QUALITY_NEUTRAL
+  return QUALITY_NEUTRAL
 }
 
 /** 结算前预览：给孩子看"如果现在提交能拿多少分" */
@@ -266,13 +272,12 @@ export function previewPoints(
   inst: TaskInstance,
   actualMinutes: number | undefined,
   quality: QualityGrade | undefined,
-  global?: Pick<SettleParams, 'overtimeEnabled' | 'qualityBonusThreshold' | 'minRatioForPoints'>,
+  global?: GlobalSettleParams,
 ): SettlementResult {
   return settle({
     plannedMinutes: inst.plannedMinutes,
     actualMinutes,
     basePoints: inst.basePoints,
-    qualityBonusPoints: inst.qualityBonusPoints,
     quality,
     qualityRated: inst.qualityRated,
     allowOvertime: inst.allowOvertime,

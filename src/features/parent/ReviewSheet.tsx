@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useApp, usePendingCheckIns } from '@/store/useApp'
-import { QUALITY_META, Sheet, SheetHead, Btn, categoryOf } from '../tasks/ui'
+import {
+  QUALITY_META,
+  QUALITY_ORDER,
+  Sheet,
+  SheetHead,
+  Btn,
+  categoryOf,
+  formatMultiplier,
+} from '../tasks/ui'
 import { ParentPinPanel } from './ParentGate'
 import { settleInstance } from '@/domain/settlement'
 import { humanizeMinutes, humanizeAgo } from '@/domain/time'
@@ -244,7 +252,7 @@ function ReviewCard({
       { ...inst, actualMinutes: minutes, quality },
       {
         overtimeEnabled: settings.overtimeEnabled,
-        qualityBonusThreshold: settings.qualityBonusThreshold,
+        qualityBonusEnabled: settings.qualityBonusEnabled,
         minRatioForPoints: settings.minRatioForPoints,
       },
     )
@@ -371,8 +379,10 @@ function ReviewCard({
           <p className="mb-2 px-1 font-display text-sm font-extrabold text-ink-500">
             做得怎么样？
           </p>
-          <div className="grid grid-cols-3 gap-2">
-            {(['poor', 'ok', 'great'] as QualityGrade[]).map((q) => {
+          {/* 五档，由低到高；中间「良好」不加不减。每档都标出加减多少，
+              家长点之前就知道会怎么变分。 */}
+          <div className="grid grid-cols-5 gap-1.5">
+            {QUALITY_ORDER.map((q) => {
               const meta = QUALITY_META[q]
               const active = quality === q
               return (
@@ -381,14 +391,28 @@ function ReviewCard({
                   type="button"
                   onClick={() => setQuality(q)}
                   className={clsx(
-                    'btn flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl border active:btn-press',
+                    'btn flex min-h-[86px] flex-col items-center justify-center gap-0.5 rounded-2xl border px-1 active:btn-press',
                     active
                       ? 'border-sun-500 bg-sun-200 shadow-flat'
                       : 'border-ink-900/10 bg-white',
                   )}
                 >
-                  <span className="text-2xl">{meta.emoji}</span>
-                  <span className="text-xs font-extrabold text-ink-900">{meta.label}</span>
+                  <span className="text-xl">{meta.emoji}</span>
+                  <span className="text-[11px] font-extrabold leading-tight text-ink-900">
+                    {meta.label}
+                  </span>
+                  <span
+                    className={clsx(
+                      'text-[10px] font-bold leading-tight',
+                      meta.multiplier > 0
+                        ? 'text-grass-700'
+                        : meta.multiplier < 0
+                          ? 'text-berry-500'
+                          : 'text-ink-500',
+                    )}
+                  >
+                    {formatMultiplier(q)}
+                  </span>
                 </button>
               )
             })}

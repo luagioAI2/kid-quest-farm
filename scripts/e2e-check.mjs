@@ -14,6 +14,7 @@
 import puppeteer from 'puppeteer-core'
 import { existsSync, writeFileSync, mkdirSync } from 'node:fs'
 import { makeProfileDir } from './lib/profile.mjs'
+import { qualityLabelRegex, readQualityLabels } from './lib/quality.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME_CANDIDATES = [
@@ -494,9 +495,16 @@ try {
   /* ---------- 4b. 长期任务：孩子端不许自评质量 ----------
      用户报的事故：「长期任务 孩子 做完确认时 为啥能自己评价和打分。」
      普通任务早就只让家长打分，长期任务那张表漏了 ——
-     孩子能选「一般 / 不错 / 特别棒」，还能看见「+N 分」。
+     孩子能自己选档位打分，还能看见「+N 分」。
      这里在真浏览器里确认那张表真的干净（jsdom 的版本见
-     src/features/tasks/PeriodSubmit.test.tsx）。 */
+     src/features/tasks/PeriodSubmit.test.tsx）。
+
+     ⚠️ 档位名**不要在这里抄一份**：2026-10 三档改五档时，
+     原来硬编码的 /一般|不错|特别棒/ 里的「不错」变成了「良好」，
+     守卫从此少匹配一个却**不会报错**。现在从 settlement.ts 读，
+     读不到就抛（见 scripts/lib/quality.mjs 顶部）。 */
+  const QUALITY_LABEL_RE = qualityLabelRegex()
+  const QUALITY_GRADE_COUNT = readQualityLabels().length
   await page.keyboard.press('Escape')
   await new Promise((r) => setTimeout(r, 400))
   await page.evaluate(() => {
@@ -527,7 +535,7 @@ try {
         buttons: btns.map((b) => (b.innerText || '').replace(/\s+/g, ' ').trim()),
       }
     })
-    const dirty = probe.buttons.filter((t) => /一般|不错|特别棒/.test(t))
+    const dirty = probe.buttons.filter((t) => QUALITY_LABEL_RE.test(t))
     check('孩子端没有质量自评按钮', dirty.length === 0, dirty.join(' / ') || '干净')
     check('没有「做得怎么样？」这一问', !probe.text.includes('做得怎么样？'))
     check('确认按钮是「完成确认」', probe.buttons.some((t) => t === '完成确认'))
@@ -885,7 +893,6 @@ try {
       cycle: 'once',
       plannedMinutes: 10,
       basePoints: 20,
-      qualityBonusPoints: 0,
       allowOvertime: true,
       allowLateNoPenalty: false,
       qualityRated: false,
@@ -947,6 +954,31 @@ try {
     '输对密码后进入打分界面（不再是锁屏）',
     unlocked.hasGradeBtn && !unlocked.stillLocked,
     unlocked.text,
+  )
+
+  /* 对照组：同一个正则，用在**家长端**必须命中全部五档。
+     没有这一步的话，上面那条「孩子端没有质量自评按钮」是**单向**断言 ——
+     正则一旦退化成什么都匹配不到（比如档位改名了），孩子端那检查照样绿，
+     而它其实什么都没守住。
+     2026-10 真的发生过：三档改五档，中间档「不错」→「良好」，
+     e2e-check 里硬编码的 /一般|不错|特别棒/ 从此少匹配一个档位却**不报错**。 */
+  const parentGrades = await page.evaluate(
+    (src) => {
+      const d = document.querySelector('[role="dialog"]')
+      if (!d) return null
+      const re = new RegExp(src)
+      return [...d.querySelectorAll('button')]
+        .map((b) => (b.innerText || '').replace(/\s+/g, ' ').trim())
+        .filter((t) => re.test(t))
+    },
+    QUALITY_LABEL_RE.source,
+  )
+  check(
+    '对照组：家长端打分表的每一档都能被这个正则认出来',
+    parentGrades?.length === QUALITY_GRADE_COUNT,
+    parentGrades
+      ? `${parentGrades.length}/${QUALITY_GRADE_COUNT} 个：${parentGrades.join(' / ')}`
+      : '没拿到打分弹层',
   )
 
   // 点确认奖励 → 积分应到账

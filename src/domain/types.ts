@@ -35,8 +35,20 @@ export const STATUS_KID_LABEL: Record<TaskStatus, string> = {
   rejected: '再试试',
 }
 
-/** 质量评级 */
-export type QualityGrade = 'poor' | 'ok' | 'great'
+/**
+ * 质量评级（五档，由低到高）
+ *
+ *   awful 很差   -100%
+ *   poor  一般   -50%
+ *   ok    良好     0%   ← 中间档，不加不减
+ *   good  很好   +10%
+ *   great 特别棒 +20%
+ *
+ * ⚠️ 键名刻意保持向后兼容：`poor` / `ok` / `great` 在旧数据里分别是
+ * 「一般 / 不错 / 特别棒」，含义和现在的「一般 / 良好 / 特别棒」对得上，
+ * 所以老记录不用做数据迁移 —— 只有 `ok` 的显示名从「不错」变成「良好」。
+ */
+export type QualityGrade = 'awful' | 'poor' | 'ok' | 'good' | 'great'
 
 /* ---------------- 任务定义 ---------------- */
 
@@ -59,9 +71,6 @@ export interface Task {
 
   /** 基础积分 */
   basePoints: number
-
-  /** 质量达标额外奖励积分（qualityBonusEnabled 为 true 且评级>=ok 时生效） */
-  qualityBonusPoints: number
 
   /**
    * 是否允许超时结算。
@@ -122,7 +131,6 @@ export interface TaskInstance {
   cycle: TaskCycle
   plannedMinutes: number
   basePoints: number
-  qualityBonusPoints: number
   allowOvertime: boolean
   allowLateNoPenalty: boolean
   qualityRated: boolean
@@ -656,10 +664,8 @@ export interface AppSettings {
   overtimeEnabled: boolean
   /** 全局：超时衰减的最低分比例（0-1），低于此直接 0 分会由任务级 allowOvertime 决定 */
   minRatioForPoints: number
-  /** 全局：是否允许质量加分 */
+  /** 全局：是否允许质量加减分（关闭后五档系数一律按 0 算） */
   qualityBonusEnabled: boolean
-  /** 质量达标评级阈值：'ok' 表示 ok 及以上加分 */
-  qualityBonusThreshold: QualityGrade
 
   /** 连续完成任务的天数奖励（连击） */
   streakBonusEnabled: boolean

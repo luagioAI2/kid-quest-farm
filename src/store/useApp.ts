@@ -309,7 +309,6 @@ export interface NewTaskInput {
   cycle: Task['cycle']
   plannedMinutes: number
   basePoints: number
-  qualityBonusPoints: number
   allowOvertime: boolean
   allowLateNoPenalty: boolean
   qualityRated: boolean
@@ -698,10 +697,10 @@ async function settleNow(
 
   const global: Pick<
     SettleParams,
-    'overtimeEnabled' | 'qualityBonusThreshold' | 'minRatioForPoints'
+    'overtimeEnabled' | 'qualityBonusEnabled' | 'minRatioForPoints'
   > = {
     overtimeEnabled: settings.overtimeEnabled,
-    qualityBonusThreshold: settings.qualityBonusThreshold,
+    qualityBonusEnabled: settings.qualityBonusEnabled,
     minRatioForPoints: settings.minRatioForPoints,
   }
 
@@ -935,7 +934,6 @@ type MirroredField =
   | 'cycle'
   | 'plannedMinutes'
   | 'basePoints'
-  | 'qualityBonusPoints'
   | 'allowOvertime'
   | 'allowLateNoPenalty'
   | 'qualityRated'
@@ -948,7 +946,6 @@ function mirroredFrom(task: Task): Pick<TaskInstance, MirroredField> {
     cycle: task.cycle,
     plannedMinutes: task.plannedMinutes,
     basePoints: task.basePoints,
-    qualityBonusPoints: task.qualityBonusPoints,
     allowOvertime: task.allowOvertime,
     allowLateNoPenalty: task.allowLateNoPenalty,
     qualityRated: task.qualityRated,
@@ -1458,7 +1455,6 @@ export const useApp = create<AppState>((set, get) => ({
       cycle: task.cycle,
       plannedMinutes: task.plannedMinutes,
       basePoints: task.basePoints,
-      qualityBonusPoints: task.qualityBonusPoints,
       allowOvertime: task.allowOvertime,
       allowLateNoPenalty: task.allowLateNoPenalty,
       qualityRated: task.qualityRated,

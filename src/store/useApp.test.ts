@@ -229,10 +229,10 @@ describe('长期任务：家长审核', () => {
    * `OnceSubmitSheet`），这里再锁一道**存储层**的不变量：
    * 就算有人把自评 UI 加回来，分数也仍然由家长给的那个评级决定。
    */
-  it('孩子自评「特别棒」但家长给「一般」→ 只拿基础分，没有质量奖励', async () => {
+  it('孩子自评「特别棒」但家长给「一般」→ 按家长那一档算（-50%）', async () => {
     const task = periodTask()
-    expect(task.qualityRated).toBe(true) // 前提：这个任务本来是能拿质量奖励的
-    expect(task.qualityBonusPoints).toBeGreaterThan(0)
+    expect(task.qualityRated).toBe(true) // 前提：这个任务本来就能打质量分
+    expect(task.basePoints).toBeGreaterThan(0) // 而且基础分不为 0，否则乘出来还是 0
     const before = useApp.getState().balance
 
     // 刻意复现旧版 UI 的调用形状：把自己的自评一起传进去
@@ -248,12 +248,27 @@ describe('长期任务：家长审核', () => {
     // 但一分都没发
     expect(s.balance).toBe(before)
 
-    // 家长给「一般」→ 基础分，没有质量奖励
+    // 家长给「一般」→ 基础分 × (1 − 50%)，自评的「特别棒」不作数
     await useApp.getState().reviewInstance(inst.id, 'poor', task.plannedMinutes)
+    expect(useApp.getState().balance - before).toBe(Math.round(task.basePoints * 0.5))
+  })
+
+  it('家长给「良好」→ 正好基础分（中间档不加不减）', async () => {
+    const task = periodTask()
+    const before = useApp.getState().balance
+
+    await useApp.getState().submitPeriodTask(task.id, task.plannedMinutes, undefined)
+
+    const s = useApp.getState()
+    const pk = periodKeyFor(task.cycle, Date.now(), s.settings.dayStartHour)
+    const inst = s.instances.find((i) => i.taskId === task.id && i.periodKey === pk)
+    if (!inst) throw new Error('应该有一条待审实例')
+
+    await useApp.getState().reviewInstance(inst.id, 'ok', task.plannedMinutes)
     expect(useApp.getState().balance - before).toBe(task.basePoints)
   })
 
-  it('家长给「特别棒」→ 基础分 + 质量奖励（家长那一档才作数）', async () => {
+  it('家长给「特别棒」→ 基础分 × (1 + 20%)', async () => {
     const task = periodTask()
     const before = useApp.getState().balance
 
@@ -267,9 +282,7 @@ describe('长期任务：家长审核', () => {
     expect(inst.quality).toBeUndefined()
 
     await useApp.getState().reviewInstance(inst.id, 'great', task.plannedMinutes)
-    expect(useApp.getState().balance - before).toBe(
-      task.basePoints + task.qualityBonusPoints,
-    )
+    expect(useApp.getState().balance - before).toBe(Math.round(task.basePoints * 1.2))
   })
 
   it('待审次数占位：交满目标次数后不再接受提交', async () => {
@@ -818,14 +831,12 @@ describe('编辑任务：改动要落到还没结算的实例上', () => {
       title: '改过的标题',
       category: 'chore',
       allowLateNoPenalty: true,
-      qualityBonusPoints: 33,
     })
     const inst = todayInst(task.id)
     expect(inst.plannedMinutes).toBe(7)
     expect(inst.title).toBe('改过的标题')
     expect(inst.category).toBe('chore')
     expect(inst.allowLateNoPenalty).toBe(true)
-    expect(inst.qualityBonusPoints).toBe(33)
   })
 
   it('改完再结算，发出去的是新分 —— 不是建实例时的旧分', async () => {

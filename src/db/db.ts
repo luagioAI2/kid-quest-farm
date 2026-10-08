@@ -404,7 +404,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   overtimeEnabled: true,
   minRatioForPoints: 0,
   qualityBonusEnabled: true,
-  qualityBonusThreshold: 'ok',
   streakBonusEnabled: true,
   streakBonusPerDay: 2,
   streakBonusCap: 20,

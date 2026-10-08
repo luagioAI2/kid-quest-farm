@@ -7,12 +7,14 @@ import { useApp } from '@/store/useApp'
 import {
   Btn,
   categoryOf,
+  QUALITY_META,
   RewardChips,
   Sheet,
   SheetHead,
   TIMER_ENABLED,
   TONE_BG,
   TONE_TEXT,
+  formatMultiplier,
   globalFrom,
   timerTone,
   useLiveSeconds,
@@ -254,9 +256,9 @@ export function TaskDetail({
                   ✨ 这项任务有质量加分
                 </p>
                 <p className="mt-1 text-xs font-bold leading-snug text-ink-600">
-                  交上去之后，爸爸妈妈会看看做得怎么样
-                  {inst.qualityBonusPoints > 0 ? `，做得好可以多拿 ${inst.qualityBonusPoints} 分` : ''}
-                  。
+                  交上去之后，爸爸妈妈会看看做得怎么样，再按五档加减分：
+                  最好「{QUALITY_META.great.label}」{formatMultiplier('great')}，
+                  最差「{QUALITY_META.awful.label}」{formatMultiplier('awful')}。
                 </p>
               </div>
             )}
@@ -378,8 +380,12 @@ function RuleSummary({ inst }: { inst: TaskInstance }) {
   } else {
     lines.push('⏱️ 严格的限时任务：超时就没有积分')
   }
-  if (inst.qualityRated && inst.qualityBonusPoints > 0) {
-    lines.push(`✨ 做得好可以额外拿 ${inst.qualityBonusPoints} 分`)
+  if (inst.qualityRated) {
+    lines.push(
+      `✨ 完成后按五档评级加减分：最好「${QUALITY_META.great.label}」${formatMultiplier(
+        'great',
+      )}，最差「${QUALITY_META.awful.label}」${formatMultiplier('awful')}`,
+    )
   }
   return (
     <ul className="mt-3 space-y-1 rounded-2xl border border-ink-100 bg-white/70 p-3">

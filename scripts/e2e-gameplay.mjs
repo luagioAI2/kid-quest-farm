@@ -71,19 +71,20 @@ try {
    * 只把实例置为 submitted（等爸爸妈妈看）。
    * 所以这里必须把家长那一步也跑一遍，才是一条完整的链路。
    */
-  const settleCase = async (label, { planned, actual, base, qualityBonus, allowOvertime, allowLateNoPenalty, quality }) =>
+  const settleCase = async (label, { planned, actual, base, allowOvertime, allowLateNoPenalty, quality }) =>
     page.evaluate(
       async (cfg) => {
         const st = window.__kqf__.getState()
         const before = st.balance
-        // 造一个临时任务，跑真实结算链路
+        // 造一个临时任务，跑真实结算链路。
+        // 注意：质量分是**乘**在基础分上的（五档系数），任务上不再有
+        // 「额外奖励分」这种固定值 —— 所以这里只给 basePoints。
         const task = await st.addTask({
           title: `__probe_${cfg.label}`,
           category: 'study',
           cycle: 'once',
           plannedMinutes: cfg.planned,
           basePoints: cfg.base,
-          qualityBonusPoints: cfg.qualityBonus,
           allowOvertime: cfg.allowOvertime,
           allowLateNoPenalty: cfg.allowLateNoPenalty,
           qualityRated: true,
@@ -119,39 +120,109 @@ try {
           submitReturn,
         }
       },
-      { label, ...{ planned, actual, base, qualityBonus, allowOvertime, allowLateNoPenalty, quality } },
+      { label, ...{ planned, actual, base, allowOvertime, allowLateNoPenalty, quality } },
     )
 
   const onTime = await settleCase('ontime', {
-    planned: 30, actual: 25, base: 20, qualityBonus: 10,
+    planned: 30, actual: 25, base: 20,
     allowOvertime: true, allowLateNoPenalty: false, quality: 'great',
   })
   check('交上去时状态变成 submitted，且不发积分', onTime.submitted === 'submitted' && onTime.afterSubmit === onTime.before, `status=${onTime.submitted} ${onTime.before} → ${onTime.afterSubmit}`)
-  check('家长确认后按时完成拿到全额+质量分(30)', onTime.earned === 30, `earned=${onTime.earned} delta=${onTime.delta}`)
+  check('家长确认后按时完成拿到基础分+质量加成(20×1.2=24)', onTime.earned === 24, `earned=${onTime.earned} delta=${onTime.delta}`)
+
+  /**
+   * 五档系数端到端验一遍（单测已覆盖引擎，这里验的是**真实链路**：
+   * 建任务 → 孩子提交 → 家长审核 → 积分入账）。
+   * 系数表见 src/domain/settlement.ts 的 QUALITY_META。
+   */
+  const gradeTable = [
+    { quality: 'awful', label: '很差', factor: 0, note: '−100% → 扣光' },
+    { quality: 'poor', label: '一般', factor: 0.5, note: '−50% → 减半' },
+    { quality: 'ok', label: '良好', factor: 1, note: '中间档 → 不加不减' },
+    { quality: 'good', label: '很好', factor: 1.1, note: '+10%' },
+  ]
+  for (const g of gradeTable) {
+    const r = await settleCase(`grade_${g.quality}`, {
+      planned: 30, actual: 25, base: 20,
+      allowOvertime: true, allowLateNoPenalty: false, quality: g.quality,
+    })
+    const want = Math.round(20 * g.factor)
+    check(
+      `质量「${g.label}」${g.note} → ${want} 分`,
+      r.earned === want,
+      `earned=${r.earned} want=${want}`,
+    )
+  }
+
+  // 「良好」这一档必须是**正好基础分** —— 用户原话「中间那个不扣分」。
+  // 单独钉一遍，因为它是整个模型的基准点，改错了别的档也会跟着偏。
+  const neutral = await settleCase('neutral', {
+    planned: 30, actual: 25, base: 20,
+    allowOvertime: true, allowLateNoPenalty: false, quality: 'ok',
+  })
+  check('中间档「良好」拿到的分 == 基础分', neutral.earned === 20, `earned=${neutral.earned}`)
 
   const overHalf = await settleCase('over50', {
-    planned: 30, actual: 45, base: 20, qualityBonus: 0,
+    planned: 30, actual: 45, base: 20,
     allowOvertime: true, allowLateNoPenalty: false, quality: undefined,
   })
   check('家长确认后超时50%拿到一半(10)', overHalf.earned === 10, `earned=${overHalf.earned}`)
 
   const overDouble = await settleCase('over2x', {
-    planned: 30, actual: 70, base: 20, qualityBonus: 0,
+    planned: 30, actual: 70, base: 20,
     allowOvertime: true, allowLateNoPenalty: false, quality: undefined,
   })
   check('超时超一倍拿到0分', overDouble.earned === 0, `earned=${overDouble.earned}`)
 
   const noPenalty = await settleCase('nopenalty', {
-    planned: 20, actual: 999, base: 15, qualityBonus: 0,
+    planned: 20, actual: 999, base: 15,
     allowOvertime: false, allowLateNoPenalty: true, quality: undefined,
   })
   check('免扣分任务超时仍拿全额(15)', noPenalty.earned === 15, `earned=${noPenalty.earned}`)
 
   const strictOver = await settleCase('strict', {
-    planned: 20, actual: 25, base: 18, qualityBonus: 0,
+    planned: 20, actual: 25, base: 18,
     allowOvertime: false, allowLateNoPenalty: false, quality: undefined,
   })
   check('严格限时任务超时即0分', strictOver.earned === 0, `earned=${strictOver.earned}`)
+
+  /**
+   * 超时衰减 **先算**，质量百分比 **后乘**（用户明确选的顺序）。
+   *
+   * ⚠️ 挑用例要挑**顺序敏感**的，否则这条断言是假的：
+   * 两种顺序在大多数组合下结果相同（因为中间都取整），比如
+   * base=20 / planned=30 / actual=45 时，正反两种顺序都是 12 ——
+   * 拿这种数当用例，实现顺序写反了测试照样绿。
+   *
+   * 下面这两组是**实测**挑出来的（照着 settle() 的分支结构逐格枚举，
+   * 再用「把实现临时改成反向、看哪几条会红」复核过）：
+   *
+   *   ① base=15 planned=30 actual=45 great：正向 10，反向 9
+   *   ② base=10 planned=20 actual=25 great：正向 10，反向 9
+   *
+   * ⚠️ 别凭手算挑。第一版挑的「base=10 / 45 分钟 / 很差」看着像能区分，
+   *    实际两种顺序都是 0 —— 实现里有 `base > 0 ? Math.max(1, …) : 0`
+   *    这个守卫，base 变成 0 之后保底根本不生效。手算漏掉它就会挑错，
+   *    而挑错的代价是：这条断言从此只证明「结果是 0」，不证明顺序。
+   */
+  const decayThenMultiply = await settleCase('decay_then_mult', {
+    planned: 30, actual: 45, base: 15,
+    allowOvertime: true, allowLateNoPenalty: false, quality: 'great',
+  })
+  check('先超时衰减再乘质量(round(15×0.5)=8 → ×1.2 → 10，反向会得 9)', decayThenMultiply.earned === 10, `earned=${decayThenMultiply.earned}`)
+
+  const overQuarter = await settleCase('over_quarter', {
+    planned: 20, actual: 25, base: 10,
+    allowOvertime: true, allowLateNoPenalty: false, quality: 'great',
+  })
+  check('超时 25% 再乘质量(round(10×0.75)=8 → ×1.2 → 10，反向会得 9)', overQuarter.earned === 10, `earned=${overQuarter.earned}`)
+
+  // 时间分已经是 0（超时一倍）时，任何好评都救不回来 —— 0 乘什么都还是 0。
+  const zeroNotRescued = await settleCase('zero_not_rescued', {
+    planned: 30, actual: 70, base: 20,
+    allowOvertime: true, allowLateNoPenalty: false, quality: 'great',
+  })
+  check('时间分是 0 时好评也救不回来', zeroNotRescued.earned === 0, `earned=${zeroNotRescued.earned}`)
 
   /* ============ 2. 账本一致性 ============ */
   console.log('\n【2】账本一致性')

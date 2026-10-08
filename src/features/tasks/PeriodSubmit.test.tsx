@@ -6,7 +6,7 @@
  *
  * 普通任务早就改成了「孩子只提交，质量分由家长给」
  * （`TaskDetail.handleSubmit` 里那句 `submitInstance(inst.id, mins, undefined, …)`），
- * 但长期任务那张表漏了 —— 孩子能自己选「一般 / 不错 / 特别棒」，
+ * 但长期任务那张表漏了 —— 孩子能自己选质量评级，
  * 而且「+N 分」的预览就摆在确认按钮上面，点一下就知道自己能拿多少分。
  * 家长审核于是成了走过场。
  *
@@ -21,7 +21,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Task } from '@/domain/types'
-import { QUALITY_META } from './ui'
+import { QUALITY_META, QUALITY_ORDER } from './ui'
 import { OnceSubmitSheet } from './TaskPage'
 
 function periodTask(): Task {
@@ -32,7 +32,6 @@ function periodTask(): Task {
     cycle: 'weekly',
     plannedMinutes: 30,
     basePoints: 20,
-    qualityBonusPoints: 10,
     allowOvertime: true,
     allowLateNoPenalty: false,
     qualityRated: true,
@@ -70,7 +69,19 @@ function buttonTexts(): string[] {
   return screen.getAllByRole('button').map((b) => (b.textContent ?? '').trim())
 }
 
-const QUALITY_LABEL_RE = /一般|不错|特别棒/
+/**
+ * 匹配任何一档质量评级的按钮文字。
+ *
+ * ⚠️ 从 `QUALITY_META` **现算**，不要手写死名单。
+ * 2026-10-09 就踩过：质量从三档改成五档后，手写的 `/一般|不错|特别棒/`
+ * 里的「不错」改名叫「良好」了，于是对照组从 3 个命中掉成 2 个 ——
+ * 断言**悄悄失效**，而不是报错。
+ */
+const QUALITY_LABEL_RE = new RegExp(
+  Object.values(QUALITY_META)
+    .map((m) => m.label)
+    .join('|'),
+)
 
 describe('长期任务：孩子端不许自评质量', () => {
   it('表里没有质量自评按钮', () => {
@@ -151,6 +162,7 @@ describe('长期任务：孩子端不许自评质量', () => {
 
     expect(screen.getByText('做得怎么样？')).toBeInTheDocument()
     const hit = buttonTexts().filter((t) => QUALITY_LABEL_RE.test(t))
-    expect(hit).toHaveLength(3)
+    // 档数从 QUALITY_ORDER 现取：加档位时这条会跟着走，不会变成假绿
+    expect(hit).toHaveLength(QUALITY_ORDER.length)
   })
 })

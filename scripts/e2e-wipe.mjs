@@ -149,7 +149,6 @@ try {
           cycle: 'once',
           plannedMinutes: 20,
           basePoints: 10,
-          qualityBonusPoints: 0,
           allowOvertime: true,
           allowLateNoPenalty: false,
           qualityRated: false,

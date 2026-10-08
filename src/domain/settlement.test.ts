@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { settle, settleTask, gradeReaches, OVERTIME_ZERO_MULTIPLIER } from './settlement'
+import {
+  QUALITY_META,
+  QUALITY_ORDER,
+  formatMultiplier,
+  settle,
+  settleTask,
+  OVERTIME_ZERO_MULTIPLIER,
+} from './settlement'
 import type { QualityGrade } from './types'
 
 /* ============================================================
@@ -9,7 +16,6 @@ import type { QualityGrade } from './types'
 const base = {
   plannedMinutes: 30,
   basePoints: 20,
-  qualityBonusPoints: 10,
   qualityRated: true,
   allowOvertime: true,
   allowLateNoPenalty: false,
@@ -110,59 +116,92 @@ describe('免扣分任务：超期不扣分', () => {
   })
 })
 
-describe('质量加分', () => {
-  it('质量达标时叠加在基础分之上', () => {
-    const r = settle({ ...base, actualMinutes: 20, quality: 'great' })
-    // 20 基础 + 10 质量
-    expect(r.points).toBe(30)
+describe('质量五档：系数乘在时间分上（base = 20 分）', () => {
+  const at = (quality: QualityGrade) => settle({ ...base, actualMinutes: 20, quality })
+
+  it('很差 -100% → 扣光，但不会变成负数', () => {
+    expect(at('awful').points).toBe(0)
   })
 
-  it('质量不达标（poor）不加分', () => {
-    const r = settle({ ...base, actualMinutes: 20, quality: 'poor' })
-    expect(r.points).toBe(20)
+  it('一般 -50% → 拿一半', () => {
+    expect(at('poor').points).toBe(10)
   })
 
-  it('未评质量则不加分', () => {
-    const r = settle({ ...base, actualMinutes: 20, quality: undefined })
-    expect(r.points).toBe(20)
+  it('良好是中间档 → 不加不减', () => {
+    expect(at('ok').points).toBe(20)
   })
 
-  it('质量加分在超时衰减时依然保留（两个维度独立）', () => {
-    const r = settle({ ...base, actualMinutes: 45, quality: 'great' })
-    // 基础衰减到 10，质量 10 全额保留
-    expect(r.points).toBe(20)
-    expect(r.overtime).toBe(true)
+  it('很好 +10% → 22', () => {
+    expect(at('good').points).toBe(22)
   })
 
-  it('超时归零时质量分仍然保留', () => {
-    const r = settle({ ...base, actualMinutes: 90, quality: 'great' })
-    expect(r.points).toBe(10)
-    expect(r.zeroed).toBe(true)
+  it('特别棒 +20% → 24', () => {
+    expect(at('great').points).toBe(24)
   })
 
-  it('关闭 qualityRated 后即使评了质量也不加分', () => {
+  it('未评质量 = 不加不减（等同良好）', () => {
+    expect(settle({ ...base, actualMinutes: 20, quality: undefined }).points).toBe(20)
+  })
+
+  it('关闭 qualityRated 后，评了也不算', () => {
     const r = settle({ ...base, qualityRated: false, actualMinutes: 20, quality: 'great' })
     expect(r.points).toBe(20)
   })
 
-  it('阈值设为 great 时 ok 不加分', () => {
-    const r = settle({
-      ...base,
-      actualMinutes: 20,
-      quality: 'ok',
-      qualityBonusThreshold: 'great',
-    })
+  it('全局关掉质量加减分后，五档一律不加不减', () => {
+    const r = settle({ ...base, actualMinutes: 20, quality: 'great', qualityBonusEnabled: false })
     expect(r.points).toBe(20)
   })
+})
 
-  it('阈值设为 great 时 great 加分', () => {
-    const r = settle({
-      ...base,
-      actualMinutes: 20,
-      quality: 'great',
-      qualityBonusThreshold: 'great',
+describe('质量 × 超时：先衰减再乘', () => {
+  // base = 20，45/30 = 1.5 → decay 0.5 → 时间分 = round(20*0.5) = 10
+  it('衰减到 10 分，再乘 +20% → 12', () => {
+    const r = settle({ ...base, actualMinutes: 45, quality: 'great' })
+    expect(r.points).toBe(12)
+    expect(r.overtime).toBe(true)
+  })
+
+  it('衰减到 10 分，再乘 -50% → 5', () => {
+    const r = settle({ ...base, actualMinutes: 45, quality: 'poor' })
+    expect(r.points).toBe(5)
+  })
+
+  it('时间分被扣成 0 时，评「特别棒」也救不回来', () => {
+    const r = settle({ ...base, actualMinutes: 90, quality: 'great' })
+    expect(r.points).toBe(0)
+    expect(r.zeroed).toBe(true)
+  })
+
+  /* ⚠️ 上面三条**区分不了顺序**。
+     把实现改成「先乘系数、再衰减」，上面三条照样全绿 ——
+     因为两种顺序下都要取整，而 base=20 / 30 分钟 / 45 分钟 这组数
+     在两种顺序下刚好都是 12 / 5 / 0。写了等于没写。
+
+     2026-10 逐格枚举过（base 1..60 × 6 个 planned × 每个 actual × 5 档，
+     照着 settle() 的分支结构逐字复刻）：能区分顺序的有 7918 组。
+     下面两条是从中挑的，都**实测过**（把实现临时改成反向，只有这两条会红）。
+
+     ⚠️ 别凭手算挑数。第一版挑的「base=10 / 45 分钟 / 很差」看着像能区分，
+        实际两种顺序都是 0 —— 因为实现里有 `base > 0 ? Math.max(1, …) : 0`
+        这个守卫，base 变成 0 之后保底根本不生效。手算漏掉这个守卫就会挑错。 */
+  describe('顺序敏感性（必须用能区分顺序的数，否则是假绿）', () => {
+    // ① 取整差（反向**少给**）：
+    //    正向 round(15*0.5)=8 → round(8*1.2)=round(9.6)=10
+    //    反向 round(15*1.2)=18 → round(18*0.5)=9
+    it('base=15 / 45 分钟 / 特别棒 → 10（顺序反了会得 9）', () => {
+      const r = settle({ ...base, basePoints: 15, actualMinutes: 45, quality: 'great' })
+      expect(r.points).toBe(10)
     })
-    expect(r.points).toBe(30)
+
+    // ② 取整差（反向**多给**）：超时 25% → decay 0.75
+    //    正向 round(10*0.75)=8 → round(8*1.2)=round(9.6)=10
+    //    反向 round(10*1.2)=12 → round(12*0.75)=9
+    //    多给分是更该防的方向：孩子拿到的分不该因为实现顺序而变多。
+    it('base=10 / 20 分钟用 25 分钟 / 特别棒 → 10（顺序反了会得 9）', () => {
+      const r = settle({ ...base, basePoints: 10, plannedMinutes: 20, actualMinutes: 25, quality: 'great' })
+      expect(r.points).toBe(10)
+    })
   })
 })
 
@@ -174,9 +213,9 @@ describe('没有计时记录', () => {
     expect(r.zeroReason).toBe('not_returned')
   })
 
-  it('未计时但质量达标仍给质量分', () => {
+  it('未计时就是 0：质量系数乘在 0 上还是 0', () => {
     const r = settle({ ...base, actualMinutes: undefined, quality: 'great' })
-    expect(r.points).toBe(10)
+    expect(r.points).toBe(0)
   })
 })
 
@@ -234,18 +273,34 @@ describe('全局开关', () => {
   })
 })
 
-describe('gradeReaches', () => {
-  it('great 达到 great 阈值', () => {
-    expect(gradeReaches('great', 'great')).toBe(true)
+describe('五档的定义（对着需求原文验）', () => {
+  it('正好五档，由低到高', () => {
+    expect(QUALITY_ORDER).toEqual(['awful', 'poor', 'ok', 'good', 'great'])
   })
-  it('ok 达不到 great 阈值', () => {
-    expect(gradeReaches('ok', 'great')).toBe(false)
+
+  it('系数就是需求里那五个数', () => {
+    expect(QUALITY_ORDER.map((q) => QUALITY_META[q].multiplier)).toEqual([-1, -0.5, 0, 0.1, 0.2])
   })
-  it('great 达到 ok 阈值', () => {
-    expect(gradeReaches('great', 'ok')).toBe(true)
+
+  it('中间那档是「良好」，系数 0（不加不减）', () => {
+    const mid = QUALITY_ORDER[2]
+    expect(QUALITY_META[mid].label).toBe('良好')
+    expect(QUALITY_META[mid].multiplier).toBe(0)
   })
-  it('poor 连 ok 都达不到', () => {
-    expect(gradeReaches('poor', 'ok')).toBe(false)
+
+  it('每档都有给人看的名字和表情', () => {
+    for (const q of QUALITY_ORDER) {
+      expect(QUALITY_META[q].label.length).toBeGreaterThan(0)
+      expect(QUALITY_META[q].emoji.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('系数文案：正数带 +、负数带 -、中间写「不加不减」', () => {
+    expect(formatMultiplier('great')).toBe('+20%')
+    expect(formatMultiplier('good')).toBe('+10%')
+    expect(formatMultiplier('ok')).toBe('不加不减')
+    expect(formatMultiplier('poor')).toBe('-50%')
+    expect(formatMultiplier('awful')).toBe('-100%')
   })
 })
 
@@ -254,7 +309,6 @@ describe('settleTask 便捷入口', () => {
     const task = {
       plannedMinutes: 20,
       basePoints: 30,
-      qualityBonusPoints: 10,
       allowOvertime: true,
       allowLateNoPenalty: false,
       qualityRated: true,
@@ -265,7 +319,6 @@ describe('settleTask 便捷入口', () => {
       plannedMinutes: 20,
       actualMinutes: 25,
       basePoints: 30,
-      qualityBonusPoints: 10,
       quality,
       qualityRated: true,
       allowOvertime: true,
@@ -282,7 +335,6 @@ describe('场景：完成语文作业', () => {
   const chinese = {
     plannedMinutes: 30,
     basePoints: 20,
-    qualityBonusPoints: 8,
     qualityRated: true,
     allowOvertime: true,
     allowLateNoPenalty: false,
@@ -300,9 +352,15 @@ describe('场景：完成语文作业', () => {
     expect(settle({ ...chinese, actualMinutes: 60 }).points).toBe(0)
   })
 
-  it('40 分钟且质量优秀 → 衰减基础分 + 质量分', () => {
-    // ratio = 40/30 = 1.333 → decay = 0.667 → round(20*0.667)=13, +8 = 21
+  it('40 分钟且评「特别棒」→ 先衰减到 13，再 +20% → 16', () => {
+    // ratio = 40/30 = 1.333 → decay = 0.667 → round(20*0.667) = 13
+    // 13 × 1.2 = 15.6 → 16
     const r = settle({ ...chinese, actualMinutes: 40, quality: 'great' })
-    expect(r.points).toBe(21)
+    expect(r.points).toBe(16)
+  })
+
+  it('40 分钟且评「很差」→ 13 分被扣光 → 0', () => {
+    const r = settle({ ...chinese, actualMinutes: 40, quality: 'awful' })
+    expect(r.points).toBe(0)
   })
 })

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { Portal } from '@/components/Portal'
-import type { TaskCategory, TaskCycle, QualityGrade } from '@/domain/types'
-import type { SettleParams } from '@/domain/settlement'
+import type { TaskCategory, TaskCycle } from '@/domain/types'
+import type { GlobalSettleParams } from '@/domain/settlement'
 
 /* ============================================================
    小任务农场 · 任务模块内部 UI 基元
@@ -140,37 +140,26 @@ export const CATEGORY_ORDER: TaskCategory[] = [
   'habit',
 ]
 
-export const QUALITY_META: Record<QualityGrade, { emoji: string; label: string }> = {
-  poor: { emoji: '😞', label: '一般' },
-  ok: { emoji: '🙂', label: '不错' },
-  great: { emoji: '🤩', label: '特别棒' },
-}
+/**
+ * 五档评级的名称 / 表情 / 系数都定义在 domain 里
+ * （结算引擎要用它拼文案），这里只转出去给 UI 用 —— 别再本地维护第二份。
+ */
+export { QUALITY_META, QUALITY_ORDER, formatMultiplier } from '@/domain/settlement'
 
 /* ---------------- 全局结算参数 ---------------- */
 
-export interface GlobalSettle {
-  overtimeEnabled: boolean
-  qualityBonusThreshold: QualityGrade
-  minRatioForPoints: number
-}
+export type GlobalSettle = GlobalSettleParams
 
 /** 从 settings 派生 settle() 需要的全局参数，保证预览与真实结算同源 */
-export function globalFrom(settings: {
-  overtimeEnabled: boolean
-  qualityBonusThreshold: QualityGrade
-  minRatioForPoints: number
-}): GlobalSettle {
+export function globalFrom(settings: GlobalSettleParams): GlobalSettleParams {
   return {
     overtimeEnabled: settings.overtimeEnabled,
-    qualityBonusThreshold: settings.qualityBonusThreshold,
+    qualityBonusEnabled: settings.qualityBonusEnabled,
     minRatioForPoints: settings.minRatioForPoints,
   }
 }
 
-export function settleGlobalOf(g: GlobalSettle): Pick<
-  SettleParams,
-  'overtimeEnabled' | 'qualityBonusThreshold' | 'minRatioForPoints'
-> {
+export function settleGlobalOf(g: GlobalSettle): GlobalSettleParams {
   return g
 }
 

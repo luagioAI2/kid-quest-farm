@@ -847,7 +847,6 @@ export function OnceSubmitSheet({
       updatedAt: 0,
       plannedMinutes: task.plannedMinutes,
       basePoints: task.basePoints,
-      qualityBonusPoints: task.qualityBonusPoints,
       allowOvertime: task.allowOvertime,
       allowLateNoPenalty: task.allowLateNoPenalty,
       qualityRated: task.qualityRated,

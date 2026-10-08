@@ -7,7 +7,16 @@ import { ITEMS } from '@/domain/catalog'
 import type { Task, TaskCategory, TaskCycle } from '@/domain/types'
 import { useApp, type NewTaskInput } from '@/store/useApp'
 import { ParentPinPanel } from '../parent/ParentGate'
-import { Btn, CATEGORY, CATEGORY_ORDER, Sheet, SheetHead, globalFrom } from './ui'
+import {
+  Btn,
+  CATEGORY,
+  CATEGORY_ORDER,
+  QUALITY_META,
+  Sheet,
+  SheetHead,
+  formatMultiplier,
+  globalFrom,
+} from './ui'
 
 /* ============================================================
    新建 / 编辑任务 —— 底部弹层
@@ -45,7 +54,6 @@ export function TaskEditor({
   const [cycle, setCycle] = useState<TaskCycle>('daily')
   const [plannedMinutes, setPlannedMinutes] = useState(20)
   const [basePoints, setBasePoints] = useState(10)
-  const [qualityBonusPoints, setQualityBonusPoints] = useState(0)
 
   const [allowOvertime, setAllowOvertime] = useState(true)
   const [allowLateNoPenalty, setAllowLateNoPenalty] = useState(false)
@@ -77,7 +85,6 @@ export function TaskEditor({
       setCycle(task.cycle)
       setPlannedMinutes(task.plannedMinutes)
       setBasePoints(task.basePoints)
-      setQualityBonusPoints(task.qualityBonusPoints)
       setAllowOvertime(task.allowOvertime)
       setAllowLateNoPenalty(task.allowLateNoPenalty)
       setQualityRated(task.qualityRated)
@@ -92,7 +99,6 @@ export function TaskEditor({
       setCycle('daily')
       setPlannedMinutes(20)
       setBasePoints(10)
-      setQualityBonusPoints(0)
       setAllowOvertime(true)
       setAllowLateNoPenalty(false)
       setQualityRated(false)
@@ -112,7 +118,6 @@ export function TaskEditor({
         plannedMinutes,
         actualMinutes: plannedMinutes * ratio,
         basePoints,
-        qualityBonusPoints,
         quality: qualityRated ? 'great' : undefined,
         qualityRated,
         allowOvertime,
@@ -127,7 +132,6 @@ export function TaskEditor({
         plannedMinutes,
         actualMinutes: undefined,
         basePoints,
-        qualityBonusPoints,
         quality: qualityRated ? 'great' : undefined,
         qualityRated,
         allowOvertime,
@@ -138,7 +142,6 @@ export function TaskEditor({
   }, [
     plannedMinutes,
     basePoints,
-    qualityBonusPoints,
     qualityRated,
     allowOvertime,
     allowLateNoPenalty,
@@ -154,9 +157,9 @@ export function TaskEditor({
     if (!title.trim()) return '给任务起个名字吧 ✏️'
     if (!Number.isFinite(plannedMinutes) || plannedMinutes <= 0) return '计划时长要大于 0 分钟 ⏰'
     if (!Number.isFinite(basePoints) || basePoints < 0) return '基础积分不能是负数哦 🪙'
-    if (!Number.isFinite(qualityBonusPoints) || qualityBonusPoints < 0)
-      return '质量奖励不能是负数哦 ✨'
-    if (qualityRated && qualityBonusPoints <= 0) return '开了质量评分，记得给「做得好」设一点奖励分 ✨'
+    // 质量分是**乘**在基础分上的，基础分是 0 就永远乘不出分来
+    if (qualityRated && basePoints <= 0)
+      return '开了质量评分，但基础积分是 0，乘出来还是 0 —— 先给个基础分吧 🪙'
     if (checkInEnabled && (checkInTargetCount < 1 || checkInTargetCount > 366))
       return '目标天数要在 1 到 366 之间 📅'
     return null
@@ -175,7 +178,6 @@ export function TaskEditor({
       cycle,
       plannedMinutes: Math.round(plannedMinutes),
       basePoints: Math.round(basePoints),
-      qualityBonusPoints: Math.round(qualityBonusPoints),
       allowOvertime,
       allowLateNoPenalty,
       qualityRated,
@@ -312,17 +314,6 @@ export function TaskEditor({
 
         <p className="-mt-2 text-xs text-ink-500">按时完成，最高可拿 {preview.onTime.points} 分</p>
 
-        <Field label="做得好额外奖励" emoji="✨">
-          <NumberStepper
-            value={qualityBonusPoints}
-            onChange={setQualityBonusPoints}
-            step={1}
-            min={0}
-            max={999}
-            suffix="分"
-          />
-        </Field>
-
         {/* ---------- 三个规则开关 ---------- */}
         <div className="space-y-3">
           <p className="font-display text-sm font-extrabold text-ink-900">规则（决定怎么算分）</p>
@@ -387,7 +378,9 @@ export function TaskEditor({
           <p className="mt-3 text-xs font-bold leading-snug text-ink-700">
             {preview.onTime.points > 0
               ? `按时做最多拿 ${preview.onTime.points} 分${
-                  qualityRated && qualityBonusPoints > 0 ? `（已包含质量奖励 ${qualityBonusPoints} 分）` : ''
+                  qualityRated
+                    ? `（已含「${QUALITY_META.great.label}」${formatMultiplier('great')}）`
+                    : ''
                 }`
               : '这条任务没有基础积分，主要用于打卡习惯'}
           </p>

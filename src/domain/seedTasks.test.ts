@@ -41,10 +41,11 @@ describe('种子任务：每日任务', () => {
     }
   })
 
-  it('学科任务都允许家长打质量分（有额外奖励空间）', () => {
+  it('学科任务都允许家长打质量分，而且基础分不为 0', () => {
+    // 质量分是**乘**在基础分上的：基础分是 0 的话，打多高的质量都乘不出分来。
     for (const t of daily.filter((x) => x.category === 'study')) {
       expect(t.qualityRated, t.title).toBe(true)
-      expect(t.qualityBonusPoints ?? 0, t.title).toBeGreaterThan(0)
+      expect(t.basePoints, t.title).toBeGreaterThan(0)
     }
   })
 
@@ -170,43 +171,34 @@ describe('种子任务：整体', () => {
    ============================================================ */
 describe('种子任务：2026-09-21 积分减半', () => {
   it('逐档对照：学科 / 家务 / 签到 / 月度 / 年度', () => {
-    const expectPoints = (
-      title: string,
-      base: number,
-      bonus: number,
-    ): void => {
+    const expectPoints = (title: string, base: number): void => {
       const t = SEED_TASKS.find((x) => x.title === title)
       expect(t, `找不到任务：${title}`).toBeDefined()
       expect(t?.basePoints, `${title} 基础分`).toBe(base)
-      expect(t?.qualityBonusPoints ?? 0, `${title} 质量分`).toBe(bonus)
     }
 
-    // 学科任务：20 + 8 → 10 + 4
-    expectPoints('完成语文作业', 10, 4)
-    expectPoints('完成数学作业', 10, 4)
-    expectPoints('完成英语作业', 10, 4)
-    expectPoints('语文课外练习', 10, 4)
-    expectPoints('数学课外练习', 10, 4)
-    expectPoints('英语课外练习', 10, 4)
-    // 家务：12 + 6 → 6 + 3
-    expectPoints('清理自己的房间', 6, 3)
-    // 签到：8 → 4（无质量分）
-    expectPoints('练字签到', 4, 0)
-    expectPoints('日记', 4, 0)
-    expectPoints('晨读', 4, 0)
-    // 月度：30 + 15 → 15 + 8（15 ÷ 2 = 7.5，按「取整」进到 8）
-    expectPoints('读一本完整的故事书', 15, 8)
-    // 年度：100 + 50 → 50 + 25
-    expectPoints('学会一项新本领', 50, 25)
+    // 学科任务：20 → 10
+    expectPoints('完成语文作业', 10)
+    expectPoints('完成数学作业', 10)
+    expectPoints('完成英语作业', 10)
+    expectPoints('语文课外练习', 10)
+    expectPoints('数学课外练习', 10)
+    expectPoints('英语课外练习', 10)
+    // 家务：12 → 6
+    expectPoints('清理自己的房间', 6)
+    // 签到：8 → 4
+    expectPoints('练字签到', 4)
+    expectPoints('日记', 4)
+    expectPoints('晨读', 4)
+    // 月度：30 → 15
+    expectPoints('读一本完整的故事书', 15)
+    // 年度：100 → 50
+    expectPoints('学会一项新本领', 50)
   })
 
   it('全部积分都是整数（用户要求「积分取整」）', () => {
     for (const t of SEED_TASKS) {
       expect(Number.isInteger(t.basePoints), `${t.title} 基础分`).toBe(true)
-      expect(
-        Number.isInteger(t.qualityBonusPoints ?? 0),
-        `${t.title} 质量分`,
-      ).toBe(true)
     }
   })
 
@@ -266,7 +258,7 @@ describe('种子任务：2026-09-21 积分减半', () => {
    逐条钉住，免得以后有人「顺手统一一下」把两者揉成一个。
    ============================================================ */
 describe('种子任务：2026-09-30 新增（背诵 / 数学计算练习）', () => {
-  it('背诵：长期任务，每周 2 次，学科档 10 + 4', () => {
+  it('背诵：长期任务，每周 2 次，学科档 10 分', () => {
     const t = SEED_TASKS.find((x) => x.title === '背诵')
     expect(t, '找不到「背诵」').toBeDefined()
     expect(t?.cycle).toBe('weekly')
@@ -275,10 +267,9 @@ describe('种子任务：2026-09-30 新增（背诵 / 数学计算练习）', ()
     expect(t?.category).toBe('study')
     expect(t?.plannedMinutes).toBe(15)
     expect(t?.basePoints).toBe(10)
-    expect(t?.qualityBonusPoints).toBe(4)
   })
 
-  it('数学计算练习：每周签到，5 次，签到档 4 + 0（奖励主要来自阶梯）', () => {
+  it('数学计算练习：每周签到，5 次，签到档 4 分（奖励主要来自阶梯）', () => {
     const t = SEED_TASKS.find((x) => x.title === '数学计算练习')
     expect(t, '找不到「数学计算练习」').toBeDefined()
     expect(t?.cycle).toBe('weekly')
@@ -287,7 +278,6 @@ describe('种子任务：2026-09-30 新增（背诵 / 数学计算练习）', ()
     expect(t?.category).toBe('study')
     expect(t?.plannedMinutes).toBe(15)
     expect(t?.basePoints).toBe(4)
-    expect(t?.qualityBonusPoints ?? 0).toBe(0)
   })
 
   it('签到任务的数值口径完全一致（4 分 / 15 分钟 / 不打质量分）', () => {
@@ -296,7 +286,6 @@ describe('种子任务：2026-09-30 新增（背诵 / 数学计算练习）', ()
     for (const t of checkIn) {
       expect(t.basePoints, t.title).toBe(4)
       expect(t.plannedMinutes, t.title).toBe(15)
-      expect(t.qualityBonusPoints ?? 0, t.title).toBe(0)
       expect(t.qualityRated, t.title).toBe(false)
       expect(t.allowOvertime, t.title).toBe(false)
       expect(t.allowLateNoPenalty, t.title).toBe(true)

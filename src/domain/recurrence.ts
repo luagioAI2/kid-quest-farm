@@ -49,7 +49,6 @@ export function makeInstance(
     cycle: task.cycle,
     plannedMinutes: task.plannedMinutes,
     basePoints: task.basePoints,
-    qualityBonusPoints: task.qualityBonusPoints,
     allowOvertime: task.allowOvertime,
     allowLateNoPenalty: task.allowLateNoPenalty,
     qualityRated: task.qualityRated,
