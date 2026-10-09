@@ -686,7 +686,8 @@ try {
       const d = document.querySelector('[role="dialog"]')
       return !!d && /请爸爸妈妈来一下/.test(d.innerText)
     })
-    if (gateShown) {
+    /** 过家长密码盘（默认 0000）。不点的话「✅ 保存修改」永远不出现。 */
+    const passPin = async () => {
       for (const k of ['0', '0', '0', '0']) {
         await page.evaluate((key) => {
           const d = document.querySelector('[role="dialog"]')
@@ -696,6 +697,7 @@ try {
         await new Promise((r) => setTimeout(r, 180))
       }
     }
+    if (gateShown) await passPin()
 
     /* 等弹层真的挂上，别用固定 sleep —— 判据是「出现保存按钮」这个可观测事实。 */
     const opened = await page
@@ -719,14 +721,81 @@ try {
       }
     })
 
-    // 关掉，别影响后面的用例
-    await page.evaluate(() => {
-      const b = [...document.querySelectorAll('button')].find(
-        (x) => x.getAttribute('aria-label') === '关闭',
-      )
-      b?.click()
-    })
-    await new Promise((r) => setTimeout(r, 700))
+    /* ---------- 存得下去吗：改「一共要签到几天」5 → 7 → 再改回 5 ----------
+       打开编辑器只证明入口通，不证明**存得下**。签到卡读的是 task 定义
+       （不像 daily 那样读实例快照），所以这里量「卡上写的目标天数」。
+       改回 5 是必须的：阶梯是按目标天数算的（unit = 0.8×基础分×目标/10），
+       留着 7 会把下面第 6 节「确认后得到 +7 分」连带改掉。 */
+    const openEditorOfCard = async () => {
+      const ok = await page.evaluate(() => {
+        const h = [...document.querySelectorAll('h3')].find(
+          (x) => x.innerText.trim() === '学习日复述每天学习内容',
+        )
+        if (!h) return false
+        let card = h
+        while (card.parentElement && card.parentElement.querySelectorAll('h3').length === 1) {
+          card = card.parentElement
+        }
+        const btn = [...card.querySelectorAll('button')].find(
+          (x) => x.getAttribute('aria-label') === '编辑任务',
+        )
+        if (!btn) return false
+        btn.click()
+        return true
+      })
+      await sleep(700)
+      await passPin()
+      await sleep(500)
+      return ok
+    }
+
+    /** 把「一共要签到几天」设成 v 并保存；返回是否真的填进去了 */
+    const setTargetAndSave = async (v) => {
+      const typed = await page.evaluate((val) => {
+        const label = [...document.querySelectorAll('p')].find((x) =>
+          (x.textContent ?? '').trim().endsWith('一共要签到几天'),
+        )
+        const input = label?.closest('div')?.querySelector('input[type="number"]')
+        if (!input) return false
+        // React 受控 input：走原型 setter + 派发 input。直接赋 value 不触发 onChange，
+        // 界面看着改了、state 没改 —— 本项目「假绿」的经典来源。
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+        setter.call(input, String(val))
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        return true
+      }, v)
+      await sleep(400)
+      await page.evaluate(() => {
+        const b = [...document.querySelectorAll('button')].find(
+          (x) => x.textContent?.trim() === '✅ 保存修改',
+        )
+        b?.click()
+      })
+      await sleep(1500)
+      return typed
+    }
+
+    /** 签到卡上「已坚持 N / M 天」里的 M */
+    const targetOnCard = () =>
+      page.evaluate(() => {
+        const h = [...document.querySelectorAll('h3')].find(
+          (x) => x.innerText.trim() === '学习日复述每天学习内容',
+        )
+        if (!h) return null
+        let card = h
+        while (card.parentElement && card.parentElement.querySelectorAll('h3').length === 1) {
+          card = card.parentElement
+        }
+        const m = card.innerText.replace(/\s+/g, ' ').match(/已坚持\s*\d+\s*\/\s*(\d+)\s*天/)
+        return m ? Number(m[1]) : null
+      })
+
+    const typed7 = await setTargetAndSave(7)
+    const after7 = await targetOnCard()
+
+    await openEditorOfCard()
+    const typed5 = await setTargetAndSave(5)
+    const after5 = await targetOnCard()
 
     check('签到卡上的 ✏️ 点得到', clicked, clicked ? '' : '没在签到卡里找到编辑按钮')
     check('点签到卡的 ✏️ 会弹出编辑器，并被家长密码挡住', clicked && gateShown, gateShown ? '' : '没看到密码盘')
@@ -736,6 +805,8 @@ try {
       editor.title === '学习日复述每天学习内容' && editor.checkInOn,
       `标题「${editor.title}」，签到模式 ${editor.checkInOn ? '开' : '关'}`,
     )
+    check('改「一共要签到几天」5 → 7 存得下去', typed7 && after7 === 7, `卡上写 / ${after7} 天（期望 7）`)
+    check('再改回 5 也存得下去（复原，不影响后面的用例）', typed5 && after5 === 5, `卡上写 / ${after5} 天（期望 5）`)
   }
 
   /* ---------- 5. 农场：种植流程 ---------- */
