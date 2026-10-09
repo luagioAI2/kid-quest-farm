@@ -58,13 +58,8 @@ export default function TaskPage() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editTask, setEditTask] = useState<Task | null>(null)
-  /** 加了固定任务之后，孩子点「新任务」时弹给家长自己看的备忘 */
+  /** 孩子点「新任务」时弹给家长自己看的备忘 */
   const [fabNudge, setFabNudge] = useState(false)
-
-  const fixedTasks = useMemo(
-    () => tasks.filter((t) => t.fixed && !t.archived),
-    [tasks],
-  )
 
   const detail = useMemo(
     () => (detailId ? instances.find((i) => i.id === detailId) ?? null : null),
@@ -85,7 +80,7 @@ export default function TaskPage() {
     setEditorOpen(true)
   }
 
-  /** 固定任务：家长在里面自己维护，孩子这里只读展示一下 */
+  /** 新增/编辑任务是家长动作，孩子这里要过密码 */
   const needsPin = !!settings.parentPin && settings.protectParentActions !== false
 
   return (
@@ -185,27 +180,6 @@ export default function TaskPage() {
         </Section>
       )}
 
-      {/* ================= 固定任务（家规） ================= */}
-      {fixedTasks.length > 0 && (
-        <Section title="固定任务" emoji="📌" count={fixedTasks.length}>
-          <p className="-mt-1 mb-2 px-1 text-xs font-bold text-ink-500">
-            这些是每天/每周都要做的家规，爸爸妈妈帮你排好的 📌
-          </p>
-          <div className="space-y-2">
-            {fixedTasks.map((t) => (
-              <FixedTaskChip
-                key={t.id}
-                task={t}
-                onEdit={() => {
-                  setEditTask(t)
-                  setEditorOpen(true)
-                }}
-              />
-            ))}
-          </div>
-        </Section>
-      )}
-
       {/* 孩子点到「加任务」时的软性提示：不弹密码盘，免得孩子乱试。
           套 Portal —— 理由同 Sheet：页面外壳的 anim-fade-in 是层叠上下文。 */}
       {fabNudge && (
@@ -223,7 +197,7 @@ export default function TaskPage() {
                 这里要爸爸妈妈来弄
               </p>
               <p className="mt-1 text-center text-sm font-bold text-ink-600">
-                任务和固定任务都是爸爸妈妈设的。想加什么，去跟爸爸妈妈说一声吧 😊
+                任务都是爸爸妈妈设的。想加什么，去跟爸爸妈妈说一声吧 😊
               </p>
               <div className="mt-4 flex gap-2">
                 <Btn tone="white" size="md" full onClick={() => setFabNudge(false)}>
@@ -635,39 +609,6 @@ function TaskCard({
 }
 
 /* ============================================================
-   固定任务小条（家规）
-   ------------------------------------------------------------
-   不做成大卡片：固定任务通常有好几条，排成清单更好扫。
-   编辑按钮交给家长（TaskEditor 内部再拦一次密码）。
-   ============================================================ */
-
-function FixedTaskChip({ task, onEdit }: { task: Task; onEdit: () => void }) {
-  const cat = categoryOf(task.category)
-  return (
-    <div className="flex items-center gap-2.5 rounded-2xl border border-ink-100 bg-white px-3 py-2.5">
-      <span className={clsx('grid size-9 shrink-0 place-items-center rounded-xl text-lg', cat.soft)}>
-        {cat.emoji}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-display text-sm font-extrabold text-ink-900">{task.title}</p>
-        <p className="text-[11px] font-bold text-ink-500">
-          {CYCLE_HINT[task.cycle]} · 每次 {humanizeMinutes(task.plannedMinutes)} · 🪙{' '}
-          {task.basePoints} 分
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={onEdit}
-        aria-label="编辑固定任务"
-        className="min-h-[36px] shrink-0 rounded-pill border border-ink-100 bg-paper-2 px-2.5 text-[11px] font-bold text-ink-500"
-      >
-        ✏️ 改
-      </button>
-    </div>
-  )
-}
-
-/* ============================================================
    长期任务卡（周 / 月 / 年）
    ============================================================ */
 
@@ -1053,7 +994,7 @@ function CheckInCard({
           </span>
           <div className="min-w-0 flex-1">
             {/* 编辑入口。签到卡原来**没有**这个按钮，也没有接 onEdit ——
-                于是签到任务从界面上根本改不了（长期任务卡 / 固定任务条都有）。
+                于是签到任务从界面上根本改不了（长期任务卡一直都有）。
                 编辑器和 store 一直是支持的，缺的只是这个入口。
                 尺寸同 TaskCard / PeriodCard 的编辑按钮：44×44 触控下限。 */}
             <div className="flex items-center gap-1.5">

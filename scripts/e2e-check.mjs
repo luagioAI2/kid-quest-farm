@@ -808,6 +808,121 @@ try {
     )
     check('改「一共要签到几天」5 → 7 存得下去', typed7 && after7 === 7, `卡上写 / ${after7} 天（期望 7）`)
     check('再改回 5 也存得下去（复原，不影响后面的用例）', typed5 && after5 === 5, `卡上写 / ${after5} 天（期望 5）`)
+
+    /* ---------- 「固定任务」开关已移除（2026-10-09，家长决定） ----------
+       反方向断言（「界面上搜不到 X」）**单独用是弱的**：探针找不到东西，
+       也可能只是因为弹层压根没开。所以**在同一次读取里配一个正向对照** ——
+       同一个编辑器里「开启签到模式」必须还在，证明这次真的读到了弹层。 */
+    await openEditorOfCard()
+    const reopenedGate = await page.evaluate(
+      () => !!document.querySelector('[role="dialog"]'),
+    )
+    if (reopenedGate) await passPin()
+    const reopened = await page
+      .waitForFunction(
+        () =>
+          [...document.querySelectorAll('button')].some(
+            (x) => x.textContent?.trim() === '✅ 保存修改',
+          ),
+        { timeout: 6000 },
+      )
+      .then(() => true, () => false)
+    const editorText = await page.evaluate(
+      () => document.querySelector('[role="dialog"]')?.innerText ?? '',
+    )
+    check(
+      '编辑器里已没有「这是家里的固定任务」开关（2026-10-09 移除）',
+      reopened && !/这是家里的固定任务/.test(editorText),
+      reopened ? '' : '编辑器没打开，这条断言不成立',
+    )
+    check(
+      '正向对照：同一个编辑器里「开启签到模式」还在（证明探针读到了弹层）',
+      reopened && /开启签到模式/.test(editorText),
+      `弹层文字 ${editorText.length} 字`,
+    )
+
+    // 关掉编辑器，别把弹层留给后面的用例
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('[role="dialog"] button')].find(
+        (x) => x.textContent?.trim() === '先不弄',
+      )
+      b?.click()
+    })
+    await sleep(600)
+
+    /* ---------- 「固定任务」区块是不是真的没了 ----------
+       ⚠️ 直接 `!/固定任务/.test(document.body.innerText)` 是**假绿**：
+       全新安装里一个 fixed 任务都没有（种子里 fixed 数为 0），
+       而那个区块有 `fixedTasks.length > 0` 守卫，压根不渲染 ——
+       于是这条断言在**功能还在**的版本上照样通过。
+       实测过：把源码回退到移除之前，它仍然绿（同批的开关断言已经红了）。
+       所以必须先**造一个 fixed 任务出来**，让那段渲染代码有机会跑。
+       选 weekly：它不靠实例，直接进「长期任务」，
+       于是「任务确实渲染了」可以当**正向对照**，证明探针没瞎。
+       （升级上来的老库里本来就有 fixed: true 的任务，所以这条路是真实的。） */
+    await page.evaluate(async () => {
+      const req = indexedDB.open('kid-quest-farm')
+      const idb = await new Promise((res, rej) => {
+        req.onsuccess = () => res(req.result)
+        req.onerror = () => rej(req.error)
+      })
+      const tx = idb.transaction('tasks', 'readwrite')
+      tx.objectStore('tasks').put({
+        id: 'tk_probe_fixed_section',
+        // 标题里**不能**含「固定任务」四个字，否则自己把自己搜出来
+        title: '探针-每周倒垃圾',
+        category: 'chore',
+        cycle: 'weekly',
+        plannedMinutes: 10,
+        basePoints: 5,
+        allowOvertime: false,
+        allowLateNoPenalty: true,
+        qualityRated: false,
+        fixed: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+      await new Promise((res) => {
+        tx.oncomplete = res
+      })
+      idb.close()
+    })
+    await page.reload({ waitUntil: 'networkidle2' })
+    await page
+      .waitForFunction(() => !!document.querySelector('nav button'), { timeout: 20000 })
+      .catch(() => {})
+    await sleep(1200)
+
+    const injectedText = await page.evaluate(() => document.body.innerText)
+    check(
+      '正向对照：注入的 fixed 任务确实渲染出来了（探针没瞎）',
+      /探针-每周倒垃圾/.test(injectedText),
+      /探针-每周倒垃圾/.test(injectedText) ? '' : '任务没渲染 → 下面那条断言不成立',
+    )
+    check(
+      '孩子端已没有「固定任务」区块（即使库里存在 fixed: true 的任务）',
+      !/固定任务/.test(injectedText),
+      /固定任务/.test(injectedText) ? '页面上还能搜到「固定任务」' : '',
+    )
+
+    // 清掉探针任务，别影响后面的用例
+    await page.evaluate(async () => {
+      const req = indexedDB.open('kid-quest-farm')
+      const idb = await new Promise((res) => {
+        req.onsuccess = () => res(req.result)
+      })
+      const tx = idb.transaction('tasks', 'readwrite')
+      tx.objectStore('tasks').delete('tk_probe_fixed_section')
+      await new Promise((res) => {
+        tx.oncomplete = res
+      })
+      idb.close()
+    })
+    await page.reload({ waitUntil: 'networkidle2' })
+    await page
+      .waitForFunction(() => !!document.querySelector('nav button'), { timeout: 20000 })
+      .catch(() => {})
+    await sleep(1200)
   }
 
   /* ---------- 5. 农场：种植流程 ---------- */

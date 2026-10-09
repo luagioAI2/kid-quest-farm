@@ -24,8 +24,7 @@ import {
    1) 表单字段全部是低龄友好的大控件
    2) 三个「规则开关」直接映射结算引擎，用大白话解释
    3) 规则预览调用 settle() 真实计算，绝不手写数字
-   4) 「固定任务」= 长期不变的家规（刷牙、练琴…），由家长维护；
-      新增/编辑本身就是家长动作，所以整层先用密码挡住，
+   4) 新增/编辑本身就是家长动作，所以整层先用密码挡住，
       孩子点进来只会看到一把锁。
    ============================================================ */
 
@@ -61,7 +60,6 @@ export function TaskEditor({
 
   const [checkInEnabled, setCheckInEnabled] = useState(false)
   const [checkInTargetCount, setCheckInTargetCount] = useState(5)
-  const [fixed, setFixed] = useState(false)
   const [rewardItemIds, setRewardItemIds] = useState<string[]>([])
   const [err, setErr] = useState<string | null>(null)
 
@@ -90,7 +88,6 @@ export function TaskEditor({
       setQualityRated(task.qualityRated)
       setCheckInEnabled(!!task.checkInEnabled)
       setCheckInTargetCount(task.checkInTargetCount ?? 5)
-      setFixed(!!task.fixed)
       setRewardItemIds(task.rewardItemIds ?? [])
     } else {
       setTitle('')
@@ -104,7 +101,6 @@ export function TaskEditor({
       setQualityRated(false)
       setCheckInEnabled(false)
       setCheckInTargetCount(5)
-      setFixed(false)
       setRewardItemIds([])
     }
   }, [open, task])
@@ -184,7 +180,6 @@ export function TaskEditor({
       rewardItemIds: rewardItemIds.length > 0 ? rewardItemIds : undefined,
       checkInEnabled,
       checkInTargetCount: checkInEnabled || cycle !== 'daily' ? checkInTargetCount : undefined,
-      fixed,
     }
     if (editing && task) {
       await updateTask(task.id, input as Partial<Task>)
@@ -211,7 +206,7 @@ export function TaskEditor({
           <div className="anim-fade-in surface border border-sun-300 bg-sun-50 p-4">
             <ParentPinPanel
               title="请爸爸妈妈来一下"
-              hint="改任务、加固定任务，先输一下密码"
+              hint="改任务、加任务，先输一下密码"
               onPass={() => setUnlocked(true)}
               onCancel={onClose}
             />
@@ -509,24 +504,13 @@ export function TaskEditor({
           </Field>
         )}
 
-        {/* ---------- 固定任务 ---------- */}
-        <div className="space-y-3">
-          <p className="font-display text-sm font-extrabold text-ink-900">固定任务</p>
-          <SwitchRow
-            emoji="📌"
-            title="这是家里的固定任务"
-            on={fixed}
-            onChange={setFixed}
-            onText="长期不变的家规（刷牙、练琴、收拾玩具…），会固定排在今天的列表里"
-            offText="普通任务，做完就可以不管了"
-          />
-          {fixed && (
-            <p className="anim-fade-in rounded-2xl border border-sun-300 bg-sun-50 px-3 py-2 text-xs font-bold leading-snug text-ink-700">
-              📌 固定任务建议选「每天 / 每周」这种周期，孩子打开 App 就能看到，
-              不用你每天手动加一遍。
-            </p>
-          )}
-        </div>
+        {/* 「固定任务」开关已移除（2026-10-09，家长决定）。
+            它当年只做了一件事：让同一个任务在「固定任务」区块多出一份
+            **只读**副本，原件照旧留在今日任务/长期任务里，而且那条副本
+            没有完成入口。全仓读它的只有 TaskPage 的一个 filter，
+            选择器一个都没排除它 —— 也就是说勾不勾，行为上没区别，
+            只是页面上多出一条看着像另一个任务的小条。
+            孩子看到的「任务在哪」完全由 `cycle` 决定，这就够了。 */}
 
         {err && (
           <p className="anim-bounce-in rounded-2xl border border-berry-300 bg-berry-100 px-4 py-3 text-sm font-extrabold text-berry-500">

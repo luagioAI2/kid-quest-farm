@@ -56,11 +56,6 @@ describe('种子任务：每日任务', () => {
     expect(chore?.plannedMinutes).toBe(15)
   })
 
-  it('每日任务都不是 fixed —— 它们走「今日任务」，不占用「固定任务」区块', () => {
-    // 家长明确说过：这些是普通每日任务，不是 📌 固定任务（家规）
-    expect(daily.every((t) => !t.fixed)).toBe(true)
-  })
-
   it('每日任务都允许超时，但拖太久会扣分（宽容超时）', () => {
     for (const t of daily) {
       expect(t.allowOvertime, t.title).toBe(true)

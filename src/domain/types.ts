@@ -107,12 +107,6 @@ export interface Task {
   /** 是否归档 */
   archived?: boolean
 
-  /**
-   * 固定任务：由家长建立、每天固定要做的常规任务。
-   * 孩子端不能编辑/删除，只有家长（密码）能新增和修改。
-   */
-  fixed?: boolean
-
   createdAt: number
   updatedAt: number
 }

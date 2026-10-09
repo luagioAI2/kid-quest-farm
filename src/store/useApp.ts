@@ -326,8 +326,6 @@ export interface NewTaskInput {
   checkInEnabled?: boolean
   checkInTargetCount?: number
   remindAt?: string
-  /** 固定任务：家长建立、孩子不能改 */
-  fixed?: boolean
 }
 
 export interface NewRedeemInput {
