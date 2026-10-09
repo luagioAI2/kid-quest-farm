@@ -225,6 +225,16 @@ interface AppState {
   claimCheckInTier: (taskId: string, days: number) => Promise<number>
   tiersFor: (task: Task) => CheckInTier[]
   checkInDays: (taskId: string) => string[]
+  /**
+   * 当前周期已经领过的阶梯天数。
+   *
+   * ⚠️ 必须和 `checkInDays` **读同一行**。卡上原来是
+   * `checkInProgress.find(p => p.taskId === id)` —— 不带周期键，
+   * 于是第二周读到的是**第一周那一行**的 `claimedTiers`，
+   * 阶梯会全部显示成「已拿」、孩子没法领。`days` 用的是带周期键的查询，
+   * 两个数来自不同的行，正是「同一个事实存两份」。
+   */
+  checkInClaimedTiers: (taskId: string) => number[]
 
   /* ---- 周期任务（周/月/年） ---- */
   submitPeriodTask: (
@@ -811,6 +821,23 @@ async function ensureCheckInProgress(
 }
 
 /**
+ * 取某个签到任务**当前周期**的进度行。
+ *
+ * `checkInDays` 和 `checkInClaimedTiers` 都必须从这里取 ——
+ * 一个带周期键、一个不带，界面上的「已坚持 N 天」和阶梯状态就会互相矛盾
+ * （第二周会读到第一周的 `claimedTiers`，阶梯全部显示「已拿」）。
+ */
+function currentCheckInRow(
+  get: () => Pick<AppState, 'tasks' | 'checkInProgress' | 'settings'>,
+  taskId: string,
+): CheckInProgress | undefined {
+  const { tasks, checkInProgress, settings } = get()
+  const cycle = tasks.find((t) => t.id === taskId)?.cycle ?? 'daily'
+  const key = periodKeyFor(cycle, Date.now(), settings.dayStartHour)
+  return checkInProgress.find((p) => p.taskId === taskId && p.periodKey === key)
+}
+
+/**
  * 真正把一次签到「兑现」：记日期 → 写签到记录 → 发积分 → 自动结算阶梯奖励。
  *
  * 幂等：日期已在 `days` 里就直接返回，避免重复发分。
@@ -1288,15 +1315,9 @@ export const useApp = create<AppState>((set, get) => ({
     return defaultTiers(task.cycle, target)
   },
 
-  checkInDays: (taskId) => {
-    const { checkInProgress, settings } = get()
-    const key = periodKeyFor(
-      get().tasks.find((t) => t.id === taskId)?.cycle ?? 'daily',
-      Date.now(),
-      settings.dayStartHour,
-    )
-    return checkInProgress.find((p) => p.taskId === taskId && p.periodKey === key)?.days ?? []
-  },
+  checkInDays: (taskId) => currentCheckInRow(get, taskId)?.days ?? [],
+
+  checkInClaimedTiers: (taskId) => currentCheckInRow(get, taskId)?.claimedTiers ?? [],
 
   /**
    * 宝贝点了「今天签到」。

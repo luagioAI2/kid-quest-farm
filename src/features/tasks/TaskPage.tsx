@@ -3,9 +3,9 @@ import clsx from 'clsx'
 import { Portal } from '@/components/Portal'
 import { humanizeMinutes, CYCLE_HINT } from '@/domain/time'
 import {
+  checkInPayout,
   checkInStreak,
   checkInStreakBonus,
-  checkInStreakIfSigned,
   claimableTiers,
 } from '@/domain/recurrence'
 import { previewPoints } from '@/domain/settlement'
@@ -965,16 +965,15 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
   const claimCheckInTier = useApp((s) => s.claimCheckInTier)
   const tiersFor = useApp((s) => s.tiersFor)
   const checkInDays = useApp((s) => s.checkInDays)
+  const checkInClaimedTiers = useApp((s) => s.checkInClaimedTiers)
   const checkInProgress = useApp((s) => s.checkInProgress)
   const [busy, setBusy] = useState(false)
 
   const days = checkInDays(task.id)
   const tiers = tiersFor(task)
-  // 订阅 progress，保证领取后阶梯状态刷新
-  const claimed = useMemo(() => {
-    const p = checkInProgress.find((x) => x.taskId === task.id)
-    return p?.claimedTiers ?? []
-  }, [checkInProgress, task.id])
+  // 和 `days` 读**同一行**（见 store 里 checkInClaimedTiers 的注释）。
+  // 这里仍然订阅 checkInProgress，保证领取 / 签到后卡片会重渲染。
+  const claimed = checkInClaimedTiers(task.id)
 
   const cat = categoryOf(task.category)
   const signedToday = days.includes(todayKey)
@@ -999,9 +998,13 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
      连续第 N 天 = 基础分 + (N-1)，断签从基础分重来。 */
   const basePoints = Math.max(0, Math.round(task.basePoints))
   const streakNow = signedToday ? checkInStreak(days, todayKey) : 0
-  /** 今天还没签时，签下去会是连续第几天 */
-  const streakNext = checkInStreakIfSigned(days, todayKey)
-  const bonusNext = checkInStreakBonus(streakNext, basePoints)
+  /* 「今天签下去**实际到手多少**」——走和发分同一个函数 `checkInPayout`。
+     原来这里只写 `basePoints + bonusNext`，漏了「今天正好落在阶梯日」那部分：
+     全新账号第 1 天卡片写 5，点下去到账 7（第 1 天那档 +2）。
+     和家长审核卡是同一个 bug —— 展示与发放必须共用一个事实源。
+     ⚠️ 只在「今天还没签」时算：`checkInPayout` 会把 date 再并进 days 一次，
+        已经签过时 days 里已经有今天，长度会多一天、阶梯会算错。 */
+  const payout = signedToday ? null : checkInPayout(task, days, claimed, todayKey)
 
   // 展示格子：本周 / 本月
   const cells = useMemo(() => buildCells(task.cycle, todayKey, days), [task.cycle, todayKey, days])
@@ -1084,7 +1087,7 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
           )}
         </div>
 
-        {/* 连击：连着来每天多 +1，断了从基础分重来 */}
+        {/* 连击 + 今天能拿多少：连着来每天多 +1，断了从基础分重来 */}
         {basePoints > 0 && (
           <p className="mt-2.5 text-[11px] font-bold text-ink-600">
             {signedToday ? (
@@ -1099,16 +1102,21 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
             ) : (
               <>
                 今天签到可得{' '}
-                <span className="tnum font-extrabold text-ink-900">{basePoints + bonusNext}</span> 分
-                {bonusNext > 0 ? (
+                <span className="tnum font-extrabold text-ink-900">{payout?.total ?? 0}</span> 分
+                {payout && payout.streakBonus + payout.tierPoints > 0 ? (
                   <span className="text-grass-700">
-                    （基础 {basePoints} + 连击 {bonusNext}）
+                    （基础 {payout.base}
+                    {payout.streakBonus > 0 ? ` + 连击 ${payout.streakBonus}` : ''}
+                    {payout.tierPoints > 0 ? ` + 阶梯 ${payout.tierPoints}` : ''}）
                   </span>
-                ) : (
-                  <span className="text-ink-400">（连着来每天多 +1）</span>
-                )}
+                ) : null}
               </>
             )}
+          </p>
+        )}
+        {basePoints > 0 && !signedToday && (
+          <p className="mt-0.5 text-[11px] font-bold text-ink-400">
+            连着来每天多 +1（最多 +{basePoints}）
           </p>
         )}
 

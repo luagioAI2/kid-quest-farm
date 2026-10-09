@@ -402,6 +402,70 @@ describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
   })
 })
 
+describe('签到：days 与 claimedTiers 必须读**同一行**', () => {
+  /* 老写法是 `checkInProgress.find(p => p.taskId === id)` —— **不带周期键**。
+     于是第二周读到的是第一周那一行的 claimedTiers，阶梯全部显示「已拿」、
+     孩子领不到；而 `days` 走的是带周期键的查询。两个数来自不同的行。 */
+  it('跨周之后 claimedTiers 读本周那一行，不是历史第一行', async () => {
+    const task = checkInTask()
+    const nowKey = periodKeyFor(
+      task.cycle,
+      Date.now(),
+      useApp.getState().settings.dayStartHour,
+    )
+
+    // 历史那一行：阶梯全领过。id 故意排在前面 —— 老写法（find 第一行）
+    // 会命中它，从而暴露问题；id 排后面的话测试**两条实现都绿**，等于没测。
+    await db.checkInProgress.put({
+      id: `cp_0_old_${task.id}`,
+      taskId: task.id,
+      periodKey: '2026-W01',
+      days: ['2026-01-01'],
+      pendingDays: [],
+      claimedTiers: [1, 3, 5],
+      updatedAt: 1,
+    })
+    // 本周那一行：一天没签、一档没领
+    await db.checkInProgress.put({
+      id: `cp_9_now_${task.id}`,
+      taskId: task.id,
+      periodKey: nowKey,
+      days: [],
+      pendingDays: [],
+      claimedTiers: [],
+      updatedAt: Date.now(),
+    })
+    await useApp.getState().refresh()
+
+    expect(useApp.getState().checkInDays(task.id)).toEqual([])
+    expect(
+      useApp.getState().checkInClaimedTiers(task.id),
+      '读到了历史那一行 → 本周阶梯会全部显示「已拿」',
+    ).toEqual([])
+  })
+
+  it('本周那一行领过之后，claimedTiers 跟着变', async () => {
+    const task = checkInTask()
+    const nowKey = periodKeyFor(
+      task.cycle,
+      Date.now(),
+      useApp.getState().settings.dayStartHour,
+    )
+    await db.checkInProgress.put({
+      id: `cp_now_${task.id}`,
+      taskId: task.id,
+      periodKey: nowKey,
+      days: ['2026-09-28', '2026-09-29'],
+      pendingDays: [],
+      claimedTiers: [1],
+      updatedAt: Date.now(),
+    })
+    await useApp.getState().refresh()
+    expect(useApp.getState().checkInClaimedTiers(task.id)).toEqual([1])
+    expect(useApp.getState().checkInDays(task.id)).toEqual(['2026-09-28', '2026-09-29'])
+  })
+})
+
 describe('长期任务：家长审核', () => {
   it('提交后进入待审，一分不发', async () => {
     const task = periodTask()

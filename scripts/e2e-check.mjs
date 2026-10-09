@@ -620,10 +620,18 @@ try {
   })
   check('新增的「学习日复述每天学习内容」出现在坚持签到里', !!checkInCard)
   if (checkInCard) {
+    /* ⚠️ 这里原来断言的是「今天签到可得 **5** 分」—— 那个数**是错的**，
+       而且这条断言在替 bug 站岗。实际到手是 base 5 + 第 1 天那档阶梯 2 = 7。
+       卡片的预告和发分现在共用 `checkInPayout`，所以这里读到的就是真数。 */
     check(
-      '签到卡预告今天能拿多少分（全新账号 = 第 1 天 = 基础 5 分）',
-      /今天签到可得\s*5\s*分/.test(checkInCard.text),
-      checkInCard.text.slice(0, 70),
+      '签到卡预告今天能拿多少分（全新账号 = 第 1 天 = 基础 5 + 阶梯 2 = 7）',
+      /今天签到可得\s*7\s*分/.test(checkInCard.text),
+      checkInCard.text.slice(0, 90),
+    )
+    check(
+      '预告下面写清了构成（基础 5 + 阶梯 2），不是一个光秃秃的数',
+      /基础\s*5[\s\S]{0,20}阶梯\s*2/.test(checkInCard.text),
+      '',
     )
     check(
       '卡片上说明了连击规则（连着来每天多 +1）',
@@ -1069,7 +1077,9 @@ try {
   await page.evaluate(async () => {
     const s = window.__kqf__.getState()
     await s.updateSettings({ parentReviewEnabled: true })
-    const t = s.tasks.find((x) => x.checkInEnabled)
+    // 用 4c 里读过的**同一个任务** —— 这样「孩子端预告 7 → 家长端预告 7 → 实发 7」
+    // 说的是同一个对象，不是三个碰巧都等于 7 的不同任务。
+    const t = s.tasks.find((x) => x.title === '学习日复述每天学习内容')
     await s.doCheckIn(t.id) // 挂进待审，不发分
   })
   await new Promise((r) => setTimeout(r, 900))
