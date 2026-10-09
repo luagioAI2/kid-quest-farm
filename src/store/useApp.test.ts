@@ -960,6 +960,117 @@ describe('兑换：丰收币优先，可混合', () => {
 })
 
 /* ============================================================
+   道具掉落总开关（2026-09-30）
+   ------------------------------------------------------------
+   家长原话：「我需要在新增任务/编辑任务这里有个掉落，只要家长在设置里
+   设置了掉落，才会有道具掉落，默认是没有掉落，因为已经有积分奖励了。」
+
+   改之前的 bug：开关叫 `taskDropsEnabled`、默认 **true**，而且**只管编辑界面**
+   —— `settleNow` 无条件发道具。家长把开关关掉，编辑页那一块是消失了，
+   但已经配好掉落的旧任务**照旧掉**。他以为自己关掉了，其实没有。
+   界面上「看不到」不等于「不会发生」。
+   ============================================================ */
+describe('道具掉落总开关', () => {
+  const ITEM = 'sticker'
+
+  function stickerCount(): number {
+    return useApp.getState().inventory.find((s) => s.itemId === ITEM)?.count ?? 0
+  }
+
+  /** 造一个配了掉落的单次任务，做完并结算 */
+  async function completeTaskWithDrop(): Promise<void> {
+    const task = await useApp.getState().addTask({
+      title: '__drop_probe',
+      category: 'study',
+      cycle: 'once',
+      plannedMinutes: 10,
+      basePoints: 10,
+      allowOvertime: false,
+      allowLateNoPenalty: true,
+      qualityRated: false,
+      rewardItemIds: [ITEM],
+    })
+    const inst = useApp
+      .getState()
+      .instances.find((i) => i.taskId === task.id && i.status === 'pending')
+    if (!inst) throw new Error('没生成实例')
+    await useApp.getState().submitInstance(inst.id, 10, undefined)
+    await useApp.getState().reviewInstance(inst.id, undefined, 10)
+  }
+
+  it('默认是**关**的（老字段默认是开，所以换了键名）', () => {
+    expect(DEFAULT_SETTINGS.itemDropsEnabled).toBe(false)
+  })
+
+  it('关着的时候：任务配了掉落也不发（这就是改之前漏掉的那一步）', async () => {
+    expect(useApp.getState().settings.itemDropsEnabled).toBe(false)
+    await completeTaskWithDrop()
+    expect(stickerCount(), '开关关着还掉了贴纸').toBe(0)
+  })
+
+  it('开着的时候：正常掉落（对照组 —— 否则上面那条可能只是因为根本没配）', async () => {
+    await useApp.getState().updateSettings({ itemDropsEnabled: true })
+    await completeTaskWithDrop()
+    expect(stickerCount()).toBe(1)
+  })
+
+  it('签到阶梯里的道具也归这个开关管', async () => {
+    const task = checkInTask()
+    // 第 5 天那档带 sticker。把前四天先签掉、claimedTiers 留空，
+    // 让第 5 天真的触发那一档。
+    const W = '2026-W41'
+    const seed = async (claimed: number[]) => {
+      await db.checkInProgress.put({
+        id: `cp_${task.id}_${W}`,
+        taskId: task.id,
+        periodKey: W,
+        days: ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08'],
+        pendingDays: ['2026-10-09'],
+        claimedTiers: claimed,
+        updatedAt: Date.now(),
+      })
+      await useApp.getState().refresh()
+    }
+
+    // 前两档先标成已领 —— 这样第 5 天**只**触发带 sticker 的那一档，
+    // 断言才指向「贴纸」而不是「三档一起发」（claimed 留空时三档全触发，
+    // 合计 2+6+12=20，到账 29，看着也对但测不出是哪个档给了道具）。
+    await seed([1, 3])
+    const gainedOff = await useApp.getState().approveCheckIn(task.id, W, '2026-10-09')
+    expect(gainedOff, '第 5 天该拿到基础 5 + 连击 4 + 第 5 天那档 12').toBe(21)
+    expect(stickerCount(), '开关关着，阶梯不该掉贴纸').toBe(0)
+
+    // 开着再来一次（换一周，避免和上一周的状态纠缠）
+    await useApp.getState().updateSettings({ itemDropsEnabled: true })
+    const W2 = '2026-W42'
+    await db.checkInProgress.put({
+      id: `cp_${task.id}_${W2}`,
+      taskId: task.id,
+      periodKey: W2,
+      days: ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'],
+      pendingDays: ['2026-10-16'],
+      claimedTiers: [],
+      updatedAt: Date.now(),
+    })
+    await useApp.getState().refresh()
+    await useApp.getState().approveCheckIn(task.id, W2, '2026-10-16')
+    expect(stickerCount(), '开关开着，第 5 天该掉一张贴纸').toBe(1)
+  })
+
+  it('关掉之后，之前配好的旧任务也停（不是只管编辑界面）', async () => {
+    // 先开着掉一个
+    await useApp.getState().updateSettings({ itemDropsEnabled: true })
+    await completeTaskWithDrop()
+    expect(stickerCount()).toBe(1)
+
+    // 关掉，再做一个同样的任务
+    await useApp.getState().updateSettings({ itemDropsEnabled: false })
+    await completeTaskWithDrop()
+    expect(stickerCount(), '关掉之后旧任务还在掉 —— 这正是改之前的 bug').toBe(1)
+  })
+})
+
+/* ============================================================
    首次启动的任务清单（家长指定的规格）
    ------------------------------------------------------------
    `domain/seedTasks.test.ts` 只证明「种子里写了什么」；

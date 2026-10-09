@@ -354,8 +354,16 @@ try {
     `承诺 ${promised} 个，实卖 ${sold} 个，到手 ${after.balance} 丰收币`,
   )
 
-  /* ============ 2. 任务掉落开关 ============ */
-  console.log('\n【2】「设置 → 任务掉落」开关')
+  /* ============ 2. 道具掉落开关 ============
+     2026-09-30 家长要求：「只要家长在设置里设置了掉落，才会有道具掉落，
+     默认是没有掉落，因为已经有积分奖励了。」
+
+     改之前的 bug：开关叫 `taskDropsEnabled`、默认 **true**，而且**只管编辑界面**
+     —— `settleNow` 无条件发道具。家长关掉之后编辑页那一块确实消失了，
+     但已经配好掉落的旧任务**照旧掉**。他以为自己关掉了，其实没有。
+     所以这里**必须验到结算**，只验「编辑页有没有那一块」是验不出这个 bug 的
+     —— 那条断言在旧实现下也是绿的。 */
+  console.log('\n【2】「设置 → 道具掉落」开关（默认关 + 结算处真的判）')
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === '关闭')
     b?.click()
@@ -365,17 +373,21 @@ try {
   await gotoTab('规则')
 
   const toggleInfo = await page.evaluate(() => {
-    const btn = document.querySelector('button[aria-label="任务掉落"]')
+    const btn = document.querySelector('button[aria-label="道具掉落"]')
     return {
       found: !!btn,
       ariaChecked: btn?.getAttribute('aria-checked') ?? null,
-      text: (btn?.closest('section')?.innerText ?? '').replace(/\s+/g, ' ').slice(0, 70),
+      text: (btn?.closest('section')?.innerText ?? '').replace(/\s+/g, ' ').slice(0, 80),
     }
   })
-  check('设置里出现了「任务掉落」开关', toggleInfo.found, toggleInfo.text || '')
-  check('开关默认是「开」', toggleInfo.ariaChecked === 'true', `aria-checked=${toggleInfo.ariaChecked}`)
+  check('设置里出现了「道具掉落」开关', toggleInfo.found, toggleInfo.text || '')
+  check(
+    '开关**默认是关**的（已经有积分奖励了）',
+    toggleInfo.ariaChecked === 'false',
+    `aria-checked=${toggleInfo.ariaChecked}`,
+  )
 
-  // 打开任务编辑页，确认默认（开着）能看到掉落选项
+  // 打开任务编辑页，确认默认（关着）看不到掉落选项
   await closeSettings()
   const openEditor = async () => {
     await page.evaluate(() => {
@@ -419,31 +431,71 @@ try {
   await openEditor()
   const editorOpen = await unlockEditor()
   check('任务编辑页打开了（不是卡在密码锁上）', editorOpen === true, `editorOpen=${editorOpen}`)
-  const hasDropsOn = await editorHasDrops()
-  check('开关为「开」时，任务编辑页有「完成后掉落」', hasDropsOn === true, `hasDrops=${hasDropsOn}`)
+  const hasDropsOff = await editorHasDrops()
+  check('默认关着时，任务编辑页**不显示**「完成后掉落」', hasDropsOff === false, `hasDrops=${hasDropsOff}`)
   await closeEditor()
 
-  // 关掉开关
+  // 打开开关
   await openSettings()
   await gotoTab('规则')
   await page.evaluate(() => {
-    document.querySelector('button[aria-label="任务掉落"]')?.click()
+    document.querySelector('button[aria-label="道具掉落"]')?.click()
   })
   await sleep(900)
-  const offNow = await page.evaluate(() => window.__kqf__.getState().settings.taskDropsEnabled)
-  check('点开关后设置真的落库了', offNow === false, `taskDropsEnabled=${offNow}`)
+  const onNow = await page.evaluate(() => window.__kqf__.getState().settings.itemDropsEnabled)
+  check('点开关后设置真的落库了', onNow === true, `itemDropsEnabled=${onNow}`)
   await closeSettings()
 
   await openEditor()
   const editorOpen2 = await unlockEditor()
   check('任务编辑页打开了（对照组）', editorOpen2 === true, `editorOpen=${editorOpen2}`)
-  const hasDropsOff = await editorHasDrops()
-  check('开关为「关」时，任务编辑页**不再显示**「完成后掉落」', hasDropsOff === false, `hasDrops=${hasDropsOff}`)
+  const hasDropsOn = await editorHasDrops()
+  check('开关为「开」时，任务编辑页有「完成后掉落」', hasDropsOn === true, `hasDrops=${hasDropsOn}`)
   await closeEditor()
 
-  // 还原
+  /* ---- 真正的那一条：开关决定**结算**发不发道具 ---- */
+  const dropProbe = await page.evaluate(async () => {
+    const S = () => window.__kqf__.getState()
+    const stickers = () => S().inventory.find((i) => i.itemId === 'sticker')?.count ?? 0
+    /** 造一个配了掉落的单次任务，做完并结算；返回结算后的贴纸数 */
+    const runOnce = async (title) => {
+      const t = await S().addTask({
+        title,
+        category: 'study',
+        cycle: 'once',
+        plannedMinutes: 10,
+        basePoints: 10,
+        allowOvertime: false,
+        allowLateNoPenalty: true,
+        qualityRated: false,
+        rewardItemIds: ['sticker'],
+      })
+      const inst = S().instances.find((i) => i.taskId === t.id && i.status === 'pending')
+      await S().submitInstance(inst.id, 10, undefined)
+      await S().reviewInstance(inst.id, undefined, 10)
+      return stickers()
+    }
+    const before = stickers()
+    await S().updateSettings({ itemDropsEnabled: false })
+    const off = await runOnce('__e2e_drop_off')
+    await S().updateSettings({ itemDropsEnabled: true })
+    const on = await runOnce('__e2e_drop_on')
+    return { before, off, on }
+  })
+  check(
+    '开关关着：配了掉落的旧任务做完也**不掉**道具',
+    dropProbe.off === dropProbe.before,
+    `贴纸 ${dropProbe.before} → ${dropProbe.off}`,
+  )
+  check(
+    '开关开着：同样的任务会掉一张（对照组 —— 证明上面不是因为没配）',
+    dropProbe.on === dropProbe.before + 1,
+    `贴纸 ${dropProbe.off} → ${dropProbe.on}`,
+  )
+
+  // 还原成默认（关）
   await page.evaluate(async () => {
-    await window.__kqf__.getState().updateSettings({ taskDropsEnabled: true })
+    await window.__kqf__.getState().updateSettings({ itemDropsEnabled: false })
   })
   await sleep(400)
 

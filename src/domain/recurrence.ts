@@ -171,7 +171,7 @@ export function buildPeriodUnits(
 
 /**
  * 签到阶梯奖励。
- * 例如「一周练字 5 天」→ 第 3 天给 30 分，第 5 天再给 50 分。
+ * 例如「一周练字 5 天」→ 第 3 天给 6 分，第 5 天再给 12 分。
  */
 export interface CheckInTier {
   days: number
@@ -180,38 +180,60 @@ export interface CheckInTier {
   label: string
 }
 
-export function defaultTiers(cycle: Task['cycle'], target: number): CheckInTier[] {
+/**
+ * 签到阶梯奖励。
+ *
+ * 口径（2026-09-30 起，家长定）：
+ *   **每完成一次，阶梯合计给 `0.8 × 基础分`**，按 1:3:6 摊到三档上。
+ *   于是「每次（单次完成）的积分」不随周期变化 —— 周 / 月 / 年一个价。
+ *   周档 base 5 / target 5 → 合计 20 → **2 / 6 / 12**
+ *   （2026-09-09 家长把原来的 10 / 30 / 60 压下来的结果：结构不动，只压数字）。
+ *
+ * ⚠️ 这个公式需要 `basePoints`。老签名只有 `(cycle, target)`，
+ *    月 / 年档只能写死绝对数（`50/150/400`、`300/1500/5000`）——
+ *    和基础分彻底脱钩：一个「每月读一本书」（base 15）掉 400 分，
+ *    是单次基础分的 25 倍，比正课还赚。
+ *    家长 2026-09-30 的要求就是「月年**每次（单次完成）**的积分也是一样的」。
+ *
+ * ⚠️ 周档原来写死 `2/6/12`、不看基础分。现在统一走公式：base 5 / target 5
+ *    仍然**精确等于** 2 / 6 / 12（`0.8×5×5/10 = 2`），所以周档行为没变；
+ *    基础分改成别的值时阶梯才会跟着按比例走 —— 那才是「一样的」。
+ */
+export function defaultTiers(
+  cycle: Task['cycle'],
+  target: number,
+  basePoints = 5,
+): CheckInTier[] {
   const base = Math.max(1, target)
+  /* 1:3:6 三档合计 10 份；每份 = 0.8×基础分×目标天数 / 10。
+     至少 1 分，否则小目标 + 小基础分会算出 0 分档，界面上会出现「+0」。 */
+  const unit = Math.max(1, Math.round((0.8 * Math.max(0, basePoints) * base) / 10))
+  const pts = (n: number) => unit * n
+
   if (cycle === 'weekly') {
-    /* 2026-10-09 家长要求：「尽可能按之前的设计，只是之前的奖励太多了。」
-       结构（第 1 / 3 / 5 天三档）和 1:3:6 的比例都保留，只把数字压小：
-       原来一周光阶梯就有 100 分，是基础分（20）的 5 倍 —— 签到比正课还赚。
-       现在 2 / 6 / 12 合计 20 分，**比基础分（25）还少**，
-       签到的收入回到「基础分为主、阶梯是甜头」的结构。
-       加上连击后一周打满 5 天 ≈ 55 分（原来 120 分）。 */
     return dedupeTiers([
-      { days: Math.min(base, 1), points: 2, label: '开了个好头' },
-      { days: Math.min(base, 3), points: 6, label: '坚持 3 天' },
-      { days: base, points: 12, itemId: 'sticker', label: `一周坚持 ${base} 天` },
+      { days: Math.min(base, 1), points: pts(1), label: '开了个好头' },
+      { days: Math.min(base, 3), points: pts(3), label: '坚持 3 天' },
+      { days: base, points: pts(6), itemId: 'sticker', label: `一周坚持 ${base} 天` },
     ])
   }
   if (cycle === 'monthly') {
     return dedupeTiers([
-      { days: Math.min(base, 5), points: 50, label: '坚持 5 天' },
-      { days: Math.min(base, 15), points: 150, itemId: 'sticker', label: '坚持半个月' },
-      { days: base, points: 400, itemId: 'medal', label: `整月坚持 ${base} 天` },
+      { days: Math.min(base, 5), points: pts(1), label: '坚持 5 天' },
+      { days: Math.min(base, 15), points: pts(3), itemId: 'sticker', label: '坚持半个月' },
+      { days: base, points: pts(6), itemId: 'medal', label: `整月坚持 ${base} 天` },
     ])
   }
   if (cycle === 'yearly') {
     return dedupeTiers([
-      { days: Math.min(base, 30), points: 300, label: '坚持 30 天' },
-      { days: Math.min(base, 180), points: 1500, itemId: 'medal', label: '坚持半年' },
-      { days: base, points: 5000, itemId: 'gem', label: `全年坚持 ${base} 天` },
+      { days: Math.min(base, 30), points: pts(1), label: '坚持 30 天' },
+      { days: Math.min(base, 180), points: pts(3), itemId: 'medal', label: '坚持半年' },
+      { days: base, points: pts(6), itemId: 'gem', label: `全年坚持 ${base} 天` },
     ])
   }
   return dedupeTiers([
-    { days: Math.min(base, 3), points: 20, label: '坚持 3 天' },
-    { days: base, points: 50, itemId: 'sticker', label: `坚持 ${base} 天` },
+    { days: Math.min(base, 3), points: pts(3), label: '坚持 3 天' },
+    { days: base, points: pts(6), itemId: 'sticker', label: `坚持 ${base} 天` },
   ])
 }
 
@@ -372,7 +394,7 @@ export function checkInPayout(
   const streak = checkInStreak(nextDays, date)
   const streakBonus = checkInStreakBonus(streak, base)
 
-  const allTiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5)
+  const allTiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5, task.basePoints)
   const tiers = claimableTiers(allTiers, nextDays.length, claimedTiers)
   const tierPoints = tiers.reduce((n, t) => n + t.points, 0)
 

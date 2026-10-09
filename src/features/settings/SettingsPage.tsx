@@ -323,12 +323,12 @@ export default function SettingsPage({
                 />
 
                 <Toggle
-                  label="任务掉落"
-                  hint="开着的时候，新建任务能选「完成后掉落」贴纸、勋章等小道具。关掉后新建任务的界面上不再出现这一项（已经配好掉落的旧任务不受影响）"
+                  label="道具掉落"
+                  hint="开着才会掉贴纸、勋章这些小道具：任务编辑页会出现「完成后掉落」，任务完成和签到阶梯也才会真的发。默认关着 —— 积分奖励不受影响"
                   emoji="🎁"
-                  checked={settings.taskDropsEnabled !== false}
+                  checked={settings.itemDropsEnabled}
                   disabled={!gateOpen}
-                  onChange={(v) => void updateSettings({ taskDropsEnabled: v })}
+                  onChange={(v) => void updateSettings({ itemDropsEnabled: v })}
                 />
 
                 <Toggle

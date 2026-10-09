@@ -56,7 +56,7 @@ describe('签到阶梯 defaultTiers', () => {
     const tiers = defaultTiers('weekly', 2)
     const last = tiers.find((t) => t.days === 2)
     expect(last).toBeDefined()
-    // 「一周坚持 2 天」带 sticker 道具，价值高于「坚持 3 天」的 30 分
+    // 「一周坚持 2 天」带 sticker 道具，价值高于「坚持 3 天」那档的 6 分
     expect(last!.itemId).toBe('sticker')
   })
 
@@ -73,6 +73,55 @@ describe('签到阶梯 defaultTiers', () => {
       const days = tiers.map((t) => t.days)
       expect(new Set(days).size).toBe(days.length)
     }
+  })
+
+  /* ---- 2026-09-30：月 / 年档和基础分脱钩（家长：「月年每次（单次完成）的积分也是一样的」）---- */
+
+  it('三档永远是「每份 ×1 / ×3 / ×6」，每份 = 0.8×基础分×目标天数 / 10', () => {
+    for (const [cycle, target, base] of [
+      ['weekly', 5, 5],
+      ['monthly', 20, 15],
+      ['yearly', 60, 50],
+      ['daily', 3, 5],
+    ] as const) {
+      const unit = Math.max(1, Math.round((0.8 * base * target) / 10))
+      for (const t of defaultTiers(cycle, target, base)) {
+        expect(
+          [1, 3, 6],
+          `${cycle}/${target}/base${base} 出现 ${t.points} 分，不是每份 ${unit} 的整数倍`,
+        ).toContain(t.points / unit)
+      }
+    }
+  })
+
+  it('阶梯总量 ≤ 每完成一次 0.8×基础分 —— 月 / 年不再有脱钩的巨款（原来 400 / 5000）', () => {
+    /* 改之前：月档 target=5、base=15 时第三档给 400 分，
+       是单次基础分的 26 倍；年档更是 5000。签到比正课还赚几十倍。 */
+    for (const [cycle, target, base] of [
+      ['weekly', 5, 5],
+      ['monthly', 5, 15],
+      ['monthly', 20, 15],
+      ['yearly', 6, 50],
+      ['yearly', 60, 50],
+      ['daily', 3, 5],
+    ] as const) {
+      const total = defaultTiers(cycle, target, base).reduce((n, t) => n + t.points, 0)
+      const budget = Math.round(0.8 * base * target)
+      expect(total, `${cycle} target=${target} base=${base}：${total} > ${budget}`).toBeLessThanOrEqual(
+        budget,
+      )
+    }
+  })
+
+  it('周档没变：base 5 / target 5 仍然精确是 2 / 6 / 12', () => {
+    // 公式 0.8×5×5/10 = 2，和上一版写死的数字一致 —— 这条钉住「没被顺手改坏」
+    expect(defaultTiers('weekly', 5, 5).map((t) => t.points)).toEqual([2, 6, 12])
+  })
+
+  it('基础分变大时阶梯跟着按比例走（不再是写死的绝对数）', () => {
+    const low = defaultTiers('weekly', 5, 5).reduce((n, t) => n + t.points, 0)
+    const high = defaultTiers('weekly', 5, 20).reduce((n, t) => n + t.points, 0)
+    expect(high).toBe(low * 4) // 基础分 ×4 → 阶梯 ×4
   })
 })
 

@@ -376,6 +376,8 @@ function TaskCard({
 }) {
   const startTimer = useApp((s) => s.startTimer)
   const tasks = useApp((s) => s.tasks)
+  // 掉落预览要和结算处同一个判据（见 settleNow）—— 开关关着时不画掉落图标
+  const itemDropsEnabled = useApp((s) => s.settings.itemDropsEnabled)
   const cat = categoryOf(inst.category)
   const taskDef = useMemo(() => tasks.find((t) => t.id === inst.taskId), [tasks, inst.taskId])
   /**
@@ -463,7 +465,7 @@ function TaskCard({
             <span>⏰ {humanizeMinutes(inst.plannedMinutes)}</span>
             <span className={cat.ink}>🪙 {inst.basePoints} 分</span>
             <CycleBadge cycle={inst.cycle} />
-            <RewardChips itemIds={inst.rewardItemIds} />
+            {itemDropsEnabled && <RewardChips itemIds={inst.rewardItemIds} />}
           </div>
 
           {/* -------- 状态：待完成 / 重做 -------- */}

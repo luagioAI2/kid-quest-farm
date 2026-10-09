@@ -765,9 +765,15 @@ async function settleNow(
     return 0
   }
 
-  // 任务定义上配置的道具掉落
-  for (const itemId of inst.rewardItemIds ?? []) {
-    await addItem(itemId, 1)
+  /* 任务定义上配置的道具掉落 —— 受「设置 → 道具掉落」总开关控制。
+     ⚠️ 这个判断不能只放在编辑页去「隐藏」那一块（2026-09-30 之前就是这么干的，
+        开关叫 taskDropsEnabled、默认 true，而且**只管界面**）：家长关掉之后
+        已经配好掉落的旧任务照旧掉，他以为自己关掉了、其实没有。
+        界面上「看不到」不等于「不会发生」。 */
+  if (settings.itemDropsEnabled) {
+    for (const itemId of inst.rewardItemIds ?? []) {
+      await addItem(itemId, 1)
+    }
   }
 
   // 连击奖励
@@ -911,7 +917,9 @@ async function grantCheckIn(
         memo: `签到奖励 · ${tier.label}`,
       })
     }
-    if (tier.itemId) await addItem(tier.itemId, 1)
+    // 阶梯里的道具也归「设置 → 道具掉落」管（家长 2026-09-30 定：
+    // 道具全由开关管，一处例外都不留）。积分照发，只停道具。
+    if (tier.itemId && get().settings.itemDropsEnabled) await addItem(tier.itemId, 1)
   }
   if (payout.tiers.length > 0) {
     progress.claimedTiers = Array.from(new Set(progress.claimedTiers))
@@ -1312,7 +1320,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   tiersFor: (task) => {
     const target = task.checkInTargetCount ?? 5
-    return defaultTiers(task.cycle, target)
+    return defaultTiers(task.cycle, target, task.basePoints)
   },
 
   checkInDays: (taskId) => currentCheckInRow(get, taskId)?.days ?? [],
@@ -1422,7 +1430,7 @@ export const useApp = create<AppState>((set, get) => ({
       .equals([taskId, pk])
       .first()
     if (!progress) return 0
-    const tiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5)
+    const tiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5, task.basePoints)
     const tier = tiers.find((t) => t.days === days)
     if (!tier || progress.claimedTiers.includes(days) || progress.days.length < days) return 0
     progress.claimedTiers = [...progress.claimedTiers, days]
@@ -1433,7 +1441,9 @@ export const useApp = create<AppState>((set, get) => ({
       refId: `${taskId}:${pk}:${days}`,
       memo: `签到奖励 · ${tier.label}`,
     })
-    if (tier.itemId) await addItem(tier.itemId, 1)
+    // 阶梯里的道具也归「设置 → 道具掉落」管（家长 2026-09-30 定：
+    // 道具全由开关管，一处例外都不留）。积分照发，只停道具。
+    if (tier.itemId && get().settings.itemDropsEnabled) await addItem(tier.itemId, 1)
     await get().refresh()
     return tier.points
   },

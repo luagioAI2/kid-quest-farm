@@ -302,8 +302,10 @@ export function TaskDetail({
             {/* ---------- 规则说明：大白话 ---------- */}
             <RuleSummary inst={inst} />
 
-            {/* ---------- 奖励掉落预览 ---------- */}
-            {inst.rewardItemIds.length > 0 && (
+            {/* ---------- 奖励掉落预览 ----------
+                ⚠️ 要和结算处同一个判据：开关关着时 `settleNow` 不发道具，
+                这里就不能还写着「完成后掉落 🏅」—— 界面不许承诺发不出的东西。 */}
+            {settings.itemDropsEnabled && inst.rewardItemIds.length > 0 && (
               <div className="mt-3 flex items-center gap-2 rounded-2xl border border-grape-200 bg-grape-100 px-3 py-2">
                 <span className="text-sm font-extrabold text-grape-500">完成后掉落</span>
                 <RewardChips itemIds={inst.rewardItemIds} max={6} />

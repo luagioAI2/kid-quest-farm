@@ -414,11 +414,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   protectParentActions: true,
   redeemEnabled: true,
   /**
-   * 任务掉落开关。默认 **true** —— 老用户升级上来行为不变，
-   * 想关的家长自己去设置里关（关掉后任务编辑页不再显示掉落选项）。
+   * 道具掉落总开关。默认 **false**（2026-09-30 起）。
+   *
+   * 家长原话：「默认是没有掉落，因为已经有积分奖励了。」
+   * 开着才会掉道具，而且**结算处真的会判**（不只是隐藏编辑页那一块）。
+   * 见 `AppSettings.itemDropsEnabled` 的注释里那段历史。
    * `loadSettings` 会和 `DEFAULT_SETTINGS` 合并，所以老库里没这个字段也能拿到默认值。
    */
-  taskDropsEnabled: true,
+  itemDropsEnabled: false,
   farmEventsEnabled: true,
   /** 浮盈倍率 r。数值口径见 catalog.ts 的 `DEFAULT_PROFIT_RATIO` */
   profitRatio: 0.6,

@@ -149,7 +149,7 @@ export function TaskEditor({
   ])
 
   const tiers = useMemo(
-    () => (checkInEnabled ? defaultTiers(cycle, checkInTargetCount) : []),
+    () => (checkInEnabled ? defaultTiers(cycle, checkInTargetCount, basePoints) : []),
     [checkInEnabled, cycle, checkInTargetCount],
   )
 
@@ -455,7 +455,11 @@ export function TaskEditor({
                       <span className="min-w-0 flex-1 truncate text-xs font-bold text-ink-700">
                         {t.label}
                       </span>
-                      {t.itemId && <span aria-hidden className="text-base">{REWARD[t.itemId] ?? '🎁'}</span>}
+                      {/* 道具也归「道具掉落」总开关管 —— 关着的时候这一档只发积分，
+                          这里就不能再画一个掉不出来的贴纸（界面不许承诺发不出的东西）。 */}
+                      {t.itemId && settings.itemDropsEnabled && (
+                        <span aria-hidden className="text-base">{REWARD[t.itemId] ?? '🎁'}</span>
+                      )}
                       <span className="tnum shrink-0 rounded-pill bg-sun-200 px-2 py-0.5 text-xs font-extrabold text-sun-700">
                         +{t.points}
                       </span>
@@ -468,11 +472,12 @@ export function TaskEditor({
         </div>
 
         {/* ---------- 奖励道具 ----------
-            ⚠️ 整块受「设置 → 任务掉落」开关控制（家长 2026-09-18 要求）。
+            ⚠️ 整块受「设置 → 道具掉落」总开关控制（家长 2026-09-30 定）。
             关掉时这块**完全不渲染** —— 不是禁用、不是灰掉，就是不出现。
-            `!== false` 是为了兼容老数据：`taskDropsEnabled` 是后加的字段，
-            老库里可能没有，缺省按「开」处理（和 DEFAULT_SETTINGS 一致）。 */}
-        {settings.taskDropsEnabled !== false && (
+            ⚠️ 开关**默认是关的**（`DEFAULT_SETTINGS.itemDropsEnabled: false`）。
+            老字段叫 `taskDropsEnabled`、默认开、而且只管这个界面；
+            现在换了键名、默认关，结算处也会真的判（见 useApp 的 settleNow）。 */}
+        {settings.itemDropsEnabled && (
           <Field label="完成后掉落（选填）" emoji="🎁">
             <div className="grid grid-cols-4 gap-2">
               {ITEMS.map((it) => {
