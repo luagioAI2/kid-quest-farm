@@ -19,7 +19,7 @@ import {
   selectTodayInstances,
   useApp,
 } from './useApp'
-import { currentDayKey } from '../domain/recurrence'
+import { currentDayKey, defaultTiers } from '../domain/recurrence'
 import { periodKeyFor } from '../domain/time'
 import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
 import { SEED_TASKS } from '../domain/seedTasks'
@@ -202,6 +202,102 @@ describe('签到：家长审核', () => {
     expect(s.balance).toBeGreaterThanOrEqual(before + task.basePoints)
     expect(s.checkIns).toHaveLength(1)
     expect(progressRows(task.id)[0].days).toContain(todayKey())
+  })
+})
+
+/* ============================================================
+   签到连击（**任务内**的，和全局 selectStreak 是两回事）
+   ------------------------------------------------------------
+   家长原话（2026-10-09）：「每次基本分是5分。连续+1」。
+   连续第 N 天 = 基础分 + (N-1)，断了从基础分重来。
+   ============================================================ */
+describe('签到连击', () => {
+  /** 2026-10-05(一) ~ 2026-10-11(日) 那一周 */
+  const W41 = '2026-W41'
+
+  /**
+   * 直接造一条进度行。
+   * 连击要看「昨天签没签」，靠 doCheckIn 造不出昨天 —— 它只会用今天。
+   * `claimedTiers` 预填满，把阶梯的影响摘掉，只观察连击。
+   */
+  async function seedProgress(
+    taskId: string,
+    periodKey: string,
+    days: string[],
+    pendingDays: string[],
+  ): Promise<void> {
+    await db.checkInProgress.put({
+      id: `cip_${taskId}_${periodKey}`,
+      taskId,
+      periodKey,
+      days,
+      pendingDays,
+      claimedTiers: defaultTiers('weekly', 5).map((t) => t.days),
+      updatedAt: Date.now(),
+    })
+  }
+
+  it('第一天签到只拿基础分（没有连击加成）', async () => {
+    const task = checkInTask()
+    await seedProgress(task.id, W41, [], ['2026-10-05'])
+    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-05')
+    expect(gained).toBe(5)
+  })
+
+  it('连着第二天多给 1 分', async () => {
+    const task = checkInTask()
+    await seedProgress(task.id, W41, ['2026-10-05'], ['2026-10-06'])
+    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-06')
+    expect(gained).toBe(6) // 基础 5 + 连击 1
+  })
+
+  it('连着第五天多给 4 分（5+6+7+8+9 的最后一档）', async () => {
+    const task = checkInTask()
+    await seedProgress(
+      task.id,
+      W41,
+      ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08'],
+      ['2026-10-09'],
+    )
+    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-09')
+    expect(gained).toBe(9) // 基础 5 + 连击 4
+  })
+
+  it('中间断一天 → 连击归零，回到基础分', async () => {
+    const task = checkInTask()
+    // 5、6 签了，7 没签，8 再签 → 从 5 重新开始
+    await seedProgress(task.id, W41, ['2026-10-05', '2026-10-06'], ['2026-10-08'])
+    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-08')
+    expect(gained).toBe(5)
+  })
+
+  it('连击加成单独记一条流水 —— 账本上看得出为什么今天多给了分', async () => {
+    const task = checkInTask()
+    await seedProgress(task.id, W41, ['2026-10-05'], ['2026-10-06'])
+    await useApp.getState().approveCheckIn(task.id, W41, '2026-10-06')
+
+    const streakRow = useApp
+      .getState()
+      .ledger.filter((l) => l.source === 'checkin_bonus')
+      .find((l) => /连击/.test(l.memo))
+    expect(streakRow, '应该有一条连击流水').toBeDefined()
+    expect(streakRow!.delta).toBe(1)
+    expect(streakRow!.memo).toContain('连续第 2 天')
+  })
+
+  it('跨周重置：上周的五连不会带进新的一周', async () => {
+    const task = checkInTask()
+    // 上周签满了 5 天
+    await seedProgress(
+      task.id,
+      W41,
+      ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09'],
+      [],
+    )
+    // 新的一周是**另一条进度行**（days 为空）→ 连击从 1 重新开始
+    await seedProgress(task.id, '2026-W42', [], ['2026-10-12'])
+    const gained = await useApp.getState().approveCheckIn(task.id, '2026-W42', '2026-10-12')
+    expect(gained).toBe(5)
   })
 })
 
@@ -755,10 +851,10 @@ describe('首次启动：今日任务', () => {
     }
   })
 
-  it('四个签到任务都能在「坚持签到」里找到', () => {
+  it('五个签到任务都能在「坚持签到」里找到', () => {
     const titles = selectCheckInTasks(useApp.getState()).map((t) => t.title)
     expect([...titles].sort()).toEqual(
-      ['晨读', '日记', '练字签到', '数学计算练习'].sort(),
+      ['晨读', '日记', '练字签到', '数学计算练习', '学习日复述每天学习内容'].sort(),
     )
   })
 

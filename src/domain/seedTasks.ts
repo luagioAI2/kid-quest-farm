@@ -7,7 +7,7 @@ import type { RedeemItem, Task } from './types'
 
    * 每日任务（cycle: 'daily'）—— 每天固定要做的 6 个学科任务
      （各 45 分钟）+ 1 个家务。
-   * 签到任务（checkInEnabled）—— 每天点一下，攒坚持天数换阶梯奖。
+   * 签到任务（checkInEnabled）—— 每天点一下，攒坚持天数换连击 + 阶梯奖。
    * 长期任务（周 / 月 / 年）—— 一段时间内做满若干次。
 
    每日任务的规则刻意统一（宽容超时 + 质量加分）：
@@ -113,7 +113,7 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'art',
     cycle: 'weekly',
     plannedMinutes: 15,
-    basePoints: 4,
+    basePoints: 5,
     allowOvertime: false,
     allowLateNoPenalty: true,
     qualityRated: false,
@@ -126,7 +126,7 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'art',
     cycle: 'weekly',
     plannedMinutes: 15,
-    basePoints: 4,
+    basePoints: 5,
     allowOvertime: false,
     allowLateNoPenalty: true,
     qualityRated: false,
@@ -139,7 +139,7 @@ export const SEED_TASKS: SeedTask[] = [
     category: 'reading',
     cycle: 'weekly',
     plannedMinutes: 15,
-    basePoints: 4,
+    basePoints: 5,
     allowOvertime: false,
     allowLateNoPenalty: true,
     qualityRated: false,
@@ -149,15 +149,34 @@ export const SEED_TASKS: SeedTask[] = [
   {
     /* 2026-09-30 家长要求：「再帮我添加一个 每周的打卡 数学计算练习。」
        走的是**签到**这条路（和晨读 / 日记 / 练字签到同一档）：
-       每周记 5 次，攒够天数拿阶梯奖励。
-       ⚠️ 积分刻意保持 4 分 —— 签到的奖励主要来自**阶梯**（10 / 30 / 60），
-       基础分只是「点一下」的即时反馈。调高这里会让签到比正课还赚。 */
+       每周记 5 次，攒够天数拿阶梯奖励。 */
     title: '数学计算练习',
     note: '每天一页口算或竖式，掐着表做更快',
     category: 'study',
     cycle: 'weekly',
     plannedMinutes: 15,
-    basePoints: 4,
+    basePoints: 5,
+    allowOvertime: false,
+    allowLateNoPenalty: true,
+    qualityRated: false,
+    checkInEnabled: true,
+    checkInTargetCount: 5,
+  },
+  {
+    /* 2026-10-09 家长要求：「再帮我添加个打卡任务 周5天，学习日复述
+       每天学习内容，每次基本分是5分。连续+1。」
+
+       「学习日」= 上学的日子。模型里没有「星期几」这个概念，
+       靠 `checkInTargetCount: 5`（一周 5 天）表达 —— 哪天签都行，
+       凑满 5 天就算达标，孩子自己安排。
+       「连续+1」走的是签到连击：连续第 N 天 = 5 + (N-1)，
+       断签从 5 重新开始（见 recurrence.ts 的 checkInStreakBonus）。 */
+    title: '学习日复述每天学习内容',
+    note: '放学问他一句：今天学了什么？讲给你听',
+    category: 'study',
+    cycle: 'weekly',
+    plannedMinutes: 10,
+    basePoints: 5,
     allowOvertime: false,
     allowLateNoPenalty: true,
     qualityRated: false,
@@ -179,8 +198,8 @@ export const SEED_TASKS: SeedTask[] = [
 
        ⚠️ 积分选 10 + 4（= 每日学科任务的档位），**不按分钟折算**：
        背诵 15 分钟拿 10 分，看着比 45 分钟的作业划算，但每周只有 2 次，
-       一周上限 28 分；而「晨读」这类签到虽然基础分只有 4，加上阶梯
-       一周能到 ~120 分。所以这个数其实偏保守，不用再往下压。 */
+       一周上限 28 分；而「晨读」这类签到基础分 5、加上连击和阶梯，
+       一周打满 5 天 ≈ 55 分。所以这个数其实偏保守，不用再往下压。 */
     title: '背诵',
     note: '古诗、课文都行，背完讲给爸爸妈妈听',
     category: 'study',
@@ -267,16 +286,21 @@ export const SEED_TASKS: SeedTask[] = [
    若只想让数字变小、不想动难度，就把下面所有 cost 和农场 `seedCost` /
    `cost` / 解锁价一起减半（那样整体是等比缩放，难度不变）。
 
-   ⚠️ **还有两处积分来源这次没动，是有意留着等家长确认的**（不要以为减半
+   ⚠️ **还有两处积分来源当时没动，是有意留着等家长确认的**（不要以为减半
    已经覆盖了全部任务侧收入）：
-     · **签到阶梯奖励** —— `domain/recurrence.ts` 的 `defaultTiers()`：
-       每周 10 / 30 / 60、每月 50 / 150 / 400、每年 300 / 1500 / 5000。
-       三个签到任务加起来 ≈ 300 分/周 ≈ 43 分/天，**不是小数目**。
-       用户说的是「每日任务改成 10 分、其他的也缩小 2 倍」，阶梯奖励是
-       **规则模板**（任何签到任务都用），不是种子任务里的数值，所以没算进去。
+     · **签到阶梯奖励** —— `domain/recurrence.ts` 的 `defaultTiers()`。
+       ⚠️ **2026-10-09 已改**：家长说「尽可能按之前的设计，只是之前的
+       奖励太多了」，于是**周**档从 10 / 30 / 60 压到 **2 / 6 / 12**
+       （结构还是第 1 / 3 / 5 天三档，1:3:6 的比例没变）。
+       原来一周光阶梯就 100 分、是基础分的 5 倍；现在阶梯合计 20 分，
+       比基础分（5×5 = 25）还少。
+       同时新增**签到连击**：连续第 N 天 = 基础分 + (N-1)，断了重来。
+       四个周签到打满一周各 ≈ 55 分（原来 ≈ 120 分）。
+       月 / 年档（50 / 150 / 400、300 / 1500 / 5000）**这次没动** ——
+       家长只说了「周打卡任务」。
      · **连击奖励** —— `DEFAULT_SETTINGS.streakBonusPerDay/Cap`（2 / 20）。
-       同上，是全局规则默认值。
-   要一起减半的话说一声，两处都是单点改动。
+       这是**全局**连击（当天完成任意任务就算一天），和上面签到卡里的
+       **任务内**连击是两回事，别混。同上，是全局规则默认值。
 
    所以（保持原档位不变）：
    * 「日常小确幸」定在 30~60 分 —— 每天都能换到一次，保持动力

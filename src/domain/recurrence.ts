@@ -183,10 +183,16 @@ export interface CheckInTier {
 export function defaultTiers(cycle: Task['cycle'], target: number): CheckInTier[] {
   const base = Math.max(1, target)
   if (cycle === 'weekly') {
+    /* 2026-10-09 家长要求：「尽可能按之前的设计，只是之前的奖励太多了。」
+       结构（第 1 / 3 / 5 天三档）和 1:3:6 的比例都保留，只把数字压小：
+       原来一周光阶梯就有 100 分，是基础分（20）的 5 倍 —— 签到比正课还赚。
+       现在 2 / 6 / 12 合计 20 分，**比基础分（25）还少**，
+       签到的收入回到「基础分为主、阶梯是甜头」的结构。
+       加上连击后一周打满 5 天 ≈ 55 分（原来 120 分）。 */
     return dedupeTiers([
-      { days: Math.min(base, 1), points: 10, label: '开了个好头' },
-      { days: Math.min(base, 3), points: 30, label: '坚持 3 天' },
-      { days: base, points: 60, itemId: 'sticker', label: `一周坚持 ${base} 天` },
+      { days: Math.min(base, 1), points: 2, label: '开了个好头' },
+      { days: Math.min(base, 3), points: 6, label: '坚持 3 天' },
+      { days: base, points: 12, itemId: 'sticker', label: `一周坚持 ${base} 天` },
     ])
   }
   if (cycle === 'monthly') {
@@ -270,6 +276,63 @@ function shiftDay(key: string, delta: number): string {
   const d = new Date(ts)
   const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/* ============================================================
+   签到连击（**单个签到任务**的连续天数）
+   ------------------------------------------------------------
+   ⚠️ 和上面的 `computeStreak` 不是一回事，别混：
+     · `computeStreak` 是**全局**连击 —— 「当天完成了任意一个任务」就算一天，
+       奖励来自 settings 的 streakBonusPerDay / Cap，每天只发一次。
+     · 这里是**任务内**连击 —— 只看这一个签到任务自己连着签了几天。
+
+   家长原话（2026-10-09）：「每次基本分是5分。连续+1」。
+   所以第 N 天 = 基础分 + (N-1)：5、6、7、8、9。
+   ============================================================ */
+
+/**
+ * 以 `date` 结尾、连续多少个**日历日**都签到了。
+ *
+ * 「断了就重新」：中间缺一天就从缺的那天断开，只数断点之后的天数。
+ * 例：签了 周一/周二/周四，问周四 → 1（周三缺，只数周四）；
+ *     签了 周一~周五，问周五 → 5。
+ *
+ * 注意 `days` 只传**本周期**的已确认日期（`CheckInProgress.days`），
+ * 所以跨周天然重置 —— 上周的五连不会带进新的一周。
+ */
+export function checkInStreak(days: string[], date: string): number {
+  const set = new Set(days)
+  let count = 0
+  let cursor = date
+  while (set.has(cursor)) {
+    count++
+    cursor = shiftDay(cursor, -1)
+  }
+  return count
+}
+
+/**
+ * 连击加成：连续第 N 天多给 N-1 分，**封顶为一次的基础分**。
+ *
+ * 为什么要封顶：家长明确说了「连击应该很难超过单次分」。
+ * 一周最多签 7 天 → 加成最多 6 分，而基础分是 5 —— 不封顶的话，
+ * 签满一周时加成会反超基础分。封顶后「加成 ≤ 单次分」永远成立。
+ */
+export function checkInStreakBonus(streak: number, basePoints: number): number {
+  const base = Math.max(0, Math.round(basePoints))
+  if (base <= 0) return 0
+  return Math.max(0, Math.min(streak - 1, base))
+}
+
+/**
+ * 「今天签下去会是连续第几天」—— 给界面预告今天能拿多少分用。
+ *
+ * 今天已经签了 → 就是当前连击；
+ * 今天还没签 → 看昨天那条连击，+1（昨天没签则从 1 重新开始）。
+ */
+export function checkInStreakIfSigned(days: string[], todayKey: string): number {
+  if (days.includes(todayKey)) return checkInStreak(days, todayKey)
+  return checkInStreak(days, shiftDay(todayKey, -1)) + 1
 }
 
 /** 是否在允许的完成时间窗内 */

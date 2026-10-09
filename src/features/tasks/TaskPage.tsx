@@ -2,7 +2,12 @@ import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { Portal } from '@/components/Portal'
 import { humanizeMinutes, CYCLE_HINT } from '@/domain/time'
-import { claimableTiers } from '@/domain/recurrence'
+import {
+  checkInStreak,
+  checkInStreakBonus,
+  checkInStreakIfSigned,
+  claimableTiers,
+} from '@/domain/recurrence'
 import { previewPoints } from '@/domain/settlement'
 import type { Task, TaskInstance } from '@/domain/types'
 import { STATUS_KID_LABEL } from '@/domain/types'
@@ -990,6 +995,14 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
   const claimable = claimableTiers(tiers, days.length, claimed)
   const target = task.checkInTargetCount ?? 5
 
+  /* 签到连击（任务内的，和全局连击不是一回事）
+     连续第 N 天 = 基础分 + (N-1)，断签从基础分重来。 */
+  const basePoints = Math.max(0, Math.round(task.basePoints))
+  const streakNow = signedToday ? checkInStreak(days, todayKey) : 0
+  /** 今天还没签时，签下去会是连续第几天 */
+  const streakNext = checkInStreakIfSigned(days, todayKey)
+  const bonusNext = checkInStreakBonus(streakNext, basePoints)
+
   // 展示格子：本周 / 本月
   const cells = useMemo(() => buildCells(task.cycle, todayKey, days), [task.cycle, todayKey, days])
 
@@ -1070,6 +1083,34 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
             ),
           )}
         </div>
+
+        {/* 连击：连着来每天多 +1，断了从基础分重来 */}
+        {basePoints > 0 && (
+          <p className="mt-2.5 text-[11px] font-bold text-ink-600">
+            {signedToday ? (
+              <>
+                🔥 连续第 <span className="tnum font-extrabold text-ink-900">{streakNow}</span> 天
+                {streakNow > 1 && (
+                  <span className="text-grass-700">
+                    （今天连击 +{checkInStreakBonus(streakNow, basePoints)}）
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                今天签到可得{' '}
+                <span className="tnum font-extrabold text-ink-900">{basePoints + bonusNext}</span> 分
+                {bonusNext > 0 ? (
+                  <span className="text-grass-700">
+                    （基础 {basePoints} + 连击 {bonusNext}）
+                  </span>
+                ) : (
+                  <span className="text-ink-400">（连着来每天多 +1）</span>
+                )}
+              </>
+            )}
+          </p>
+        )}
 
         {/* 阶梯 */}
         <div className="mt-3 space-y-1.5">

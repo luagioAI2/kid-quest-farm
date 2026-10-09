@@ -426,6 +426,20 @@ export function TaskEditor({
                   suffix="天"
                 />
               </Field>
+              {/* 连击规则。数字全部现算 —— 家长改基础分时这里要跟着变，
+                  写死会立刻变成假话。 */}
+              {basePoints > 0 && (
+                <p className="rounded-xl border border-white bg-white/80 px-3 py-2 text-[11px] font-bold leading-relaxed text-ink-600">
+                  🔥 连着来每天多 <span className="font-extrabold text-ink-900">+1</span> 分：第 1 天{' '}
+                  <span className="tnum font-extrabold text-ink-900">{basePoints}</span>、第 2 天{' '}
+                  <span className="tnum font-extrabold text-ink-900">{basePoints + 1}</span>、第 3 天{' '}
+                  <span className="tnum font-extrabold text-ink-900">{basePoints + 2}</span>……
+                  断一天就从 {basePoints} 重新开始。
+                  <span className="text-ink-400">
+                    （连击加成最多 +{basePoints} 分，不会超过单次基础分）
+                  </span>
+                </p>
+              )}
               <div>
                 <p className="mb-1.5 text-xs font-extrabold text-ink-700">坚持的奖励阶梯</p>
                 <div className="space-y-1.5">

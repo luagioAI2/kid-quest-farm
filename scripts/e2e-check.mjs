@@ -582,6 +582,62 @@ try {
     await new Promise((r) => setTimeout(r, 400))
   }
 
+  /* ---------- 4c. 签到卡：连击预告 + 压小后的阶梯数字（2026-10-09） ----------
+     家长要求：签到「每次基本分 5 分，连续 +1」，并把过大的阶梯奖励压小
+     （周档 10/30/60 → 2/6/12）。
+
+     单测钉的是领域函数（defaultTiers / checkInStreakBonus），
+     卡片上是**另一条渲染路径**（TaskPage 的 CheckInCard）—— 它会单独写错，
+     所以这里在真浏览器里把显示出来的字读一遍。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(
+      (x) => x.innerText.trim().split('\n').pop().trim() === '任务',
+    )
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 900))
+
+  const checkInCard = await page.evaluate(() => {
+    const title = '学习日复述每天学习内容'
+    const h = [...document.querySelectorAll('h3')].find((x) => x.innerText.trim() === title)
+    if (!h) return null
+    /* 从标题往上走到整张卡。
+       ⚠️ 别用「祖先里有『已坚持』就停」—— 标题的**上一级**就已经满足，
+          于是停在标题那一行，后面的日期格子 / 连击 / 阶梯全都读不到，
+          断言会误报「卡片上没写连击」（第一版就是这么错的）。
+       判据改成「这一层还只有 1 个 h3」：一旦祖先里出现第二个 h3，
+       说明已经走到卡片列表那一层了，该停。 */
+    let card = h
+    while (card.parentElement && card.parentElement.querySelectorAll('h3').length === 1) {
+      card = card.parentElement
+    }
+    return {
+      text: card.innerText.replace(/\s+/g, ' ').trim(),
+      buttons: [...card.querySelectorAll('button')].map((b) =>
+        b.innerText.replace(/\s+/g, ' ').trim(),
+      ),
+    }
+  })
+  check('新增的「学习日复述每天学习内容」出现在坚持签到里', !!checkInCard)
+  if (checkInCard) {
+    check(
+      '签到卡预告今天能拿多少分（全新账号 = 第 1 天 = 基础 5 分）',
+      /今天签到可得\s*5\s*分/.test(checkInCard.text),
+      checkInCard.text.slice(0, 70),
+    )
+    check(
+      '卡片上说明了连击规则（连着来每天多 +1）',
+      /连着来每天多\s*\+1/.test(checkInCard.text),
+      '',
+    )
+    check(
+      '阶梯数字已经压小：+2 / +6 / +12（不再是 10 / 30 / 60）',
+      ['+2', '+6', '+12'].every((p) => checkInCard.buttons.some((b) => b.endsWith(p))) &&
+        !checkInCard.buttons.some((b) => b.endsWith('+60')),
+      checkInCard.buttons.join(' | '),
+    )
+  }
+
   /* ---------- 5. 农场：种植流程 ---------- */
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find(

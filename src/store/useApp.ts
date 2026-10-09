@@ -77,6 +77,8 @@ import {
 } from '../domain/economy'
 import {
   buildPeriodUnits,
+  checkInStreak,
+  checkInStreakBonus,
   claimableTiers,
   computeStreak,
   currentDayKey,
@@ -826,8 +828,15 @@ async function grantCheckIn(
 ): Promise<{ gained: number; bonus: number; tierLabel?: string }> {
   if (progress.days.includes(date)) return { gained: 0, bonus: 0 }
 
-  const gained = Math.max(0, Math.round(task.basePoints))
-  progress.days = [...progress.days, date].sort()
+  const basePoints = Math.max(0, Math.round(task.basePoints))
+  const nextDays = [...progress.days, date].sort()
+  // ⚠️ 连击必须在**把今天算进去之后**再问 —— 否则问「今天是第几天」永远是 0，
+  //    连击永远不会生效（而且不会报错，只是每天都是基础分）。
+  const streak = checkInStreak(nextDays, date)
+  const streakBonus = checkInStreakBonus(streak, basePoints)
+  const gained = basePoints + streakBonus
+
+  progress.days = nextDays
   progress.updatedAt = Date.now()
   await db.checkInProgress.put(progress)
 
@@ -841,12 +850,23 @@ async function grantCheckIn(
   }
   await db.checkIns.put(record)
 
-  if (gained > 0) {
+  if (basePoints > 0) {
     await postLedger({
-      delta: gained,
+      delta: basePoints,
       source: 'checkin',
       refId: record.id,
       memo: `签到：${task.title}`,
+    })
+  }
+
+  // 连击加成单独记一条流水 —— 否则孩子在账本里只看到「签到 +7」，
+  // 看不出多出来的 2 分是连击给的，也就学不到「连着来更划算」。
+  if (streakBonus > 0) {
+    await postLedger({
+      delta: streakBonus,
+      source: 'checkin_bonus',
+      refId: `${record.id}:streak`,
+      memo: `连续第 ${streak} 天 · 连击 +${streakBonus}`,
     })
   }
 
@@ -877,7 +897,11 @@ async function grantCheckIn(
   get().pushToast({
     kind: 'reward',
     title: `签到成功 +${gained + bonus} 分`,
-    detail: tierLabel ? `达成「${tierLabel}」！` : `已坚持 ${progress.days.length} 天`,
+    detail: tierLabel
+      ? `达成「${tierLabel}」！`
+      : streak > 1
+        ? `连续第 ${streak} 天，连击 +${streakBonus} 分`
+        : `已坚持 ${progress.days.length} 天`,
     emoji: '📅',
   })
 

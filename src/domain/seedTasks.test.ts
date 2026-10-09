@@ -84,12 +84,16 @@ describe('种子任务：签到', () => {
     expect(checkIn.map((t) => t.title)).toContain('练字签到')
   })
 
-  it('四个签到任务都是每周记 5 次', () => {
-    expect(checkIn).toHaveLength(4)
+  it('五个签到任务都是每周记 5 次', () => {
+    expect(checkIn).toHaveLength(5)
     for (const t of checkIn) {
       expect(t.cycle, t.title).toBe('weekly')
       expect(t.checkInTargetCount, t.title).toBe(5)
     }
+  })
+
+  it('包含「学习日复述每天学习内容」（2026-10-09 家长要求新增的每周打卡）', () => {
+    expect(checkIn.map((t) => t.title)).toContain('学习日复述每天学习内容')
   })
 
   it('日记归到「艺术」、晨读归到「阅读」、数学计算练习归到「学科」', () => {
@@ -186,10 +190,12 @@ describe('种子任务：2026-09-21 积分减半', () => {
     expectPoints('英语课外练习', 10)
     // 家务：12 → 6
     expectPoints('清理自己的房间', 6)
-    // 签到：8 → 4
-    expectPoints('练字签到', 4)
-    expectPoints('日记', 4)
-    expectPoints('晨读', 4)
+    // 签到：8 → 4 → 5（2026-10-09 家长要求「每次基本分是5分」）
+    expectPoints('练字签到', 5)
+    expectPoints('日记', 5)
+    expectPoints('晨读', 5)
+    expectPoints('数学计算练习', 5)
+    expectPoints('学习日复述每天学习内容', 5)
     // 月度：30 → 15
     expectPoints('读一本完整的故事书', 15)
     // 年度：100 → 50
@@ -226,6 +232,7 @@ describe('种子任务：2026-09-21 积分减半', () => {
       每月记忆单词: '2026-09-29 新增（年度）',
       背诵: '2026-09-30 新增（长期任务，每周 2 次）',
       数学计算练习: '2026-09-30 新增（每周签到）',
+      学习日复述每天学习内容: '2026-10-09 新增（每周签到）',
     }
     for (const t of SEED_TASKS) {
       if (t.title in ADDED_AFTER) continue
@@ -254,7 +261,7 @@ describe('种子任务：2026-09-21 积分减半', () => {
 
    两条都是 weekly，走的是**不同的机制**，所以数值也不同：
    * 背诵         长期任务（不预先展开）→ 每周 2 次，学科档 10 + 4
-   * 数学计算练习  签到（按天打卡 + 阶梯奖）→ 每周 5 次，签到档 4 + 0
+   * 数学计算练习  签到（按天打卡 + 连击 + 阶梯）→ 每周 5 次，签到档 5 分
    逐条钉住，免得以后有人「顺手统一一下」把两者揉成一个。
    ============================================================ */
 describe('种子任务：2026-09-30 新增（背诵 / 数学计算练习）', () => {
@@ -269,7 +276,7 @@ describe('种子任务：2026-09-30 新增（背诵 / 数学计算练习）', ()
     expect(t?.basePoints).toBe(10)
   })
 
-  it('数学计算练习：每周签到，5 次，签到档 4 分（奖励主要来自阶梯）', () => {
+  it('数学计算练习：每周签到，5 次，签到档 5 分', () => {
     const t = SEED_TASKS.find((x) => x.title === '数学计算练习')
     expect(t, '找不到「数学计算练习」').toBeDefined()
     expect(t?.cycle).toBe('weekly')
@@ -277,18 +284,19 @@ describe('种子任务：2026-09-30 新增（背诵 / 数学计算练习）', ()
     expect(t?.checkInTargetCount).toBe(5)
     expect(t?.category).toBe('study')
     expect(t?.plannedMinutes).toBe(15)
-    expect(t?.basePoints).toBe(4)
+    expect(t?.basePoints).toBe(5)
   })
 
-  it('签到任务的数值口径完全一致（4 分 / 15 分钟 / 不打质量分）', () => {
-    // 四个签到任务除了标题、说明、分类之外，数值应当一模一样 ——
-    // 不一致的话「每天点一下」这件事对不同任务就不等价了。
+  it('签到任务的**积分口径**完全一致（都是 5 分 / 不打质量分 / 免扣分）', () => {
+    // 积分必须一致 —— 不一致的话「每天点一下」这件事对不同任务就不等价了。
+    // ⚠️ 计划时长**不**要求一致：复述是几分钟的对话，不必凑成 15 分钟。
+    //    签到的得分只看 basePoints，时长不参与结算（allowLateNoPenalty = true）。
     for (const t of checkIn) {
-      expect(t.basePoints, t.title).toBe(4)
-      expect(t.plannedMinutes, t.title).toBe(15)
+      expect(t.basePoints, t.title).toBe(5)
       expect(t.qualityRated, t.title).toBe(false)
       expect(t.allowOvertime, t.title).toBe(false)
       expect(t.allowLateNoPenalty, t.title).toBe(true)
+      expect(t.plannedMinutes, t.title).toBeGreaterThan(0)
     }
   })
 
