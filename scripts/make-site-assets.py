@@ -257,6 +257,16 @@ def copy_shots():
         out = IMG / dst
         im.save(out, optimize=True)
         rows.append((dst, out.stat().st_size, f"{im.width}x{im.height}"))
+
+    # 把「这批图是从哪一版 bundle 截的」一起搬到 site/ 下。
+    # check-site 拿它和当前 bundle 比 —— 官网的界面截图是发布物，
+    # 改了 App 没重拍时页面上就是旧界面的图，而且零报错。
+    # （capture.mjs 写 SHOTS-BUILD.txt；这一行负责让它跟着发布。）
+    marker = SHOTS_SRC / "SHOTS-BUILD.txt"
+    if marker.exists():
+        (IMG / "shots-source.txt").write_text(
+            marker.read_text(encoding="utf-8"), encoding="utf-8"
+        )
     return rows
 
 

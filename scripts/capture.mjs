@@ -17,7 +17,7 @@
  */
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const OUT = process.argv[3] ?? 'screenshots/redesign'
@@ -576,6 +576,21 @@ try {
     await wait(1200)
   }
   await shot('13-parent-review')
+
+  /* 记下这批图是从**哪一版 bundle** 截的。
+     `make-site-assets.py` 会把它复制成 `site/img/shots-source.txt`，
+     `check-site` 拿它和当前 bundle 名比。
+
+     为什么需要：官网的界面截图是**发布物**，但重拍是手工步骤 ——
+     `build-site.mjs` 只把 `.e2e-scratch/landing-shots/` 里的图**重新压缩**，
+     并不会重拍。所以「改了 App 没重拍」时，官网会一直挂着旧界面的图，
+     而且**零报错**，日志里还写着「③ 界面截图」像是刚生成的。
+     2026-10-09 实测：那一批图是 10-03 拍的，挂了六天，
+     页面上日期还写着「10月3日」。 */
+  const html = await fetch(URL).then((r) => r.text())
+  const bundle = (html.match(/assets\/(index-[\w-]+\.js)/) ?? [])[1] ?? 'unknown'
+  writeFileSync(`${OUT}/SHOTS-BUILD.txt`, `${bundle}\n`)
+  console.log(`截图对应的 bundle：${bundle}`)
 
   console.log(`\n截图已输出到 ${OUT}/`)
   if (errors.length) {

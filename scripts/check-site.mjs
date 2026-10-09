@@ -286,6 +286,31 @@ try {
     )
   }
 
+  /* ---------- 官网的界面截图，也得是**这一版**界面的 ----------
+     同一条链的第 5 环，而且是**唯一靠手工**的一环：
+     `build-site.mjs` 只把 `.e2e-scratch/landing-shots/` 里的图**重新压缩**，
+     从不重拍（重拍要跑 `capture.mjs`）。所以「改了 App 没重拍」时，
+     官网一直挂着旧界面的图，**零报错**，日志里还写着「③ 界面截图」。
+     2026-10-09 实测：那批图是 10-03 拍的，挂了六天，页面上日期还写着「10月3日」。
+     判据：capture.mjs 写下的 bundle 名 == 当前 bundle 名。 */
+  const shotsMarker = resolve(SITE_DIR, 'img/shots-source.txt')
+  if (existsSync(shotsMarker)) {
+    const shotBundle = readFileSync(shotsMarker, 'utf8').trim()
+    check(
+      `官网界面截图是从这一版界面截的（${bundleName}）`,
+      !!bundleName && shotBundle === bundleName,
+      shotBundle === bundleName
+        ? ''
+        : `截图来自 ${shotBundle} —— 重跑：node scripts/capture.mjs http://127.0.0.1:4180/ .e2e-scratch/landing-shots && node scripts/build-site.mjs --no-build`,
+    )
+  } else {
+    check(
+      '有 site/img/shots-source.txt（界面截图的版次标记）',
+      false,
+      '缺标记：capture.mjs 没跑过，或 make-site-assets.py 没把它搬过来',
+    )
+  }
+
   // 法务页 + 备案号
   for (const f of ['privacy.html', 'terms.html']) {
     check(`法务页存在：${f}`, existsSync(resolve(SITE_DIR, f)))
