@@ -3,6 +3,7 @@ import {
   checkInStreak,
   checkInStreakBonus,
   checkInStreakIfSigned,
+  checkInPayout,
   defaultTiers,
   claimableTiers,
   eachDay,
@@ -172,6 +173,103 @@ describe('checkInStreakIfSigned（界面上「今天签下去能拿多少」）'
 
   it('一天都没签过 → 1（今天签就是第 1 天）', () => {
     expect(checkInStreakIfSigned([], '2026-10-07')).toBe(1)
+  })
+})
+
+describe('一次签到发多少分 checkInPayout（发分与展示的唯一事实源）', () => {
+  const weekly = { basePoints: 5, cycle: 'weekly' as const, checkInTargetCount: 5 }
+
+  it('首日 = 基础 5 + 阶梯 2 = 7（审核卡原来写 5、实发 7，就是这个 bug）', () => {
+    const p = checkInPayout(weekly, [], [], '2026-10-05')
+    expect(p.base).toBe(5)
+    expect(p.streak).toBe(1)
+    expect(p.streakBonus).toBe(0)
+    expect(p.tierPoints).toBe(2)
+    expect(p.total).toBe(7)
+  })
+
+  it('第 2 天不落在阶梯日 → 基础 5 + 连击 1 = 6', () => {
+    const p = checkInPayout(weekly, ['2026-10-05'], [1], '2026-10-06')
+    expect(p.streak).toBe(2)
+    expect(p.streakBonus).toBe(1)
+    expect(p.tierPoints).toBe(0)
+    expect(p.total).toBe(6)
+  })
+
+  it('第 3 天：基础 5 + 连击 2 + 阶梯 6 = 13', () => {
+    const p = checkInPayout(weekly, ['2026-10-05', '2026-10-06'], [1], '2026-10-07')
+    expect(p.tierLabel).toBe('坚持 3 天')
+    expect(p.total).toBe(13)
+  })
+
+  it('断一天就重新起算：只签过 10-05，10-08 再来是第 1 天', () => {
+    const p = checkInPayout(weekly, ['2026-10-05'], [1], '2026-10-08')
+    expect(p.streak).toBe(1)
+    expect(p.streakBonus).toBe(0)
+  })
+
+  it('连击加成封顶为一次的基础分：连到第 7 天也只加 5', () => {
+    const days = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06']
+    const p = checkInPayout(weekly, days, [1, 3, 5], '2026-10-07')
+    expect(p.streak).toBe(7)
+    expect(p.streakBonus).toBe(5)
+  })
+
+  it('已经领过的阶梯不再重复发', () => {
+    const p = checkInPayout(weekly, [], [1], '2026-10-05')
+    expect(p.tiers).toEqual([])
+    expect(p.total).toBe(5)
+  })
+
+  it('total 永远等于 base + streakBonus + tierPoints', () => {
+    const claimed = [1, 3, 5]
+    let day = 1
+    let days: string[] = []
+    for (const key of ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09']) {
+      const p = checkInPayout(weekly, days, claimed, key)
+      expect(p.total).toBe(p.base + p.streakBonus + p.tierPoints)
+      expect(p.streak).toBe(day)
+      days = [...days, key].sort()
+      day++
+    }
+  })
+
+  it('一周打满 5 天合计 55 分 —— 和 seedTasks 里的平衡锚点对得上', () => {
+    /* 7 + 6 + 13 + 8 + 21 = 55。这个数字同时写在 seedTasks.ts 的注释里，
+       是「签到收入回到基础分为主」的唯一依据；改了阶梯/连击就必须同步改它。
+       ⚠️ claimed 必须**边领边长**：一开始就塞满 [1,3,5] 的话阶梯一分不发，
+       合计会变成 35（只有基础+连击），而那个数看着也「挺合理」，很容易蒙混过去。 */
+    let claimed: number[] = []
+    let days: string[] = []
+    let sum = 0
+    for (const key of ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09']) {
+      const p = checkInPayout(weekly, days, claimed, key)
+      sum += p.total
+      claimed = [...claimed, ...p.tiers.map((t) => t.days)]
+      days = [...days, key].sort()
+    }
+    expect(sum).toBe(55)
+    expect(claimed.sort((a, b) => a - b)).toEqual([1, 3, 5])
+  })
+
+  it('不改动传进来的数组（store 依赖这一点：算完还要拿 progress.days 去写库）', () => {
+    const days = ['2026-10-06', '2026-10-05']
+    const claimed = [1]
+    checkInPayout(weekly, days, claimed, '2026-10-07')
+    expect(days).toEqual(['2026-10-06', '2026-10-05'])
+    expect(claimed).toEqual([1])
+  })
+
+  it('basePoints 为 0 时不会凭空长出连击分', () => {
+    const p = checkInPayout(
+      { basePoints: 0, cycle: 'weekly', checkInTargetCount: 5 },
+      ['2026-10-05', '2026-10-06'],
+      [1, 3, 5],
+      '2026-10-07',
+    )
+    expect(p.streak).toBe(3)
+    expect(p.streakBonus).toBe(0)
+    expect(p.total).toBe(0)
   })
 })
 

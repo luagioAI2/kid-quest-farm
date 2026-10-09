@@ -335,6 +335,58 @@ export function checkInStreakIfSigned(days: string[], todayKey: string): number 
   return checkInStreak(days, shiftDay(todayKey, -1)) + 1
 }
 
+/** 一次签到的发放明细 */
+export interface CheckInPayout {
+  /** 基础分（任务定义上的 basePoints） */
+  base: number
+  /** 这一签之后是连续第几天 */
+  streak: number
+  /** 连击加成 */
+  streakBonus: number
+  /** 这一签同时达成的阶梯（要逐个落账，所以给列表而不是只给合计） */
+  tiers: CheckInTier[]
+  /** 阶梯奖励合计 */
+  tierPoints: number
+  /** 最后达成的那一档的名字（用于文案） */
+  tierLabel?: string
+  /** 实际到账 = base + streakBonus + tierPoints */
+  total: number
+}
+
+/**
+ * 一次签到**发多少分** —— 唯一事实源。
+ *
+ * ⚠️ 发分（`useApp.grantCheckIn`）和「确认后得到 N 分」的**展示**必须共用
+ * 这个函数。分成两处算就一定会走散：家长审核面板上原来只写
+ * `+task.basePoints`，而实际到账还要加连击和阶梯 —— 首日就写 5 实发 7。
+ * 这是本项目的老毛病（同一个事实存两份），别再开第二份。
+ */
+export function checkInPayout(
+  task: Pick<Task, 'basePoints' | 'cycle' | 'checkInTargetCount'>,
+  confirmedDays: string[],
+  claimedTiers: number[],
+  date: string,
+): CheckInPayout {
+  const base = Math.max(0, Math.round(task.basePoints))
+  const nextDays = [...confirmedDays, date].sort()
+  const streak = checkInStreak(nextDays, date)
+  const streakBonus = checkInStreakBonus(streak, base)
+
+  const allTiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5)
+  const tiers = claimableTiers(allTiers, nextDays.length, claimedTiers)
+  const tierPoints = tiers.reduce((n, t) => n + t.points, 0)
+
+  return {
+    base,
+    streak,
+    streakBonus,
+    tiers,
+    tierPoints,
+    tierLabel: tiers.length > 0 ? tiers[tiers.length - 1].label : undefined,
+    total: base + streakBonus + tierPoints,
+  }
+}
+
 /** 是否在允许的完成时间窗内 */
 export function inTimeWindow(task: Task, ts = Date.now()): boolean {
   if (task.windowStartMinute == null || task.windowEndMinute == null) return true

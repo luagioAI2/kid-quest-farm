@@ -12,6 +12,7 @@ import {
 } from '../tasks/ui'
 import { ParentPinPanel } from './ParentGate'
 import { settleInstance } from '@/domain/settlement'
+import { checkInPayout } from '@/domain/recurrence'
 import { humanizeMinutes, humanizeAgo } from '@/domain/time'
 import type { PendingCheckIn, QualityGrade, TaskInstance } from '@/domain/types'
 
@@ -137,7 +138,22 @@ function CheckInReviewCard({
   // 哪天 refresh 改成每次重建对象，就会重演 React #185。
   const tasks = useApp((s) => s.tasks)
   const task = useMemo(() => tasks.find((t) => t.id === ci.taskId), [tasks, ci.taskId])
+  // 同理：订 `checkInProgress` 整片，别在 selector 里 `.find()`
+  const checkInProgress = useApp((s) => s.checkInProgress)
   const [busy, setBusy] = useState(false)
+
+  /* 「确认后得到 N 分」必须等于 `approveCheckIn` 真正发出去的数 ——
+     所以两处共用 `checkInPayout`，不在这里另算一遍。
+     这里原来写的是 `+task.basePoints`，而实际到账还有连击和阶梯：
+     全新账号第一天写着 5、点下去实发 7。家长看到的是一个数、孩子拿到另一个数，
+     这是最不该有的那类 bug。
+     ⚠️ 也不能图省事写「基础分」了事 —— 阶梯奖励就是这次确认触发的，
+     不预告等于把惊喜变成意外（家长会以为多发了）。 */
+  const payout = useMemo(() => {
+    if (!task) return null
+    const row = checkInProgress.find((p) => p.taskId === ci.taskId && p.periodKey === ci.periodKey)
+    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], ci.date)
+  }, [task, checkInProgress, ci.taskId, ci.periodKey, ci.date])
 
   const cat = task ? categoryOf(task.category) : null
 
@@ -186,7 +202,7 @@ function CheckInReviewCard({
           <div className="p-3">
             <p className="text-[11px] font-bold text-ink-500">确认后得到</p>
             <p className="tnum mt-0.5 font-display text-lg font-extrabold text-grass-600">
-              +{task?.basePoints ?? 0}
+              +{payout?.total ?? 0}
               <span className="ml-0.5 text-xs font-bold text-ink-500">分</span>
             </p>
           </div>
@@ -194,7 +210,9 @@ function CheckInReviewCard({
       </div>
 
       <p className="mt-3 px-1 text-xs font-bold leading-snug text-ink-500">
-        确认后这一天会算进坚持天数，攒够天数自动发阶梯奖励。
+        {payout && payout.streakBonus + payout.tierPoints > 0
+          ? `基础 ${payout.base} 分${payout.streakBonus > 0 ? ` + 连击 ${payout.streakBonus} 分（连续第 ${payout.streak} 天）` : ''}${payout.tierPoints > 0 ? ` + 阶梯 ${payout.tierPoints} 分` : ''}。确认后这一天会算进坚持天数。`
+          : '确认后这一天会算进坚持天数，攒够天数自动发阶梯奖励。'}
       </p>
 
       <div className="mt-4 space-y-2">

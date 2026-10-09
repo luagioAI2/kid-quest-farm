@@ -1059,6 +1059,75 @@ try {
   })
   await new Promise((r) => setTimeout(r, 600))
 
+  /* ---------- 6b. 签到审核卡：「确认后得到」必须等于真的到账（2026-10-09） ----------
+     修掉的 bug：卡片上写的是 `+task.basePoints`，而 grantCheckIn 实发
+     base + 连击 + 阶梯 —— 全新账号首日写着 5、点下去到账 7。
+     家长看到的是一个数、孩子拿到的是另一个数。
+
+     单测只能钉住 store 的发放口径，**钉不住这张卡片渲染出来的字**，
+     所以必须在真浏览器里把显示出来的数字读出来，再跟余额增量对一次。 */
+  await page.evaluate(async () => {
+    const s = window.__kqf__.getState()
+    await s.updateSettings({ parentReviewEnabled: true })
+    const t = s.tasks.find((x) => x.checkInEnabled)
+    await s.doCheckIn(t.id) // 挂进待审，不发分
+  })
+  await new Promise((r) => setTimeout(r, 900))
+
+  await page.evaluate(() => {
+    const b = document.querySelector('button[aria-label^="家长确认"]')
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 800))
+  // 弹层每次打开都重新上锁 —— 6 里那次解锁已经随着关闭失效了
+  for (const k of ['1', '2', '3', '4']) {
+    await page.evaluate((key) => {
+      const d = document.querySelector('[role="dialog"]')
+      const b = d && [...d.querySelectorAll('button')].find((x) => x.innerText.trim() === key)
+      b?.click()
+    }, k)
+    await new Promise((r) => setTimeout(r, 200))
+  }
+  await new Promise((r) => setTimeout(r, 1200))
+
+  const ciCard = await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]')
+    if (!d) return null
+    const text = d.innerText.replace(/\s+/g, ' ')
+    const m = text.match(/确认后得到\s*\+?\s*(\d+)/)
+    return {
+      text: text.slice(0, 120),
+      shown: m ? Number(m[1]) : null,
+      hasBtn: [...d.querySelectorAll('button')].some((b) => /确认这一天做到了/.test(b.innerText)),
+    }
+  })
+  check('签到待审出现在家长队列里（签到卡渲染出来了）', !!ciCard?.hasBtn, ciCard?.text ?? '没拿到弹层')
+  check(
+    '签到卡的「确认后得到」是基础分 + 阶梯（第 1 天 = 7，不是光秃秃的 5）',
+    ciCard?.shown === 7,
+    ciCard ? `读到 ${ciCard.shown} ｜ ${ciCard.text.slice(0, 80)}` : '没读到',
+  )
+
+  const ciPaid = await page.evaluate(async () => {
+    const before = window.__kqf__.getState().balance
+    const d = document.querySelector('[role="dialog"]')
+    const b = d && [...d.querySelectorAll('button')].find((x) => /确认这一天做到了/.test(x.innerText))
+    b?.click()
+    await new Promise((r) => setTimeout(r, 1400))
+    return { before, after: window.__kqf__.getState().balance }
+  })
+  check(
+    '签到审核卡预告的分 = 实际到账的分（这一条就是那个 bug 的护栏）',
+    ciCard?.shown != null && ciPaid.after - ciPaid.before === ciCard.shown,
+    `卡片写 ${ciCard?.shown}，实发 ${ciPaid.after - ciPaid.before}（${ciPaid.before} → ${ciPaid.after}）`,
+  )
+
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === '关闭')
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 600))
+
   /* ---------- 7. 数据导出 ---------- */
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find((x) => x.innerText.includes('⚙️'))

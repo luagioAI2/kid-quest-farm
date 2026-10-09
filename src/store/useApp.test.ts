@@ -19,7 +19,7 @@ import {
   selectTodayInstances,
   useApp,
 } from './useApp'
-import { currentDayKey, defaultTiers } from '../domain/recurrence'
+import { checkInPayout, currentDayKey, defaultTiers } from '../domain/recurrence'
 import { periodKeyFor } from '../domain/time'
 import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
 import { SEED_TASKS } from '../domain/seedTasks'
@@ -298,6 +298,107 @@ describe('签到连击', () => {
     await seedProgress(task.id, '2026-W42', [], ['2026-10-12'])
     const gained = await useApp.getState().approveCheckIn(task.id, '2026-W42', '2026-10-12')
     expect(gained).toBe(5)
+  })
+})
+
+describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
+  /* 2026-10-09 修掉的 bug：家长审核卡上写「确认后得到 +5 分」，
+     点下去实发 7 —— 卡片只显示 basePoints，而 grantCheckIn 还加了连击和阶梯。
+     同一个事实存两份，第一周就露馅。
+     现在两边共用 `checkInPayout`，这里把「预告 = 实发」这条不变量钉死。 */
+  const W41 = '2026-W41'
+  const WEEK = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09']
+
+  /** 造一条干净的进度行（claimedTiers 留空 —— 阶梯要真的发得出来） */
+  async function seed(taskId: string, days: string[], claimedTiers: number[], pendingDays: string[]) {
+    await db.checkInProgress.put({
+      id: `cip_${taskId}_${W41}`,
+      taskId,
+      periodKey: W41,
+      days,
+      pendingDays,
+      claimedTiers,
+      updatedAt: Date.now(),
+    })
+    // ⚠️ 必须 refresh：store 里的 checkInProgress 是内存快照，
+    // 直接 put 到 Dexie 不会自动同步。少了这一句，cardSays 读到的是空进度行，
+    // 而空进度行算出来的首日恰好也是 7 —— 测试会「绿着」放过一个假实现。
+    await useApp.getState().refresh()
+  }
+
+  /** 复刻审核卡那一行：读 store 的进度行 + 同一个 checkInPayout */
+  function cardSays(taskId: string, periodKey: string, date: string): number {
+    const s = useApp.getState()
+    const task = s.tasks.find((t) => t.id === taskId)!
+    const row = s.checkInProgress.find((p) => p.taskId === taskId && p.periodKey === periodKey)
+    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], date).total
+  }
+
+  it('首日卡片写 7（基础 5 + 阶梯 2），实发也是 7 —— 老代码这里写 5 实发 7', async () => {
+    const task = checkInTask()
+    await seed(task.id, [], [], ['2026-10-05'])
+
+    // 先把「进度行确实进了 store」钉住 —— 读不到行时会退回空数组，
+    // 而空数组算出来的首日**也是 7**，断言照样绿，等于白测。
+    const row = useApp.getState().checkInProgress.find((p) => p.taskId === task.id && p.periodKey === W41)
+    expect(row, '进度行没进 store，下面的预告是拿空数据算的').toBeDefined()
+
+    const shown = cardSays(task.id, W41, '2026-10-05')
+    expect(shown, '卡片上写的').toBe(7)
+
+    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-05')
+    expect(gained, '实际发的').toBe(shown)
+  })
+
+  it('阶梯已经领过的那天，预告里就没有阶梯分（证明预告真的读了进度行）', async () => {
+    const task = checkInTask()
+    await seed(task.id, [], [1], ['2026-10-05'])
+    expect(cardSays(task.id, W41, '2026-10-05')).toBe(5)
+  })
+
+  it('整周逐日核对：每天的预告都等于当天实发', async () => {
+    const task = checkInTask()
+    await seed(task.id, [], [], [])
+
+    for (const day of WEEK) {
+      // 家长点「确认」之前，卡片上会显示这个数
+      const shown = cardSays(task.id, W41, day)
+
+      // 孩子那边把它挂进待审，家长再确认
+      const row = await db.checkInProgress.where('[taskId+periodKey]').equals([task.id, W41]).first()
+      await db.checkInProgress.put({ ...row!, pendingDays: [day] })
+
+      const gained = await useApp.getState().approveCheckIn(task.id, W41, day)
+      expect(gained, `${day} 卡片写 ${shown} 但实发 ${gained}`).toBe(shown)
+    }
+  })
+
+  it('阶梯那一天的预告里确实含阶梯分（不是只有基础+连击）', async () => {
+    const task = checkInTask()
+    await seed(task.id, ['2026-10-05', '2026-10-06'], [1], ['2026-10-07'])
+
+    const s = useApp.getState()
+    const row = s.checkInProgress.find((p) => p.taskId === task.id && p.periodKey === W41)!
+    const p = checkInPayout(task, row.days, row.claimedTiers, '2026-10-07')
+    expect(p.base).toBe(5)
+    expect(p.streakBonus).toBe(2)
+    expect(p.tierPoints).toBe(6)
+    expect(p.total).toBe(13)
+
+    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-07')
+    expect(gained).toBe(13)
+  })
+
+  it('账本合计 = 卡片预告（分条落账也不许少一分）', async () => {
+    const task = checkInTask()
+    await seed(task.id, [], [], ['2026-10-05'])
+    const shown = cardSays(task.id, W41, '2026-10-05')
+    await useApp.getState().approveCheckIn(task.id, W41, '2026-10-05')
+
+    const rows = useApp
+      .getState()
+      .ledger.filter((l) => l.source === 'checkin' || l.source === 'checkin_bonus')
+    expect(rows.reduce((n, l) => n + l.delta, 0)).toBe(shown)
   })
 })
 

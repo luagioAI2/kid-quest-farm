@@ -77,9 +77,7 @@ import {
 } from '../domain/economy'
 import {
   buildPeriodUnits,
-  checkInStreak,
-  checkInStreakBonus,
-  claimableTiers,
+  checkInPayout,
   computeStreak,
   currentDayKey,
   defaultTiers,
@@ -828,15 +826,16 @@ async function grantCheckIn(
 ): Promise<{ gained: number; bonus: number; tierLabel?: string }> {
   if (progress.days.includes(date)) return { gained: 0, bonus: 0 }
 
-  const basePoints = Math.max(0, Math.round(task.basePoints))
-  const nextDays = [...progress.days, date].sort()
-  // ⚠️ 连击必须在**把今天算进去之后**再问 —— 否则问「今天是第几天」永远是 0，
-  //    连击永远不会生效（而且不会报错，只是每天都是基础分）。
-  const streak = checkInStreak(nextDays, date)
-  const streakBonus = checkInStreakBonus(streak, basePoints)
-  const gained = basePoints + streakBonus
+  /* 发多少分**只算这一次**，而且用的是「家长审核卡上显示多少分」那同一个函数。
+     ⚠️ 别把 base / streak / tier 又在这里展开算一遍 ——
+     审核卡原来就写着 `+task.basePoints`，实际到账却是 base + 连击 + 阶梯，
+     首日写 5 实发 7。同一个事实存两份，迟早走散（本项目的老毛病）。
+     `checkInPayout` 内部已经把 date 并进 days 之后再问连击 ——
+     否则「今天是第几天」永远是 0，连击永远不生效，而且不报错。 */
+  const payout = checkInPayout(task, progress.days, progress.claimedTiers, date)
+  const gained = payout.base + payout.streakBonus
 
-  progress.days = nextDays
+  progress.days = [...progress.days, date].sort()
   progress.updatedAt = Date.now()
   await db.checkInProgress.put(progress)
 
@@ -850,9 +849,9 @@ async function grantCheckIn(
   }
   await db.checkIns.put(record)
 
-  if (basePoints > 0) {
+  if (payout.base > 0) {
     await postLedger({
-      delta: basePoints,
+      delta: payout.base,
       source: 'checkin',
       refId: record.id,
       memo: `签到：${task.title}`,
@@ -861,21 +860,19 @@ async function grantCheckIn(
 
   // 连击加成单独记一条流水 —— 否则孩子在账本里只看到「签到 +7」，
   // 看不出多出来的 2 分是连击给的，也就学不到「连着来更划算」。
-  if (streakBonus > 0) {
+  if (payout.streakBonus > 0) {
     await postLedger({
-      delta: streakBonus,
+      delta: payout.streakBonus,
       source: 'checkin_bonus',
       refId: `${record.id}:streak`,
-      memo: `连续第 ${streak} 天 · 连击 +${streakBonus}`,
+      memo: `连续第 ${payout.streak} 天 · 连击 +${payout.streakBonus}`,
     })
   }
 
   // 自动结算已达成的阶梯奖励
-  const tiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5)
-  const claimable = claimableTiers(tiers, progress.days.length, progress.claimedTiers)
   let bonus = 0
   let tierLabel: string | undefined
-  for (const tier of claimable) {
+  for (const tier of payout.tiers) {
     progress.claimedTiers = [...progress.claimedTiers, tier.days]
     bonus += tier.points
     tierLabel = tier.label
@@ -889,7 +886,7 @@ async function grantCheckIn(
     }
     if (tier.itemId) await addItem(tier.itemId, 1)
   }
-  if (claimable.length > 0) {
+  if (payout.tiers.length > 0) {
     progress.claimedTiers = Array.from(new Set(progress.claimedTiers))
     await db.checkInProgress.put(progress)
   }
@@ -899,8 +896,8 @@ async function grantCheckIn(
     title: `签到成功 +${gained + bonus} 分`,
     detail: tierLabel
       ? `达成「${tierLabel}」！`
-      : streak > 1
-        ? `连续第 ${streak} 天，连击 +${streakBonus} 分`
+      : payout.streak > 1
+        ? `连续第 ${payout.streak} 天，连击 +${payout.streakBonus} 分`
         : `已坚持 ${progress.days.length} 天`,
     emoji: '📅',
   })
