@@ -644,6 +644,98 @@ try {
         !checkInCard.buttons.some((b) => b.endsWith('+60')),
       checkInCard.buttons.join(' | '),
     )
+    /* 2026-10-09 家长报「签到任务无法编辑」。
+       原因：签到卡（CheckInCard）渲染时**没接 onEdit**，也没有编辑按钮 ——
+       长期任务卡和固定任务条都有 ✏️，唯独签到卡漏了，于是签到任务
+       从界面上根本走不到编辑器（编辑器和 store 本身都支持签到任务）。
+       这条断言就是那个缺口。 */
+    check(
+      '签到卡上有编辑入口（✏️）—— 否则签到任务根本改不了',
+      checkInCard.buttons.some((b) => b.includes('✏️')),
+      checkInCard.buttons.join(' | '),
+    )
+
+    /* 光有按钮不算数：点下去要真的打开编辑器，而且载入的是**这张签到任务**
+       （标题一致 + 签到模式开着）。否则等于给了个开不出东西的按钮。
+       这一节跑在设密码之前（引导里走的是「以后再说」），所以不用过闸。
+
+       ⚠️ 不能直接找页面上第一个 aria-label="编辑任务" —— 「今日任务」的卡片
+       也有这个按钮，DOM 顺序在前，点到的是别人的卡。必须**从签到卡的标题
+       往上走回卡片**，再点它里面的那个（同上面 checkInCard 的走法）。 */
+    const clicked = await page.evaluate(() => {
+      const title = '学习日复述每天学习内容'
+      const h = [...document.querySelectorAll('h3')].find((x) => x.innerText.trim() === title)
+      if (!h) return false
+      let card = h
+      while (card.parentElement && card.parentElement.querySelectorAll('h3').length === 1) {
+        card = card.parentElement
+      }
+      const btn = [...card.querySelectorAll('button')].find(
+        (x) => x.getAttribute('aria-label') === '编辑任务',
+      )
+      if (!btn) return false
+      btn.click()
+      return true
+    })
+
+    /* 编辑器是**家长动作**，被密码锁着 —— `DEFAULT_SETTINGS.parentPin` 是 '0000'，
+       而引导里走的是「以后再说」（不改密码），所以这里就是 0000。
+       不过闸的话，「✅ 保存修改」永远不会出现（这一条第一次写就栽在这，
+       报的是「没出现保存按钮」，看着像编辑入口坏了，其实是门禁在正常工作）。 */
+    const gateShown = await page.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]')
+      return !!d && /请爸爸妈妈来一下/.test(d.innerText)
+    })
+    if (gateShown) {
+      for (const k of ['0', '0', '0', '0']) {
+        await page.evaluate((key) => {
+          const d = document.querySelector('[role="dialog"]')
+          const b = d ? [...d.querySelectorAll('button')].find((x) => x.innerText.trim() === key) : null
+          b?.click()
+        }, k)
+        await new Promise((r) => setTimeout(r, 180))
+      }
+    }
+
+    /* 等弹层真的挂上，别用固定 sleep —— 判据是「出现保存按钮」这个可观测事实。 */
+    const opened = await page
+      .waitForFunction(
+        () =>
+          [...document.querySelectorAll('button')].some(
+            (x) => x.textContent?.trim() === '✅ 保存修改',
+          ),
+        { timeout: 6000 },
+      )
+      .then(() => true, () => false)
+
+    const editor = await page.evaluate(() => {
+      const titleInput = document.querySelector('input[placeholder="比如：完成语文作业"]')
+      const checkInSwitch = [...document.querySelectorAll('button')].find((x) =>
+        (x.textContent ?? '').includes('开启签到模式'),
+      )
+      return {
+        title: titleInput?.value ?? null,
+        checkInOn: checkInSwitch?.getAttribute('aria-pressed') === 'true',
+      }
+    })
+
+    // 关掉，别影响后面的用例
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(
+        (x) => x.getAttribute('aria-label') === '关闭',
+      )
+      b?.click()
+    })
+    await new Promise((r) => setTimeout(r, 700))
+
+    check('签到卡上的 ✏️ 点得到', clicked, clicked ? '' : '没在签到卡里找到编辑按钮')
+    check('点签到卡的 ✏️ 会弹出编辑器，并被家长密码挡住', clicked && gateShown, gateShown ? '' : '没看到密码盘')
+    check('过了密码后编辑器打开', opened, opened ? '' : '等 6s 也没出现「✅ 保存修改」')
+    check(
+      '编辑器载入的就是那张签到任务（标题一致 + 签到模式开着）',
+      editor.title === '学习日复述每天学习内容' && editor.checkInOn,
+      `标题「${editor.title}」，签到模式 ${editor.checkInOn ? '开' : '关'}`,
+    )
   }
 
   /* ---------- 5. 农场：种植流程 ---------- */

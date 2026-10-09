@@ -172,7 +172,15 @@ export default function TaskPage() {
         <Section title="坚持签到" emoji="📅" count={checkInTasks.length}>
           <div className="card-list">
             {checkInTasks.map((t) => (
-              <CheckInCard key={t.id} task={t} todayKey={todayKey} />
+              <CheckInCard
+                key={t.id}
+                task={t}
+                todayKey={todayKey}
+                onEdit={() => {
+                  setEditTask(t)
+                  setEditorOpen(true)
+                }}
+              />
             ))}
           </div>
         </Section>
@@ -962,7 +970,15 @@ export function OnceSubmitSheet({
    签到卡：日格 + 阶梯奖励
    ============================================================ */
 
-function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
+function CheckInCard({
+  task,
+  todayKey,
+  onEdit,
+}: {
+  task: Task
+  todayKey: string
+  onEdit: () => void
+}) {
   const doCheckIn = useApp((s) => s.doCheckIn)
   const claimCheckInTier = useApp((s) => s.claimCheckInTier)
   const tiersFor = useApp((s) => s.tiersFor)
@@ -1039,9 +1055,22 @@ function CheckInCard({ task, todayKey }: { task: Task; todayKey: string }) {
             {cat.emoji}
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate font-display text-base font-extrabold text-ink-900">
-              {task.title}
-            </h3>
+            {/* 编辑入口。签到卡原来**没有**这个按钮，也没有接 onEdit ——
+                于是签到任务从界面上根本改不了（长期任务卡 / 固定任务条都有）。
+                编辑器和 store 一直是支持的，缺的只是这个入口。
+                尺寸同 TaskCard / PeriodCard 的编辑按钮：44×44 触控下限。 */}
+            <div className="flex items-center gap-1.5">
+              <h3 className="min-w-0 flex-1 truncate font-display text-base font-extrabold text-ink-900">
+                {task.title}
+              </h3>
+              <button
+                onClick={onEdit}
+                aria-label="编辑任务"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border border-ink-100 bg-white text-base font-bold text-ink-500 active:scale-95"
+              >
+                ✏️
+              </button>
+            </div>
             <p className="text-[11px] font-bold text-ink-500">
               已坚持{' '}
               <span className="tnum font-extrabold text-ink-900">{days.length}</span>
