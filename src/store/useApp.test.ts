@@ -1127,6 +1127,29 @@ describe('首次启动：今日任务', () => {
     }
   })
 
+  it('周期是 daily 的签到任务，也不会混进今日任务（否则两个区块各渲染一次）', async () => {
+    /* 上面那条只覆盖了**种子里的**签到任务（全是 weekly，本来就不预生成实例）。
+       真正的缺口在 daily：selectPeriodTasks 早就排除了 checkInEnabled，
+       但 selectTodayInstances 只按实例的 `cycle` 过滤 ——
+       一个 cycle: 'daily' 的签到任务会**同时**出现在「今日任务」和
+       「坚持签到」两个区块里，看起来像建了两个任务。
+       这条路是通的：家长在编辑器里能把签到任务的周期改成 daily。 */
+    await useApp.getState().addTask({
+      title: '每日喝水打卡',
+      category: 'habit',
+      cycle: 'daily',
+      plannedMinutes: 5,
+      basePoints: 5,
+      allowOvertime: false,
+      allowLateNoPenalty: true,
+      qualityRated: false,
+      checkInEnabled: true,
+      checkInTargetCount: 5,
+    })
+    expect(selectCheckInTasks(useApp.getState()).map((x) => x.title)).toContain('每日喝水打卡')
+    expect(todayTitles()).not.toContain('每日喝水打卡')
+  })
+
   it('五个签到任务都能在「坚持签到」里找到', () => {
     const titles = selectCheckInTasks(useApp.getState()).map((t) => t.title)
     expect([...titles].sort()).toEqual(

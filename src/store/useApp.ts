@@ -2689,6 +2689,22 @@ export const useApp = create<AppState>((set, get) => ({
    辅助选择器（供组件直接使用，避免重复计算）
    ============================================================ */
 
+/**
+ * 今天真正属于「今日任务」的实例行。
+ *
+ * 排除签到任务：它们有自己的卡片（「坚持签到」区块），
+ * 若这里也算进去，同一张任务会在两个区块各渲染一次。
+ * 和 `selectPeriodTasks` 同一个理由 —— 两个选择器的排除口径必须一致。
+ *
+ * 为什么要在这里再挡一次（`makeInstance` 已经不预生成签到任务的实例了）：
+ * 一个任务**先**是普通 daily（已有实例）、**后**被家长打开签到模式时，
+ * 那些旧实例还在库里。只在生成处挡，这条转轨就漏了。
+ */
+function todayInstanceRows(s: AppState): TaskInstance[] {
+  const checkInIds = new Set(s.tasks.filter((t) => t.checkInEnabled).map((t) => t.id))
+  return s.instances.filter((i) => i.date === s.todayKey && !checkInIds.has(i.taskId))
+}
+
 /** 今日实例：每日任务 + 今天创建的单次任务 */
 export function selectTodayInstances(s: AppState): TaskInstance[] {
   // 排序：① 待完成在前 ② 同一组里按「任务定义」的顺序（家长排的顺序）
@@ -2698,8 +2714,8 @@ export function selectTodayInstances(s: AppState): TaskInstance[] {
   // 写进去的，createdAt 全一样 → 排序退化成「按随机主键」，于是每次
   // 全新安装看到的任务先后都不一样（实测跑三次三个顺序）。
   const orderOf = new Map(s.tasks.map((t, i) => [t.id, i]))
-  return s.instances
-    .filter((i) => i.date === s.todayKey && i.cycle !== 'weekly' && i.cycle !== 'monthly' && i.cycle !== 'yearly')
+  return todayInstanceRows(s)
+    .filter((i) => i.cycle !== 'weekly' && i.cycle !== 'monthly' && i.cycle !== 'yearly')
     .sort((a, b) => {
       const rank = (i: TaskInstance) => (i.status === 'pending' ? 0 : 1)
       if (rank(a) !== rank(b)) return rank(a) - rank(b)
@@ -2733,7 +2749,9 @@ export function selectCheckInTasks(s: AppState): Task[] {
 
 /** 今日统计 */
 export function selectTodayStats(s: AppState) {
-  const today = s.instances.filter((i) => i.date === s.todayKey)
+  // 和「今日任务」用同一份行 —— 否则签到任务会算进「今日任务 N 个」，
+  // 而列表里根本不显示它，数字对不上。
+  const today = todayInstanceRows(s)
   const done = today.filter((i) => i.status === 'completed' || i.status === 'failed')
   const pending = today.filter((i) => i.status === 'pending')
   const submitted = today.filter((i) => i.status === 'submitted')

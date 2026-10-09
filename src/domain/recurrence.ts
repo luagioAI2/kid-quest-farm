@@ -35,6 +35,13 @@ export function makeInstance(
 ): TaskInstance | null {
   if (task.archived) return null
   if (!isPreGenerated(task.cycle)) return null
+  /* 签到任务**不预生成实例**。签到走的是 checkIns + checkInProgress 两条表
+     （见 useApp 的 doCheckIn / grantCheckIn），从不读 TaskInstance；
+     而卡片渲染是「签到进『坚持签到』区块」这一个口径。
+     不挡住的话，一个 cycle: 'daily' 的签到任务会生成实例 →
+     同一张任务在「今日任务」和「坚持签到」各渲染一次，看起来像建重了。
+     （种子里的签到任务都是 weekly、本来就不预生成，所以以前没暴露。） */
+  if (task.checkInEnabled) return null
 
   // 单次任务：只在创建当天及之后出现一次，由调用方保证只建一次
   const periodKey = periodKeyFor(task.cycle, Date.now(), dayStartHour)
