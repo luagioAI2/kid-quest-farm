@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
+  checkInCapacity,
   checkInStreak,
   checkInStreakBonus,
   checkInStreakIfSigned,
   checkInPayout,
+  checkInSupported,
   defaultTiers,
   claimableTiers,
   eachDay,
   computeStreak,
+  isCheckInTask,
 } from './recurrence'
 
 /* ============================================================
@@ -360,5 +363,80 @@ describe('连击 computeStreak', () => {
 
   it('空记录为 0', () => {
     expect(computeStreak([], '2026-03-05')).toBe(0)
+  })
+})
+
+/* ============================================================
+   签到容量：目标天数不能超过「一个周期能有几天」
+   ------------------------------------------------------------
+   2026-10-09：家长问签到任务的周期支持哪些。查完发现
+   `daily` / `once` 的 periodKey 就是**当天**，进度行每天重置，
+   而 `checkInTargetCount` 默认 5、输入框上限还写死 366 ——
+   于是「目标 5 天」在日任务上**永远到不了**，界面上却照常
+   写着「+12 分」。编辑器现在拿 checkInCapacity 做校验并提示。
+   ============================================================ */
+
+describe('签到容量 checkInCapacity', () => {
+  it('日 / 单次的一个周期只有 1 天', () => {
+    expect(checkInCapacity('once')).toBe(1)
+    expect(checkInCapacity('daily')).toBe(1)
+  })
+
+  it('周 7 / 月 31 / 年 366', () => {
+    expect(checkInCapacity('weekly')).toBe(7)
+    expect(checkInCapacity('monthly')).toBe(31)
+    expect(checkInCapacity('yearly')).toBe(366)
+  })
+
+  it('★ 默认目标 5 天在 daily 上全都超出容量 —— 这正是编辑器要警告的情形', () => {
+    const tiers = defaultTiers('daily', 5, 5)
+    expect(tiers.length).toBeGreaterThan(0)
+    for (const t of tiers) {
+      expect(t.days, `第 ${t.days} 天那档`).toBeGreaterThan(checkInCapacity('daily'))
+    }
+  })
+
+  it('正向对照：weekly + 目标 5 的每一档都在容量以内（不是所有组合都到不了）', () => {
+    const tiers = defaultTiers('weekly', 5, 5)
+    expect(tiers.length).toBe(3)
+    for (const t of tiers) {
+      expect(t.days, `第 ${t.days} 天那档`).toBeLessThanOrEqual(checkInCapacity('weekly'))
+    }
+  })
+})
+
+/* ============================================================
+   签到只在「跨天」的周期上成立（2026-10-09 家长定）
+   ------------------------------------------------------------
+   编辑器里日 / 单次**不显示**签到开关；数据层同样按 isCheckInTask 判定，
+   两边共用一个事实源。老库里可能还留着 daily + checkInEnabled: true，
+   那种任务必须**退回成普通日任务**，而不是从所有区块一起消失。
+   ============================================================ */
+
+describe('checkInSupported / isCheckInTask', () => {
+  it('日 / 单次不支持；周 / 月 / 年支持', () => {
+    expect(checkInSupported('once')).toBe(false)
+    expect(checkInSupported('daily')).toBe(false)
+    expect(checkInSupported('weekly')).toBe(true)
+    expect(checkInSupported('monthly')).toBe(true)
+    expect(checkInSupported('yearly')).toBe(true)
+  })
+
+  it('★ 日 / 单次上即使留着 checkInEnabled: true，也不算签到任务（老库数据）', () => {
+    expect(isCheckInTask({ checkInEnabled: true, cycle: 'daily' })).toBe(false)
+    expect(isCheckInTask({ checkInEnabled: true, cycle: 'once' })).toBe(false)
+  })
+
+  it('正向对照：周 / 月 / 年上 checkInEnabled: true 才算签到任务', () => {
+    expect(isCheckInTask({ checkInEnabled: true, cycle: 'weekly' })).toBe(true)
+    expect(isCheckInTask({ checkInEnabled: true, cycle: 'monthly' })).toBe(true)
+    expect(isCheckInTask({ checkInEnabled: true, cycle: 'yearly' })).toBe(true)
+  })
+
+  it('没开开关就不是签到任务（不论周期）', () => {
+    for (const c of ['once', 'daily', 'weekly', 'monthly', 'yearly'] as const) {
+      expect(isCheckInTask({ checkInEnabled: false, cycle: c }), c).toBe(false)
+      expect(isCheckInTask({ cycle: c }), c).toBe(false)
+    }
   })
 })

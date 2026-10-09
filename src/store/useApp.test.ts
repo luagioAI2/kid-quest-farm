@@ -1127,13 +1127,18 @@ describe('首次启动：今日任务', () => {
     }
   })
 
-  it('周期是 daily 的签到任务，也不会混进今日任务（否则两个区块各渲染一次）', async () => {
-    /* 上面那条只覆盖了**种子里的**签到任务（全是 weekly，本来就不预生成实例）。
-       真正的缺口在 daily：selectPeriodTasks 早就排除了 checkInEnabled，
-       但 selectTodayInstances 只按实例的 `cycle` 过滤 ——
-       一个 cycle: 'daily' 的签到任务会**同时**出现在「今日任务」和
-       「坚持签到」两个区块里，看起来像建了两个任务。
-       这条路是通的：家长在编辑器里能把签到任务的周期改成 daily。 */
+  it('★ 日 / 单次周期不算签到任务 —— 老库留着 checkInEnabled 也退回成普通任务', async () => {
+    /* 2026-10-09 家长定：日 / 单次不支持签到（编辑器里整块不显示）。
+       起因：签到的日历 / 连击 / 阶梯全是按「一个周期内坚持几天」设计的，
+       而 daily 的 periodKey 就是当天 —— 目标天数永远到不了，
+       界面上却照常写着「+12 分」。
+
+       老库里可能有 `daily + checkInEnabled: true` 的记录。它必须
+       **退回成普通日任务**，而且要**照常出现在今日任务里**：
+       这是本条的关键 —— 如果只有 `selectCheckInTasks` 排除了它、
+       而 `makeInstance` 仍按签到返回 null，它就会从所有区块**一起消失**，
+       比原来更糟。所以 makeInstance / 今日任务 / 长期任务 / 坚持签到
+       四处判定必须共用 `isCheckInTask`。 */
     await useApp.getState().addTask({
       title: '每日喝水打卡',
       category: 'habit',
@@ -1146,8 +1151,32 @@ describe('首次启动：今日任务', () => {
       checkInEnabled: true,
       checkInTargetCount: 5,
     })
-    expect(selectCheckInTasks(useApp.getState()).map((x) => x.title)).toContain('每日喝水打卡')
-    expect(todayTitles()).not.toContain('每日喝水打卡')
+    // 不再进「坚持签到」
+    expect(selectCheckInTasks(useApp.getState()).map((x) => x.title)).not.toContain('每日喝水打卡')
+    // 也没有从页面上消失 —— 退回成普通日任务
+    expect(todayTitles()).toContain('每日喝水打卡')
+  })
+
+  it('正向对照：周期改成 weekly 之后，同一个开关就真的生效（进签到、不进今日）', async () => {
+    /* 和上一条成对。只有「不进签到」是弱断言 —— 万一是
+       `selectCheckInTasks` 把**所有**任务都排除了呢？
+       换成受支持的周期，它必须回到「坚持签到」里去。 */
+    const t = await useApp.getState().addTask({
+      title: '每周喝水打卡',
+      category: 'habit',
+      cycle: 'weekly',
+      plannedMinutes: 5,
+      basePoints: 5,
+      allowOvertime: false,
+      allowLateNoPenalty: true,
+      qualityRated: false,
+      checkInEnabled: true,
+      checkInTargetCount: 5,
+    })
+    expect(selectCheckInTasks(useApp.getState()).map((x) => x.title)).toContain('每周喝水打卡')
+    expect(todayTitles()).not.toContain('每周喝水打卡')
+    expect(selectPeriodTasks(useApp.getState()).map((x) => x.title)).not.toContain('每周喝水打卡')
+    expect(t.cycle).toBe('weekly')
   })
 
   it('五个签到任务都能在「坚持签到」里找到', () => {

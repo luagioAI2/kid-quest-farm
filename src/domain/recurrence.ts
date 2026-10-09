@@ -40,8 +40,9 @@ export function makeInstance(
      而卡片渲染是「签到进『坚持签到』区块」这一个口径。
      不挡住的话，一个 cycle: 'daily' 的签到任务会生成实例 →
      同一张任务在「今日任务」和「坚持签到」各渲染一次，看起来像建重了。
-     （种子里的签到任务都是 weekly、本来就不预生成，所以以前没暴露。） */
-  if (task.checkInEnabled) return null
+     （种子里的签到任务都是 weekly、本来就不预生成，所以以前没暴露。）
+     判据用 isCheckInTask 而不是裸的 checkInEnabled —— 见那个函数的注释。 */
+  if (isCheckInTask(task)) return null
 
   // 单次任务：只在创建当天及之后出现一次，由调用方保证只建一次
   const periodKey = periodKeyFor(task.cycle, Date.now(), dayStartHour)
@@ -185,6 +186,60 @@ export interface CheckInTier {
   points: number
   itemId?: string
   label: string
+}
+
+/**
+ * 一个周期内**最多能签几天** —— 也就是阶梯天数的上限。
+ *
+ * 为什么需要它：`checkInTargetCount` 输入框的上限写死 366，
+ * 而周期容量比它小得多（日 / 单次只有 **1** 天、一周 7 天）。
+ * 目标填得比容量大时，最后一档**永远到不了**，界面上却照常写着「+12 分」
+ * —— 又一个「界面承诺了发不出来的东西」。
+ * 编辑器拿它做校验，给家长一句实话。
+ *
+ * ⚠️ 月 / 年取的是**理论上限**（31 / 366），所以 2 月填 31 天仍会漏判。
+ *    宁可漏判也不要误报：一个会误报的提示，家长很快就学会无视它。
+ */
+export function checkInCapacity(cycle: Task['cycle']): number {
+  switch (cycle) {
+    case 'once':
+    case 'daily':
+      return 1
+    case 'weekly':
+      return 7
+    case 'monthly':
+      return 31
+    case 'yearly':
+      return 366
+  }
+}
+
+/**
+ * 这个周期**能不能用签到模式**。
+ *
+ * 判据就是「一个周期是不是只有一天」—— 复用 `checkInCapacity`，
+ * 不再写第二份周期清单：两处各写一遍，加周期时必然走散。
+ *
+ * 为什么日 / 单次不行：签到整套东西（日历格、已坚持 X/Y 天、连击、
+ * 阶梯）都是按「**一个周期内**坚持几天」设计的，而日 / 单次的
+ * `periodKey` 就是当天，进度行每天重置 —— 目标天数永远到不了。
+ * 2026-10-09 家长定：这两种周期直接**不显示**签到开关。
+ */
+export function checkInSupported(cycle: Task['cycle']): boolean {
+  return checkInCapacity(cycle) > 1
+}
+
+/**
+ * 这个任务**实际是不是**签到任务 —— 唯一事实源。
+ *
+ * ⚠️ 不能只看 `task.checkInEnabled`：日 / 单次周期上这个标志是无效的
+ * （编辑器已经不显示了，但老库里可能留着 `true`）。
+ * 若各处各判各的，就会出现「生成处挡了、读取处没挡」这类分叉；
+ * 更糟的是**两个读取处口径相反**时，任务会从所有区块一起消失。
+ * 所以 makeInstance、今日任务、长期任务、坚持签到四处必须共用这一个判定。
+ */
+export function isCheckInTask(task: Pick<Task, 'checkInEnabled' | 'cycle'>): boolean {
+  return !!task.checkInEnabled && checkInSupported(task.cycle)
 }
 
 /**

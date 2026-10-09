@@ -82,6 +82,7 @@ import {
   currentDayKey,
   defaultTiers,
   isPreGenerated,
+  isCheckInTask,
   makeInstance,
   planMissingInstances,
   uid,
@@ -2699,7 +2700,7 @@ export const useApp = create<AppState>((set, get) => ({
  * 那些旧实例还在库里。只在生成处挡，这条转轨就漏了。
  */
 function todayInstanceRows(s: AppState): TaskInstance[] {
-  const checkInIds = new Set(s.tasks.filter((t) => t.checkInEnabled).map((t) => t.id))
+  const checkInIds = new Set(s.tasks.filter(isCheckInTask).map((t) => t.id))
   return s.instances.filter((i) => i.date === s.todayKey && !checkInIds.has(i.taskId))
 }
 
@@ -2735,14 +2736,14 @@ export function selectTodayInstances(s: AppState): TaskInstance[] {
 export function selectPeriodTasks(s: AppState): Task[] {
   return s.tasks.filter(
     (t) =>
-      !t.checkInEnabled &&
+      !isCheckInTask(t) &&
       (t.cycle === 'weekly' || t.cycle === 'monthly' || t.cycle === 'yearly'),
   )
 }
 
 /** 签到任务 */
 export function selectCheckInTasks(s: AppState): Task[] {
-  return s.tasks.filter((t) => t.checkInEnabled)
+  return s.tasks.filter(isCheckInTask)
 }
 
 /** 今日统计 */

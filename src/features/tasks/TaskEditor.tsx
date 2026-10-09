@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { settle } from '@/domain/settlement'
 import { humanizeMinutes, CYCLE_LABEL } from '@/domain/time'
-import { defaultTiers } from '@/domain/recurrence'
+import { checkInCapacity, checkInSupported, defaultTiers } from '@/domain/recurrence'
 import { ITEMS } from '@/domain/catalog'
 import type { Task, TaskCategory, TaskCycle } from '@/domain/types'
 import { useApp, type NewTaskInput } from '@/store/useApp'
@@ -398,7 +398,13 @@ export function TaskEditor({
           </Field>
         )}
 
-        {/* ---------- 签到模式 ---------- */}
+        {/* ---------- 签到模式 ----------
+            日 / 单次周期**整块不显示**（2026-10-09 家长定）。
+            原因见 checkInSupported：签到是按「一个周期内坚持几天」设计的，
+            而这两种周期的 periodKey 就是当天，进度行每天重置 ——
+            目标天数永远到不了。与其显示一个必然失败的配置，不如不显示。
+            周期选回「周 / 月 / 年」时它自己会回来。 */}
+        {checkInSupported(cycle) && (
         <div className="space-y-3">
           <SwitchRow
             emoji="📅"
@@ -421,6 +427,22 @@ export function TaskEditor({
                   suffix="天"
                 />
               </Field>
+              {/* 目标天数 > 周期容量 → 最后一档**永远到不了**。
+                  日 / 单次已经被上面整块挡掉了，所以这里只剩
+                  「周填 8 天以上 / 月填 32 天以上」这类：家长能填、
+                  界面上还写着「+12 分」，但那一档永远不会触发。
+                  只提示，不改数字 —— 家长自己决定要目标还是要档位。 */}
+              {checkInTargetCount > checkInCapacity(cycle) && (
+                <p className="rounded-xl border border-berry-300 bg-berry-100 px-3 py-2 text-[11px] font-bold leading-relaxed text-berry-500">
+                  ⚠️ 签到是按「一个周期里坚持几天」算的，而「{CYCLE_LABEL[cycle]}」
+                  的一个周期只有{' '}
+                  <span className="tnum font-extrabold">{checkInCapacity(cycle)}</span> 天 ——
+                  最多签 {checkInCapacity(cycle)} 次。目标填{' '}
+                  <span className="tnum font-extrabold">{checkInTargetCount}</span> 的话，
+                  后面那几档永远到不了。
+                  {` 把目标改到 ${checkInCapacity(cycle)} 天以内，或者把周期改大一点。`}
+                </p>
+              )}
               {/* 连击规则。数字全部现算 —— 家长改基础分时这里要跟着变，
                   写死会立刻变成假话。 */}
               {basePoints > 0 && (
@@ -465,6 +487,7 @@ export function TaskEditor({
             </div>
           )}
         </div>
+        )}
 
         {/* ---------- 奖励道具 ----------
             ⚠️ 整块受「设置 → 道具掉落」总开关控制（家长 2026-09-30 定）。

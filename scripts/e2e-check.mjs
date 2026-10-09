@@ -841,14 +841,91 @@ try {
       `弹层文字 ${editorText.length} 字`,
     )
 
-    // 关掉编辑器，别把弹层留给后面的用例
-    await page.evaluate(() => {
-      const b = [...document.querySelectorAll('[role="dialog"] button')].find(
-        (x) => x.textContent?.trim() === '先不弄',
+    /* ---------- 目标超过「周期容量」时要给家长一句实话 ----------
+       周任务的容量是 7 天。目标 5 ≤ 7 → 不该报警；
+       把目标推到 8 > 7 → 必须明确警告「永远到不了」。
+       一正一反成对：只有反向（「没看到警告」）是弱断言，
+       配上正向才能说明这段逻辑真的接上了，而不是永远不显示。 */
+    check(
+      '周任务目标 5 ≤ 容量 7，编辑器不报「永远到不了」（不是常显）',
+      !/永远到不了/.test(editorText),
+      /永远到不了/.test(editorText) ? '在有效配置上误报了' : '',
+    )
+
+    /* ---------- 日 / 单次周期：签到整块不显示（2026-10-09 家长定） ----------
+       同一份弹层，只切周期：选「每天」时签到那块必须整块消失，
+       选回「每周」必须自己回来。
+       正向对照放在**同一次读取**里 —— 用「计划时长」这个永远在的字段
+       证明探针读的是**当前**弹层，而不是拿到一份空文本
+       （否则「没有签到模式」也可能只是因为整个弹层都没了）。 */
+    const clickCycle = async (label) => {
+      const ok = await page.evaluate((t) => {
+        const d = document.querySelector('[role="dialog"]')
+        const b = d
+          ? [...d.querySelectorAll('button')].find((x) => x.textContent?.trim() === t)
+          : null
+        if (!b) return false
+        b.click()
+        return true
+      }, label)
+      await sleep(500)
+      return ok
+    }
+    const dialogText = () =>
+      page.evaluate(() => document.querySelector('[role="dialog"]')?.innerText ?? '')
+
+    const toDaily = await clickCycle('每天')
+    const dailyText = await dialogText()
+    check(
+      '周期选「每天」时，签到模式整块不显示（开关和目标天数都不在）',
+      toDaily && !/开启签到模式/.test(dailyText) && !/一共要签到几天/.test(dailyText),
+      toDaily ? '' : '没找到「每天」按钮',
+    )
+    check(
+      '正向对照：同一次读取里「计划时长」还在（读的是当前弹层，不是空文本）',
+      /计划时长/.test(dailyText),
+      `弹层文字 ${dailyText.length} 字`,
+    )
+
+    const backWeekly = await clickCycle('每周')
+    const weeklyText = await dialogText()
+    check(
+      '周期选回「每周」时，签到模式自己回来（不是永久消失）',
+      backWeekly && /开启签到模式/.test(weeklyText),
+      backWeekly ? '' : '没找到「每周」按钮',
+    )
+
+    await setTargetAndSave(8)
+    await openEditorOfCard()
+    const gate8 = await page.evaluate(() => !!document.querySelector('[role="dialog"]'))
+    if (gate8) await passPin()
+    await page
+      .waitForFunction(
+        () =>
+          [...document.querySelectorAll('button')].some(
+            (x) => x.textContent?.trim() === '✅ 保存修改',
+          ),
+        { timeout: 6000 },
       )
-      b?.click()
-    })
-    await sleep(600)
+      .catch(() => {})
+    const editorText8 = await page.evaluate(
+      () => document.querySelector('[role="dialog"]')?.innerText ?? '',
+    )
+    check(
+      '目标 8 > 周期容量 7 时，编辑器警告「永远到不了」',
+      /永远到不了/.test(editorText8),
+      /永远到不了/.test(editorText8) ? '' : `弹层 ${editorText8.length} 字，没找到警告`,
+    )
+    check(
+      '警告里把容量 7 和目标 8 都点出来了（不是一句空话）',
+      /7/.test(editorText8) && /8/.test(editorText8),
+      '',
+    )
+
+    // 复原成 5 —— 下面的签到审核用例依赖阶梯数字（base 5 / target 5 → 2/6/12）
+    await setTargetAndSave(5)
+    const afterRestore = await targetOnCard()
+    check('目标改回 5（复原）', afterRestore === 5, `卡上写 / ${afterRestore} 天`)
 
     /* ---------- 「固定任务」区块是不是真的没了 ----------
        ⚠️ 直接 `!/固定任务/.test(document.body.innerText)` 是**假绿**：
