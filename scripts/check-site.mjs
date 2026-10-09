@@ -271,6 +271,21 @@ try {
     )
   }
 
+  /* ---------- 上游锚点：试玩版必须和 dist（当前源码的构建产物）同一版 ----------
+     上面那条把 APK 钉在 site/app 上；这条把 site/app 钉在 **dist** 上。
+     缺了这条，链路是「APK = 旧 demo = 旧代码」—— 两处一致地旧，照样绿。
+     `build-site.mjs --no-build` 正是会跳过重建的那个开关（改了 App 却没重跑构建）。
+     钉住整条链：源码 → dist → site/app → APK。 */
+  const distIndex = resolve('dist/index.html')
+  if (existsSync(distIndex)) {
+    const distBundle = (readFileSync(distIndex, 'utf8').match(/assets\/(index-[\w-]+\.js)/) ?? [])[1]
+    check(
+      '网页版试玩和 dist（当前源码构建产物）是同一版',
+      !!distBundle && distBundle === bundleName,
+      `demo=${bundleName} dist=${distBundle}`,
+    )
+  }
+
   // 法务页 + 备案号
   for (const f of ['privacy.html', 'terms.html']) {
     check(`法务页存在：${f}`, existsSync(resolve(SITE_DIR, f)))
@@ -284,6 +299,59 @@ try {
   for (const f of ['robots.txt', 'sitemap.xml', 'og-cover.png', 'manifest.webmanifest']) {
     check(`站点根有 ${f}`, existsSync(resolve(SITE_DIR, f)))
   }
+
+  /* ---------- 「存在」不等于「对」：这几个文件的**内容**也量一遍 ----------
+     上面那圈只 `existsSync`。2026-10-09 就是栽在「只查存在」上：
+     一个四天前的 APK 在官网挂了四天，没人发现。同理：
+     og-cover 尺寸不对 → 微信 / 微博的分享卡片会被裁；
+     manifest 写错 → 「添加到主屏幕」装出来是错的图标、状态栏颜色不对。
+     都是**零报错**的坏法。 */
+  /** 读 PNG 像素尺寸（IHDR 就在文件头，第 16–24 字节是大端 width/height） */
+  const pngSize = (p) => {
+    if (!existsSync(p)) return null
+    const b = readFileSync(p)
+    if (b.length < 24 || b.toString('latin1', 1, 4) !== 'PNG') return null
+    return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }
+  }
+
+  const ogSize = pngSize(resolve(SITE_DIR, 'og-cover.png'))
+  check(
+    'og-cover 是 1200×630（分享卡片的标准尺寸）',
+    ogSize?.w === 1200 && ogSize?.h === 630,
+    ogSize ? `${ogSize.w}×${ogSize.h}` : '读不出尺寸',
+  )
+
+  const mf = JSON.parse(readFileSync(resolve(SITE_DIR, 'manifest.webmanifest'), 'utf8'))
+  /* theme_color 在**两个地方**各写了一遍（页面 meta + manifest）。
+     两处存同一个事实 → 迟早分叉：这里原本 manifest 是旧的琥珀 #f59e0b、
+     页面是纸色 #fffaf2，装成 PWA 后状态栏和浏览器里颜色不一样。 */
+  const pageTheme = (readFileSync(resolve(SITE_DIR, 'index.html'), 'utf8').match(
+    /name="theme-color"\s+content="([^"]+)"/,
+  ) ?? [])[1]
+  /* 比的是**颜色**，不是**字符串**：十六进制色值大小写不敏感，
+     而仓库里本来就两种写法都有（site/index.html 是小写、
+     site/app/index.html 是大写）。不归一化的话，谁把哪一处改成大写，
+     这条就会误报红 —— 一个会误报的检查，等于没有检查。 */
+  check(
+    'manifest 的 theme_color 和页面 <meta theme-color> 一致',
+    !!pageTheme && mf.theme_color?.toLowerCase() === pageTheme.toLowerCase(),
+    `manifest=${mf.theme_color} page=${pageTheme}`,
+  )
+
+  const badIcons = []
+  for (const ic of mf.icons ?? []) {
+    const real = pngSize(resolve(SITE_DIR, ic.src))
+    const [dw, dh] = String(ic.sizes).split('x').map(Number)
+    if (!real || real.w !== dw || real.h !== dh) {
+      badIcons.push(`${ic.src} 声明 ${ic.sizes} 实际 ${real ? `${real.w}×${real.h}` : '读不出'}`)
+    }
+  }
+  check(
+    `manifest 每个图标声明的尺寸 = 文件真实尺寸（共 ${(mf.icons ?? []).length} 个）`,
+    badIcons.length === 0,
+    badIcons.join('; '),
+  )
+
   const sitemap = readFileSync(resolve(SITE_DIR, 'sitemap.xml'), 'utf8')
   check('sitemap 是合法 urlset', sitemap.includes('<urlset') && sitemap.includes('</urlset>'))
   check('sitemap 里的 loc 数量 ≥ 3', (sitemap.match(/<loc>/g) ?? []).length >= 3,
