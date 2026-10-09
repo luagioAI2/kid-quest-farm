@@ -3,7 +3,6 @@ import clsx from 'clsx'
 import { Portal } from '@/components/Portal'
 import { humanizeMinutes, CYCLE_HINT } from '@/domain/time'
 import {
-  checkInPayout,
   checkInStreak,
   checkInStreakBonus,
   claimableTiers,
@@ -1013,16 +1012,14 @@ function CheckInCard({
   const target = task.checkInTargetCount ?? 5
 
   /* 签到连击（任务内的，和全局连击不是一回事）
-     连续第 N 天 = 基础分 + (N-1)，断签从基础分重来。 */
+     连续第 N 天 = 基础分 + (N-1)，断签从基础分重来。
+
+     以前这里还算过一个 `payout`（「今天签下去实际到手多少」）给卡片做预告，
+     走的是和发分同一个 `checkInPayout`。那行预告家长说不用显示，于是
+     `payout` 连同它的注释一起去掉了 —— 家长审核卡（ReviewSheet）那边
+     仍然用 `checkInPayout`，「展示与发放共用一个事实源」这条规矩没变。 */
   const basePoints = Math.max(0, Math.round(task.basePoints))
   const streakNow = signedToday ? checkInStreak(days, todayKey) : 0
-  /* 「今天签下去**实际到手多少**」——走和发分同一个函数 `checkInPayout`。
-     原来这里只写 `basePoints + bonusNext`，漏了「今天正好落在阶梯日」那部分：
-     全新账号第 1 天卡片写 5，点下去到账 7（第 1 天那档 +2）。
-     和家长审核卡是同一个 bug —— 展示与发放必须共用一个事实源。
-     ⚠️ 只在「今天还没签」时算：`checkInPayout` 会把 date 再并进 days 一次，
-        已经签过时 days 里已经有今天，长度会多一天、阶梯会算错。 */
-  const payout = signedToday ? null : checkInPayout(task, days, claimed, todayKey)
 
   // 展示格子：本周 / 本月
   const cells = useMemo(() => buildCells(task.cycle, todayKey, days), [task.cycle, todayKey, days])
@@ -1118,36 +1115,18 @@ function CheckInCard({
           )}
         </div>
 
-        {/* 连击 + 今天能拿多少：连着来每天多 +1，断了从基础分重来 */}
-        {basePoints > 0 && (
+        {/* 连击：签过之后才显示连了几天（连着来每天多 +1，断了从基础分重来）。
+            「今天签到可得 N 分（基础 5 + 阶梯 2）」和
+            「连着来每天多 +1（最多 +5）」这两行**不显示**（家长要求）——
+            阶梯那几行本来就写着每档 +多少，再说一遍是重复。 */}
+        {basePoints > 0 && signedToday && (
           <p className="mt-2.5 text-[11px] font-bold text-ink-600">
-            {signedToday ? (
-              <>
-                🔥 连续第 <span className="tnum font-extrabold text-ink-900">{streakNow}</span> 天
-                {streakNow > 1 && (
-                  <span className="text-grass-700">
-                    （今天连击 +{checkInStreakBonus(streakNow, basePoints)}）
-                  </span>
-                )}
-              </>
-            ) : (
-              <>
-                今天签到可得{' '}
-                <span className="tnum font-extrabold text-ink-900">{payout?.total ?? 0}</span> 分
-                {payout && payout.streakBonus + payout.tierPoints > 0 ? (
-                  <span className="text-grass-700">
-                    （基础 {payout.base}
-                    {payout.streakBonus > 0 ? ` + 连击 ${payout.streakBonus}` : ''}
-                    {payout.tierPoints > 0 ? ` + 阶梯 ${payout.tierPoints}` : ''}）
-                  </span>
-                ) : null}
-              </>
+            🔥 连续第 <span className="tnum font-extrabold text-ink-900">{streakNow}</span> 天
+            {streakNow > 1 && (
+              <span className="text-grass-700">
+                （今天连击 +{checkInStreakBonus(streakNow, basePoints)}）
+              </span>
             )}
-          </p>
-        )}
-        {basePoints > 0 && !signedToday && (
-          <p className="mt-0.5 text-[11px] font-bold text-ink-400">
-            连着来每天多 +1（最多 +{basePoints}）
           </p>
         )}
 
