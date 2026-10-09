@@ -245,6 +245,32 @@ try {
   check(`站内链接的文件都存在（共 ${relLinks.length} 个）`, missingFiles.length === 0,
     missingFiles.join(', '))
 
+  /* ---------- 下载的 APK 装的是不是**这一版**代码 ----------
+     2026-10-09：官网挂的 APK 还是 10-05 的，而代码已经改了四天 ——
+     上面那条「文件都存在」一直绿，因为它只 `existsSync`：
+     **文件在 ≠ 文件是新的**。这正是 `build-apk.sh` 注释里那个
+     「同一份产物存在两处就一定会走散」的另一半 —— 走散之后没人报错。
+
+     判据：APK 里必须装着和 `site/app/`（网页版试玩）**同一份 bundle**。
+     文件名带内容 hash，所以「名字对上」=「代码对上」。
+
+     ⚠️ 不用解压、不用引 zip 库：ZIP 的中央目录把文件名**原样存**，
+       直接在大字节串里搜那个文件名就行（实测：当前包命中、
+       09-30 的旧 debug 包不命中）。 */
+  const appHtml = readFileSync(resolve(SITE_DIR, 'app/index.html'), 'utf8')
+  const bundleName = (appHtml.match(/assets\/(index-[\w-]+\.js)/) ?? [])[1] ?? null
+  check('读得到网页版的 bundle 名（staleness 检查的前提）', !!bundleName, bundleName ?? '没匹配到 assets/index-*.js')
+  const apkPath = resolve(SITE_DIR, 'download/kid-quest-farm.apk')
+  if (bundleName && existsSync(apkPath)) {
+    const apkBytes = readFileSync(apkPath)
+    const hit = apkBytes.includes(`assets/public/assets/${bundleName}`)
+    check(
+      `下载的 APK 里装的是同一版代码（${bundleName}）`,
+      hit,
+      hit ? '' : 'APK 是旧的 —— 里面没有这一版的 bundle，重跑 bash scripts/build-apk.sh release 再发布',
+    )
+  }
+
   // 法务页 + 备案号
   for (const f of ['privacy.html', 'terms.html']) {
     check(`法务页存在：${f}`, existsSync(resolve(SITE_DIR, f)))
