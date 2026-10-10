@@ -22,7 +22,7 @@ import {
 import { checkInPayout, currentDayKey, defaultTiers } from '../domain/recurrence'
 import { periodKeyFor } from '../domain/time'
 import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
-import { SEED_TASKS } from '../domain/seedTasks'
+import { SEED_REDEEM_ITEMS, SEED_TASKS } from '../domain/seedTasks'
 
 /* ============================================================
    签到 / 长期任务的家长审核
@@ -2155,5 +2155,87 @@ describe('播种的并发闸门', () => {
     expect(welcome, '欢迎礼只该发一次').toHaveLength(1)
     expect(welcome[0].delta).toBe(50)
     expect(useApp.getState().balance).toBe(welcome[0].delta)
+  })
+})
+
+/* ============================================================
+   种子兑换表：老设备补条目
+   ------------------------------------------------------------
+   2026-10-10 家长反馈：源码里新增/改价的兑换品，**已装设备看不到**。
+   根因是 `doSeedIfEmpty` 里那道 `redeemCount === 0` 守卫 —— 只在空表时写，
+   表里已经有 12 条的老设备一条都不补。
+
+   修法（家长明确选的方案）：boot 时把**默认清单里缺的条目**按名字补上。
+   ⚠️ 契约是「**只增不改**」—— 下面每条断言都是在钉这个契约的边界：
+     · 缺的会补回来        ✓
+     · 家长调过的价格不动  ✓（刻意不覆盖）
+     · 连 boot 两次不翻倍  ✓
+     · 家长删掉的会回来    ✓（已知代价，钉住它，免得被当 bug 改掉）
+   ============================================================ */
+describe('种子兑换表：老设备补条目（只增不改）', () => {
+  const names = () => useApp.getState().allRedeemItems.map((i) => i.name)
+  const findByName = (n: string) =>
+    useApp.getState().allRedeemItems.find((i) => i.name === n)
+
+  /** 造一个「老设备」：boot 之后删掉几条，模拟「上次安装时种子里还没有它们」 */
+  async function makeStale(namesToRemove: string[]) {
+    for (const n of namesToRemove) {
+      const hit = findByName(n)
+      if (hit) await useApp.getState().deleteRedeemItem(hit.id)
+    }
+  }
+
+  it('缺的条目会在下次 boot 补回来（这就是家长要的）', async () => {
+    await boot()
+    const added = ['15 分钟自由休息时间', '2 小时电视时间', '挑一个大玩具']
+    // 前提：这三条确实在种子里（改种子的那次改动）
+    for (const n of added) expect(SEED_REDEEM_ITEMS.some((s) => s.name === n), n).toBe(true)
+
+    await makeStale(added)
+    expect(names()).not.toContain('挑一个大玩具')
+
+    await useApp.getState().boot()
+
+    for (const n of added) expect(names(), `「${n}」应该被补回来`).toContain(n)
+    expect(useApp.getState().allRedeemItems).toHaveLength(SEED_REDEEM_ITEMS.length)
+  })
+
+  it('只增不改：家长自己调过的价格，boot 不会覆盖回去', async () => {
+    await boot()
+    const target = findByName('晚睡 30 分钟')!
+    await useApp.getState().updateRedeemItem(target.id, { cost: 999 })
+
+    await useApp.getState().boot()
+
+    expect(findByName('晚睡 30 分钟')?.cost, '家长改过的价不该被种子冲掉').toBe(999)
+  })
+
+  it('幂等：连 boot 两次不会把条目翻倍', async () => {
+    await boot()
+    await useApp.getState().boot()
+    await useApp.getState().boot()
+
+    expect(useApp.getState().allRedeemItems).toHaveLength(SEED_REDEEM_ITEMS.length)
+    const dupes = names().filter((n, i, arr) => arr.indexOf(n) !== i)
+    expect(dupes, '不该出现重名条目').toEqual([])
+  })
+
+  it('已知代价：家长**删掉**的默认条目会被加回来（想彻底不要请用隐藏）', async () => {
+    await boot()
+    const victim = findByName('一份小零食')!
+    await useApp.getState().deleteRedeemItem(victim.id)
+    expect(names()).not.toContain('一份小零食')
+
+    await useApp.getState().boot()
+
+    expect(names(), '只增不改 ⇒ 删掉的默认条目会回来').toContain('一份小零食')
+  })
+
+  it('空库新装仍然只播一遍（没被 backfill 带成两份）', async () => {
+    await boot()
+
+    expect(useApp.getState().allRedeemItems).toHaveLength(SEED_REDEEM_ITEMS.length)
+    const dupes = names().filter((n, i, arr) => arr.indexOf(n) !== i)
+    expect(dupes).toEqual([])
   })
 })

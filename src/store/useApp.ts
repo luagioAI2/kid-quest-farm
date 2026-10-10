@@ -415,7 +415,45 @@ async function doSeedIfEmpty(): Promise<void> {
         updatedAt: now,
       })),
     )
+  } else {
+    await backfillMissingRedeemItems(now)
   }
+}
+
+/**
+ * 把 `SEED_REDEEM_ITEMS` 里「这个库还没有的」条目补进去。
+ *
+ * ------------------------------------------------------------
+ * 为什么需要它（2026-10-10 家长反馈）：
+ *   上面那道 `redeemCount === 0` 守卫**只在空表时写**。于是改种子只对
+ *   「全新安装」生效 —— 已经装过、表里有 12 条的设备，家长在源码里
+ *   新增的兑换品**永远拿不到**。家长连着问了两遍「兑换的为啥还没有」，
+ *   查了半天代码和产物全对，问题就在这道守卫上。
+ *
+ * ⚠️ **只增不改**（家长 2026-10-10 明确选的这条）：
+ *   · 已存在的条目**一个字都不动** —— 家长自己调过价、改过名的不会被种子覆盖；
+ *   · 代价：默认清单里的**改价**传不到老设备（比如「晚睡 30 分钟」120→30
+ *     对老设备无效，只有新装才生效）；
+ *   · 另一个代价：家长**特意删掉**的默认条目会被加回来（想彻底不要就隐藏它，
+ *     见 `setRedeemItemArchived`）。
+ *
+ * 为什么按**名字**认而不是 id：种子每次建库都用 `uid('rd')` 现生成 id，
+ * 老库里的 id 和源码里的对不上，只有名字是稳定的。
+ */
+async function backfillMissingRedeemItems(now: number): Promise<void> {
+  const existing = await db.redeemItems.toArray()
+  const existingNames = new Set(existing.map((r) => r.name))
+  const missing = SEED_REDEEM_ITEMS.filter((r) => !existingNames.has(r.name))
+  if (missing.length === 0) return
+  // createdAt 逐条 +1ms：和上面的种子同一个理由 —— 别让顺序退化成「按随机主键排」
+  await db.redeemItems.bulkPut(
+    missing.map((r, i) => ({
+      ...r,
+      id: uid('rd'),
+      createdAt: now + i,
+      updatedAt: now + i,
+    })),
+  )
 }
 
 /* ============================================================
