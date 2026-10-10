@@ -1002,6 +1002,69 @@ try {
     await sleep(1200)
   }
 
+  /* ---------- 4b. 任务隐藏：软隐藏 + 可恢复 ----------
+     ⚠️ 两条纪律，都是踩过的：
+     ① **正向对照放前面**：先证明「这个任务本来就在今日列表里」。
+        否则「隐藏后搜不到」可能只是探针根本没搜到东西（假绿）。
+     ② **按 section 作用域比，不要拿 body.innerText 搜标题**：
+        隐藏之后标题**还在页面上**（在「已隐藏」区块里），
+        全页搜会一直命中 → 断言恒真，等于没测。
+        `Section` 渲染的是 <section><h2>标题</h2>…，正好可以定位。 */
+  {
+    const sectionText = (heading) =>
+      page.evaluate((h) => {
+        const sec = [...document.querySelectorAll('section')].find(
+          (x) => x.querySelector('h2')?.textContent?.trim() === h,
+        )
+        return sec ? sec.innerText : null
+      }, heading)
+
+    const probe = await page.evaluate(() => {
+      const t = window.__kqf__.getState().tasks.find((x) => x.cycle === 'daily')
+      return t ? { id: t.id, title: t.title } : null
+    })
+    check('找得到一个每日任务当探针', !!probe, probe?.title ?? '没找到每日任务')
+
+    if (probe) {
+      const todayBefore = await sectionText('今日任务')
+      check(
+        '正向对照：隐藏前，这个任务确实在「今日任务」区块里',
+        !!todayBefore && todayBefore.includes(probe.title),
+        todayBefore ? '' : '没拿到「今日任务」区块 → 下面两条不成立',
+      )
+      check('隐藏前页面上没有「已隐藏」区块', (await sectionText('已隐藏')) === null)
+
+      await page.evaluate(async (id) => {
+        await window.__kqf__.getState().setTaskArchived(id, true)
+      }, probe.id)
+      await sleep(900)
+
+      const todayHidden = await sectionText('今日任务')
+      const hiddenSec = await sectionText('已隐藏')
+      check(
+        '隐藏后：从「今日任务」区块里消失',
+        !!todayHidden && !todayHidden.includes(probe.title),
+      )
+      check(
+        '隐藏后：出现「已隐藏」区块，且任务在里面（家长找得回来）',
+        !!hiddenSec && hiddenSec.includes(probe.title),
+        hiddenSec === null ? '「已隐藏」区块没渲染 → 隐藏不可逆' : '',
+      )
+
+      await page.evaluate(async (id) => {
+        await window.__kqf__.getState().setTaskArchived(id, false)
+      }, probe.id)
+      await sleep(900)
+
+      const todayBack = await sectionText('今日任务')
+      check(
+        '恢复后：任务回到「今日任务」区块',
+        !!todayBack && todayBack.includes(probe.title),
+      )
+      check('恢复后：「已隐藏」区块消失', (await sectionText('已隐藏')) === null)
+    }
+  }
+
   /* ---------- 5. 农场：种植流程 ---------- */
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find(

@@ -137,7 +137,15 @@ interface AppState {
   loading: boolean
 
   settings: AppSettings
+  /** 任务：在用的（不含已隐藏） */
   tasks: Task[]
+  /**
+   * 任务：**含已隐藏**，家长管理用。
+   * 和 `redeemItems` / `allRedeemItems` 是同一套分工 ——
+   * 孩子端只吃 `tasks`，家长端要能看到并恢复被藏起来的那些。
+   * 没有它，「隐藏」就不可逆：任务从 `tasks` 消失后再也找不回来。
+   */
+  allTasks: Task[]
   instances: TaskInstance[]
   ledger: LedgerEntry[]
   /**
@@ -190,7 +198,8 @@ interface AppState {
   /* ---- 任务 ---- */
   addTask: (input: NewTaskInput) => Promise<Task>
   updateTask: (id: string, patch: Partial<Task>) => Promise<void>
-  archiveTask: (id: string) => Promise<void>
+  /** 隐藏 / 恢复一个任务。和 `setRedeemItemArchived` 同名同形 —— 两边别走散 */
+  setTaskArchived: (id: string, archived: boolean) => Promise<void>
   deleteTask: (id: string) => Promise<void>
 
   /* ---- 任务实例 ---- */
@@ -647,6 +656,7 @@ async function doRefresh(
 
   set({
     tasks,
+    allTasks,
     instances,
     ledger,
     harvestLedger,
@@ -1049,6 +1059,7 @@ export const useApp = create<AppState>((set, get) => ({
   loading: true,
   settings: DEFAULT_SETTINGS,
   tasks: [],
+  allTasks: [],
   instances: [],
   ledger: [],
   harvestLedger: [],
@@ -1166,8 +1177,10 @@ export const useApp = create<AppState>((set, get) => ({
     await get().refresh()
   },
 
-  archiveTask: async (id) => {
-    await db.tasks.update(id, { archived: true, updatedAt: Date.now() })
+  setTaskArchived: async (id, archived) => {
+    // 软隐藏：只翻一个标志位。任务底下的实例、签到记录、账本**一律不动** ——
+    // 硬删会把这些连坐带走，而家长想要的通常只是「别让孩子看见」。
+    await db.tasks.update(id, { archived, updatedAt: Date.now() })
     await get().refresh()
   },
 
@@ -2701,7 +2714,15 @@ export const useApp = create<AppState>((set, get) => ({
  */
 function todayInstanceRows(s: AppState): TaskInstance[] {
   const checkInIds = new Set(s.tasks.filter(isCheckInTask).map((t) => t.id))
-  return s.instances.filter((i) => i.date === s.todayKey && !checkInIds.has(i.taskId))
+  /* 已隐藏的任务同理：`planMissingInstances` 读的是**含已隐藏**的 allTasks，
+     所以隐藏之后实例还会照常生成、旧的也一直躺在库里。
+     只在「生成处」挡会漏 —— 必须在这里按**读**过滤，
+     否则家长隐藏了一个每日任务，孩子那边的卡片照样在（只是排在最后）。
+     和上面签到那条是同一个道理。 */
+  const hiddenIds = new Set(s.allTasks.filter((t) => t.archived).map((t) => t.id))
+  return s.instances.filter(
+    (i) => i.date === s.todayKey && !checkInIds.has(i.taskId) && !hiddenIds.has(i.taskId),
+  )
 }
 
 /** 今日实例：每日任务 + 今天创建的单次任务 */

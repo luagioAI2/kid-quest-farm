@@ -26,6 +26,7 @@ import {
   CycleBadge,
   EmptyHint,
   MANUAL_FILL_ENABLED,
+  CATEGORY,
   RewardChips,
   Sheet,
   SheetHead,
@@ -47,6 +48,8 @@ export default function TaskPage() {
   const todayKey = useApp((s) => s.todayKey)
   const instances = useApp((s) => s.instances)
   const tasks = useApp((s) => s.tasks)
+  /** 含已隐藏。孩子端其余地方一律只吃 `tasks`，这一份**只**给下面的「已隐藏」区块用 */
+  const allTasks = useApp((s) => s.allTasks)
 
   // 选择器返回新对象/新数组 → 必须 useMemo 缓存，否则 zustand v5 会无限重渲染
   const todayInstances = useMemo(() => selectTodayInstances(useApp.getState()), [instances])
@@ -54,6 +57,7 @@ export default function TaskPage() {
   const streak = useMemo(() => selectStreak(useApp.getState()), [instances])
   const periodTasks = useMemo(() => selectPeriodTasks(useApp.getState()), [tasks])
   const checkInTasks = useMemo(() => selectCheckInTasks(useApp.getState()), [tasks])
+  const hiddenTasks = useMemo(() => allTasks.filter((t) => t.archived), [allTasks])
 
   const [detailId, setDetailId] = useState<string | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
@@ -175,6 +179,46 @@ export default function TaskPage() {
                   setEditorOpen(true)
                 }}
               />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* ================= 已隐藏 =================
+          ★ 隐藏必须**可逆**，否则家长手一滑就再也找不回来
+          （`tasks` 里已经过滤掉 archived，全仓只有这里读 `allTasks`）。
+          只在真有时才出现，平时不占地方。
+          点进去走的是同一个 TaskEditor —— 家长密码闸门一并复用，
+          所以孩子点得开这个区块，但**恢复不了**。 */}
+      {hiddenTasks.length > 0 && (
+        <Section title="已隐藏" emoji="🙈" count={hiddenTasks.length}>
+          <div className="card-list">
+            {hiddenTasks.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setEditTask(t)
+                  setEditorOpen(true)
+                }}
+                aria-label={`管理已隐藏的任务：${t.title}`}
+                className="btn active:btn-press flex w-full items-center gap-3 rounded-2xl border border-ink-200 bg-paper-2 px-4 py-3 text-left"
+              >
+                <span aria-hidden className="text-xl opacity-70">
+                  {CATEGORY[t.category]?.emoji ?? '📝'}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-extrabold text-ink-600">
+                    {t.title}
+                  </span>
+                  <span className="block text-[11px] font-bold text-ink-400">
+                    孩子看不到 · 点一下可以恢复
+                  </span>
+                </span>
+                <span aria-hidden className="text-base font-bold text-ink-400">
+                  ›
+                </span>
+              </button>
             ))}
           </div>
         </Section>

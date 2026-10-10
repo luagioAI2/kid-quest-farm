@@ -42,6 +42,7 @@ export function TaskEditor({
 }) {
   const addTask = useApp((s) => s.addTask)
   const updateTask = useApp((s) => s.updateTask)
+  const setTaskArchived = useApp((s) => s.setTaskArchived)
   const settings = useApp((s) => s.settings)
   const toast = useApp((s) => s.pushToast)
 
@@ -188,6 +189,25 @@ export function TaskEditor({
       await addTask(input)
       toast({ kind: 'success', title: '新任务加好啦', emoji: '🎉' })
     }
+    onClose()
+  }
+
+  /**
+   * 隐藏 / 恢复。和兑换品的「上架 / 下架」是同一套语义：
+   * **软隐藏** —— 只翻 `archived` 标志，任务底下的实例、签到记录、
+   * 账本一律不动，所以随时能恢复，历史也不会断。
+   * 硬删（`deleteTask`）会把这些连坐带走，不能拿来做「眼不见心不烦」。
+   */
+  async function handleToggleArchived() {
+    if (!task) return
+    const next = !task.archived
+    await setTaskArchived(task.id, next)
+    toast({
+      kind: 'info',
+      title: next ? '已隐藏' : '已恢复显示',
+      detail: next ? `「${task.title}」从孩子的列表里藏起来了` : `「${task.title}」又回来啦`,
+      emoji: next ? '🙈' : '👀',
+    })
     onClose()
   }
 
@@ -539,6 +559,29 @@ export function TaskEditor({
           <p className="anim-bounce-in rounded-2xl border border-berry-300 bg-berry-100 px-4 py-3 text-sm font-extrabold text-berry-500">
             {err}
           </p>
+        )}
+
+        {/* ---------- 隐藏 / 恢复（只对已有任务） ----------
+            和兑换品的「上架 / 下架」并列：软隐藏、可恢复。
+            放在保存按钮**上面**并单独框起来，免得家长想改个分数
+            却误触了「隐藏」——两个动作的后果差很远。 */}
+        {editing && task && (
+          <div className="rounded-2xl border border-ink-200 bg-paper-2 p-4">
+            <button
+              type="button"
+              onClick={() => void handleToggleArchived()}
+              aria-label={task.archived ? '恢复显示这个任务' : '隐藏这个任务'}
+              className="btn active:btn-press flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-ink-200 bg-white px-4 text-sm font-extrabold text-ink-700"
+            >
+              <span aria-hidden>{task.archived ? '👀' : '🙈'}</span>
+              {task.archived ? '恢复显示' : '隐藏这个任务'}
+            </button>
+            <p className="mt-2 text-center text-xs font-bold text-ink-500">
+              {task.archived
+                ? '现在孩子看不到它。恢复后立刻回到原来的位置。'
+                : '隐藏后孩子就看不到它了。做过的记录和积分都还在，随时能恢复。'}
+            </p>
+          </div>
         )}
 
         <div className="flex gap-3">

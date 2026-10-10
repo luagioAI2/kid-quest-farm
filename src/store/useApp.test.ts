@@ -717,6 +717,108 @@ describe('兑换品管理', () => {
 })
 
 /* ============================================================
+   任务隐藏：软隐藏 + 可恢复（2026-10-10）
+   ------------------------------------------------------------
+   家长要能拿掉一个默认任务（「清理自己的房间」这种用不上的）。
+   在这之前全仓只有一个**没人调用**的 `archiveTask` ——
+   字段在、动作在、界面上一处入口都没有，家长只能改代码或清库。
+
+   判据和上面「兑换品上下架」**完全对齐**，因为本质是同一种操作：
+     · 隐藏 = 从孩子端（`tasks`）消失，但**不是被删**
+     · 任务底下的记录一律不动（实例、签到、账本）
+     · 能恢复，且反复切换不丢不重
+
+   ⚠️ 最后两条是这次真正的坑：`planMissingInstances` 读的是**含已隐藏**的
+   `allTasks`，所以隐藏之后实例照常生成。只在生成处挡会漏 ——
+   必须按**读**过滤，否则「隐藏了但卡片还在」。
+   ============================================================ */
+
+describe('任务隐藏', () => {
+  const kidSideIds = () => useApp.getState().tasks.map((t) => t.id)
+  const adminSideIds = () => useApp.getState().allTasks.map((t) => t.id)
+
+  function aTask() {
+    const t = useApp.getState().allTasks[0]
+    if (!t) throw new Error('种子里应该有任务')
+    return t
+  }
+
+  it('隐藏：从孩子端消失，但管理端还在（不是被删了）', async () => {
+    const t = aTask()
+
+    await useApp.getState().setTaskArchived(t.id, true)
+
+    expect(kidSideIds()).not.toContain(t.id)
+    expect(adminSideIds()).toContain(t.id)
+    expect(useApp.getState().allTasks.find((x) => x.id === t.id)?.archived).toBe(true)
+  })
+
+  it('恢复：隐藏之后还能再回来（否则「隐藏」是不可逆的）', async () => {
+    const t = aTask()
+
+    await useApp.getState().setTaskArchived(t.id, true)
+    expect(kidSideIds()).not.toContain(t.id)
+
+    await useApp.getState().setTaskArchived(t.id, false)
+
+    expect(kidSideIds()).toContain(t.id)
+    expect(useApp.getState().allTasks.find((x) => x.id === t.id)?.archived).toBe(false)
+  })
+
+  it('反复隐藏/恢复不会把任务弄丢，也不会重复出现', async () => {
+    const t = aTask()
+
+    for (let i = 0; i < 3; i++) {
+      await useApp.getState().setTaskArchived(t.id, true)
+      await useApp.getState().setTaskArchived(t.id, false)
+    }
+
+    expect(adminSideIds().filter((id) => id === t.id)).toHaveLength(1)
+    expect(kidSideIds()).toContain(t.id)
+  })
+
+  it('★ 隐藏**不碰**底下的记录 —— 实例一条都没少（所以恢复得了）', async () => {
+    const t = aTask()
+    const count = () => useApp.getState().instances.filter((i) => i.taskId === t.id).length
+    const before = count()
+    expect(before, '这个任务本来就该有实例').toBeGreaterThan(0)
+
+    await useApp.getState().setTaskArchived(t.id, true)
+
+    expect(count()).toBe(before)
+  })
+
+  it('★ 隐藏一个每日任务后，孩子端**真的看不到那张卡**了（不是只是排在最后）', async () => {
+    const daily = useApp.getState().allTasks.find((t) => t.cycle === 'daily')
+    expect(daily, '种子里应该有每日任务').toBeTruthy()
+    const id = daily!.id
+
+    // 正向对照：隐藏之前它确实在今日列表里
+    const inList = () => selectTodayInstances(useApp.getState()).some((i) => i.taskId === id)
+    expect(inList()).toBe(true)
+
+    await useApp.getState().setTaskArchived(id, true)
+
+    expect(inList()).toBe(false)
+    // 实例并没有被删掉，只是不再露出来
+    expect(useApp.getState().instances.some((i) => i.taskId === id)).toBe(true)
+  })
+
+  it('★ 隐藏一个签到任务后，签到区块里也没了', async () => {
+    const checkIn = useApp.getState().allTasks.find((t) => t.checkInEnabled)
+    expect(checkIn, '种子里应该有签到任务').toBeTruthy()
+    const id = checkIn!.id
+
+    const inSection = () => selectCheckInTasks(useApp.getState()).some((t) => t.id === id)
+    expect(inSection()).toBe(true)
+
+    await useApp.getState().setTaskArchived(id, true)
+
+    expect(inSection()).toBe(false)
+  })
+})
+
+/* ============================================================
    兑换分账：丰收币优先 + 可混合（用户 2026-09-30）
    ------------------------------------------------------------
    用户要求：「兑换页面，优先用丰收币兑换。价值和积分等价的。
