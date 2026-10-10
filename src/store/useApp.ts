@@ -401,6 +401,8 @@ async function doSeedIfEmpty(): Promise<void> {
       source: 'manual_adjust',
       memo: '欢迎来到小任务农场！这是给你的启动积分 🎁',
     })
+  } else {
+    await backfillMissingTasks(now)
   }
 
   // 兑换商城是后加的，老用户库里没有 —— 空的时候补一份默认清单，
@@ -443,6 +445,49 @@ async function migrateRedeemPrices(now: number): Promise<void> {
     if (!row || row.cost !== m.from) continue
     await db.redeemItems.update(row.id, { cost: m.to, updatedAt: now })
   }
+}
+
+/**
+ * 把 `SEED_TASKS` 里「这个库还没有的」任务补进去（按**标题**认）。
+ *
+ * ------------------------------------------------------------
+ * 和 `backfillMissingRedeemItems` 是同一个坑的两侧：
+ *   上面那道 `taskCount === 0` 守卫**只在空表时写**。于是 `SEED_TASKS`
+ *   后来新增的任务，**已经装过的设备永远拿不到**。
+ *
+ * 这不是假设 —— 实测历史：`SEED_TASKS` 从首个提交的 **9 条长到 16 条**，
+ * 中间 7 条新增（背诵 / 数学计算练习 / 学习日复述 / 签到 5 条 …）
+ * 一条都没进过老设备。家长 2026-10-10 问「改了的任务为什么看不到」时
+ * 才把这条一起查出来。
+ *
+ * ⚠️ **只增不改**，和兑换侧同一套契约：
+ *   · 已存在的任务一个字不动 —— 家长改过的分值、时长、周期都不被覆盖；
+ *   · 代价 1：`SEED_TASKS` 里的**改分值**传不到老设备
+ *     （真要改就照 `REDEEM_PRICE_MIGRATIONS` 那张表补一条迁移）；
+ *   · 代价 2：家长**特意删掉**的默认任务会被加回来
+ *     （想彻底不要就用「隐藏任务」，见 `setTaskArchived` ——
+ *     隐藏的任务**还在表里**，所以不会被这里重复加回来）。
+ *
+ * 为什么按**标题**认而不是 id：种子每次建库都用 `uid('tk')` 现生成 id，
+ * 老库里的 id 和源码里的对不上，只有标题是稳定的。
+ *
+ * @returns 实际补了几条（调试句柄要用它来决定要不要刷新页面）
+ */
+async function backfillMissingTasks(now: number): Promise<number> {
+  const existing = await db.tasks.toArray()
+  const existingTitles = new Set(existing.map((t) => t.title))
+  const missing = SEED_TASKS.filter((t) => !existingTitles.has(t.title))
+  if (missing.length === 0) return 0
+  // createdAt 逐条 +1ms：和上面的种子同一个理由 —— 别让顺序退化成「按随机主键排」
+  await db.tasks.bulkPut(
+    missing.map((t, i) => ({
+      ...t,
+      id: uid('tk'),
+      createdAt: now + i,
+      updatedAt: now + i,
+    })),
+  )
+  return missing.length
 }
 
 /**
@@ -3071,23 +3116,17 @@ if (typeof window !== 'undefined') {
       window.location.reload()
     },
     syncSeedTasks: async () => {
+      /* 现在 boot 时也会自动补（`backfillMissingTasks`），这个句柄留着
+         是为了「不刷新页面就能手动触发一次」的调试场景。
+         ⚠️ 逻辑必须复用同一个函数 —— 以前这里是抄了一份，
+         两处一旦分叉，调试句柄补的东西就会和自动补的不一样。 */
       console.log('[kqf-cheat] 同步种子任务...')
-      const existing = await db.tasks.toArray()
-      const existingTitles = new Set(existing.map((t) => t.title))
-      const missing = SEED_TASKS.filter((t) => !existingTitles.has(t.title))
-      if (missing.length === 0) {
+      const added = await backfillMissingTasks(Date.now())
+      if (added === 0) {
         console.log('[kqf-cheat] 所有种子任务都已存在，无需添加')
         return
       }
-      const now = Date.now()
-      const rows = missing.map((t, i) => ({
-        ...t,
-        id: uid('tk'),
-        createdAt: now + i,
-        updatedAt: now + i,
-      }))
-      await db.tasks.bulkPut(rows)
-      console.log('[kqf-cheat] 已添加', missing.length, '个新任务:', missing.map((t) => t.title).join(', '))
+      console.log('[kqf-cheat] 已添加', added, '个新任务')
       window.location.reload()
     },
   }

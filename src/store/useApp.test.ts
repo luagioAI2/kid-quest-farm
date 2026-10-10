@@ -2207,7 +2207,12 @@ describe('种子兑换表：老设备补条目（只增不改）', () => {
 
     await useApp.getState().boot()
 
-    expect(findByName('晚睡 30 分钟')?.cost, '家长改过的价不该被种子冲掉').toBe(999)
+    /* ⚠️ 先数条数再看价 —— 只写 `findByName(...)?.cost === 999` 是**顺序相关**的：
+       一个「补条目时不去重」的错实现会多插一条 30 分的同名条目，
+       但 findByName 取的是数组里第一条，可能仍是原来那条 999 ⇒ 假绿。 */
+    const same = useApp.getState().allRedeemItems.filter((i) => i.name === '晚睡 30 分钟')
+    expect(same, '不该被重复加一条').toHaveLength(1)
+    expect(same[0].cost, '家长改过的价不该被种子冲掉').toBe(999)
   })
 
   it('幂等：连 boot 两次不会把条目翻倍', async () => {
@@ -2311,5 +2316,74 @@ describe('种子兑换表：改价迁移（只改没被动过的）', () => {
       .allRedeemItems.map((i) => i.name)
       .filter((n, i, a) => a.indexOf(n) !== i)
     expect(dupes).toEqual([])
+  })
+})
+
+/* ============================================================
+   种子任务：老设备补任务
+   ------------------------------------------------------------
+   和兑换侧同一个坑的另一面：`taskCount === 0` 守卫只在空表时写，
+   于是 `SEED_TASKS` 后来新增的任务进不了老设备。
+   实测历史：`SEED_TASKS` 从 9 条长到 16 条，中间 7 条新增
+   一条都没进过老设备。
+
+   契约同样是「**只增不改**」，另外多一条**和「隐藏任务」的交互**：
+   隐藏的任务**还在表里**（只翻了个 `archived`），所以不会被重复加回来。
+   ============================================================ */
+describe('种子任务：老设备补任务（只增不改）', () => {
+  const titles = () => useApp.getState().allTasks.map((t) => t.title)
+  const findTask = (title: string) => useApp.getState().allTasks.find((t) => t.title === title)
+
+  it('缺的任务会在下次 boot 补回来', async () => {
+    await boot()
+    const victim = findTask(SEED_TASKS[0].title)!
+    await useApp.getState().deleteTask(victim.id)
+    expect(titles()).not.toContain(SEED_TASKS[0].title)
+
+    await useApp.getState().boot()
+
+    expect(titles()).toContain(SEED_TASKS[0].title)
+    expect(useApp.getState().allTasks).toHaveLength(SEED_TASKS.length)
+  })
+
+  it('只增不改：家长调过的分值不会被种子覆盖', async () => {
+    await boot()
+    const victim = findTask(SEED_TASKS[0].title)!
+    await useApp.getState().updateTask(victim.id, { basePoints: 999 })
+
+    await useApp.getState().boot()
+
+    /* ⚠️ 断言必须「先数条数、再看值」：
+       只写 `findTask(...)?.basePoints === 999` 的话，一个「补任务时不去重」的
+       错实现**照样能过** —— 重复加进来的那条排在后面，findTask 取到的
+       还是原来那条 999。实测过：那个写法两种变异都杀不掉，等于白写。
+       先钉住「只有一条」，再去比它的分值，才与顺序无关。 */
+    const same = useApp.getState().allTasks.filter((t) => t.title === SEED_TASKS[0].title)
+    expect(same, '不该被重复加一条').toHaveLength(1)
+    expect(same[0].basePoints, '家长改过的分值不该被冲掉').toBe(999)
+  })
+
+  it('幂等：连 boot 两次不会把任务翻倍', async () => {
+    await boot()
+    await useApp.getState().boot()
+    await useApp.getState().boot()
+
+    expect(useApp.getState().allTasks).toHaveLength(SEED_TASKS.length)
+    const dupes = titles().filter((n, i, a) => a.indexOf(n) !== i)
+    expect(dupes, '不该出现同名任务').toEqual([])
+  })
+
+  it('★ 隐藏的任务不会被重复加回来（它在表里，只是 archived）', async () => {
+    await boot()
+    const victim = findTask(SEED_TASKS[0].title)!
+    await useApp.getState().setTaskArchived(victim.id, true)
+    expect(titles(), '隐藏后仍在 allTasks 里').toContain(SEED_TASKS[0].title)
+
+    await useApp.getState().boot()
+
+    expect(useApp.getState().allTasks).toHaveLength(SEED_TASKS.length)
+    const same = useApp.getState().allTasks.filter((t) => t.title === SEED_TASKS[0].title)
+    expect(same, '不该被重复加一条').toHaveLength(1)
+    expect(same[0].archived, '补任务不该把它「复活」').toBe(true)
   })
 })
