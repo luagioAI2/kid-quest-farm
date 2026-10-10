@@ -115,7 +115,7 @@ import {
   rollHarvestEvent,
   seasonalBonus,
 } from '../domain/farmEvents'
-import { SEED_TASKS, SEED_REDEEM_ITEMS } from '../domain/seedTasks'
+import { REDEEM_PRICE_MIGRATIONS, SEED_TASKS, SEED_REDEEM_ITEMS } from '../domain/seedTasks'
 
 /* ============================================================
    全局 store
@@ -417,6 +417,31 @@ async function doSeedIfEmpty(): Promise<void> {
     )
   } else {
     await backfillMissingRedeemItems(now)
+    await migrateRedeemPrices(now)
+  }
+}
+
+/**
+ * 把默认清单里**改过价的**条目同步到老设备 —— 但**只改没被动过的**。
+ *
+ * ------------------------------------------------------------
+ * `backfillMissingRedeemItems` 只补缺的条目，改价传不下来。家长 2026-10-10
+ * 明确要求改「晚睡 30 分钟」和「独处一下午」的价，所以补这一步。
+ *
+ * 判据是「库里的价**正好等于**迁移表里的 `from`」⇒ 说明家长没动过它。
+ * 家长自己调过的一律不碰（宁可漏改，不可覆盖）。
+ *
+ * 迁移表在 `seedTasks.ts` 的 `REDEEM_PRICE_MIGRATIONS` —— 放在种子旁边，
+ * 是为了让「改种子价格」的人一眼看到「还得加一行迁移」。
+ */
+async function migrateRedeemPrices(now: number): Promise<void> {
+  if (REDEEM_PRICE_MIGRATIONS.length === 0) return
+  const rows = await db.redeemItems.toArray()
+  for (const m of REDEEM_PRICE_MIGRATIONS) {
+    const row = rows.find((r) => r.name === m.name)
+    // 没这条（交给 backfill）／家长动过价（不动）→ 跳过
+    if (!row || row.cost !== m.from) continue
+    await db.redeemItems.update(row.id, { cost: m.to, updatedAt: now })
   }
 }
 

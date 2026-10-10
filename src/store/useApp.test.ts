@@ -22,7 +22,7 @@ import {
 import { checkInPayout, currentDayKey, defaultTiers } from '../domain/recurrence'
 import { periodKeyFor } from '../domain/time'
 import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
-import { SEED_REDEEM_ITEMS, SEED_TASKS } from '../domain/seedTasks'
+import { REDEEM_PRICE_MIGRATIONS, SEED_REDEEM_ITEMS, SEED_TASKS } from '../domain/seedTasks'
 
 /* ============================================================
    签到 / 长期任务的家长审核
@@ -2236,6 +2236,80 @@ describe('种子兑换表：老设备补条目（只增不改）', () => {
 
     expect(useApp.getState().allRedeemItems).toHaveLength(SEED_REDEEM_ITEMS.length)
     const dupes = names().filter((n, i, arr) => arr.indexOf(n) !== i)
+    expect(dupes).toEqual([])
+  })
+})
+
+/* ============================================================
+   种子兑换表：改价迁移
+   ------------------------------------------------------------
+   「只增不改」的代价之一：默认清单里的**改价**传不到老设备。
+   家长 2026-10-10 明确要求改这两条价，所以补一条**安全**的迁移。
+
+   安全 = 「**宁可漏改，不可覆盖**」：只有库里的价**正好等于**迁移表的
+   `from`（说明家长没动过）才改。家长自己调过的，一律不碰 ——
+   哪怕那样就漏改了。下面每条断言都在钉这条边界。
+   ============================================================ */
+describe('种子兑换表：改价迁移（只改没被动过的）', () => {
+  const costOf = (n: string) =>
+    useApp.getState().allRedeemItems.find((i) => i.name === n)?.cost
+  const idOf = (n: string) => useApp.getState().allRedeemItems.find((i) => i.name === n)!.id
+
+  it('迁移表里的每条都真的存在、且和种子的新价对得上', async () => {
+    // 这条是防「改价时忘了加迁移行」——迁移表里的 from 必须是旧值，
+    // to 必须**等于**种子里现在的价，否则说明两处写岔了。
+    await boot()
+    for (const m of REDEEM_PRICE_MIGRATIONS) {
+      const seed = SEED_REDEEM_ITEMS.find((s) => s.name === m.name)
+      expect(seed, `迁移表里的「${m.name}」在种子里找不到`).toBeTruthy()
+      expect(seed!.cost, `「${m.name}」的 to 应该等于种子现价`).toBe(m.to)
+    }
+  })
+
+  it('停在旧价的库：下次 boot 改成新价（这就是家长要的）', async () => {
+    await boot()
+    const m = REDEEM_PRICE_MIGRATIONS[0]
+    await useApp.getState().updateRedeemItem(idOf(m.name), { cost: m.from })
+    expect(costOf(m.name)).toBe(m.from)
+
+    await useApp.getState().boot()
+
+    expect(costOf(m.name), `「${m.name}」应该被迁移到 ${m.to}`).toBe(m.to)
+  })
+
+  it('家长自己调过的价：boot 不会覆盖（宁可漏改，不可覆盖）', async () => {
+    await boot()
+    const m = REDEEM_PRICE_MIGRATIONS[0]
+    await useApp.getState().updateRedeemItem(idOf(m.name), { cost: 999 })
+
+    await useApp.getState().boot()
+
+    expect(costOf(m.name), '不是迁移表的 from，就不该被碰').toBe(999)
+  })
+
+  it('幂等：已经是新价的库，反复 boot 也不会再变', async () => {
+    await boot()
+    const m = REDEEM_PRICE_MIGRATIONS[0]
+    expect(costOf(m.name), '新装就该是新价').toBe(m.to)
+
+    await useApp.getState().boot()
+    await useApp.getState().boot()
+
+    expect(costOf(m.name)).toBe(m.to)
+  })
+
+  it('条目被删掉时：backfill 补进来的是新价，迁移不重复改', async () => {
+    await boot()
+    const m = REDEEM_PRICE_MIGRATIONS[0]
+    await useApp.getState().deleteRedeemItem(idOf(m.name))
+
+    await useApp.getState().boot()
+
+    expect(costOf(m.name), '补进来就该是新价').toBe(m.to)
+    const dupes = useApp
+      .getState()
+      .allRedeemItems.map((i) => i.name)
+      .filter((n, i, a) => a.indexOf(n) !== i)
     expect(dupes).toEqual([])
   })
 })
