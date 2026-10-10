@@ -318,6 +318,26 @@ export const SEED_TASKS: SeedTask[] = [
 
    这样「积分不会膨胀到兑换失控」：孩子每次想换大件都得等，
    家长就有充足的谈判空间。
+
+   ------------------------------------------------------------
+   ★ 2026-10-09：家长逐条调了这张表（原话见提交信息）。改动如下 ——
+   这张表**只在首次建库 / 表为空时**写入（`useApp.ts` 里
+   `if (redeemCount === 0)`），所以改这里**只对新装的设备生效**，
+   已经装过的不会补，别指望它自动同步。
+
+     新增  「15 分钟自由休息时间」  30 分  （privilege，每天 2 次）
+     新增  「2 小时电视时间」      180 分  （screen，每天 1 次）
+     新增  「挑一个大玩具」       1200 分  （gift，每天 1 次）
+     改价  「晚睡 30 分钟」       120 → 30
+     改价  「和爸爸妈妈独处的一下午」 400 → 180
+
+   ⚠️ 改完这张表的档位分布变成：
+     30 / 30 / 45 / 50 / 60 / 180 / 180 / 200 / 260 / 300 / 600 / 1200 / 1500
+   和上面「日常 30~60 / 周末 150~300 / 大件 600~1500」的老锚点**不再对齐**
+   —— 150~300 那档现在挤了 5 条（180/180/200/260/300），
+   而「晚睡」掉到 30 之后**比看一集动画片还便宜**。
+   这是家长明确要求的，不是算错；但若之后觉得「小确幸」和「周末特权」
+   分不出层次，回来调的就是这几个数。
    ============================================================ */
 
 type SeedRedeem = Omit<RedeemItem, 'id' | 'createdAt' | 'updatedAt'>
@@ -329,6 +349,15 @@ export const SEED_REDEEM_ITEMS: SeedRedeem[] = [
     category: 'snack',
     cost: 30,
     note: '饼干、酸奶、水果，任选一样',
+    limitPerDay: 2,
+    createdByParent: true,
+  },
+  {
+    name: '15 分钟自由休息时间',
+    emoji: '🛋️',
+    category: 'privilege',
+    cost: 30,
+    note: '想歇一会儿就歇，自己定个闹钟',
     limitPerDay: 2,
     createdByParent: true,
   },
@@ -351,6 +380,15 @@ export const SEED_REDEEM_ITEMS: SeedRedeem[] = [
     createdByParent: true,
   },
   {
+    name: '2 小时电视时间',
+    emoji: '🎬',
+    category: 'screen',
+    cost: 180,
+    note: '一次看完两小时，自己关掉',
+    limitPerDay: 1,
+    createdByParent: true,
+  },
+  {
     name: '看一集动画片',
     emoji: '📺',
     category: 'screen',
@@ -363,7 +401,7 @@ export const SEED_REDEEM_ITEMS: SeedRedeem[] = [
     name: '晚睡 30 分钟',
     emoji: '🌙',
     category: 'privilege',
-    cost: 120,
+    cost: 30,
     note: '周末才能用哦',
     limitPerDay: 1,
     createdByParent: true,
@@ -396,6 +434,15 @@ export const SEED_REDEEM_ITEMS: SeedRedeem[] = [
     createdByParent: true,
   },
   {
+    name: '挑一个大玩具',
+    emoji: '🎠',
+    category: 'gift',
+    cost: 1200,
+    note: '攒久一点，换个大的',
+    limitPerDay: 1,
+    createdByParent: true,
+  },
+  {
     name: '点一次想要的晚餐',
     emoji: '🍕',
     category: 'privilege',
@@ -417,7 +464,7 @@ export const SEED_REDEEM_ITEMS: SeedRedeem[] = [
     name: '和爸爸妈妈独处的一下午',
     emoji: '💛',
     category: 'privilege',
-    cost: 400,
+    cost: 180,
     note: '想去哪、做什么，你决定',
     limitPerDay: 1,
     createdByParent: true,
