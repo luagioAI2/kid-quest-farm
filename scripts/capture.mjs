@@ -275,6 +275,21 @@ try {
 
   await shot('02-tasks')
 
+  /* 02c. 任务页 · 「坚持签到」区块（2026-10-11 补）
+     ⚠️ 这一屏**以前从没进过图集** —— 而 2026-10-11 改的正是签到卡
+     （去掉「🔥 连续第 N 天」那一行、徽章搬去长期任务）。删了一行却从没
+     拍过这张卡，「删干净了没有」这件事第 4 层**等于没验**。
+     ⚠️ `block:'center'`：顶栏是 sticky，`'start'` 会把卡片顶到顶栏底下
+     （见 shot 14 那段注释，同一个坑）。 */
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('*')].find(
+      (x) => x.children.length === 0 && /坚持签到/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'center' })
+  })
+  await wait(800)
+  await shot('02c-checkin-section')
+
   /* 3. 任务详情弹层滚到底 —— 验底部按钮没被导航盖住
      ⚠️ 卡片上的入口跟着 `TIMER_ENABLED` / `MANUAL_FILL_ENABLED` 变
      （见 src/features/tasks/ui.tsx）。**当前状态**是「计时器开着 + 右边那个
