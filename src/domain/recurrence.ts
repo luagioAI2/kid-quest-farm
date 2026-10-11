@@ -1,5 +1,6 @@
 import type { Task, TaskInstance } from './types'
 import { appDayKey, periodKeyFor, periodStartDateKey } from './time'
+import { clampTierRatio, DEFAULT_TIER_RATIO } from './tierRatio'
 
 /* ============================================================
    任务实例生成
@@ -243,13 +244,38 @@ export function isCheckInTask(task: Pick<Task, 'checkInEnabled' | 'cycle'>): boo
 }
 
 /**
+ * 这个任务是不是「长期任务」（周 / 月 / 年，**且不是签到**）—— 唯一事实源。
+ *
+ * 「长期任务」在这个 App 里指的是**不预先展开成实例**的那一类：一段时间内
+ * 做满若干次（「每周 2 次」），靠孩子点「记一次完成」攒次数。
+ * 判据正好是 `!isPreGenerated(cycle)`（once/daily 才预生成）。
+ *
+ * ⚠️ 必须排除签到任务，理由和 `selectPeriodTasks` 那段一样：签到自己的卡片
+ * （日历 + 阶梯）已经完整表达了「周期内坚持几天」，再算进长期任务就会
+ * 同一张任务同时出现在两个区块里。
+ *
+ * ⚠️ 这个谓词现在有**两个**读者，别只改一处：
+ *   1. `selectPeriodTasks` —— 决定长期任务区块显示哪些卡；
+ *   2. 连击奖励（`selectStreak` / `maybePayStreakBonus`）—— 2026-10-11 家长定：
+ *      「长期任务这种次数的可以有连续奖励……不能两种同时都有」，
+ *      所以连击**只**发给长期任务，今日任务和签到都不发。
+ *   两处口径必须一致：界面把它列进「长期任务」，它就该能连击；反之亦然。
+ */
+export function isPeriodTask(task: Pick<Task, 'checkInEnabled' | 'cycle'>): boolean {
+  return !isCheckInTask(task) && !isPreGenerated(task.cycle)
+}
+
+/**
  * 签到阶梯奖励。
  *
- * 口径（2026-09-30 起，家长定）：
- *   **每完成一次，阶梯合计给 `0.8 × 基础分`**，按 1:3:6 摊到三档上。
+ * 口径（2026-09-30 起，家长定；2026-10-10 起倍率可调）：
+ *   **每完成一次，阶梯合计给 `ratio × 基础分`**，按 1:3:6 摊到三档上。
  *   于是「每次（单次完成）的积分」不随周期变化 —— 周 / 月 / 年一个价。
- *   周档 base 5 / target 5 → 合计 20 → **2 / 6 / 12**
+ *   周档 base 5 / target 5 / ratio 0.8 → 合计 20 → **2 / 6 / 12**
  *   （2026-10-09 家长把原来的 10 / 30 / 60 压下来的结果：结构不动，只压数字）。
+ *
+ * `ratio` 就是 `settings.checkInTierRatio`（默认 0.8，见 `domain/tierRatio.ts`）。
+ * 家长 2026-10-10 抱怨「阶梯分还是这么大」，那个设置就是给他压这个数的。
  *
  * ⚠️ 这个公式需要 `basePoints`。老签名只有 `(cycle, target)`，
  *    月 / 年档只能写死绝对数（`50/150/400`、`300/1500/5000`）——
@@ -260,16 +286,25 @@ export function isCheckInTask(task: Pick<Task, 'checkInEnabled' | 'cycle'>): boo
  * ⚠️ 周档原来写死 `2/6/12`、不看基础分。现在统一走公式：base 5 / target 5
  *    仍然**精确等于** 2 / 6 / 12（`0.8×5×5/10 = 2`），所以周档行为没变；
  *    基础分改成别的值时阶梯才会跟着按比例走 —— 那才是「一样的」。
+ *
+ * ⚠️ `ratio` 有默认值（老调用点不用改），但**凡是给家长看或给孩子发**
+ *    的地方都必须把 `settings.checkInTierRatio` 传进来 —— 漏传就退回
+ *    0.8，家长明明把倍率压到 20%、界面和账本却还是 80% 的数。
  */
 export function defaultTiers(
   cycle: Task['cycle'],
   target: number,
   basePoints = 5,
+  ratio: number = DEFAULT_TIER_RATIO,
 ): CheckInTier[] {
   const base = Math.max(1, target)
-  /* 1:3:6 三档合计 10 份；每份 = 0.8×基础分×目标天数 / 10。
-     至少 1 分，否则小目标 + 小基础分会算出 0 分档，界面上会出现「+0」。 */
-  const unit = Math.max(1, Math.round((0.8 * Math.max(0, basePoints) * base) / 10))
+  /* 1:3:6 三档合计 10 份；每份 = ratio×基础分×目标天数 / 10。
+     至少 1 分，否则小目标 + 小基础分会算出 0 分档，界面上会出现「+0」。
+     （也正因为这句兜底，`MIN_TIER_RATIO` 不能再往下压 —— 见 tierRatio.ts。） */
+  const unit = Math.max(
+    1,
+    Math.round((clampTierRatio(ratio) * Math.max(0, basePoints) * base) / 10),
+  )
   const pts = (n: number) => unit * n
 
   if (cycle === 'weekly') {
@@ -363,111 +398,70 @@ function shiftDay(key: string, delta: number): string {
 }
 
 /* ============================================================
-   签到连击（**单个签到任务**的连续天数）
+   签到**没有**连击奖励（2026-10-11 家长定）
    ------------------------------------------------------------
-   ⚠️ 和上面的 `computeStreak` 不是一回事，别混：
-     · `computeStreak` 是**全局**连击 —— 「当天完成了任意一个任务」就算一天，
-       奖励来自 settings 的 streakBonusPerDay / Cap，每天只发一次。
-     · 这里是**任务内**连击 —— 只看这一个签到任务自己连着签了几天。
+   家长原话：「签到 只需要阶梯奖励(可以设置倍率)。但是长期任务
+   这种次数的可以有连续奖励(连击奖励)(可以设置连续的加成的分)。
+   不能两种同时都有。」
 
-   家长原话（2026-10-09）：「每次基本分是5分。连续+1」。
-   所以第 N 天 = 基础分 + (N-1)：5、6、7、8、9。
+   所以这里原来那套「任务内连击」是**整块删掉**的（checkInStreak /
+   checkInStreakBonus / checkInStreakIfSigned），不是藏起来不用 ——
+   留着的死代码会诱使人再把它接回去，那就又变成「两种都有」了。
+   连击奖励现在只属于长期任务，走的是上面 `computeStreak` 那条线。
    ============================================================ */
-
-/**
- * 以 `date` 结尾、连续多少个**日历日**都签到了。
- *
- * 「断了就重新」：中间缺一天就从缺的那天断开，只数断点之后的天数。
- * 例：签了 周一/周二/周四，问周四 → 1（周三缺，只数周四）；
- *     签了 周一~周五，问周五 → 5。
- *
- * 注意 `days` 只传**本周期**的已确认日期（`CheckInProgress.days`），
- * 所以跨周天然重置 —— 上周的五连不会带进新的一周。
- */
-export function checkInStreak(days: string[], date: string): number {
-  const set = new Set(days)
-  let count = 0
-  let cursor = date
-  while (set.has(cursor)) {
-    count++
-    cursor = shiftDay(cursor, -1)
-  }
-  return count
-}
-
-/**
- * 连击加成：连续第 N 天多给 N-1 分，**封顶为一次的基础分**。
- *
- * 为什么要封顶：家长明确说了「连击应该很难超过单次分」。
- * 一周最多签 7 天 → 加成最多 6 分，而基础分是 5 —— 不封顶的话，
- * 签满一周时加成会反超基础分。封顶后「加成 ≤ 单次分」永远成立。
- */
-export function checkInStreakBonus(streak: number, basePoints: number): number {
-  const base = Math.max(0, Math.round(basePoints))
-  if (base <= 0) return 0
-  return Math.max(0, Math.min(streak - 1, base))
-}
-
-/**
- * 「今天签下去会是连续第几天」—— 给界面预告今天能拿多少分用。
- *
- * 今天已经签了 → 就是当前连击；
- * 今天还没签 → 看昨天那条连击，+1（昨天没签则从 1 重新开始）。
- */
-export function checkInStreakIfSigned(days: string[], todayKey: string): number {
-  if (days.includes(todayKey)) return checkInStreak(days, todayKey)
-  return checkInStreak(days, shiftDay(todayKey, -1)) + 1
-}
 
 /** 一次签到的发放明细 */
 export interface CheckInPayout {
   /** 基础分（任务定义上的 basePoints） */
   base: number
-  /** 这一签之后是连续第几天 */
-  streak: number
-  /** 连击加成 */
-  streakBonus: number
   /** 这一签同时达成的阶梯（要逐个落账，所以给列表而不是只给合计） */
   tiers: CheckInTier[]
   /** 阶梯奖励合计 */
   tierPoints: number
   /** 最后达成的那一档的名字（用于文案） */
   tierLabel?: string
-  /** 实际到账 = base + streakBonus + tierPoints */
+  /** 实际到账 = base + tierPoints */
   total: number
 }
 
 /**
  * 一次签到**发多少分** —— 唯一事实源。
  *
+ * 口径（2026-10-11 家长定）：签到只有**基础分 + 阶梯奖励**两块，
+ * 没有连击。连击奖励是长期任务的，见文件上方那段说明。
+ *
  * ⚠️ 发分（`useApp.grantCheckIn`）和「确认后得到 N 分」的**展示**必须共用
  * 这个函数。分成两处算就一定会走散：家长审核面板上原来只写
- * `+task.basePoints`，而实际到账还要加连击和阶梯 —— 首日就写 5 实发 7。
+ * `+task.basePoints`，而实际到账还有阶梯 —— 写 5 实发 7。
  * 这是本项目的老毛病（同一个事实存两份），别再开第二份。
+ *
+ * ⚠️ `ratio`（阶梯倍率）**故意不给默认值**。给了默认值，新调用点漏传
+ * 也能编译过，于是「预览用 80%、实发用家长设的 20%」这种分叉会静默发生 ——
+ * 正是上面那段说的老毛病。不给默认值，`tsc` 会挨个点名，漏不掉。
+ * 纯函数里的默认口径见 `defaultTiers` / `domain/tierRatio.ts`。
  */
 export function checkInPayout(
   task: Pick<Task, 'basePoints' | 'cycle' | 'checkInTargetCount'>,
   confirmedDays: string[],
   claimedTiers: number[],
   date: string,
+  ratio: number,
 ): CheckInPayout {
   const base = Math.max(0, Math.round(task.basePoints))
+  // `date` 必须并进去再数天数 —— 否则「今天签完是第几天」永远少一天，
+  // 阶梯就永远差一档才触发（而且不报错）。
   const nextDays = [...confirmedDays, date].sort()
-  const streak = checkInStreak(nextDays, date)
-  const streakBonus = checkInStreakBonus(streak, base)
 
-  const allTiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5, task.basePoints)
+  const allTiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5, task.basePoints, ratio)
   const tiers = claimableTiers(allTiers, nextDays.length, claimedTiers)
   const tierPoints = tiers.reduce((n, t) => n + t.points, 0)
 
   return {
     base,
-    streak,
-    streakBonus,
     tiers,
     tierPoints,
     tierLabel: tiers.length > 0 ? tiers[tiers.length - 1].label : undefined,
-    total: base + streakBonus + tierPoints,
+    total: base + tierPoints,
   }
 }
 

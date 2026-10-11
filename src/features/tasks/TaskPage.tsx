@@ -2,11 +2,7 @@ import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { Portal } from '@/components/Portal'
 import { humanizeMinutes, CYCLE_HINT } from '@/domain/time'
-import {
-  checkInStreak,
-  checkInStreakBonus,
-  claimableTiers,
-} from '@/domain/recurrence'
+import { claimableTiers } from '@/domain/recurrence'
 import { previewPoints } from '@/domain/settlement'
 import type { Task, TaskInstance } from '@/domain/types'
 import { STATUS_KID_LABEL } from '@/domain/types'
@@ -101,7 +97,6 @@ export default function TaskPage() {
         perfect={todayStats.perfect}
         rate={todayStats.rate}
         dateText={`${dateLabel} · ${weekday}`}
-        streak={streak}
       />
 
       {/* ================= 今日任务 ================= */}
@@ -149,7 +144,24 @@ export default function TaskPage() {
 
       {/* ================= 长期任务 ================= */}
       {periodTasks.length > 0 && (
-        <Section title="长期任务" emoji="🗓️" count={periodTasks.length}>
+        <Section
+          title="长期任务"
+          emoji="🗓️"
+          count={periodTasks.length}
+          /* 「🔥 连续 N 天」挂这里，不挂「今日任务」头部。
+             连击奖励只发给长期任务（2026-10-11 家长定），挂在今日任务那边
+             会让人以为做今日任务也能连击 —— 界面不该承诺发不出来的东西。 */
+          action={
+            streak > 0 ? (
+              <span className="flex shrink-0 items-center gap-1 rounded-pill bg-tangerine-100 px-2.5 py-1">
+                <span aria-hidden>🔥</span>
+                <span className="tnum font-display text-xs font-extrabold text-tangerine-500">
+                  连续 {streak} 天
+                </span>
+              </span>
+            ) : undefined
+          }
+        >
           <div className="card-list">
             {periodTasks.map((t) => (
               <PeriodCard
@@ -288,7 +300,6 @@ function ProgressCard({
   perfect,
   rate,
   dateText,
-  streak,
 }: {
   done: number
   total: number
@@ -297,7 +308,6 @@ function ProgressCard({
   rate: number
   /** 「9月14日 · 星期一」—— 原来挂在被删掉的大头部上，现在收进这张卡 */
   dateText: string
-  streak: number
 }) {
   const R = 42
   const C = 2 * Math.PI * R
@@ -306,17 +316,12 @@ function ProgressCard({
 
   return (
     <section className="surface mt-4 border border-grass-300 bg-gradient-to-br from-grass-50 to-sky-50 p-4">
-      {/* 日期 + 连续天数：压成窄窄一条，不跟「还剩几个任务」抢位置 */}
+      {/* 日期：压成窄窄一条，不跟「还剩几个任务」抢位置。
+          ⚠️ 「🔥 连续 N 天」原来挂在这里，2026-10-11 挪到「长期任务」标题栏了 ——
+          连击奖励现在只发给长期任务，挂在「今日任务」的头部会让人以为
+          做今日任务也能连击。 */}
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs font-bold text-ink-600">{dateText}</span>
-        {streak > 0 && (
-          <span className="ml-auto flex shrink-0 items-center gap-1 rounded-pill bg-tangerine-100 px-2.5 py-1">
-            <span aria-hidden>🔥</span>
-            <span className="tnum font-display text-xs font-extrabold text-tangerine-500">
-              连续 {streak} 天
-            </span>
-          </span>
-        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -996,15 +1001,13 @@ function CheckInCard({
   const claimable = claimableTiers(tiers, days.length, claimed)
   const target = task.checkInTargetCount ?? 5
 
-  /* 签到连击（任务内的，和全局连击不是一回事）
-     连续第 N 天 = 基础分 + (N-1)，断签从基础分重来。
-
-     以前这里还算过一个 `payout`（「今天签下去实际到手多少」）给卡片做预告，
-     走的是和发分同一个 `checkInPayout`。那行预告家长说不用显示，于是
-     `payout` 连同它的注释一起去掉了 —— 家长审核卡（ReviewSheet）那边
-     仍然用 `checkInPayout`，「展示与发放共用一个事实源」这条规矩没变。 */
-  const basePoints = Math.max(0, Math.round(task.basePoints))
-  const streakNow = signedToday ? checkInStreak(days, todayKey) : 0
+  /* ⚠️ 这里原来有一行「🔥 连续第 N 天（今天连击 +N）」。
+     2026-10-11 家长定：签到**只留阶梯奖励**，连击奖励归长期任务，
+     两种不能同时都有 —— 所以整行连同 `checkInStreak` / `checkInStreakBonus`
+     一起删掉了，不是藏起来不显示。卡片上现在只有「已坚持 X/Y 天」+ 阶梯。
+     （曾经这里还算过一个 `payout` 做「今天签下去到手多少」的预告，
+     家长说不用显示，那行早就去掉了。家长审核卡 ReviewSheet 那边仍然用
+     `checkInPayout`，「展示与发放共用一个事实源」这条规矩没变。） */
 
   // 展示格子：本周 / 本月
   const cells = useMemo(() => buildCells(task.cycle, todayKey, days), [task.cycle, todayKey, days])
@@ -1100,20 +1103,11 @@ function CheckInCard({
           )}
         </div>
 
-        {/* 连击：签过之后才显示连了几天（连着来每天多 +1，断了从基础分重来）。
-            「今天签到可得 N 分（基础 5 + 阶梯 2）」和
-            「连着来每天多 +1（最多 +5）」这两行**不显示**（家长要求）——
-            阶梯那几行本来就写着每档 +多少，再说一遍是重复。 */}
-        {basePoints > 0 && signedToday && (
-          <p className="mt-2.5 text-[11px] font-bold text-ink-600">
-            🔥 连续第 <span className="tnum font-extrabold text-ink-900">{streakNow}</span> 天
-            {streakNow > 1 && (
-              <span className="text-grass-700">
-                （今天连击 +{checkInStreakBonus(streakNow, basePoints)}）
-              </span>
-            )}
-          </p>
-        )}
+        {/* ⚠️ 这里原来有一行「🔥 连续第 N 天（今天连击 +N）」。
+            2026-10-11 家长定：签到只留阶梯奖励，连击归长期任务 ——
+            整行删掉。签到卡现在只有「已坚持 X/Y 天」+ 下面那几档阶梯。
+            （「今天签到可得 N 分」那行更早之前就按家长要求去掉了：
+            阶梯那几行本来就写着每档 +多少，再说一遍是重复。） */}
 
         {/* 阶梯 */}
         <div className="mt-3 space-y-1.5">

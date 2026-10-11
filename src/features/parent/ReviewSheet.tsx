@@ -140,11 +140,15 @@ function CheckInReviewCard({
   const task = useMemo(() => tasks.find((t) => t.id === ci.taskId), [tasks, ci.taskId])
   // 同理：订 `checkInProgress` 整片，别在 selector 里 `.find()`
   const checkInProgress = useApp((s) => s.checkInProgress)
+  /* 阶梯倍率。`checkInPayout` 的第五个参数是**必填**的（故意不给默认值），
+     所以这里必须把它订出来 —— 否则家长在设置里把阶梯压到 20%，
+     审核卡还按 80% 预告「+N 分」，点下去实发另一个数。 */
+  const tierRatio = useApp((s) => s.settings.checkInTierRatio)
   const [busy, setBusy] = useState(false)
 
   /* 「确认后得到 N 分」必须等于 `approveCheckIn` 真正发出去的数 ——
      所以两处共用 `checkInPayout`，不在这里另算一遍。
-     这里原来写的是 `+task.basePoints`，而实际到账还有连击和阶梯：
+     这里原来写的是 `+task.basePoints`，而实际到账还有阶梯：
      全新账号第一天写着 5、点下去实发 7。家长看到的是一个数、孩子拿到另一个数，
      这是最不该有的那类 bug。
      ⚠️ 也不能图省事写「基础分」了事 —— 阶梯奖励就是这次确认触发的，
@@ -152,8 +156,8 @@ function CheckInReviewCard({
   const payout = useMemo(() => {
     if (!task) return null
     const row = checkInProgress.find((p) => p.taskId === ci.taskId && p.periodKey === ci.periodKey)
-    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], ci.date)
-  }, [task, checkInProgress, ci.taskId, ci.periodKey, ci.date])
+    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], ci.date, tierRatio)
+  }, [task, checkInProgress, ci.taskId, ci.periodKey, ci.date, tierRatio])
 
   const cat = task ? categoryOf(task.category) : null
 
@@ -210,8 +214,8 @@ function CheckInReviewCard({
       </div>
 
       <p className="mt-3 px-1 text-xs font-bold leading-snug text-ink-500">
-        {payout && payout.streakBonus + payout.tierPoints > 0
-          ? `基础 ${payout.base} 分${payout.streakBonus > 0 ? ` + 连击 ${payout.streakBonus} 分（连续第 ${payout.streak} 天）` : ''}${payout.tierPoints > 0 ? ` + 阶梯 ${payout.tierPoints} 分` : ''}。确认后这一天会算进坚持天数。`
+        {payout && payout.tierPoints > 0
+          ? `基础 ${payout.base} 分 + 阶梯 ${payout.tierPoints} 分。确认后这一天会算进坚持天数。`
           : '确认后这一天会算进坚持天数，攒够天数自动发阶梯奖励。'}
       </p>
 

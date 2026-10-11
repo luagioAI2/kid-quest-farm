@@ -747,6 +747,18 @@ export interface AppSettings {
    */
   pointsPerYuan: number
 
+  /**
+   * 签到「坚持的奖励阶梯」的倍率（2026-10-10 家长要求）。
+   *
+   * 阶梯合计 = 这个倍率 × 基础分 × 目标天数，按 1:3:6 摊到三档。
+   * 默认 0.8 —— 也就是「每完成一次，阶梯多给 0.8 个基础分」。
+   *
+   * ⚠️ 和 `pointsPerYuan` 不同，这个**参与计算**：它进 `defaultTiers`
+   * → `checkInPayout` → 真正落账的分数。预览和实发必须传同一个值。
+   * 口径与夹取区间见 `domain/tierRatio.ts`。
+   */
+  checkInTierRatio: number
+
   /** 农场时间流速设置 */
   farmClock: FarmClockSettings
 

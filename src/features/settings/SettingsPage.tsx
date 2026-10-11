@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppSettings, BackupFile } from '../../domain/types'
 import { useApp } from '../../store/useApp'
 import { DEFAULT_PROFIT_RATIO } from '../../domain/catalog'
 import { QUALITY_META, QUALITY_ORDER, formatMultiplier } from '../../domain/settlement'
 import { clampPointsPerYuan, formatYuan, MAX_POINTS_PER_YUAN, MIN_POINTS_PER_YUAN } from '../../domain/cash'
+import { clampTierRatio } from '../../domain/tierRatio'
+import {
+  MAX_STREAK_CAP,
+  MAX_STREAK_PER_DAY,
+  MIN_STREAK_CAP,
+  MIN_STREAK_PER_DAY,
+  clampStreakCap,
+  clampStreakPerDay,
+} from '../../domain/streakBonus'
+import { defaultTiers, isCheckInTask } from '../../domain/recurrence'
 import { AVATAR_CHOICES } from '../../domain/avatars'
 import { humanizeAgo } from '../../domain/time'
 import { saveBlob, shareOrDownload } from '../../platform/files'
@@ -28,6 +38,7 @@ export default function SettingsPage({
   onReplayGuide?: () => void
 }) {
   const settings = useApp((s) => s.settings)
+  const tasks = useApp((s) => s.tasks)
   const updateSettings = useApp((s) => s.updateSettings)
   const exportBackup = useApp((s) => s.exportBackup)
   const importBackup = useApp((s) => s.importBackup)
@@ -53,6 +64,44 @@ export default function SettingsPage({
    * 「¥NaN」。夹一次，UI 上永远不会看到脏数。
    */
   const ratio = clampPointsPerYuan(settings.pointsPerYuan)
+
+  /**
+   * 签到阶梯的倍率（家长 2026-10-10 要求「阶梯分设置」）。
+   *
+   * 同样走 `clampTierRatio` 而不是直接用 `settings.checkInTierRatio` ——
+   * 导入的旧备份里可能是 `undefined` / 越界值，夹一次，界面上永远不会
+   * 出现「NaN%」。
+   */
+  const tierRatio = clampTierRatio(settings.checkInTierRatio)
+
+  /**
+   * 连击奖励的加成分（家长 2026-10-11 要求「可以设置连续的加成的分」）。
+   *
+   * 同样先夹再用 —— 导入的旧备份里可能是 `undefined` / 越界值，
+   * 界面上不能出现「NaN 分」，算式那边也不能收到越界值。
+   */
+  const streakPerDay = clampStreakPerDay(settings.streakBonusPerDay)
+  const streakCap = clampStreakCap(settings.streakBonusCap)
+
+  /**
+   * 卡片里那行「例：…」的预览。
+   *
+   * ⚠️ 用**家长自己的**签到任务现算，而不是写死一个「基础分 5 / 目标 5 天」
+   *    的抽象例子 —— 阶梯分只能是整数，倍率低的时候相邻两档会算出同一个数。
+   *    如果预览举的是别人的例子，家长点了 20% 和 40% 看到一模一样的结果，
+   *    会以为这个设置坏了。用他自己的任务，那个取整就是可见且合理的。
+   *    一个签到任务都没有时（家长全删了），退回新建签到任务的默认档 5 / 5。
+   *
+   * 现算，**不写死** —— 倍率 0.8 时给出 2/6/12，压到 0.2 就变 1/3/6。
+   * 写死的话家长点了 20% 还看到 2/6/12，那是界面在骗人。
+   */
+  const sampleCheckIn = useMemo(() => tasks.find((t) => isCheckInTask(t)), [tasks])
+  const tierPreview = defaultTiers(
+    sampleCheckIn?.cycle ?? 'weekly',
+    sampleCheckIn?.checkInTargetCount ?? 5,
+    sampleCheckIn?.basePoints ?? 5,
+    tierRatio,
+  )
 
   // 切到 data tab 时自动上锁，防止孩子趁家长没注意时导出/恢复/清空
   useEffect(() => {
@@ -286,14 +335,60 @@ export default function SettingsPage({
                   </p>
                 </Card>
 
-                <Toggle
-                  label="连续完成奖励"
-                  hint={`每连击一天多给 ${settings.streakBonusPerDay} 分，最多 ${settings.streakBonusCap} 分`}
-                  emoji="🔥"
-                  checked={settings.streakBonusEnabled}
-                  disabled={!gateOpen}
-                  onChange={(v) => void updateSettings({ streakBonusEnabled: v })}
-                />
+                <Card title="连续完成奖励" emoji="🔥">
+                  <p className="mb-3 text-sm text-ink-500">
+                    连着几天完成长期任务（每周 / 每月要做满几次的那种），每天多给一点分。
+                    签到任务不算 —— 它有自己的阶梯奖励，两种不会同时发。
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-display text-base font-extrabold text-ink-900">
+                        开启
+                      </div>
+                      <div className="text-sm text-ink-500">关掉之后，长期任务只发基础分</div>
+                    </div>
+                    <Switch
+                      checked={settings.streakBonusEnabled}
+                      onChange={(v) => void updateSettings({ streakBonusEnabled: v })}
+                      disabled={!gateOpen}
+                      label="连续完成奖励"
+                    />
+                  </div>
+                  {/* ⚠️ 两个输入框**各占一行**，不要塞进同一个 `flex-wrap`。
+                      390px 宽度下「每连击一天多给 [2] 分，一次最多加 [20] 分」
+                      放不下，会折成「…一次最多加」+ 换行 +「[20] 分」，
+                      第二个框和它的单位被拆到两行，看着像排版坏了（实测过）。 */}
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 text-sm font-bold text-ink-500">每连击一天多给</span>
+                      <NumberInput
+                        value={streakPerDay}
+                        min={MIN_STREAK_PER_DAY}
+                        max={MAX_STREAK_PER_DAY}
+                        clamp={clampStreakPerDay}
+                        disabled={!gateOpen}
+                        onCommit={(v) => void updateSettings({ streakBonusPerDay: v })}
+                      />
+                      <span className="shrink-0 text-sm font-bold text-ink-500">分</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 text-sm font-bold text-ink-500">一次最多加</span>
+                      <NumberInput
+                        value={streakCap}
+                        min={MIN_STREAK_CAP}
+                        max={MAX_STREAK_CAP}
+                        clamp={clampStreakCap}
+                        disabled={!gateOpen}
+                        onCommit={(v) => void updateSettings({ streakBonusCap: v })}
+                      />
+                      <span className="shrink-0 text-sm font-bold text-ink-500">分</span>
+                    </div>
+                  </div>
+                  <p className="tnum mt-2 text-xs font-bold leading-snug text-ink-500">
+                    当前：连击第 N 天多给「N × {streakPerDay}」分，最多 {streakCap} 分。
+                    例：连到第 3 天多给 {Math.min(streakCap, 3 * streakPerDay)} 分。
+                  </p>
+                </Card>
 
                 <Toggle
                   label="家长确认后才发积分"
@@ -363,6 +458,42 @@ export default function SettingsPage({
                 <p className="-mt-1 px-4 text-xs font-bold leading-snug text-ink-500">
                   💡 周末和节假日的收成会悄悄多一些，这个不用告诉孩子 —— 他自己会慢慢感觉到。
                 </p>
+
+                <Card title="坚持的奖励阶梯" emoji="🪜">
+                  <p className="mb-3 text-sm text-ink-500">
+                    签到任务里有一条「坚持得越久、奖励越多」的阶梯：坚持到某几天会各多发一次奖励，
+                    具体是哪几天看周期（下面那行就是你的任务）。
+                    这里定它<b className="text-ink-700">一共给多少</b>：
+                    每完成一次签到，阶梯合计给「基础分」的这个比例。
+                    调低 = 阶梯只是个彩头；调高 = 坚持本身也值不少分。
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {([0.2, 0.4, 0.6, 0.8, 1.0, 1.5] as number[]).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        disabled={!gateOpen}
+                        onClick={() => void updateSettings({ checkInTierRatio: v })}
+                        className={
+                          'btn rounded-full px-4 py-2 font-bold shadow-flat disabled:opacity-50 ' +
+                          (tierRatio === v ? 'bg-grass-300 text-ink-900' : 'bg-white text-ink-500')
+                        }
+                      >
+                        {Math.round(v * 100)}%
+                      </button>
+                    ))}
+                  </div>
+                  <p className="tnum mt-2 text-xs font-bold leading-snug text-ink-500">
+                    当前：每完成一次，阶梯合计给基础分的 {Math.round(tierRatio * 100)}%。
+                    {sampleCheckIn ? `以你的「${sampleCheckIn.title}」为例` : '例'}：
+                    {tierPreview.map((t) => `${t.days} 天 +${t.points}`).join('、')}。
+                  </p>
+                  <p className="mt-1 text-xs font-bold leading-snug text-ink-400">
+                    分数只能是整数，所以小任务上相邻两档可能算出一样的数 ——
+                    上面那行就是当前档位的真实结果。改完会影响所有签到任务，
+                    已经发出去的分不会追回。
+                  </p>
+                </Card>
 
                 <Card title="每一轮最多能赚多少" emoji="📈">
                   <p className="mb-3 text-sm text-ink-500">
@@ -634,6 +765,41 @@ function Card({
   )
 }
 
+/** 开关本体。`Toggle` 和需要更多控件的卡片共用它 —— 开关只该有一份实现。 */
+function Switch({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  disabled?: boolean
+  /** 无障碍名字，同时也是 e2e / 单测的抓手 */
+  label: string
+}) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={
+        'relative h-9 w-16 shrink-0 rounded-full transition-colors disabled:opacity-50 ' +
+        (checked ? 'bg-grass-400' : 'bg-ink-300')
+      }
+    >
+      <span
+        className={
+          'absolute top-1 h-7 w-7 rounded-full bg-white shadow transition-all ' +
+          (checked ? 'left-8' : 'left-1')
+        }
+      />
+    </button>
+  )
+}
+
 function Toggle({
   label,
   hint,
@@ -656,30 +822,14 @@ function Toggle({
         <div className="font-display text-base font-extrabold text-ink-900">{label}</div>
         <div className="text-sm text-ink-500">{hint}</div>
       </div>
-      <button
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={
-          'relative h-9 w-16 shrink-0 rounded-full transition-colors disabled:opacity-50 ' +
-          (checked ? 'bg-grass-400' : 'bg-ink-300')
-        }
-      >
-        <span
-          className={
-            'absolute top-1 h-7 w-7 rounded-full bg-white shadow transition-all ' +
-            (checked ? 'left-8' : 'left-1')
-          }
-        />
-      </button>
+      <Switch checked={checked} onChange={onChange} disabled={disabled} label={label} />
     </section>
   )
 }
 
 /**
- * 「1 元 = ___ 分」的自定义输入框。
+ * 一个「自己填个数」的输入框 —— 「1 元 = ___ 分」「每连击一天多给 ___ 分」
+ * 都用它。
  *
  * ⚠️ 用**本地草稿 + 失焦提交**，不要 `onChange` 直接写 store。
  * 家长想把 10 改成 80 时，中间会经过「8」这个瞬间值：直接落库的话
@@ -688,13 +838,22 @@ function Toggle({
  *
  * 外部值变了（点了预设按钮）用「渲染期同步」而不是 `useEffect` ——
  * 后者要多写一个依赖数组和 lint 豁免，而且会多跑一帧。
+ *
+ * `clamp` 由调用方给（见 `domain/cash.ts` / `domain/tierRatio.ts`）——
+ * 夹取规则属于领域，不属于这个组件。
  */
-function RatioInput({
+function NumberInput({
   value,
+  min,
+  max,
+  clamp,
   disabled,
   onCommit,
 }: {
   value: number
+  min: number
+  max: number
+  clamp: (n: number) => number
   disabled?: boolean
   onCommit: (v: number) => void
 }) {
@@ -707,7 +866,7 @@ function RatioInput({
   }
 
   const commit = () => {
-    const n = clampPointsPerYuan(Number(draft))
+    const n = clamp(Number(draft))
     setDraft(String(n))
     if (n !== value) onCommit(n)
   }
@@ -718,8 +877,8 @@ function RatioInput({
       inputMode="numeric"
       disabled={disabled}
       value={draft}
-      min={MIN_POINTS_PER_YUAN}
-      max={MAX_POINTS_PER_YUAN}
+      min={min}
+      max={max}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
@@ -727,6 +886,28 @@ function RatioInput({
         if (e.key === 'Enter') e.currentTarget.blur()
       }}
       className="tnum min-h-[44px] w-24 rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-3 text-center font-display font-extrabold text-ink-900 outline-none focus:border-sky-400 disabled:opacity-50"
+    />
+  )
+}
+
+/** 「1 元 = ___ 分」的输入框 —— 夹取规则走 `domain/cash.ts` */
+function RatioInput({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number
+  disabled?: boolean
+  onCommit: (v: number) => void
+}) {
+  return (
+    <NumberInput
+      value={value}
+      min={MIN_POINTS_PER_YUAN}
+      max={MAX_POINTS_PER_YUAN}
+      clamp={clampPointsPerYuan}
+      disabled={disabled}
+      onCommit={onCommit}
     />
   )
 }

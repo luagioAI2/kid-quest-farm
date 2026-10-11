@@ -487,6 +487,37 @@ try {
   await wait(800)
   await shot('12b-sound-toggles')
 
+  /* 12d. 设置 · 规则 tab：「坚持的奖励阶梯」倍率（2026-10-10 新增）
+     ⚠️ 同一条规矩：新加的界面必须进图集。家长抱怨的正是「阶梯分设置没有」，
+     这张卡就是那个设置 —— 不进图集的话，第 4 层走查对这一屏等于没验。
+
+     ⚠️ 新增设置卡会让**设置页变高**，而设置页的滚动会漏进后面 13-parent-review
+     的背景（切 tab 不重置滚动）。这一步本身放在哪都行 —— 实测过：夹在 12b 和 12
+     之间、或加在 12c 后面，13 的差异一模一样（都是 31020 px）。真正的修法是在
+     13 那里把待确认卡显式滚进视野，见那一段的注释。 */
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('*')].find(
+      (x) => x.children.length === 0 && /坚持的奖励阶梯/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'center' })
+  })
+  await wait(800)
+  await shot('12d-tier-ladder')
+
+  /* 12e. 设置 · 规则 tab：「连续完成奖励」开关 + 两个数字（2026-10-11 新增）
+     ⚠️ 同 12b / 12d 的规矩：新加的界面必须进图集，否则第 4 层走查对这一屏
+     等于没验。家长要的正是「连击奖励……可以设置连续的加成的分」，
+     这两个输入框就是那个设置。
+     锚点用卡片的说明句而不是标题 —— 标题在卡片顶上，居中滚过去只露半张卡。 */
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('*')].find(
+      (x) => x.children.length === 0 && /连着几天完成长期任务/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'center' })
+  })
+  await wait(800)
+  await shot('12e-streak-bonus')
+
   /* 12. 设置 · 规则 tab：家长设「每一轮最多能赚多少」 */
   await page.evaluate(() => {
     const el = [...document.querySelectorAll('*')].find(
@@ -547,6 +578,26 @@ try {
   await wait(900)
   await clickByText('任务', 'nav')
   await wait(700)
+
+  /* ⚠️⚠️ 切 tab **不会**重置滚动（同 09/10 那段的老坑），所以这一屏「弹层背后
+     露出哪张卡」完全取决于上一屏（设置页）滚到了哪里 —— 而设置页的高度会随
+     新增卡片变化。2026-10-10 加「坚持的奖励阶梯」卡后，设置页高了一张卡，
+     `现金对积分` 的 `scrollIntoView` 落点跟着变，这个滚动又漏进了任务 tab：
+     这一屏背景从「等确认的琥珀色卡」整块换成了另一张普通任务卡，走查图上
+     看着像弹层改版了，其实弹层本身逐字节相同（实测：同一脚本下两个构建
+     0 像素差；只有脚本版本不同才会差）。
+     所以这里**显式**把刚造的那张待确认卡滚到视野顶部 —— 这张图的语义本来就是
+     「家长确认弹层 + 背后那张等确认的卡」，不该靠上一屏的滚动碰运气。
+     ⚠️ 必须用 `block:'start'`：弹层盖住屏幕中下部，`block:'center'` 会把这张卡
+     藏到弹层**背后**，露出来的反而是它上面那张无关的任务卡（实测过）。 */
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('*')].find(
+      (x) => x.children.length === 0 && /__capture_review/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'start' })
+  })
+  await wait(500)
+
   await page.evaluate(() => {
     const b = document.querySelector('button[aria-label^="家长确认"]')
     if (b) b.click()
@@ -576,6 +627,71 @@ try {
     await wait(1200)
   }
   await shot('13-parent-review')
+
+  /* 14. 长期任务区块的连击徽章（2026-10-11 新增）
+     ------------------------------------------------------------
+     连击奖励现在**只属于长期任务**（见 domain/recurrence.ts 的 isPeriodTask），
+     徽章也从签到卡搬到了「长期任务」这一块的标题行。新界面必须进图集 ——
+     否则第 4 层走查对这一屏**等于没验**（§12b / §12d 都是踩过这个坑才写的）。
+
+     ⚠️ 徽章只在 streak > 0 时出现，而一次走查**不会跨天**完成长期任务 ——
+     不造历史的话这一屏永远拍不到它。
+
+     造法只用现成的公开命令，不碰内部表：导出备份 → 给「读一本完整的故事书」
+     （monthly，目标 4）补三条「前三天 / 前两天 / 昨天」的完成记录 → 导回去。
+     `importBackup` 是「先全量校验、再整体替换」，所以这是一次**无损往返** ——
+     农场 / 背包 / 兑换记录都随导出的那份快照一起回来。
+     ⚠️ 挑月度任务、且三条日期都落在**同一个月**：它的 periodKey 是 `2026-10`
+     这种，三条 = 同周期不同天，唯一键 `&[taskId+periodKey+date]` 放得下，
+     卡片上「本月进度 3/4」也自然。换 weekly 的「背诵」（目标 2）会显示
+     「3/2」，看着像出了 bug。
+     ⚠️ 今天是月初时前三天会跨月 —— 所以 periodKey 按每条自己的日期算，
+     不能拿今天的月份一把梭。 */
+  // 先把 13 那张打分弹层关掉，否则下面点不到底栏的「任务」
+  await page.keyboard.press('Escape')
+  await wait(500)
+  await page.evaluate(async () => {
+    const raw = await window.__kqf__.exportBackup()
+    const dayOf = (delta) => {
+      const d = new Date(Date.now() + delta * 86400_000)
+      const p = (n) => (n < 10 ? `0${n}` : String(n))
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    }
+    const task = raw.data.tasks.find((t) => t.title === '读一本完整的故事书')
+    if (!task) return
+    for (const delta of [-1, -2, -3]) {
+      const date = dayOf(delta)
+      const at = new Date(`${date}T12:00:00`).getTime()
+      raw.data.taskInstances.push({
+        ...task,
+        id: `cap-streak-${delta}`,
+        taskId: task.id,
+        periodKey: date.slice(0, 7), // 月度周期键 = yyyy-MM
+        date,
+        status: 'completed',
+        earnedPoints: task.basePoints,
+        completedAt: at,
+        settledAt: at,
+        createdAt: at,
+        updatedAt: at,
+      })
+    }
+    await window.__kqf__.importBackup(raw)
+  })
+  await wait(900)
+  await clickByText('任务', 'nav')
+  await wait(800)
+  /* ⚠️ 这里必须 `block:'center'`，**不能**用 `'start'` —— 顶栏是 sticky 的，
+     `'start'` 会把「长期任务」这一行顶到视口最上面、正好被顶栏盖住，
+     拍出来就是「区块标题和徽章都不见了」（第一版就是这么拍的）。 */
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('*')].find(
+      (x) => x.children.length === 0 && /长期任务/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'center' })
+  })
+  await wait(800)
+  await shot('14-period-streak')
 
   /* 记下这批图是从**哪一版 bundle** 截的。
      `make-site-assets.py` 会把它复制成 `site/img/shots-source.txt`，

@@ -83,6 +83,7 @@ import {
   defaultTiers,
   isPreGenerated,
   isCheckInTask,
+  isPeriodTask,
   makeInstance,
   planMissingInstances,
   uid,
@@ -101,6 +102,7 @@ import {
   produceUnitOf,
 } from '../domain/catalog'
 import { describeRedeemPayment, planRedeemPayment } from '../domain/redeem'
+import { clampStreakCap, clampStreakPerDay } from '../domain/streakBonus'
 import {
   advanceMarket,
   applySell,
@@ -893,10 +895,17 @@ async function settleNow(
     }
   }
 
-  // 连击奖励
+  /* 连击奖励 —— **只发给长期任务**（2026-10-11 家长定：
+     「长期任务这种次数的可以有连续奖励……不能两种同时都有」）。
+     今日任务天天都要做，签到有自己的阶梯奖励，两者都不给连击。
+     判据用 `isPeriodTask`，和「长期任务」区块共用同一个谓词 —— 否则会
+     出现「区块里列着它、连击却不发」这种两处口径打架。
+     ⚠️ 必须查**任务定义**而不是 `inst.cycle`：单次 / 每日任务也有实例，
+     只看周期会漏判（签到任务同样有 cycle）。 */
   let streakBonus = 0
   if (settings.streakBonusEnabled && result.points > 0) {
-    streakBonus = await maybePayStreakBonus()
+    const def = get().tasks.find((t) => t.id === inst.taskId)
+    if (def && isPeriodTask(def)) streakBonus = await maybePayStreakBonus()
   }
 
   set({
@@ -977,13 +986,19 @@ async function grantCheckIn(
   if (progress.days.includes(date)) return { gained: 0, bonus: 0 }
 
   /* 发多少分**只算这一次**，而且用的是「家长审核卡上显示多少分」那同一个函数。
-     ⚠️ 别把 base / streak / tier 又在这里展开算一遍 ——
-     审核卡原来就写着 `+task.basePoints`，实际到账却是 base + 连击 + 阶梯，
-     首日写 5 实发 7。同一个事实存两份，迟早走散（本项目的老毛病）。
-     `checkInPayout` 内部已经把 date 并进 days 之后再问连击 ——
-     否则「今天是第几天」永远是 0，连击永远不生效，而且不报错。 */
-  const payout = checkInPayout(task, progress.days, progress.claimedTiers, date)
-  const gained = payout.base + payout.streakBonus
+     ⚠️ 别把 base / tier 又在这里展开算一遍 ——
+     审核卡原来就写着 `+task.basePoints`，实际到账却是 base + 阶梯，
+     写 5 实发 7。同一个事实存两份，迟早走散（本项目的老毛病）。
+     `checkInPayout` 内部已经把 date 并进 days 之后再数天数 ——
+     否则「今天是第几天」永远少一天，阶梯永远差一档才触发，而且不报错。 */
+  const payout = checkInPayout(
+    task,
+    progress.days,
+    progress.claimedTiers,
+    date,
+    get().settings.checkInTierRatio,
+  )
+  const gained = payout.base
 
   progress.days = [...progress.days, date].sort()
   progress.updatedAt = Date.now()
@@ -1008,16 +1023,9 @@ async function grantCheckIn(
     })
   }
 
-  // 连击加成单独记一条流水 —— 否则孩子在账本里只看到「签到 +7」，
-  // 看不出多出来的 2 分是连击给的，也就学不到「连着来更划算」。
-  if (payout.streakBonus > 0) {
-    await postLedger({
-      delta: payout.streakBonus,
-      source: 'checkin_bonus',
-      refId: `${record.id}:streak`,
-      memo: `连续第 ${payout.streak} 天 · 连击 +${payout.streakBonus}`,
-    })
-  }
+  /* 签到**没有**连击流水了（2026-10-11 家长定：签到只留阶梯奖励，
+     连击奖励归长期任务）。原来这里有一条 `checkin_bonus` 的连击流水，
+     是整块删掉的 —— 留着会让账本里出现一笔界面已经不再预告的分。 */
 
   // 自动结算已达成的阶梯奖励
   let bonus = 0
@@ -1046,11 +1054,7 @@ async function grantCheckIn(
   get().pushToast({
     kind: 'reward',
     title: `签到成功 +${gained + bonus} 分`,
-    detail: tierLabel
-      ? `达成「${tierLabel}」！`
-      : payout.streak > 1
-        ? `连续第 ${payout.streak} 天，连击 +${payout.streakBonus} 分`
-        : `已坚持 ${progress.days.length} 天`,
+    detail: tierLabel ? `达成「${tierLabel}」！` : `已坚持 ${progress.days.length} 天`,
     emoji: '📅',
   })
 
@@ -1440,7 +1444,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   tiersFor: (task) => {
     const target = task.checkInTargetCount ?? 5
-    return defaultTiers(task.cycle, target, task.basePoints)
+    return defaultTiers(task.cycle, target, task.basePoints, get().settings.checkInTierRatio)
   },
 
   checkInDays: (taskId) => currentCheckInRow(get, taskId)?.days ?? [],
@@ -1550,7 +1554,12 @@ export const useApp = create<AppState>((set, get) => ({
       .equals([taskId, pk])
       .first()
     if (!progress) return 0
-    const tiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5, task.basePoints)
+    const tiers = defaultTiers(
+      task.cycle,
+      task.checkInTargetCount ?? 5,
+      task.basePoints,
+      settings.checkInTierRatio,
+    )
     const tier = tiers.find((t) => t.days === days)
     if (!tier || progress.claimedTiers.includes(days) || progress.days.length < days) return 0
     progress.claimedTiers = [...progress.claimedTiers, days]
@@ -2854,20 +2863,15 @@ export function selectTodayInstances(s: AppState): TaskInstance[] {
     })
 }
 
-/** 长期任务（周/月/年） */
+/** 长期任务（周 / 月 / 年） */
 /**
  * 长期任务（周 / 月 / 年）。
  *
- * 必须排除签到任务：签到自己的卡片（日历 + 阶梯奖励）已经完整表达了
- * 「周期内坚持几天」，若这里再返回一次，同一张任务会同时出现在
- * 「长期任务」和「坚持签到」两个区块里，看起来像重复创建了任务。
+ * 判据统一放在 `isPeriodTask`（domain/recurrence.ts）—— 连击奖励也用
+ * 同一个谓词，两处口径必须一致：界面把它列进「长期任务」，它就该能连击。
  */
 export function selectPeriodTasks(s: AppState): Task[] {
-  return s.tasks.filter(
-    (t) =>
-      !isCheckInTask(t) &&
-      (t.cycle === 'weekly' || t.cycle === 'monthly' || t.cycle === 'yearly'),
-  )
+  return s.tasks.filter(isPeriodTask)
 }
 
 /** 签到任务 */
@@ -2947,18 +2951,46 @@ export function selectPendingRedeems(s: AppState): RedeemRecord[] {
     .sort((a, b) => a.createdAt - b.createdAt)
 }
 
-/** 连续完成天数 */
-export function selectStreak(s: AppState): number {
+/**
+ * 从实例里挑出「算连击的那些天」。
+ *
+ * 抽出来是为了让**两个读者共用同一份口径**：
+ *   · `selectStreak`（界面显示）读 store 快照；
+ *   · `maybePayStreakBonus`（发分）读 DB。
+ * 各写一遍过滤条件迟早走散（本项目的老毛病）。这里同时钉住了
+ * 「只数长期任务」和「用逻辑日而不是日历日」两条规则。
+ */
+function streakDaysOf(
+  instances: readonly TaskInstance[],
+  tasks: readonly Task[],
+  dayStartHour: number,
+): string[] {
+  const periodIds = new Set(tasks.filter(isPeriodTask).map((t) => t.id))
   const dates = new Set<string>()
-  for (const i of s.instances) {
+  for (const i of instances) {
+    if (!periodIds.has(i.taskId)) continue
     if (i.earnedPoints && i.earnedPoints > 0 && i.completedAt) {
       // ⚠️ 同 `redeemedToday`：必须用**逻辑日**。`computeStreak` 的第二个参数
       // 是 `s.todayKey`（逻辑日），这里若用日历日 `toDateKey`，凌晨完成的
       // 那次会被记成「明天」——孩子刚做完，连击反而显示 0。
-      dates.add(appDayKey(i.completedAt, s.settings.dayStartHour))
+      dates.add(appDayKey(i.completedAt, dayStartHour))
     }
   }
-  return computeStreak([...dates], s.todayKey)
+  return [...dates]
+}
+
+/**
+ * 连续完成天数（连击）—— **只数长期任务**。
+ *
+ * 2026-10-11 家长定：「长期任务这种次数的可以有连续奖励……不能两种同时都有」。
+ * 所以按 `isPeriodTask` 过滤：
+ *   · 签到任务 —— 有自己的阶梯奖励，不给连击；
+ *   · 今日任务（单次 / 每日）—— 天天都要做，也不给连击。
+ * 判据和「长期任务」区块共用同一个谓词 —— 否则会出现「区块里列着它、
+ * 连击却不认它」这种两处口径打架。
+ */
+export function selectStreak(s: AppState): number {
+  return computeStreak(streakDaysOf(s.instances, s.tasks, s.settings.dayStartHour), s.todayKey)
 }
 
 /** 农场等级信息 */
@@ -3203,24 +3235,52 @@ export function usePendingRedeems(): RedeemRecord[] {
   return useApp(useShallow((s) => selectPendingRedeems(s)))
 }
 
-/* 连击奖励发放（内部） */
-let lastStreakPaidDay = ''
+/**
+ * 连击奖励发放（内部）—— **只由长期任务的结算调用**
+ * （见 settleInstance 里那个 `isPeriodTask` 判断）。
+ *
+ * 一天只发一次，判据在账本里（见函数内注释）——
+ * 同一个逻辑日里完成第二个长期任务不会再多发一笔：
+ * 连击是「天」的奖励，不是「次」的奖励。
+ */
 async function maybePayStreakBonus(): Promise<number> {
   const s = useApp.getState()
   const today = s.todayKey
-  if (lastStreakPaidDay === today) return 0
-  const streak = selectStreak(s)
+
+  /* 一天只发一次 —— 判据放在**账本**里，而且用 `refId` 显式记下「这是哪一天的连击」。
+     两个坑：
+     ① 以前这里是个模块级的 `lastStreakPaidDay`，一重启就没了 ——
+        孩子做完一个长期任务 → 杀掉 App 再打开 → 再做一个，连击就发两遍。
+     ② 别拿 `createdAt` 反推逻辑日：`ledgerTip()` 会把时间戳抬到「比上一条大」，
+        所以它可能**比真实时间晚**（建库时的初始账本用的是真实时间，
+        之后所有条目都被顶到那之后）。`refId` 是显式写进去的，不受这个影响。
+     （`refId` 上有索引，只读这一条。） */
+  const alreadyPaidToday =
+    (await db.ledger.where('refId').equals(`streak:${today}`).count()) > 0
+  if (alreadyPaidToday) return 0
+
+  /* ⚠️ 连击天数必须读 **DB**，不能读 store 快照。
+     调用点（settleNow）刚把「今天完成」写进 DB，而 store 要等这一轮结算
+     结束才 refresh —— 拿快照算出来的连击**永远少一天**：连到第 2 天时
+     算出 1（于是不发），到第 3 天才发第 2 天的量，memo 也跟着写错。
+     2026-10-11 写「连击只发长期任务」的测试时，这个 off-by-one 才暴露出来
+     —— 在此之前它一直是错的，而且没有任何测试会红。 */
+  const rows = await db.taskInstances.toArray()
+  const streak = computeStreak(streakDaysOf(rows, s.tasks, s.settings.dayStartHour), today)
   if (streak <= 1) return 0
-  const bonus = Math.min(
-    s.settings.streakBonusCap,
-    streak * s.settings.streakBonusPerDay,
-  )
+  /* ⚠️ 夹取必须在**这里**做，不能只靠设置页的输入框 ——
+     导入的旧备份、手改的 IndexedDB、测试里直接 updateSettings 都能绕过输入框，
+     而这两个值会变成账本里真实的分。 */
+  const perDay = clampStreakPerDay(s.settings.streakBonusPerDay)
+  const cap = clampStreakCap(s.settings.streakBonusCap)
+  const bonus = Math.min(cap, streak * perDay)
   if (bonus <= 0) return 0
-  lastStreakPaidDay = today
   await postLedger({
     delta: bonus,
     source: 'streak_bonus',
-    memo: `连续 ${streak} 天完成任务 🔥`,
+    // ⚠️ 这个 refId 就是「今天发过了」的判据，见上面的注释，别改格式。
+    refId: `streak:${today}`,
+    memo: `连续 ${streak} 天完成长期任务 🔥`,
   })
   return bonus
 }

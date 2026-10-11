@@ -146,8 +146,17 @@ export function TaskEditor({
   ])
 
   const tiers = useMemo(
-    () => (checkInEnabled ? defaultTiers(cycle, checkInTargetCount, basePoints) : []),
-    [checkInEnabled, cycle, checkInTargetCount],
+    () =>
+      checkInEnabled
+        ? defaultTiers(cycle, checkInTargetCount, basePoints, settings.checkInTierRatio)
+        : [],
+    // ⚠️ `basePoints` 必须在依赖里 —— 阶梯是 `倍率 × 基础分 × 目标天数` 现算的，
+    //    漏掉它，家长改了基础分预览还停在旧数字上（上面那段注释正好在说
+    //    「写死会立刻变成假话」，结果依赖漏了等于缓存成写死）。
+    //    2026-10-10 家长报「为啥阶梯分还是这么大」时查出来的，有单测钉住。
+    // ⚠️ `settings.checkInTierRatio` 同理 —— 家长在设置里压了倍率，
+    //    这里不跟着重算，编辑器就还在按旧倍率报价。
+    [checkInEnabled, cycle, checkInTargetCount, basePoints, settings.checkInTierRatio],
   )
 
   function validate(): string | null {

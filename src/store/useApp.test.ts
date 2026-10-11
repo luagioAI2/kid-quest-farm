@@ -19,7 +19,8 @@ import {
   selectTodayInstances,
   useApp,
 } from './useApp'
-import { checkInPayout, currentDayKey, defaultTiers } from '../domain/recurrence'
+import { checkInPayout, currentDayKey } from '../domain/recurrence'
+import { DEFAULT_TIER_RATIO, MAX_TIER_RATIO, MIN_TIER_RATIO } from '../domain/tierRatio'
 import { periodKeyFor } from '../domain/time'
 import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
 import { REDEEM_PRICE_MIGRATIONS, SEED_REDEEM_ITEMS, SEED_TASKS } from '../domain/seedTasks'
@@ -206,25 +207,33 @@ describe('签到：家长审核', () => {
 })
 
 /* ============================================================
-   签到连击（**任务内**的，和全局 selectStreak 是两回事）
+   签到**不发**连击（2026-10-11 家长定）
    ------------------------------------------------------------
-   家长原话（2026-10-09）：「每次基本分是5分。连续+1」。
-   连续第 N 天 = 基础分 + (N-1)，断了从基础分重来。
+   家长原话：「签到 只需要阶梯奖励(可以设置倍率)。但是长期任务
+   这种次数的可以有连续奖励(连击奖励)。不能两种同时都有。」
+
+   这里原来测的是「任务内连击」：连续第 N 天 = 基础分 + (N-1)。
+   那套东西连同 `checkInStreak*` 三个函数一起删了，用例也跟着改成
+   「签到到账里根本没有连击这一项」。连击只属于长期任务 ——
+   那半边在 `连击奖励只发长期任务` 那一组里测。
    ============================================================ */
-describe('签到连击', () => {
+describe('签到不发连击（2026-10-11 家长定：签到只留阶梯）', () => {
   /** 2026-10-05(一) ~ 2026-10-11(日) 那一周 */
   const W41 = '2026-W41'
 
   /**
    * 直接造一条进度行。
-   * 连击要看「昨天签没签」，靠 doCheckIn 造不出昨天 —— 它只会用今天。
-   * `claimedTiers` 预填满，把阶梯的影响摘掉，只观察连击。
+   *
+   * 这个 describe 原来是「签到连击」—— 靠它造「昨天签过」来观察连击。
+   * 现在连击没了，改成观察**阶梯**：`claimedTiers` 按用例给，
+   * 想单看基础分就把它填满（阶梯就发不出来了），想看阶梯就留空。
    */
   async function seedProgress(
     taskId: string,
     periodKey: string,
     days: string[],
     pendingDays: string[],
+    claimedTiers: number[] = [],
   ): Promise<void> {
     await db.checkInProgress.put({
       id: `cip_${taskId}_${periodKey}`,
@@ -232,72 +241,183 @@ describe('签到连击', () => {
       periodKey,
       days,
       pendingDays,
-      claimedTiers: defaultTiers('weekly', 5).map((t) => t.days),
+      claimedTiers,
       updatedAt: Date.now(),
     })
+    await useApp.getState().refresh()
   }
 
-  it('第一天签到只拿基础分（没有连击加成）', async () => {
+  it('★ 连着签第二天，到账也只有基础分 —— 没有那 1 分连击', async () => {
     const task = checkInTask()
-    await seedProgress(task.id, W41, [], ['2026-10-05'])
-    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-05')
-    expect(gained).toBe(5)
-  })
-
-  it('连着第二天多给 1 分', async () => {
-    const task = checkInTask()
-    await seedProgress(task.id, W41, ['2026-10-05'], ['2026-10-06'])
+    // 阶梯全部领过 → 这次只看基础分
+    await seedProgress(task.id, W41, ['2026-10-05'], ['2026-10-06'], [1, 3, 5])
     const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-06')
-    expect(gained).toBe(6) // 基础 5 + 连击 1
+    expect(gained, '基础 5；连签第 2 天不再是 6').toBe(5)
   })
 
-  it('连着第五天多给 4 分（5+6+7+8+9 的最后一档）', async () => {
+  it('★ 连签第 5 天：基础 5 + 第 5 档阶梯 12 = 17（原来还要再加连击 4 → 21）', async () => {
     const task = checkInTask()
+    // 前两档领过，第 5 档还开着 → 这一签正好触发它
     await seedProgress(
       task.id,
       W41,
       ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08'],
       ['2026-10-09'],
+      [1, 3],
     )
     const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-09')
-    expect(gained).toBe(9) // 基础 5 + 连击 4
+    expect(gained).toBe(17)
   })
 
-  it('中间断一天 → 连击归零，回到基础分', async () => {
+  it('★ 账本里不许再出现「连击」那条流水，基础分那条必须在', async () => {
     const task = checkInTask()
-    // 5、6 签了，7 没签，8 再签 → 从 5 重新开始
-    await seedProgress(task.id, W41, ['2026-10-05', '2026-10-06'], ['2026-10-08'])
-    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-08')
-    expect(gained).toBe(5)
-  })
-
-  it('连击加成单独记一条流水 —— 账本上看得出为什么今天多给了分', async () => {
-    const task = checkInTask()
-    await seedProgress(task.id, W41, ['2026-10-05'], ['2026-10-06'])
+    await seedProgress(task.id, W41, ['2026-10-05'], ['2026-10-06'], [1, 3, 5])
     await useApp.getState().approveCheckIn(task.id, W41, '2026-10-06')
 
-    const streakRow = useApp
-      .getState()
-      .ledger.filter((l) => l.source === 'checkin_bonus')
-      .find((l) => /连击/.test(l.memo))
-    expect(streakRow, '应该有一条连击流水').toBeDefined()
-    expect(streakRow!.delta).toBe(1)
-    expect(streakRow!.memo).toContain('连续第 2 天')
+    const ledger = useApp.getState().ledger
+    const streakRow = ledger.find((l) => l.source === 'checkin_bonus' && /连击/.test(l.memo))
+    expect(streakRow, '签到不该再发连击流水').toBeUndefined()
+
+    // ⚠️ 光断言「没有连击」是不够的：把整个发分逻辑删掉也能让它绿。
+    //    所以这里必须同时钉住「基础分那条还在、数额也对」。
+    const baseRow = ledger.find((l) => l.source === 'checkin')
+    expect(baseRow, '基础分流水还得有').toBeDefined()
+    expect(baseRow!.delta).toBe(5)
   })
 
-  it('跨周重置：上周的五连不会带进新的一周', async () => {
+  it('新的一周第 1 天：基础 5 + 第 1 档 2 = 7（本来就没有连击可重置）', async () => {
     const task = checkInTask()
-    // 上周签满了 5 天
     await seedProgress(
       task.id,
       W41,
       ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09'],
       [],
+      [1, 3, 5],
     )
-    // 新的一周是**另一条进度行**（days 为空）→ 连击从 1 重新开始
     await seedProgress(task.id, '2026-W42', [], ['2026-10-12'])
     const gained = await useApp.getState().approveCheckIn(task.id, '2026-W42', '2026-10-12')
-    expect(gained).toBe(5)
+    expect(gained).toBe(7)
+  })
+})
+
+/* ============================================================
+   连击奖励只发长期任务（2026-10-11 家长定）
+   ------------------------------------------------------------
+   家长原话：「长期任务 这种 次数的可以有连续奖励(连击奖励)
+   (可以设置连续的加成的分)。不能两种 同时都有。」
+
+   边界收窄成：长期任务 → 发；今日任务 → 不发；签到 → 不发。
+
+   ⚠️ 「今日任务不发」那条是**故意**构造成「长期任务那边已经连了 2 天」
+   的 —— 只有这样，把 settleInstance 里那个 `isPeriodTask` 判断删掉时
+   它才会红。否则 `selectStreak` 自己就返回 0，测试绿得毫无意义
+   （这正是本项目反复踩的「假绿」）。
+   ============================================================ */
+describe('连击奖励只发长期任务', () => {
+  /** 把系统时间拨到 10 月某天的中午，并同步 store 的 todayKey */
+  const atDay = async (day: number) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, day, 12, 0, 0))
+    await useApp.getState().refresh()
+  }
+
+  const dailyTask = () => {
+    const t = useApp.getState().tasks.find((x) => x.title === '完成语文作业')
+    if (!t) throw new Error('种子里应该有「完成语文作业」')
+    return t
+  }
+
+  /** 完成一次长期任务，返回这次结算实发的分 */
+  async function doPeriodTask(taskId: string): Promise<number> {
+    await useApp.getState().submitPeriodTask(taskId, 10, undefined)
+    const inst = useApp
+      .getState()
+      .instances.filter((i) => i.taskId === taskId && i.status === 'submitted')
+      .at(-1)
+    expect(inst, '「记一次完成」该产出一条待审实例').toBeDefined()
+    return useApp.getState().reviewInstance(inst!.id, undefined, 10)
+  }
+
+  const streakRows = () => useApp.getState().ledger.filter((l) => l.source === 'streak_bonus')
+
+  it('★ 连到第 2 天，长期任务多拿一份连击（默认每天 2 分 → 多 4 分）', async () => {
+    const task = periodTask()
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(task.id)
+    expect(day2 - day1, '第 2 天比第 1 天多出来的，就是连击').toBe(4)
+  })
+
+  it('★ 今日任务不触发连击 —— 哪怕长期任务那边已经连了 2 天', async () => {
+    const period = periodTask()
+    await atDay(5)
+    await doPeriodTask(period.id)
+    await atDay(6)
+    await doPeriodTask(period.id)
+    expect(selectStreak(useApp.getState()), '前提：长期任务已连 2 天').toBe(2)
+
+    // 第 7 天做一个今日任务。连击「连着 2 天」是事实，但今日任务不搭这趟车。
+    await atDay(7)
+    const daily = dailyTask()
+    const inst = selectTodayInstances(useApp.getState()).find((i) => i.taskId === daily.id)
+    expect(inst, '每日任务该有今天的卡').toBeDefined()
+
+    const before = streakRows().length
+    await useApp.getState().submitInstance(inst!.id, 10, undefined)
+    const paid = await useApp.getState().reviewInstance(inst!.id, undefined, 10)
+
+    expect(paid, '今日任务只发基础分').toBe(daily.basePoints)
+    expect(streakRows().length, '今日任务不该再多一条连击流水').toBe(before)
+  })
+
+  it('★ 「每连击一天」改成 5 分，发出去的连击跟着变（设置真的接到了发分那一步）', async () => {
+    const task = periodTask()
+    await useApp.getState().updateSettings({ streakBonusPerDay: 5, streakBonusCap: 100 })
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(task.id)
+    expect(day2 - day1, '每天 5 分 → 第 2 天多 10 分').toBe(10)
+  })
+
+  it('★ 封顶压到 3 分 → 连击最多只多给 3 分', async () => {
+    const task = periodTask()
+    await useApp.getState().updateSettings({ streakBonusPerDay: 5, streakBonusCap: 3 })
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(task.id)
+    expect(day2 - day1, 'min(封顶 3, 2×5) = 3').toBe(3)
+  })
+
+  it('★ 关掉开关 → 连击一分不发', async () => {
+    const task = periodTask()
+    await useApp.getState().updateSettings({ streakBonusEnabled: false })
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(task.id)
+    expect(day2 - day1, '开关关着就没有连击').toBe(0)
+    expect(streakRows(), '也不该留下连击流水').toHaveLength(0)
+  })
+
+  it('★ 连击一天只发一次：同一天做完第二个长期任务不再多给', async () => {
+    // 「长期任务」里一周有 2 次的那种，孩子很可能一天里一口气做两次。
+    // 连击是「天」的奖励，不是「次」的 —— 第二次不该再发一笔。
+    const weekly = useApp.getState().tasks.find((t) => t.cycle === 'weekly' && !t.checkInEnabled)!
+    await atDay(5)
+    await doPeriodTask(weekly.id)
+    await atDay(6)
+    await doPeriodTask(weekly.id)
+    const rowsAfterDay2 = streakRows().length
+
+    // 同一天再来一个别的长期任务（换个任务，避开「同一天只记一次」）
+    const other = useApp
+      .getState()
+      .tasks.find((t) => t.id !== weekly.id && !t.checkInEnabled && t.cycle !== 'daily' && t.cycle !== 'once')!
+    await doPeriodTask(other.id)
+    expect(streakRows().length, '同一天的第二笔连击不该发').toBe(rowsAfterDay2)
   })
 })
 
@@ -331,7 +451,10 @@ describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
     const s = useApp.getState()
     const task = s.tasks.find((t) => t.id === taskId)!
     const row = s.checkInProgress.find((p) => p.taskId === taskId && p.periodKey === periodKey)
-    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], date).total
+    // ⚠️ 倍率必须从 settings 读，不能写死默认值 —— 否则家长在设置里把
+    //    阶梯压到 20% 之后，这条「预告 = 实发」的不变量就被测试自己
+    //    放宽成了「预告 = 80% 那套数」，假的绿。
+    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], date, s.settings.checkInTierRatio).total
   }
 
   it('首日卡片写 7（基础 5 + 阶梯 2），实发也是 7 —— 老代码这里写 5 实发 7', async () => {
@@ -373,20 +496,83 @@ describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
     }
   })
 
-  it('阶梯那一天的预告里确实含阶梯分（不是只有基础+连击）', async () => {
+  it('阶梯那一天的预告里确实含阶梯分（不是只有基础分）', async () => {
     const task = checkInTask()
     await seed(task.id, ['2026-10-05', '2026-10-06'], [1], ['2026-10-07'])
 
     const s = useApp.getState()
     const row = s.checkInProgress.find((p) => p.taskId === task.id && p.periodKey === W41)!
-    const p = checkInPayout(task, row.days, row.claimedTiers, '2026-10-07')
+    const p = checkInPayout(task, row.days, row.claimedTiers, '2026-10-07', s.settings.checkInTierRatio)
     expect(p.base).toBe(5)
-    expect(p.streakBonus).toBe(2)
     expect(p.tierPoints).toBe(6)
-    expect(p.total).toBe(13)
+    expect(p.total, '基础 5 + 第 3 档 6 = 11').toBe(11)
 
     const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-07')
-    expect(gained).toBe(13)
+    expect(gained).toBe(11)
+  })
+
+  /* ============ 阶梯倍率（2026-10-10 家长要求「阶梯分设置」） ============
+     上面那几条钉的是「预告 = 实发」。这一组钉的是**设置真的接到了发分那一步**：
+     家长在设置里把倍率从 80% 压到 20%，如果只有编辑器预览跟着变、
+     `grantCheckIn` / `claimCheckInTier` 还按写死的 0.8 发，那就等于
+     这个设置是个摆设 —— 而且没有任何测试会红。 */
+  it('★ 倍率压到下限 → 预告和实发一起变小（设置真的接到了发分那一步）', async () => {
+    const task = checkInTask()
+    await seed(task.id, [], [], ['2026-10-05'])
+
+    // 默认档：基础 5 + 第 1 档 2 = 7
+    expect(useApp.getState().settings.checkInTierRatio, '前提：默认倍率').toBe(DEFAULT_TIER_RATIO)
+    expect(cardSays(task.id, W41, '2026-10-05')).toBe(7)
+
+    await useApp.getState().updateSettings({ checkInTierRatio: MIN_TIER_RATIO })
+
+    const shown = cardSays(task.id, W41, '2026-10-05')
+    expect(shown, '压到下限后第 1 档从 2 变 1 → 5 + 1 = 6').toBe(6)
+
+    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-05')
+    expect(gained, '实发也得跟着变 —— 只改预览不改发分，这个设置就是假的').toBe(shown)
+
+    // 分条落账（base 一笔、阶梯一笔），合计也必须等于预告
+    const rows = useApp
+      .getState()
+      .ledger.filter((l) => l.source === 'checkin' || l.source === 'checkin_bonus')
+    expect(rows.reduce((n, l) => n + l.delta, 0)).toBe(shown)
+  })
+
+  it('★ 手动领阶梯也按设置里的倍率发（claimCheckInTier 不是按写死的 0.8）', async () => {
+    const task = checkInTask()
+    await useApp.getState().updateSettings({ checkInTierRatio: MIN_TIER_RATIO })
+    await seed(task.id, ['2026-10-05'], [], [])
+
+    // 默认档这里会是 2（第 1 档 = round(0.8×5×5/10)）
+    expect(await useApp.getState().claimCheckInTier(task.id, 1)).toBe(1)
+  })
+
+  it('tiersFor 跟着设置走 —— 编辑器预览 / 审核卡 / 发分共用同一个口径', async () => {
+    const task = checkInTask()
+
+    expect(useApp.getState().tiersFor(task).map((t) => t.points)).toEqual([2, 6, 12])
+
+    await useApp.getState().updateSettings({ checkInTierRatio: MIN_TIER_RATIO })
+    expect(useApp.getState().tiersFor(task).map((t) => t.points)).toEqual([1, 3, 6])
+
+    await useApp.getState().updateSettings({ checkInTierRatio: MAX_TIER_RATIO })
+    expect(useApp.getState().tiersFor(task).map((t) => t.points)).toEqual([4, 12, 24])
+  })
+
+  it('倍率只影响阶梯那一段，基础分一分不动', async () => {
+    // 第 2 天不在阶梯日：两个极端倍率下都只该是基础 5。
+    // ⚠️ 每轮 `boot()` 干净重来 —— 直接连着一周里 seed 两次会撞
+    //    `[taskId+periodKey]` 的唯一索引（ConstraintError），
+    //    那是测试脚手架的问题，不是被测行为的问题。
+    for (const ratio of [MIN_TIER_RATIO, MAX_TIER_RATIO]) {
+      await boot()
+      await useApp.getState().updateSettings({ checkInTierRatio: ratio })
+      const task = checkInTask()
+      await seed(task.id, ['2026-10-05'], [1], ['2026-10-06'])
+      const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-06')
+      expect(gained, `倍率 ${ratio} 下第 2 天都该是基础 5`).toBe(5)
+    }
   })
 
   it('账本合计 = 卡片预告（分条落账也不许少一分）', async () => {
@@ -1049,13 +1235,23 @@ describe('兑换：丰收币优先，可混合', () => {
     expect(useApp.getState().harvestBalance).toBe(450)
   })
 
-  it('凌晨完成第一个任务：连击是 1，不是 0', async () => {
+  it('凌晨完成第一个长期任务：连击是 1，不是 0', async () => {
     await bootAtOneAm()
     expect(selectStreak(useApp.getState())).toBe(0)
 
-    const inst = selectTodayInstances(useApp.getState())[0]
-    await useApp.getState().submitInstance(inst.id, 10, undefined)
-    await useApp.getState().reviewInstance(inst.id, undefined, 10)
+    /* ⚠️ 必须用**长期任务**。连击现在只数长期任务（2026-10-11 家长定），
+       拿今日任务来测的话 `selectStreak` 永远是 0 —— 那样这条用例会
+       在「凌晨完成却显示断了连击」这句话上失败，但失败原因跟逻辑日无关，
+       修起来会往错的方向找。 */
+    const period = selectPeriodTasks(useApp.getState())[0]
+    expect(period, '种子任务里该有长期任务').toBeDefined()
+
+    await useApp.getState().submitPeriodTask(period.id, 10, undefined)
+    const inst = useApp
+      .getState()
+      .instances.find((i) => i.taskId === period.id && i.status === 'submitted')
+    expect(inst, '长期任务「记一次完成」该产出一条待审实例').toBeDefined()
+    await useApp.getState().reviewInstance(inst!.id, undefined, 10)
 
     expect(selectStreak(useApp.getState()), '刚做完却显示断了连击').toBe(1)
   })
@@ -1139,7 +1335,7 @@ describe('道具掉落总开关', () => {
     // 合计 2+6+12=20，到账 29，看着也对但测不出是哪个档给了道具）。
     await seed([1, 3])
     const gainedOff = await useApp.getState().approveCheckIn(task.id, W, '2026-10-09')
-    expect(gainedOff, '第 5 天该拿到基础 5 + 连击 4 + 第 5 天那档 12').toBe(21)
+    expect(gainedOff, '第 5 天该拿到基础 5 + 第 5 天那档 12 = 17（连击已取消）').toBe(17)
     expect(stickerCount(), '开关关着，阶梯不该掉贴纸').toBe(0)
 
     // 开着再来一次（换一周，避免和上一周的状态纠缠）
@@ -2098,6 +2294,47 @@ describe('现金 : 积分 参考汇率', () => {
       useApp.getState().balance,
       '兑换扣分必须等于标价本身，与汇率无关',
     ).toBe(balanceBeforeRedeem - cost)
+  })
+})
+
+/* ============================================================
+   签到阶梯倍率（2026-10-10 家长要求「阶梯分设置」）
+   ------------------------------------------------------------
+   家长原话：「坚持的奖励阶梯 … 为啥阶梯分 还是这么大。
+   另外阶梯分设置没有。」
+
+   和上面那个汇率**正好相反**：这个倍率是**参与计算**的。
+   所以这里守的是另一组事：
+   1. 默认 0.8 —— 老库升上来行为一字不变（原来写死的就是 0.8）；
+   2. 老库 / 老备份没有这个字段 → 回落到 0.8，不需要 Dexie 迁移；
+   3. **它真的会影响发分** —— 只改预览不改发分就等于这个设置是假的。
+      第 3 条在「签到：家长审核」那一组里用审核卡 + 账本钉过
+      （`★ 倍率压到下限 → 预告和实发一起变小`），这里不重复。
+   ============================================================ */
+describe('签到阶梯倍率', () => {
+  beforeEach(async () => {
+    await boot()
+  })
+
+  it('默认 0.8 —— 就是原来写死在 defaultTiers 里的那个系数', () => {
+    expect(DEFAULT_SETTINGS.checkInTierRatio).toBe(DEFAULT_TIER_RATIO)
+    expect(useApp.getState().settings.checkInTierRatio).toBe(DEFAULT_TIER_RATIO)
+  })
+
+  it('老库里没有这个字段 → 读出来是 0.8，不报错（加字段不需要迁移）', async () => {
+    const old: Record<string, unknown> = { ...DEFAULT_SETTINGS }
+    delete old.checkInTierRatio
+    await setMeta('settings', old)
+
+    const loaded = await loadSettings()
+    expect(loaded.checkInTierRatio, '缺字段必须回落到默认值 0.8').toBe(DEFAULT_TIER_RATIO)
+  })
+
+  it('改完能读回来', async () => {
+    await useApp.getState().updateSettings({ checkInTierRatio: 0.4 })
+
+    expect((await loadSettings()).checkInTierRatio).toBe(0.4)
+    expect(useApp.getState().settings.checkInTierRatio).toBe(0.4)
   })
 })
 

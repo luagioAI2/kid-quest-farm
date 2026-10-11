@@ -1,21 +1,35 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkInCapacity,
-  checkInStreak,
-  checkInStreakBonus,
-  checkInStreakIfSigned,
-  checkInPayout,
+  checkInPayout as checkInPayoutRaw,
   checkInSupported,
   defaultTiers,
   claimableTiers,
   eachDay,
   computeStreak,
   isCheckInTask,
+  isPeriodTask,
 } from './recurrence'
+import { DEFAULT_TIER_RATIO, MAX_TIER_RATIO, MIN_TIER_RATIO } from './tierRatio'
 
 /* ============================================================
    周期 / 签到阶梯 / 连击 测试
    ============================================================ */
+
+/**
+ * 下面这 10 个用例测的是 base / 连击 / 阶梯**机制**，倍率固定用默认档。
+ *
+ * `checkInPayout` 的第五个参数（阶梯倍率）是**必填**的 —— 故意不给默认值，
+ * 逼每个调用点显式想一下「这里该传哪个倍率」，否则「预览用 80%、实发用
+ * 家长设的 20%」会静默分叉。所以测试里包一层，别让 10 个用例都被同一个
+ * 参数淹没。倍率本身的行为在 `阶梯倍率` 那一组里单独测（那里直连原函数）。
+ */
+const checkInPayout = (
+  task: Parameters<typeof checkInPayoutRaw>[0],
+  days: string[],
+  claimed: number[],
+  date: string,
+) => checkInPayoutRaw(task, days, claimed, date, DEFAULT_TIER_RATIO)
 
 describe('签到阶梯 defaultTiers', () => {
   it('周档是 2 / 6 / 12 —— 2026-10-09 家长要求把「太多了」的奖励压小', () => {
@@ -142,89 +156,29 @@ describe('阶梯领取 claimableTiers', () => {
 })
 
 /* ============================================================
-   签到连击（**任务内**的，和全局 computeStreak 是两回事）
+   签到**没有**连击奖励（2026-10-11 家长定）
    ------------------------------------------------------------
-   家长原话：「每次基本分是5分。连续+1」→ 第 N 天 = 基础分 + (N-1)。
+   家长原话：「签到 只需要阶梯奖励(可以设置倍率)。但是长期任务
+   这种次数的可以有连续奖励(连击奖励)。不能两种同时都有。」
+
+   原来这里有三组用例测「任务内连击」（checkInStreak /
+   checkInStreakBonus / checkInStreakIfSigned）。那三个函数连同奖励
+   一起删掉了，所以用例也一起删 —— 测一个已经不存在的行为，
+   只会让人以为它还活着。连击现在只属于长期任务，见 `isPeriodTask`。
    ============================================================ */
 
-describe('签到连击 checkInStreak', () => {
-  it('连着签 3 天 → 3', () => {
-    expect(checkInStreak(['2026-10-05', '2026-10-06', '2026-10-07'], '2026-10-07')).toBe(3)
-  })
-
-  it('中间断一天 → 只数断点之后（「断了就重新」）', () => {
-    // 5、6 签了，7 没签，8 签了 → 连击从 8 重新开始
-    expect(checkInStreak(['2026-10-05', '2026-10-06', '2026-10-08'], '2026-10-08')).toBe(1)
-  })
-
-  it('当天没签 → 0（不往前找，和全局 computeStreak 的「留缓冲」不一样）', () => {
-    expect(checkInStreak(['2026-10-05', '2026-10-06'], '2026-10-07')).toBe(0)
-  })
-
-  it('跨月也连得上', () => {
-    expect(checkInStreak(['2026-09-30', '2026-10-01'], '2026-10-01')).toBe(2)
-  })
-
-  it('输入乱序不影响结果', () => {
-    expect(checkInStreak(['2026-10-07', '2026-10-05', '2026-10-06'], '2026-10-07')).toBe(3)
-  })
-
-  it('空数组 → 0', () => {
-    expect(checkInStreak([], '2026-10-07')).toBe(0)
-  })
-})
-
-describe('连击加成 checkInStreakBonus', () => {
-  it('第 1 天没有加成，第 N 天加 N-1（基础分 5）', () => {
-    expect(checkInStreakBonus(1, 5)).toBe(0)
-    expect(checkInStreakBonus(2, 5)).toBe(1)
-    expect(checkInStreakBonus(3, 5)).toBe(2)
-    expect(checkInStreakBonus(5, 5)).toBe(4)
-  })
-
-  it('封顶 = 一次的基础分（家长：「连击应该很难超过单次分」）', () => {
-    // 一周最多签 7 天 → 加成本该是 6，比基础分 5 还大 —— 所以必须封顶
-    expect(checkInStreakBonus(6, 5)).toBe(5)
-    expect(checkInStreakBonus(7, 5)).toBe(5)
-    expect(checkInStreakBonus(100, 5)).toBe(5)
-  })
-
-  it('加成永远不超过单次基础分（全档位扫一遍）', () => {
-    for (let streak = 1; streak <= 30; streak++) {
-      for (const base of [1, 3, 5, 10, 20]) {
-        expect(checkInStreakBonus(streak, base)).toBeLessThanOrEqual(base)
-      }
-    }
-  })
-
-  it('基础分是 0 时没有加成（乘不出来，也不该凭空给分）', () => {
-    expect(checkInStreakBonus(5, 0)).toBe(0)
-  })
-
-  it('一周打满 5 天 = 5+6+7+8+9 = 35 分', () => {
-    let total = 0
-    for (let day = 1; day <= 5; day++) {
-      total += 5 + checkInStreakBonus(day, 5)
-    }
-    expect(total).toBe(35)
-  })
-})
-
-describe('checkInStreakIfSigned（界面上「今天签下去能拿多少」）', () => {
-  it('今天已签 → 就是当前连击', () => {
-    expect(checkInStreakIfSigned(['2026-10-05', '2026-10-06'], '2026-10-06')).toBe(2)
-  })
-
-  it('昨天签了、今天还没签 → 昨天那条 +1', () => {
-    expect(checkInStreakIfSigned(['2026-10-05', '2026-10-06'], '2026-10-07')).toBe(3)
-  })
-
-  it('昨天也没签 → 从 1 重新开始', () => {
-    expect(checkInStreakIfSigned(['2026-10-05'], '2026-10-07')).toBe(1)
-  })
-
-  it('一天都没签过 → 1（今天签就是第 1 天）', () => {
-    expect(checkInStreakIfSigned([], '2026-10-07')).toBe(1)
+describe('签到不发连击：口径只能有一种', () => {
+  it('★ 连签 5 天，到账里也找不出任何「连击」成分', () => {
+    // 签到卡上原来写着「连续第 N 天（今天连击 +N）」。
+    // 家长说签到只留阶梯 —— 所以哪怕连着签，到账也只有基础分 + 阶梯。
+    const weekly = { basePoints: 5, cycle: 'weekly' as const, checkInTargetCount: 5 }
+    const days = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08']
+    const p = checkInPayout(weekly, days, [1, 3], '2026-10-09')
+    // 第 5 天：基础 5 + 阶梯 12（第 5 档）= 17，没有第 5 天该有的「连击 +4」
+    expect(p.base).toBe(5)
+    expect(p.tierPoints).toBe(12)
+    expect(p.total, '到账 = 基础 + 阶梯，一个连击分都不许有').toBe(17)
+    expect(Object.keys(p).sort()).toEqual(['base', 'tierLabel', 'tierPoints', 'tiers', 'total'])
   })
 })
 
@@ -234,37 +188,36 @@ describe('一次签到发多少分 checkInPayout（发分与展示的唯一事�
   it('首日 = 基础 5 + 阶梯 2 = 7（审核卡原来写 5、实发 7，就是这个 bug）', () => {
     const p = checkInPayout(weekly, [], [], '2026-10-05')
     expect(p.base).toBe(5)
-    expect(p.streak).toBe(1)
-    expect(p.streakBonus).toBe(0)
     expect(p.tierPoints).toBe(2)
     expect(p.total).toBe(7)
   })
 
-  it('第 2 天不落在阶梯日 → 基础 5 + 连击 1 = 6', () => {
+  it('第 2 天不落在阶梯日 → 只有基础 5（签到没有连击加成）', () => {
     const p = checkInPayout(weekly, ['2026-10-05'], [1], '2026-10-06')
-    expect(p.streak).toBe(2)
-    expect(p.streakBonus).toBe(1)
     expect(p.tierPoints).toBe(0)
-    expect(p.total).toBe(6)
+    expect(p.total).toBe(5)
   })
 
-  it('第 3 天：基础 5 + 连击 2 + 阶梯 6 = 13', () => {
+  it('第 3 天：基础 5 + 阶梯 6 = 11', () => {
     const p = checkInPayout(weekly, ['2026-10-05', '2026-10-06'], [1], '2026-10-07')
     expect(p.tierLabel).toBe('坚持 3 天')
-    expect(p.total).toBe(13)
+    expect(p.total).toBe(11)
   })
 
-  it('断一天就重新起算：只签过 10-05，10-08 再来是第 1 天', () => {
-    const p = checkInPayout(weekly, ['2026-10-05'], [1], '2026-10-08')
-    expect(p.streak).toBe(1)
-    expect(p.streakBonus).toBe(0)
+  it('阶梯看的是**累计天数**，断一天照样算 —— 和连击不一样', () => {
+    // 签了 10-05，跳过 10-06，10-07 再签 → 累计第 2 天。
+    // 要是按「连续」算，这天只能是第 1 天，阶梯就永远差一档。
+    const p = checkInPayout(weekly, ['2026-10-05'], [1], '2026-10-07')
+    expect(p.tierPoints, '累计第 2 天还没到第 3 档，所以是 0').toBe(0)
+    const p2 = checkInPayout(weekly, ['2026-10-05', '2026-10-07'], [1], '2026-10-09')
+    expect(p2.tierLabel, '累计第 3 天 → 该发第 3 档了').toBe('坚持 3 天')
+    expect(p2.tierPoints).toBe(6)
   })
 
-  it('连击加成封顶为一次的基础分：连到第 7 天也只加 5', () => {
+  it('连签 7 天也只有「基础 + 阶梯」，没有额外的连击分', () => {
     const days = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06']
     const p = checkInPayout(weekly, days, [1, 3, 5], '2026-10-07')
-    expect(p.streak).toBe(7)
-    expect(p.streakBonus).toBe(5)
+    expect(p.total, '第 7 天：基础 5，阶梯都领过了 → 5').toBe(5)
   })
 
   it('已经领过的阶梯不再重复发', () => {
@@ -273,24 +226,22 @@ describe('一次签到发多少分 checkInPayout（发分与展示的唯一事�
     expect(p.total).toBe(5)
   })
 
-  it('total 永远等于 base + streakBonus + tierPoints', () => {
+  it('total 永远等于 base + tierPoints', () => {
     const claimed = [1, 3, 5]
-    let day = 1
     let days: string[] = []
     for (const key of ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09']) {
       const p = checkInPayout(weekly, days, claimed, key)
-      expect(p.total).toBe(p.base + p.streakBonus + p.tierPoints)
-      expect(p.streak).toBe(day)
+      expect(p.total).toBe(p.base + p.tierPoints)
       days = [...days, key].sort()
-      day++
     }
   })
 
-  it('一周打满 5 天合计 55 分 —— 和 seedTasks 里的平衡锚点对得上', () => {
-    /* 7 + 6 + 13 + 8 + 21 = 55。这个数字同时写在 seedTasks.ts 的注释里，
-       是「签到收入回到基础分为主」的唯一依据；改了阶梯/连击就必须同步改它。
+  it('一周打满 5 天合计 45 分 —— 和 seedTasks 里的平衡锚点对得上', () => {
+    /* 7 + 5 + 11 + 5 + 17 = 45。这个数字同时写在 seedTasks.ts 的注释里，
+       是「签到收入回到基础分为主」的唯一依据；改了阶梯就必须同步改它。
+       ⚠️ 2026-10-11 去掉签到连击后，这个锚点从 55 掉到 45（少了 10 分连击）。
        ⚠️ claimed 必须**边领边长**：一开始就塞满 [1,3,5] 的话阶梯一分不发，
-       合计会变成 35（只有基础+连击），而那个数看着也「挺合理」，很容易蒙混过去。 */
+       合计会变成 25（只有基础分），而那个数看着也「挺合理」，很容易蒙混过去。 */
     let claimed: number[] = []
     let days: string[] = []
     let sum = 0
@@ -300,7 +251,7 @@ describe('一次签到发多少分 checkInPayout（发分与展示的唯一事�
       claimed = [...claimed, ...p.tiers.map((t) => t.days)]
       days = [...days, key].sort()
     }
-    expect(sum).toBe(55)
+    expect(sum).toBe(45)
     expect(claimed.sort((a, b) => a - b)).toEqual([1, 3, 5])
   })
 
@@ -312,16 +263,109 @@ describe('一次签到发多少分 checkInPayout（发分与展示的唯一事�
     expect(claimed).toEqual([1])
   })
 
-  it('basePoints 为 0 时不会凭空长出连击分', () => {
+  it('basePoints 为 0 时到账就是 0（不凭空长分）', () => {
     const p = checkInPayout(
       { basePoints: 0, cycle: 'weekly', checkInTargetCount: 5 },
       ['2026-10-05', '2026-10-06'],
       [1, 3, 5],
       '2026-10-07',
     )
-    expect(p.streak).toBe(3)
-    expect(p.streakBonus).toBe(0)
     expect(p.total).toBe(0)
+  })
+})
+
+describe('阶梯倍率真的进了算式（2026-10-10 家长要求「阶梯分设置」）', () => {
+  const ladderTotal = (ratio: number) =>
+    defaultTiers('weekly', 5, 5, ratio).reduce((n, t) => n + t.points, 0)
+
+  it('默认倍率下周档仍是 2 / 6 / 12 —— 老库升上来行为一字不变', () => {
+    expect(defaultTiers('weekly', 5, 5, DEFAULT_TIER_RATIO).map((t) => t.points)).toEqual([
+      2, 6, 12,
+    ])
+  })
+
+  it('倍率 = 「每完成一次给基础分的多少倍」：0.8 → 合计 20（0.8 × 5 × 5）', () => {
+    expect(ladderTotal(0.8)).toBe(20)
+    expect(ladderTotal(0.4)).toBe(10)
+    expect(ladderTotal(1.0)).toBe(30)
+    expect(ladderTotal(1.5)).toBe(40)
+  })
+
+  it('倍率调低 → 阶梯变小（家长要的就是这个方向）', () => {
+    const high = ladderTotal(DEFAULT_TIER_RATIO)
+    const low = ladderTotal(MIN_TIER_RATIO)
+    expect(low).toBeLessThan(high)
+    // 下限在**最小的任务**上也要真的动 —— 一动不动就是界面在骗人
+    expect(low).toBe(10)
+  })
+
+  it('倍率越界时按夹取后的值算，不会算出负数或 0 分档', () => {
+    // 传 0 / 负数会被夹到 MIN，不是「不发分」
+    expect(ladderTotal(0)).toBe(ladderTotal(MIN_TIER_RATIO))
+    expect(ladderTotal(-5)).toBe(ladderTotal(MIN_TIER_RATIO))
+    expect(ladderTotal(99)).toBe(ladderTotal(MAX_TIER_RATIO))
+    // 每一档都 ≥ 1：界面上永远不出现「+0」
+    for (const r of [0, 0.2, 0.5, 0.8, 1.5, 99]) {
+      for (const t of defaultTiers('weekly', 5, 5, r)) {
+        expect(t.points, `ratio=${r} 的 ${t.days} 天档是 ${t.points} 分`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('checkInPayout 跟着倍率走 —— 发分与展示共用的就是这一份', () => {
+    const weekly = { basePoints: 5, cycle: 'weekly' as const, checkInTargetCount: 5 }
+    const at = (r: number) =>
+      checkInPayoutRaw(weekly, [], [], '2026-10-05', r)
+    // 首日落在第 1 档：基础 5 + 阶梯 2 = 7（默认档，和上面那组对得上）
+    expect(at(DEFAULT_TIER_RATIO).total).toBe(7)
+    // 倍率压到下限 → 第 1 档从 2 变 1 → 6
+    expect(at(MIN_TIER_RATIO).tierPoints).toBe(1)
+    expect(at(MIN_TIER_RATIO).total).toBe(6)
+    // 倍率拉满 → 第 1 档 4 → 9
+    expect(at(MAX_TIER_RATIO).tierPoints).toBe(4)
+    expect(at(MAX_TIER_RATIO).total).toBe(9)
+  })
+
+  it('倍率只影响阶梯那一段，不动基础分', () => {
+    const weekly = { basePoints: 5, cycle: 'weekly' as const, checkInTargetCount: 5 }
+    const low = checkInPayoutRaw(weekly, ['2026-10-05'], [1], '2026-10-06', MIN_TIER_RATIO)
+    const high = checkInPayoutRaw(weekly, ['2026-10-05'], [1], '2026-10-06', MAX_TIER_RATIO)
+    expect(low.base).toBe(high.base)
+    expect(low.base).toBe(5)
+    expect(low.tierPoints).toBe(high.tierPoints) // 第 2 天不在阶梯日，两边都是 0
+    expect(low.total).toBe(5)
+  })
+})
+
+describe('isPeriodTask：长期任务只有一个判据', () => {
+  const t = (cycle: string, checkInEnabled = false) =>
+    ({ cycle, checkInEnabled }) as Parameters<typeof isPeriodTask>[0]
+
+  it('周 / 月 / 年 + 不是签到 → 是长期任务', () => {
+    expect(isPeriodTask(t('weekly'))).toBe(true)
+    expect(isPeriodTask(t('monthly'))).toBe(true)
+    expect(isPeriodTask(t('yearly'))).toBe(true)
+  })
+
+  it('单次 / 每日 → 不是（它们预生成实例，属于「今日任务」）', () => {
+    expect(isPeriodTask(t('once'))).toBe(false)
+    expect(isPeriodTask(t('daily'))).toBe(false)
+  })
+
+  it('★ 开了签到的周任务 → 不算长期任务（否则会同时出现在两个区块里）', () => {
+    expect(isPeriodTask(t('weekly', true))).toBe(false)
+  })
+
+  it('★ 和 isCheckInTask 互补：签到 / 长期 / 今日三选一，不重不漏', () => {
+    const cycles = ['once', 'daily', 'weekly', 'monthly', 'yearly'] as const
+    for (const cycle of cycles) {
+      for (const on of [false, true]) {
+        const task = t(cycle, on)
+        const checkIn = isCheckInTask(task)
+        const period = isPeriodTask(task)
+        expect(checkIn && period, `${cycle}/${on} 不能既是签到又是长期`).toBe(false)
+      }
+    }
   })
 })
 
