@@ -472,20 +472,21 @@ export function TaskEditor({
                   {` 把目标改到 ${checkInCapacity(cycle)} 天以内，或者把周期改大一点。`}
                 </p>
               )}
-              {/* 连击规则。数字全部现算 —— 家长改基础分时这里要跟着变，
-                  写死会立刻变成假话。 */}
-              {basePoints > 0 && (
-                <p className="rounded-xl border border-white bg-white/80 px-3 py-2 text-[11px] font-bold leading-relaxed text-ink-600">
-                  🔥 连着来每天多 <span className="font-extrabold text-ink-900">+1</span> 分：第 1 天{' '}
-                  <span className="tnum font-extrabold text-ink-900">{basePoints}</span>、第 2 天{' '}
-                  <span className="tnum font-extrabold text-ink-900">{basePoints + 1}</span>、第 3 天{' '}
-                  <span className="tnum font-extrabold text-ink-900">{basePoints + 2}</span>……
-                  断一天就从 {basePoints} 重新开始。
-                  <span className="text-ink-400">
-                    （连击加成最多 +{basePoints} 分，不会超过单次基础分）
-                  </span>
-                </p>
-              )}
+              {/* ⚠️ 这里原来画的是「🔥 连着来每天多 +1 分：第 1 天 5、第 2 天 6
+                  ……断一天就从 5 重新开始」—— 那是**签到的任务内连击**。
+                  2026-10-11 家长收回「签到只需要阶梯奖励……不能两种同时都有」，
+                  规则整块删掉了，**但这段话术漏了**：界面还在承诺一条不存在的
+                  规则。当时的走查和 e2e 都只盯了任务页那张签到卡，没盯编辑器 ——
+                  家长当天问「为啥任务编辑里没有连击设置」时才撞出来。
+                  现在换成一句**实话**：直接说清这里为什么没有连击可设，
+                  免得家长再找一遍。 */}
+              <p className="rounded-xl border border-white bg-white/80 px-3 py-2 text-[11px] font-bold leading-relaxed text-ink-600">
+                签到只发上面的阶梯奖励。
+                <span className="text-ink-400">
+                  （🔥 连击奖励只给「长期任务」—— 连着几天完成长期任务才多给；
+                  签到不参与，两种不会同时发。）
+                </span>
+              </p>
               <div>
                 <p className="mb-1.5 text-xs font-extrabold text-ink-700">坚持的奖励阶梯</p>
                 <div className="space-y-1.5">
