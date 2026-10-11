@@ -419,6 +419,43 @@ describe('连击奖励只发长期任务', () => {
     await doPeriodTask(other.id)
     expect(streakRows().length, '同一天的第二笔连击不该发').toBe(rowsAfterDay2)
   })
+
+  /* ---- 这两个设置本身（2026-10-11 新增）----
+     家长要的是「可以设置连续的加成的分」。加了字段就要守两条，
+     和「现金对积分」/「阶梯倍率」那两组一模一样 —— 少哪条都会烂：
+
+     1. **老库 / 老备份没有这两个字段 → 回落到 2 / 20。**
+        靠的还是 `loadSettings` 的合并，**不需要 Dexie 版本迁移**
+        （乱加迁移才是把老用户数据搞丢的那条路）。
+     2. **越界的值在「发分」那一刻被夹住。** 备份是用户能手改、也能从
+        别处导入的 —— 只在输入框里夹等于没夹。 */
+
+  it('★ 老库里没有这两个字段 → 读出来是 2 / 20，不报错（加字段不需要迁移）', async () => {
+    const old: Record<string, unknown> = { ...DEFAULT_SETTINGS }
+    delete old.streakBonusPerDay
+    delete old.streakBonusCap
+    await setMeta('settings', old)
+
+    const loaded = await loadSettings()
+    expect(loaded.streakBonusPerDay, '缺字段必须回落到 2').toBe(2)
+    expect(loaded.streakBonusCap, '缺字段必须回落到 20').toBe(20)
+    // 对照：删这两个字段不该把别的字段一起带坏（否则「回落」是假的）
+    expect(loaded.childName).toBe(DEFAULT_SETTINGS.childName)
+  })
+
+  it('★ 设置里塞了越界的值 → 发出去的连击按夹紧后的算，不是按 9999 算', async () => {
+    // `updateSettings` 不夹（它只管写），夹的是「用」的时候 —— 这正是要验的。
+    await useApp.getState().updateSettings({ streakBonusPerDay: 9999, streakBonusCap: 9999 })
+
+    const task = periodTask()
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(task.id)
+    // 夹紧后 = 每天最多 20、封顶 200 → 第 2 天 min(200, 2×20) = 40。
+    // 不夹的话是 min(9999, 2×9999) = 19998 —— 差 500 倍，一眼看得出来。
+    expect(day2 - day1, '9999 必须被夹成 40，不是 19998').toBe(40)
+  })
 })
 
 describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
