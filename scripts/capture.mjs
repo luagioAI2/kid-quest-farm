@@ -502,27 +502,21 @@ try {
   await wait(800)
   await shot('12b-sound-toggles')
 
-  /* 12d. 设置 · 规则 tab：「坚持的奖励阶梯」倍率（2026-10-10 新增）
-     ⚠️ 同一条规矩：新加的界面必须进图集。家长抱怨的正是「阶梯分设置没有」，
-     这张卡就是那个设置 —— 不进图集的话，第 4 层走查对这一屏等于没验。
+  /* ⚠️ 这里原来有一张 `12d-tier-ladder`（设置页那张「坚持的奖励阶梯」卡）。
+     2026-10-12 家长拍板「不需要全局设定梯度，连续的。每个任务单独，
+     有默认的就行了」—— 整张卡删掉了，**锚点文案也不存在了**。
+     留着它的后果不是「少一张图」，而是 `el` 为 undefined 时
+     `scrollIntoView` 静默跳过，然后照常 `shot()` —— 拍下来的是**别的页面**，
+     而且没有任何报错。所以整段删掉，对应的界面改由 12f/12g 拍
+     （阶梯倍率搬进了任务编辑）。 */
 
-     ⚠️ 新增设置卡会让**设置页变高**，而设置页的滚动会漏进后面 13-parent-review
-     的背景（切 tab 不重置滚动）。这一步本身放在哪都行 —— 实测过：夹在 12b 和 12
-     之间、或加在 12c 后面，13 的差异一模一样（都是 31020 px）。真正的修法是在
-     13 那里把待确认卡显式滚进视野，见那一段的注释。 */
-  await page.evaluate(() => {
-    const el = [...document.querySelectorAll('*')].find(
-      (x) => x.children.length === 0 && /坚持的奖励阶梯/.test(x.textContent ?? ''),
-    )
-    el?.scrollIntoView({ block: 'center' })
-  })
-  await wait(800)
-  await shot('12d-tier-ladder')
-
-  /* 12e. 设置 · 规则 tab：「连续完成奖励」开关 + 两个数字（2026-10-11 新增）
+  /* 12e. 设置 · 规则 tab：「连续完成奖励」卡（2026-10-11 新增，2026-10-12 瘦身）
      ⚠️ 同 12b / 12d 的规矩：新加的界面必须进图集，否则第 4 层走查对这一屏
-     等于没验。家长要的正是「连击奖励……可以设置连续的加成的分」，
-     这两个输入框就是那个设置。
+     等于没验。
+     ⚠️ 2026-10-12 家长拍板「不需要全局设定梯度，连续的。每个任务单独，
+     有默认的就行了」—— 这张卡上原来那两个数字输入框**删掉了**，只剩总开关。
+     所以这张图现在要证明的是「加成分**不在**设置页了」+「有一句指路
+     （加多少去每条长期任务里设）」；加成分本身的界面在 12h。
      锚点用卡片的说明句而不是标题 —— 标题在卡片顶上，居中滚过去只露半张卡。 */
   await page.evaluate(() => {
     const el = [...document.querySelectorAll('*')].find(
@@ -554,6 +548,141 @@ try {
   })
   await wait(800)
   await shot('12c-cash-ratio')
+
+  /* 12f ~ 12h. 任务编辑 →「单独设奖励」（2026-10-12 新增）
+     ------------------------------------------------------------
+     家长 2026-10-12 拍板：
+
+       「不需要全局设定梯度，连续的。 每个任务单独，有默认的就行了。」
+
+     于是设置页那张「坚持的奖励阶梯」卡**整张删掉**、连击卡只剩总开关，
+     两个值都搬进了**任务编辑**：
+       · 签到任务 → 「单独设阶梯倍率」（20% ~ 150% 六个档位）
+       · 长期任务 → 「单独设连击奖励」（每连一天多给 / 一次最多加）
+     ⚠️ 新加的界面必须进图集（§12b / §12d 都是踩过这个坑才写的）：
+     这两组控件正是家长**问了两遍**的东西，不进图集的话第 4 层
+     对这一屏等于没验 —— 而「家长找不到」本来就是这个改动的起因。
+
+     ⚠️ 关着的那张（12f）比打开的那张（12g）更重要：开关关着时要显示
+     「不单独设，用默认的 80%」这句实话。这次改动里最容易漏的就是它 ——
+     界面写着默认值、发分按另一个数，两边都不报错。
+
+     ⚠️ 家长锁在 §11 就已经关了（`protectParentActions: false`），
+     所以点「编辑任务」不会弹 PIN 键盘；下面留了兜底，以后又开也不至于拍错。
+     ⚠️ `block:'center'`：编辑器是**底部弹层**，`'start'` 会把目标滚到
+     弹层可视区之外（§02c / §14 同一个坑，只是方向相反）。 */
+  const openTaskEditor = async (title) => {
+    // 设置页是整页，得先退出去才点得到底部 tab
+    await page.evaluate(() => {
+      const b = document.querySelector('button[aria-label="返回"]')
+      if (b) b.click()
+    })
+    await wait(500)
+    await clickByText('任务', 'nav')
+    await wait(700)
+
+    const opened = await page.evaluate((t) => {
+      /* ⚠️ 任务卡片的 DOM 嵌套层数没写死过，所以**从编辑按钮往上爬**找
+         哪一层的文案里有这个标题，而不是假设卡片是某个具体标签。 */
+      const btn = [...document.querySelectorAll('button[aria-label="编辑任务"]')].find((b) => {
+        let el = b
+        for (let i = 0; i < 6 && el; i++) {
+          if ((el.textContent ?? '').includes(t)) return true
+          el = el.parentElement
+        }
+        return false
+      })
+      if (!btn) return false
+      btn.scrollIntoView({ block: 'center' })
+      btn.click()
+      return true
+    }, title)
+    // 找不到就**炸掉**，不要静默拍一张别的页面 —— 静默的错图比缺图更糟
+    if (!opened) throw new Error(`截图脚本找不到「${title}」那张卡的编辑入口`)
+    await wait(900)
+
+    const locked = await page.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]')
+      return !!d && /请爸爸妈妈来一下/.test(d.innerText)
+    })
+    if (locked) {
+      for (let i = 0; i < 4; i++) {
+        await page.evaluate(() => {
+          const d = document.querySelector('[role="dialog"]')
+          const b = d && [...d.querySelectorAll('button')].find((x) => x.innerText.trim() === '0')
+          b?.click()
+        })
+        await wait(180)
+      }
+      await wait(800)
+    }
+  }
+
+  /** 在弹层里把含某段文案的元素滚到视野中间 */
+  const scrollInDialog = async (re) => {
+    const ok = await page.evaluate((src) => {
+      const d = document.querySelector('[role="dialog"]')
+      if (!d) return false
+      const hits = [...d.querySelectorAll('*')].filter((x) =>
+        new RegExp(src).test(x.textContent ?? ''),
+      )
+      if (!hits.length) return false
+      /* 取**文本最短**的那个命中元素（≈ 最内层的那个）。
+         ⚠️ 这里原来要求 `children.length === 0`（必须是叶子），但 `Field` 的标签是
+            `<p><span aria-hidden>➕</span>每连一天多给</p>` 这种形状：
+            `<p>` 有子元素、`<span>` 里只有 emoji —— **两边都不匹配**。
+            于是 2026-10-12 的 12h 静默滚不动，拍出来是表单顶部。
+            改成「最短文本」之后，带 emoji 的标签和不带 emoji 的标签都能命中。 */
+      const el = hits.reduce((a, b) =>
+        (a.textContent ?? '').length <= (b.textContent ?? '').length ? a : b,
+      )
+      el.scrollIntoView({ block: 'center' })
+      return true
+    }, re)
+    /* ⚠️ 找不到就**炸掉**。旧版这里是 `el?.scrollIntoView(...)` ——
+       找不到时它什么都不做、也不报错，`shot()` 照拍，
+       出来的是一张「停在表单顶部」的错图，而且**全程零报错**。
+       静默的错图比缺图更糟（同 `clickInDialog` / `openTaskEditor` 那两条规矩）。 */
+    if (!ok) throw new Error(`弹层里找不到匹配 /${re}/ 的文本，滚不过去`)
+    await wait(800)
+  }
+
+  /** 点弹层里第一个文案匹配的按钮（开关就是 button） */
+  const clickInDialog = async (re) => {
+    const ok = await page.evaluate((src) => {
+      const d = document.querySelector('[role="dialog"]')
+      const b = d && [...d.querySelectorAll('button')].find((x) => new RegExp(src).test(x.textContent ?? ''))
+      if (!b) return false
+      b.click()
+      return true
+    }, re)
+    if (!ok) throw new Error(`弹层里找不到匹配 /${re}/ 的按钮`)
+    await wait(700)
+  }
+
+  // 12f：签到任务 —— 阶梯倍率开关（关着，显示「不单独设，用默认的 80%」）
+  await openTaskEditor('练字签到')
+  await scrollInDialog('单独设阶梯倍率')
+  await shot('12f-task-tier-ratio-off')
+
+  /* 12g：把开关打开 —— 六个档位按钮出现，上面那几档**当场重算**。
+     ⚠️ 必须再点一个**非默认**的档位（150%），否则这张图证明不了「重算」：
+        默认值本来就是 80%，开关一开、档位停在 80%，上面那三个数字
+        和关着的时候一模一样 —— 图看着没问题，其实什么都没验到。
+        点完 150% 后应当看到 1/3/5 天从 +2/+6/+12 变成 **+4/+12/+24**
+        （unit = 1.5 × 基础分 5 × 目标 5 / 10 = 3.75 → 取整 4）。 */
+  await clickInDialog('单独设阶梯倍率')
+  await clickInDialog('150%')
+  await scrollInDialog('每完成一次签到')
+  await shot('12g-task-tier-ratio-on')
+  await closeSheet()
+
+  // 12h：长期任务 —— 连击加成分（每连一天多给 / 一次最多加）
+  await openTaskEditor('读一本完整的故事书')
+  await clickInDialog('单独设连击奖励')
+  await scrollInDialog('每连一天多给')
+  await shot('12h-task-streak-bonus')
+  await closeSheet()
 
   /* 13. 家长确认 · 打分弹层
      ⚠️ 这个界面以前**不在图集里**。2026-09-21 改它的文案

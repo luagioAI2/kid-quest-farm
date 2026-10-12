@@ -442,6 +442,67 @@ try {
     !/countUp|data-count/.test(mainJsSrc),
   )
 
+  // 【事实闸门】页面上写的「N 种作物 / N 种动物」必须对得上 `catalog.ts`。
+  //
+  // ⚠️ 作物**故意允许两个读数**，因为「写 8 还是写 12」是一个**还没拍板的内容决定**
+  //    （`.workbuddy-ai/memory/MEMORY.md` 里记着「已把选择权交给家长，不要自己改」）：
+  //      8  = 只数一年生作物，即不带「花 🌸」「多年生 🌳」徽章的那批（`kind === 'annual'`）
+  //      12 = 全部作物（`CROPS.length`），也就是孩子在种子商店里数得到的数
+  //    两个都放行，但会把**当前用的是哪个读数**打出来 —— 真要改口径，
+  //    这条断言会跟着动，不会像以前那样悄悄挂着没人发现。
+  //    ⚠️ 别把它收成「必须等于 12」：那是替家长做决定。
+  // 动物没这个歧义（`ANIMALS` 5 条，全部能领养），所以走严格比对。
+  //
+  // 这里不引 TS 编译，直接在源码文本里数条目 —— 够用，而且改了立刻红。
+  // ⚠️ 依赖「条目 4 空格缩进 + `id: '…'` / `kind: '…'`」这个排版约定；
+  //    真被 prettier 改成别的缩进，这条会红，那时改正则即可（红比假绿好）。
+  const catalogSrc = readFileSync(resolve('src/domain/catalog.ts'), 'utf8')
+  const cropBlock = (() => {
+    const start = catalogSrc.indexOf('export const CROPS')
+    if (start < 0) return ''
+    const rest = catalogSrc.slice(start + 10)
+    const next = rest.indexOf('\nexport const ')
+    return next < 0 ? rest : rest.slice(0, next)
+  })()
+  const animalBlock = (() => {
+    const start = catalogSrc.indexOf('export const ANIMALS')
+    if (start < 0) return ''
+    const rest = catalogSrc.slice(start + 10)
+    const next = rest.indexOf('\nexport const ')
+    return next < 0 ? rest : rest.slice(0, next)
+  })()
+  const countIds = (block) => (block.match(/^ {4}id: '/gm) ?? []).length
+  const cropTotal = countIds(cropBlock)
+  const cropAnnual = (cropBlock.match(/^ {4}kind: 'annual'/gm) ?? []).length
+  const animalTotal = countIds(animalBlock)
+
+  check('数得出 catalog.ts 里的作物数（闸门的前提）', cropTotal > 0, `CROPS=${cropTotal}`)
+  check('数得出 catalog.ts 里的动物数（闸门的前提）', animalTotal > 0, `ANIMALS=${animalTotal}`)
+
+  // 读数 → 人话。作物两读都收；动物只有一个读数。
+  const readings = {
+    作物: new Map([
+      [cropAnnual, `只数一年生（不带花/多年生徽章的那批）`],
+      [cropTotal, `全部作物（商店里数得到的数）`],
+    ]),
+    动物: new Map([[animalTotal, '全部动物']]),
+  }
+  const indexRaw = readFileSync(resolve(SITE_DIR, 'index.html'), 'utf8')
+  for (const [label, allowed] of Object.entries(readings)) {
+    const claims = [...indexRaw.matchAll(new RegExp(`(\\d+) 种${label}`, 'g'))].map((m) => Number(m[1]))
+    const used = [...new Set(claims)]
+    const wrong = used.filter((n) => !allowed.has(n))
+    check(
+      `页面上「N 种${label}」的说法对得上代码（共 ${claims.length} 处）`,
+      claims.length > 0 && wrong.length === 0,
+      claims.length === 0
+        ? `页面上一处「种${label}」都没提 —— 闸门形同虚设，要么补回来要么删掉这条断言`
+        : wrong.length
+          ? `写的是 ${wrong.join(' / ')}，代码里只有 ${[...allowed.keys()].join(' / ')}`
+          : used.map((n) => `${n}=${allowed.get(n)}`).join('；'),
+    )
+  }
+
   for (const vp of [
     { name: '桌面 1440', width: 1440, height: 960 },
     { name: '平板 834', width: 834, height: 1112 },

@@ -375,6 +375,29 @@ describe('任务编辑器：单独设连击奖励（长期任务）', () => {
     expect(row.streakPerDay, '9999 要被夹成上限 20').toBe(20)
   })
 
+  it('★ 关掉连击开关再保存 → 两个字段都被删掉（不是留着旧值）', async () => {
+    /* ⚠️ 这条是变异验证逼出来的。
+       「关掉覆盖要删字段」原来只覆盖了**阶梯倍率**那一半，连击这一半
+       没测 —— 把 `streakPerDay: isPeriod && streakOn ? … : undefined`
+       改成 `isPeriod ? … : undefined`（也就是「不管开关，永远写」）时，
+       整个套件**全绿**。那是个真漏洞：家长把连击关掉之后，
+       界面上写着「不单独设，用默认的」，发分却还按他刚才那个 10 分算。 */
+    const task = anyPeriodTask()
+    await useApp.getState().updateTask(task.id, { streakPerDay: 10, streakCap: 50 })
+
+    const { user, saved } = await openEdit(await savedTask(task.id))
+    const sw = screen.getByRole('button', { name: /单独设连击奖励/ })
+    expect(sw.getAttribute('aria-pressed'), '任务上设过 → 打开时开关应该是开着的').toBe('true')
+
+    await user.click(sw)
+    await user.click(screen.getByRole('button', { name: /保存修改/ }))
+    await saved
+
+    const row = await savedTask(task.id)
+    expect(row.streakPerDay, '关掉覆盖要把 perDay 一起删掉').toBeUndefined()
+    expect(row.streakCap, 'cap 也要一起删掉（两个字段是一组）').toBeUndefined()
+  })
+
   it('★ 全局开关关着 → 编辑器要说出来「设了也不会发」，而不是默不作声', async () => {
     await act(async () => {
       await useApp.getState().updateSettings({ streakBonusEnabled: false })
