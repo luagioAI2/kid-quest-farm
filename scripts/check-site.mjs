@@ -429,6 +429,8 @@ try {
   check('结算规则进度条都拉起来了', barsOk, bars.join(', '))
 
   // 首屏那条「数据条」（12 块土地 / 8 种作物 / 5 种动物 / 0 条广告）已整块删除。
+  // ⚠️ 那批数字里作物写的是 8，其实 `CROPS` 一直是 12 条（见下面那条事实闸门）；
+  //    2026-10-12 家长拍板对外统一说 12。
   // 这里反过来断言它**真的删干净了**：
   // 只删 HTML 不删 JS 的话，main.js 会留一段永远匹配不到元素的死代码 ——
   // 那种残留不会报错，只会一直躺在那里骗下一个人。
@@ -483,21 +485,33 @@ try {
     作物: new Map([[cropTotal, `全部作物（商店里数得到的数）`]]),
     动物: new Map([[animalTotal, '全部动物']]),
   }
-  const indexRaw = readFileSync(resolve(SITE_DIR, 'index.html'), 'utf8')
-  for (const [label, allowed] of Object.entries(readings)) {
-    const claims = [...indexRaw.matchAll(new RegExp(`(\\d+) 种${label}`, 'g'))].map((m) => Number(m[1]))
-    const used = [...new Set(claims)]
-    const wrong = used.filter((n) => !allowed.has(n))
-    const aside = label === '作物' ? `；参照：只数一年生是 ${cropAnnual}` : ''
-    check(
-      `页面上「N 种${label}」的说法对得上代码（共 ${claims.length} 处）`,
-      claims.length > 0 && wrong.length === 0,
-      claims.length === 0
-        ? `页面上一处「种${label}」都没提 —— 闸门形同虚设，要么补回来要么删掉这条断言`
-        : wrong.length
-          ? `写的是 ${wrong.join(' / ')}，代码里只有 ${[...allowed.keys()].join(' / ')}`
-          : used.map((n) => `${n}=${allowed.get(n)}`).join('；') + aside,
-    )
+  /* ⚠️ 扫的不只是官网 —— **README 里也写了一遍作物数**。
+     2026-10-12 收紧这条闸门时才发现 README 那行也还是 8：
+     同一个事实在这个仓库里存了 **5 份**（`catalog.ts` 1 份 + 官网 4 处），
+     外加 README 1 份 —— 而闸门只管了官网那 4 处。
+     「同一个事实存两份就一定会走散」在这里是**字面意义上**发生的。
+     ➜ 以后再往别的地方抄这个数字，记得把它加进这个数组。 */
+  const quantitySources = [
+    ['官网', resolve(SITE_DIR, 'index.html')],
+    ['README', resolve('README.md')],
+  ]
+  for (const [where, filePath] of quantitySources) {
+    const raw = readFileSync(filePath, 'utf8')
+    for (const [label, allowed] of Object.entries(readings)) {
+      const claims = [...raw.matchAll(new RegExp(`(\\d+) 种${label}`, 'g'))].map((m) => Number(m[1]))
+      const used = [...new Set(claims)]
+      const wrong = used.filter((n) => !allowed.has(n))
+      const aside = label === '作物' ? `；参照：只数一年生是 ${cropAnnual}` : ''
+      check(
+        `${where}里「N 种${label}」的说法对得上代码（共 ${claims.length} 处）`,
+        claims.length > 0 && wrong.length === 0,
+        claims.length === 0
+          ? `${where}一处「种${label}」都没提 —— 要么补回来要么把 ${where} 从闸门里删掉`
+          : wrong.length
+            ? `写的是 ${wrong.join(' / ')}，代码里只有 ${[...allowed.keys()].join(' / ')}`
+            : used.map((n) => `${n}=${allowed.get(n)}`).join('；') + aside,
+      )
+    }
   }
 
   for (const vp of [
