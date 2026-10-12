@@ -2,7 +2,25 @@ import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { settle } from '@/domain/settlement'
 import { humanizeMinutes, CYCLE_LABEL } from '@/domain/time'
-import { checkInCapacity, checkInSupported, defaultTiers } from '@/domain/recurrence'
+import {
+  checkInCapacity,
+  checkInSupported,
+  defaultTiers,
+  isPeriodTask,
+} from '@/domain/recurrence'
+import { DEFAULT_TIER_RATIO, TIER_RATIO_PRESETS, tierRatioFor } from '@/domain/tierRatio'
+import {
+  DEFAULT_STREAK_CAP,
+  DEFAULT_STREAK_PER_DAY,
+  MAX_STREAK_CAP,
+  MAX_STREAK_PER_DAY,
+  MIN_STREAK_CAP,
+  MIN_STREAK_PER_DAY,
+  clampStreakCap,
+  clampStreakPerDay,
+  streakCapFor,
+  streakPerDayFor,
+} from '@/domain/streakBonus'
 import { ITEMS } from '@/domain/catalog'
 import type { Task, TaskCategory, TaskCycle } from '@/domain/types'
 import { useApp, type NewTaskInput } from '@/store/useApp'
@@ -61,6 +79,28 @@ export function TaskEditor({
 
   const [checkInEnabled, setCheckInEnabled] = useState(false)
   const [checkInTargetCount, setCheckInTargetCount] = useState(5)
+
+  /* ---------------- 奖励覆盖（2026-10-11） ----------------
+     家长问了两遍「为什么任务编辑里没有编辑连续奖励和梯度奖励」——
+     以前这两样只能去「设置 → 规则」改，而且是**全局**的：
+     改一次，所有签到任务的阶梯倍率、所有长期任务的连击加成一起变。
+     现在每条任务可以自己覆盖一份。
+
+     ⚠️ 每个覆盖配一个**开关**（`*On`），而不是「填了就算覆盖」——
+     因为「不填」和「填 0」必须能分开：
+        · 连击「每天加 0 分」= 这条任务不发连击，是有效设置；
+        · 留空 = 跟着全局默认走。
+     靠「输入框里是不是空」来区分这两件事，家长永远搞不清自己现在是哪种。
+     开关关掉时**存 `undefined`**（Dexie 的 update 会把这个键删掉，已实测），
+     于是「关掉」真的回到全局默认，不会留下一个偷偷生效的旧值。
+     ⚠️ 开关关着的时候，界面上显示的仍是**当前实际生效**的那个数
+     （从 settings 取），不然家长会以为这条任务没奖励。 */
+  const [tierRatioOn, setTierRatioOn] = useState(false)
+  const [tierRatioValue, setTierRatioValue] = useState<number>(DEFAULT_TIER_RATIO)
+  const [streakOn, setStreakOn] = useState(false)
+  const [streakPerDayValue, setStreakPerDayValue] = useState(DEFAULT_STREAK_PER_DAY)
+  const [streakCapValue, setStreakCapValue] = useState(DEFAULT_STREAK_CAP)
+
   const [rewardItemIds, setRewardItemIds] = useState<string[]>([])
   const [err, setErr] = useState<string | null>(null)
 
@@ -89,6 +129,15 @@ export function TaskEditor({
       setQualityRated(task.qualityRated)
       setCheckInEnabled(!!task.checkInEnabled)
       setCheckInTargetCount(task.checkInTargetCount ?? 5)
+      /* 覆盖字段：`null`/`undefined` = 这条任务没覆盖过 → 开关关掉，
+         输入框里填**当前实际生效**的值（任务设过就是它自己的，没设就是
+         内置默认 —— `tierRatioFor(task)` 一个人把这两种情况都说清了，
+         别在这里再写一遍 `?? DEFAULT`）。 */
+      setTierRatioOn(task.checkInTierRatio != null)
+      setTierRatioValue(tierRatioFor(task))
+      setStreakOn(task.streakPerDay != null || task.streakCap != null)
+      setStreakPerDayValue(streakPerDayFor(task))
+      setStreakCapValue(streakCapFor(task))
       setRewardItemIds(task.rewardItemIds ?? [])
     } else {
       setTitle('')
@@ -102,11 +151,43 @@ export function TaskEditor({
       setQualityRated(false)
       setCheckInEnabled(false)
       setCheckInTargetCount(5)
+      // 新建：默认不覆盖，输入框预填内置默认值
+      setTierRatioOn(false)
+      setTierRatioValue(tierRatioFor({}))
+      setStreakOn(false)
+      setStreakPerDayValue(streakPerDayFor({}))
+      setStreakCapValue(streakCapFor({}))
       setRewardItemIds([])
     }
   }, [open, task])
 
   const global = useMemo(() => globalFrom(settings), [settings])
+
+  /* ---------------- 覆盖的「实际生效值」 ----------------
+     全部走 `tierRatioFor` / `streakPerDayFor` / `streakCapFor` ——
+     和发分那边**同一套取值规则**。别在这里写
+     `tierRatioOn ? tierRatioValue : DEFAULT_TIER_RATIO`：
+     那条式子就是「同一个事实存两份」，迟早和发分那边分叉
+     （编辑器写着 40%、发出去按 80%，而且不报错）。
+
+     ⚠️ 传进去的是个**合成对象**：开关关掉时 `undefined`，
+     于是 `*For` 自动兜到内置默认 —— 这正是我们要的语义。
+     2026-10-12 起没有「全局设置」这一层了（家长拍板删掉）。 */
+  const effectiveTierRatio = tierRatioFor({ checkInTierRatio: tierRatioOn ? tierRatioValue : undefined })
+  const effectiveStreakPerDay = streakPerDayFor({ streakPerDay: streakOn ? streakPerDayValue : undefined })
+  const effectiveStreakCap = streakCapFor({ streakCap: streakOn ? streakCapValue : undefined })
+
+  /** 内置默认值（开关关着时显示给家长看的那个数） */
+  const defaultTierRatio = tierRatioFor({})
+  const defaultStreakPerDay = streakPerDayFor({})
+  const defaultStreakCap = streakCapFor({})
+
+  /** 这条任务是不是「长期任务」—— 连击奖励只发给它（`isPeriodTask` 是唯一判据）。
+      签到任务不算（签到只有阶梯），今日 / 单次任务也不算。 */
+  const isPeriod = isPeriodTask({ checkInEnabled, cycle })
+
+  /** 连击预览里的那个例子：连到第 3 天能多拿多少（和设置页同一句口径） */
+  const streakExample = Math.min(effectiveStreakCap, 3 * effectiveStreakPerDay)
 
   /** 用真实引擎算：按时 / 超出 50% / 超出一倍 各能拿多少分 */
   const preview = useMemo(() => {
@@ -146,17 +227,14 @@ export function TaskEditor({
   ])
 
   const tiers = useMemo(
-    () =>
-      checkInEnabled
-        ? defaultTiers(cycle, checkInTargetCount, basePoints, settings.checkInTierRatio)
-        : [],
+    () => (checkInEnabled ? defaultTiers(cycle, checkInTargetCount, basePoints, effectiveTierRatio) : []),
     // ⚠️ `basePoints` 必须在依赖里 —— 阶梯是 `倍率 × 基础分 × 目标天数` 现算的，
     //    漏掉它，家长改了基础分预览还停在旧数字上（上面那段注释正好在说
     //    「写死会立刻变成假话」，结果依赖漏了等于缓存成写死）。
     //    2026-10-10 家长报「为啥阶梯分还是这么大」时查出来的，有单测钉住。
-    // ⚠️ `settings.checkInTierRatio` 同理 —— 家长在设置里压了倍率，
-    //    这里不跟着重算，编辑器就还在按旧倍率报价。
-    [checkInEnabled, cycle, checkInTargetCount, basePoints, settings.checkInTierRatio],
+    // ⚠️ `effectiveTierRatio` 同理 —— 家长在设置里压了倍率、或在这条任务上
+    //    单独设了倍率，这里不跟着重算，编辑器就还在按旧倍率报价。
+    [checkInEnabled, cycle, checkInTargetCount, basePoints, effectiveTierRatio],
   )
 
   function validate(): string | null {
@@ -190,6 +268,16 @@ export function TaskEditor({
       rewardItemIds: rewardItemIds.length > 0 ? rewardItemIds : undefined,
       checkInEnabled,
       checkInTargetCount: checkInEnabled || cycle !== 'daily' ? checkInTargetCount : undefined,
+      /* ---- 奖励覆盖 ----
+         ⚠️ 开关关掉、或这条任务根本不适用时，一律写 `undefined`。
+         实测过 Dexie 的 `update()`：`undefined` 的键会被**删掉**，
+         所以「关掉覆盖」真的回到全局默认，不会留一个偷偷生效的旧值
+         （那正是家长最怕的：界面上写着「跟着设置走」，发分却按旧数）。
+         ⚠️ 存的是 `effective*`（夹紧后的），不是输入框里的裸值 ——
+         和设置页同一个口径，别让越界值从编辑器这条路径漏进账本。 */
+      checkInTierRatio: checkInEnabled && tierRatioOn ? effectiveTierRatio : undefined,
+      streakPerDay: isPeriod && streakOn ? effectiveStreakPerDay : undefined,
+      streakCap: isPeriod && streakOn ? effectiveStreakCap : undefined,
     }
     if (editing && task) {
       await updateTask(task.id, input as Partial<Task>)
@@ -514,9 +602,112 @@ export function TaskEditor({
                   ))}
                 </div>
               </div>
+
+              {/* ---------- 这条任务单独的阶梯倍率（2026-10-11） ----------
+                  放在阶梯列表**下面**：上面那几档是「现在的倍率算出来的结果」，
+                  家长先看到结果，再决定要不要给这条任务单独换一个倍率。
+                  ⚠️ 别把它挪到列表上面 —— 那段「签到只发**上面的**阶梯奖励」
+                  的说明会立刻变成假话。 */}
+              <SwitchRow
+                emoji="🪜"
+                title="这条任务单独设阶梯倍率"
+                on={tierRatioOn}
+                onChange={setTierRatioOn}
+                onText={`这条任务按 ${Math.round(effectiveTierRatio * 100)}% 算，上面那几档就是结果`}
+                offText={`不单独设，用默认的 ${Math.round(defaultTierRatio * 100)}%`}
+              />
+              {tierRatioOn && (
+                <div className="anim-fade-in space-y-2 rounded-2xl border border-white bg-white/80 p-3">
+                  <p className="text-xs font-extrabold text-ink-700">
+                    每完成一次签到，阶梯合计给基础分的
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {TIER_RATIO_PRESETS.map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setTierRatioValue(v)}
+                        aria-pressed={effectiveTierRatio === v}
+                        className={clsx(
+                          'btn active:btn-press min-h-[40px] rounded-pill border px-3 font-display text-sm font-extrabold',
+                          effectiveTierRatio === v
+                            ? 'border-grass-600 bg-grass-300 text-ink-900'
+                            : 'border-ink-100 bg-white text-ink-500',
+                        )}
+                      >
+                        {Math.round(v * 100)}%
+                      </button>
+                    ))}
+                  </div>
+                  <p className="tnum text-[11px] font-bold leading-snug text-ink-500">
+                    只改「{title.trim() || '这条任务'}」，别的签到任务照旧。
+                    已经发出去的分不会追回。
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
+        )}
+
+        {/* ---------- 连击奖励（只给长期任务，2026-10-11） ----------
+            家长原话：「长期任务这种次数的可以有连续奖励……不能两种同时都有」。
+            判据用 `isPeriodTask` —— 和「长期任务」区块、发分那三处**同一个谓词**，
+            不然会出现「卡片列在长期任务里、连击却不认它」。
+            签到任务在这里**不出现**：它只走上面那套阶梯，两种奖励不会同时发。
+
+            ⚠️ 全局开关关着时必须说出来。不渲染这块 = 家长找不到（他就是
+            因为「找不到」才来问的）；渲染了却不提醒 = 界面在承诺一件
+            不会发生的事。所以：照常渲染，但顶上挂一条实话。 */}
+        {isPeriod && (
+          <div className="space-y-3">
+            <SwitchRow
+              emoji="🔥"
+              title="这条任务单独设连击奖励"
+              on={streakOn}
+              onChange={setStreakOn}
+              onText={`连着几天完成，每多一天多给 ${effectiveStreakPerDay} 分，最多 ${effectiveStreakCap} 分`}
+              offText={`不单独设，用默认的每连一天 +${defaultStreakPerDay} 分，最多 +${defaultStreakCap} 分`}
+            />
+            {!settings.streakBonusEnabled && (
+              <p className="rounded-xl border border-berry-300 bg-berry-100 px-3 py-2 text-[11px] font-bold leading-relaxed text-berry-500">
+                ⚠️ 「设置 → 规则」里的连击奖励总开关现在<b>关着</b> —— 这里设好了也不会发。
+                想让连击生效，先去那里把它打开。
+              </p>
+            )}
+            {streakOn && (
+              <div className="anim-fade-in space-y-3 rounded-2xl border border-white bg-white/80 p-3">
+                <Field label="每连一天多给" emoji="➕">
+                  <NumberStepper
+                    value={streakPerDayValue}
+                    onChange={(v) => setStreakPerDayValue(clampStreakPerDay(v))}
+                    step={1}
+                    min={MIN_STREAK_PER_DAY}
+                    max={MAX_STREAK_PER_DAY}
+                    suffix="分"
+                  />
+                </Field>
+                <Field label="一次最多加" emoji="🧢">
+                  <NumberStepper
+                    value={streakCapValue}
+                    onChange={(v) => setStreakCapValue(clampStreakCap(v))}
+                    step={5}
+                    min={MIN_STREAK_CAP}
+                    max={MAX_STREAK_CAP}
+                    suffix="分"
+                  />
+                </Field>
+                <p className="tnum text-[11px] font-bold leading-snug text-ink-500">
+                  连击第 N 天多给「N × {effectiveStreakPerDay}」分，最多 {effectiveStreakCap} 分。
+                  例：连到第 3 天多给 {streakExample} 分。
+                </p>
+                <p className="text-[11px] font-bold leading-snug text-ink-400">
+                  一天只发一次：同一天里先完成的那条长期任务按它自己的设置发，
+                  当天后面完成的几条不再发。断一天连击就从头算。
+                </p>
+              </div>
+            )}
+          </div>
         )}
 
         {/* ---------- 奖励道具 ----------

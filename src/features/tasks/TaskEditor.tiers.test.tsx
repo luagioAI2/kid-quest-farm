@@ -105,24 +105,26 @@ describe('任务编辑器：奖励阶梯预览必须跟着基础分走', () => {
     expect(ladder().every((p) => p >= 1)).toBe(true)
   })
 
-  it('★ 家长在设置里压倍率，编辑器预览跟着重算（依赖漏了就会停在旧数字）', async () => {
-    await openWeeklyCheckIn('6')
-    expect(ladder(), '前提：默认倍率 0.8').toEqual([5, 15, 30])
+  /* ⚠️ 这里原来有两条「家长在**设置页**压倍率 → 编辑器预览跟着重算」。
+     2026-10-12 家长拍板「不需要全局设定梯度、连续的。每个任务单独，
+     有默认的就行了」，设置页那张卡删了，所以这两条整体作废 ——
+     倍率现在只能挂在任务上，而「改了倍率预览跟着重算」这件事
+     由下面「单独设阶梯倍率」那一组里的
+     「★ 打开开关 → 出现档位按钮；点 20% → 上面那几档跟着变小」接管
+     （那条同时也是 `tiers` 那个 `useMemo` 依赖数组的护栏）。 */
 
-    // 家长在设置页把「坚持的奖励阶梯」压到下限
-    await act(async () => {
-      await useApp.getState().updateSettings({ checkInTierRatio: MIN_TIER_RATIO })
-    })
+  it('★ 任务自己带了倍率 → 打开编辑器就按它算，不是按默认的 80%', async () => {
+    // 倍率现在只有一个来源：任务自己的 `checkInTierRatio`。
+    // 这条钉的是「打开编辑器时确实把它读进来了」—— 漏读的话，
+    // 家长在别处（导入的备份 / 另一台设备同步过来的库）设好的倍率
+    // 会在编辑器里显示成默认值，他一点保存就把自己的设置抹平了。
+    const task = anyCheckInTask()
+    await useApp.getState().updateTask(task.id, { checkInTierRatio: MIN_TIER_RATIO })
+    await openEdit(await savedTask(task.id))
 
-    // unit = round(0.2 × 10 × 6 / 10) = round(1.2) = 1 → 1/3/6
-    expect(ladder(), '倍率压到下限，预览必须跟着变小').toEqual([1, 3, 6])
-  })
-
-  it('先改设置再开编辑器，打开时就是新倍率', async () => {
-    await useApp.getState().updateSettings({ checkInTierRatio: MIN_TIER_RATIO })
-    await openWeeklyCheckIn('6')
-
-    expect(ladder()).toEqual([1, 3, 6])
+    // 种子里这条签到任务是 base 5 / 目标 5。
+    // unit = round(0.2 × 5 × 5 / 10) = round(0.5) = 1 → 1/3/6（默认 0.8 时是 2/6/12）
+    expect(ladder(), '倍率压到下限，预览必须按任务的算').toEqual([1, 3, 6])
   })
 
   /* ------------------------------------------------------------
@@ -154,5 +156,254 @@ describe('任务编辑器：奖励阶梯预览必须跟着基础分走', () => {
       screen.getByText(/签到只发上面的阶梯奖励/),
       '删了旧话术要换上「这里为什么没有连击」的实话，不能留一片空白',
     ).toBeTruthy()
+  })
+})
+
+/* ============================================================
+   按任务覆盖奖励设置（2026-10-11）
+   ------------------------------------------------------------
+   家长问了两遍：「为什么任务编辑里还是没有编辑连续奖励和梯度奖励」。
+   以前这两样只在「设置 → 规则」里，而且是**全局**的 —— 改一次，
+   所有签到任务的阶梯倍率、所有长期任务的连击加成一起变。
+   现在每条任务可以自己覆盖一份。
+
+   这一组盯的是**界面这一层**（域逻辑在 domain/*.test.ts，
+   发分在 store/useApp.test.ts）：
+
+     ① 开关关着时，界面上显示的必须是**当前实际生效**的那个数
+        —— 显示 0 或空白会让家长以为这条任务没有奖励；
+     ② 开关关掉 → 存 `undefined`（真的回到全局默认，不留旧值）；
+     ③ 签到任务上**不出现**连击设置，长期任务上**不出现**阶梯倍率
+        —— 家长的原话是「不能两种同时都有」。
+   ============================================================ */
+
+/** 解锁家长闸门（默认 PIN 0000，第 4 位自动提交） */
+async function unlock(user: ReturnType<typeof userEvent.setup>) {
+  for (let i = 0; i < 4; i++) {
+    await user.click(screen.getByRole('button', { name: '0' }))
+  }
+}
+
+/**
+ * 开一个「编辑已有任务」的编辑态。
+ *
+ * 返回的 `saved` 是一个 promise，在编辑器调用 `onClose` 时 resolve ——
+ * `handleSave` 的最后一步就是 `onClose()`，所以 `await saved` 等于
+ * 「等整条保存链（写库 → 同步实例 → refresh）跑完」。
+ *
+ * ⚠️ 为什么非要等这一下：`user.click` **不会** await 事件处理器返回的
+ *    promise。不等的话，测试结束 / 下一个 `beforeEach` 里的 `db.delete()`
+ *    会撞上还在飞的异步写库，vitest 抛 `DatabaseClosedError`
+ *    （unhandled rejection）。那不是「测试环境的噪音」——
+ *    它意味着断言可能读到写了一半的状态，正是假绿的温床。
+ *    2026-10-12 加这批测试时实测到的。
+ */
+async function openEdit(task: Parameters<typeof TaskEditor>[0]['task']) {
+  const user = userEvent.setup()
+  let done!: () => void
+  const saved = new Promise<void>((resolve) => {
+    done = resolve
+  })
+  render(<TaskEditor open task={task} onClose={done} />)
+  await unlock(user)
+  return { user, saved }
+}
+
+/** 从 store 里拿一条签到任务 */
+function anyCheckInTask() {
+  const t = useApp.getState().tasks.find((x) => x.checkInEnabled)
+  if (!t) throw new Error('种子里应该有签到任务')
+  return t
+}
+
+/** 从 store 里拿一条长期任务（非签到） */
+function anyPeriodTask() {
+  const t = useApp
+    .getState()
+    .tasks.find((x) => !x.checkInEnabled && (x.cycle === 'weekly' || x.cycle === 'monthly' || x.cycle === 'yearly'))
+  if (!t) throw new Error('种子里应该有长期任务')
+  return t
+}
+
+/* ⚠️ 「保存后」的断言一律读 **Dexie**，不读 `useApp.getState().tasks`。
+   原因实测过：`handleSave` 是 async，而 `user.click` 不会等它 ——
+   点击返回时库里已经写好了，store 的内存快照却还没 `refresh` 回来，
+   读 store 会拿到**旧值**（甚至 undefined），测试红得毫无道理。
+   「保存」这件事的判据本来就该是「落库了没有」，所以读库更准。 */
+async function savedTask(id: string) {
+  const row = await db.tasks.get(id)
+  if (!row) throw new Error(`库里找不到任务 ${id}`)
+  return row
+}
+
+describe('任务编辑器：单独设阶梯倍率（签到任务）', () => {
+  beforeEach(bootStore)
+  afterEach(cleanup)
+
+  it('★ 默认不覆盖 —— 开关关着，显示的「现在是多少」是全局默认，不是 0', async () => {
+    await openEdit(anyCheckInTask())
+
+    const sw = screen.getByRole('button', { name: /单独设阶梯倍率/ })
+    expect(sw.getAttribute('aria-pressed'), '新任务默认不覆盖').toBe('false')
+    // ⚠️ 这条是关键：关着的时候必须显示**实际生效**的那个百分比。
+    //    显示 0% / 空白会让家长以为这条任务的阶梯是白送的。
+    expect(
+      screen.getByText(/不单独设，用默认的 80%/),
+      '关着时要告诉家长「不设就是默认的 80%」，不能留空、也不能写 0%',
+    ).toBeTruthy()
+  })
+
+  it('★ 打开开关 → 出现档位按钮；点 20% → 上面那几档跟着变小', async () => {
+    const { user } = await openEdit(anyCheckInTask())
+
+    // 前提：全局 0.8，base 5 / 目标 5 → 2/6/12
+    expect(ladder(), '前提：默认倍率下的阶梯').toEqual([2, 6, 12])
+
+    await user.click(screen.getByRole('button', { name: /单独设阶梯倍率/ }))
+    await user.click(screen.getByRole('button', { name: '20%' }))
+
+    // unit = round(0.2 × 5 × 5 / 10) = round(0.5) = 1 → 1/3/6
+    expect(ladder(), '改成 20% 后，上面那几档必须当场重算').toEqual([1, 3, 6])
+  })
+
+  it('★ 关掉开关 → 阶梯立刻回到全局默认（不是停在 20%）', async () => {
+    const { user } = await openEdit(anyCheckInTask())
+    const sw = () => screen.getByRole('button', { name: /单独设阶梯倍率/ })
+
+    await user.click(sw())
+    await user.click(screen.getByRole('button', { name: '20%' }))
+    expect(ladder()).toEqual([1, 3, 6])
+
+    await user.click(sw())
+    expect(ladder(), '关掉覆盖必须回到全局默认，不能停在刚才那个 20%').toEqual([2, 6, 12])
+  })
+
+  it('★ 保存 → 写进任务；再打开开关关掉保存 → 字段被真的删掉', async () => {
+    const task = anyCheckInTask()
+    const { user, saved } = await openEdit(task)
+
+    await user.click(screen.getByRole('button', { name: /单独设阶梯倍率/ }))
+    await user.click(screen.getByRole('button', { name: '20%' }))
+    await user.click(screen.getByRole('button', { name: /保存修改/ }))
+    await saved
+
+    expect(
+      (await savedTask(task.id)).checkInTierRatio,
+      '保存后任务上要真的带上这个倍率',
+    ).toBe(0.2)
+
+    // 重新打开（拿库里的那一行），把开关关掉再存一次
+    cleanup()
+    const reopened = await savedTask(task.id)
+    const { user: user2, saved: saved2 } = await openEdit(reopened)
+    const sw = screen.getByRole('button', { name: /单独设阶梯倍率/ })
+    expect(sw.getAttribute('aria-pressed'), '重新打开时开关应该是开着的').toBe('true')
+    await user2.click(sw)
+    await user2.click(screen.getByRole('button', { name: /保存修改/ }))
+    await saved2
+
+    // ⚠️ 必须真的**没有**这个键，不能是 0 / NaN / 留着旧值 ——
+    //    留着旧值的话，界面上写着「跟着设置走」，发分却按旧数，家长抓不到。
+    expect(
+      (await savedTask(task.id)).checkInTierRatio,
+      '关掉覆盖要把字段删掉（存 undefined）',
+    ).toBeUndefined()
+  })
+
+  it('★ 这条签到任务上**没有**连击设置 —— 家长定「不能两种同时都有」', async () => {
+    await openEdit(anyCheckInTask())
+    expect(
+      screen.queryByRole('button', { name: /单独设连击奖励/ }),
+      '签到只走阶梯，编辑器不许给签到任务一个连击开关',
+    ).toBeNull()
+  })
+})
+
+describe('任务编辑器：单独设连击奖励（长期任务）', () => {
+  beforeEach(bootStore)
+  afterEach(cleanup)
+
+  it('★ 长期任务上出现连击开关，且关着时显示的是当前生效的数', async () => {
+    await openEdit(anyPeriodTask())
+
+    const sw = screen.getByRole('button', { name: /单独设连击奖励/ })
+    expect(sw.getAttribute('aria-pressed'), '默认不覆盖').toBe('false')
+    expect(
+      screen.getByText(/不单独设，用默认的每连一天 \+2 分，最多 \+20 分/),
+      '关着时要显示内置默认的 2 / 20',
+    ).toBeTruthy()
+  })
+
+  it('★ 打开开关 → 两个数字框出现；把「每连一天」改成 10 → 预览跟着变', async () => {
+    const { user } = await openEdit(anyPeriodTask())
+    await user.click(screen.getByRole('button', { name: /单独设连击奖励/ }))
+
+    fireEvent.change(stepperInput('每连一天多给'), { target: { value: '10' } })
+
+    // 预览那句是现算的：连到第 3 天 min(封顶 20, 3×10) = 20
+    expect(screen.getByText(/连击第 N 天多给「N × 10」分，最多 20 分/)).toBeTruthy()
+    expect(screen.getByText(/连到第 3 天多给 20 分/)).toBeTruthy()
+  })
+
+  it('★ 保存 → 两个值都写进任务', async () => {
+    const task = anyPeriodTask()
+    const { user, saved } = await openEdit(task)
+
+    await user.click(screen.getByRole('button', { name: /单独设连击奖励/ }))
+    fireEvent.change(stepperInput('每连一天多给'), { target: { value: '10' } })
+    fireEvent.change(stepperInput('一次最多加'), { target: { value: '50' } })
+    await user.click(screen.getByRole('button', { name: /保存修改/ }))
+    await saved
+
+    const row = await savedTask(task.id)
+    expect(row.streakPerDay).toBe(10)
+    expect(row.streakCap).toBe(50)
+  })
+
+  it('★ 输入框里塞越界值 → 存下去的是夹紧后的数（输入框不是唯一的闸门）', async () => {
+    const task = anyPeriodTask()
+    const { user, saved } = await openEdit(task)
+
+    await user.click(screen.getByRole('button', { name: /单独设连击奖励/ }))
+    // stepper 的 onChange 里有 clamp，但这里直接打一个越界值进去，
+    // 验的是「存下去的那一刻也夹过」—— 两条路都得是同一个数。
+    fireEvent.change(stepperInput('每连一天多给'), { target: { value: '9999' } })
+    await user.click(screen.getByRole('button', { name: /保存修改/ }))
+    await saved
+
+    const row = await savedTask(task.id)
+    expect(row.streakPerDay, '9999 要被夹成上限 20').toBe(20)
+  })
+
+  it('★ 全局开关关着 → 编辑器要说出来「设了也不会发」，而不是默不作声', async () => {
+    await act(async () => {
+      await useApp.getState().updateSettings({ streakBonusEnabled: false })
+    })
+    await openEdit(anyPeriodTask())
+
+    // ⚠️ 这块**照常渲染**（不渲染家长就找不到 —— 他正是因为找不到才来问的），
+    //    但必须挂一条实话。渲染了却不提醒 = 界面在承诺一件不会发生的事。
+    expect(
+      screen.getByText(/连击奖励总开关现在/),
+      '全局关着时必须提醒，不能默默收下这个设置',
+    ).toBeTruthy()
+    expect(screen.getByText(/这里设好了也不会发/)).toBeTruthy()
+  })
+
+  it('★ 今日任务上**没有**连击设置 —— 连击只给长期任务', async () => {
+    const daily = useApp.getState().tasks.find((t) => t.cycle === 'daily' && !t.checkInEnabled)!
+    await openEdit(daily)
+    expect(
+      screen.queryByRole('button', { name: /单独设连击奖励/ }),
+      '今日任务天天都要做，不搭连击这趟车',
+    ).toBeNull()
+  })
+
+  it('★ 长期任务上**没有**阶梯倍率开关 —— 阶梯只给签到任务', async () => {
+    await openEdit(anyPeriodTask())
+    expect(
+      screen.queryByRole('button', { name: /单独设阶梯倍率/ }),
+      '没开签到的任务不该出现阶梯倍率设置',
+    ).toBeNull()
   })
 })

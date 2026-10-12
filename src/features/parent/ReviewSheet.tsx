@@ -140,10 +140,13 @@ function CheckInReviewCard({
   const task = useMemo(() => tasks.find((t) => t.id === ci.taskId), [tasks, ci.taskId])
   // 同理：订 `checkInProgress` 整片，别在 selector 里 `.find()`
   const checkInProgress = useApp((s) => s.checkInProgress)
-  /* 阶梯倍率。`checkInPayout` 的第五个参数是**必填**的（故意不给默认值），
-     所以这里必须把它订出来 —— 否则家长在设置里把阶梯压到 20%，
-     审核卡还按 80% 预告「+N 分」，点下去实发另一个数。 */
-  const tierRatio = useApp((s) => s.settings.checkInTierRatio)
+  /* ⚠️ 2026-10-12 起这里**不再订阶梯倍率**了。
+     原来订的是 `s.settings.checkInTierRatio`（全局值）；家长拍板
+     「不需要全局设定梯度、连续的。每个任务单独，有默认的就行了」，
+     那个设置连同字段一起删掉了。
+     现在倍率的唯一来源是任务自己的 `checkInTierRatio`，而 `task`
+     本来就是本组件的依赖 —— 所以「家长在任务里改了倍率，审核卡跟着变」
+     这条不变量自动成立，不需要再单独订一个值。 */
   const [busy, setBusy] = useState(false)
 
   /* 「确认后得到 N 分」必须等于 `approveCheckIn` 真正发出去的数 ——
@@ -156,8 +159,8 @@ function CheckInReviewCard({
   const payout = useMemo(() => {
     if (!task) return null
     const row = checkInProgress.find((p) => p.taskId === ci.taskId && p.periodKey === ci.periodKey)
-    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], ci.date, tierRatio)
-  }, [task, checkInProgress, ci.taskId, ci.periodKey, ci.date, tierRatio])
+    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], ci.date)
+  }, [task, checkInProgress, ci.taskId, ci.periodKey, ci.date])
 
   const cat = task ? categoryOf(task.category) : null
 

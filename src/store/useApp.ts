@@ -102,7 +102,8 @@ import {
   produceUnitOf,
 } from '../domain/catalog'
 import { describeRedeemPayment, planRedeemPayment } from '../domain/redeem'
-import { clampStreakCap, clampStreakPerDay } from '../domain/streakBonus'
+import { streakCapFor, streakPerDayFor } from '../domain/streakBonus'
+import { tierRatioFor } from '../domain/tierRatio'
 import {
   advanceMarket,
   applySell,
@@ -338,6 +339,15 @@ export interface NewTaskInput {
   checkInEnabled?: boolean
   checkInTargetCount?: number
   remindAt?: string
+  /* ---- 奖励覆盖（2026-10-11 家长要「在任务编辑里也能改」）----
+     三个都是可选覆盖：不填 = 用「设置 → 规则」里的全局默认。
+     见 `domain/types.ts` 的 `Task` 同名注释（为什么是覆盖而不是必填）。 */
+  /** 这条签到任务的阶梯倍率。不填 = 用 `DEFAULT_TIER_RATIO`（0.8） */
+  checkInTierRatio?: number
+  /** 这条长期任务的连击加成：每连一天多给几分。不填 = 用全局默认 */
+  streakPerDay?: number
+  /** 这条长期任务的连击封顶。不填 = 用全局默认 */
+  streakCap?: number
 }
 
 export interface NewRedeemInput {
@@ -905,7 +915,8 @@ async function settleNow(
   let streakBonus = 0
   if (settings.streakBonusEnabled && result.points > 0) {
     const def = get().tasks.find((t) => t.id === inst.taskId)
-    if (def && isPeriodTask(def)) streakBonus = await maybePayStreakBonus()
+    // 把任务传进去 —— 连击的「每天加几分 / 封顶」可以按任务设（2026-10-11）。
+    if (def && isPeriodTask(def)) streakBonus = await maybePayStreakBonus(def)
   }
 
   set({
@@ -991,13 +1002,7 @@ async function grantCheckIn(
      写 5 实发 7。同一个事实存两份，迟早走散（本项目的老毛病）。
      `checkInPayout` 内部已经把 date 并进 days 之后再数天数 ——
      否则「今天是第几天」永远少一天，阶梯永远差一档才触发，而且不报错。 */
-  const payout = checkInPayout(
-    task,
-    progress.days,
-    progress.claimedTiers,
-    date,
-    get().settings.checkInTierRatio,
-  )
+  const payout = checkInPayout(task, progress.days, progress.claimedTiers, date)
   const gained = payout.base
 
   progress.days = [...progress.days, date].sort()
@@ -1444,7 +1449,11 @@ export const useApp = create<AppState>((set, get) => ({
 
   tiersFor: (task) => {
     const target = task.checkInTargetCount ?? 5
-    return defaultTiers(task.cycle, target, task.basePoints, get().settings.checkInTierRatio)
+    // 倍率的取值只有两级：任务自己的，或者 `tierRatioFor` 兜到的内置默认
+    // （2026-10-12 起设置里那个全局值删了）。走 `tierRatioFor`，
+    // 别在这里重写一遍 —— 否则「界面上显示的阶梯」和「真正发的」
+    // 会各按一套优先级走。
+    return defaultTiers(task.cycle, target, task.basePoints, tierRatioFor(task))
   },
 
   checkInDays: (taskId) => currentCheckInRow(get, taskId)?.days ?? [],
@@ -1558,7 +1567,8 @@ export const useApp = create<AppState>((set, get) => ({
       task.cycle,
       task.checkInTargetCount ?? 5,
       task.basePoints,
-      settings.checkInTierRatio,
+      // 同 `tiersFor`：这条任务自己的倍率优先，没设才用内置默认。
+      tierRatioFor(task),
     )
     const tier = tiers.find((t) => t.days === days)
     if (!tier || progress.claimedTiers.includes(days) || progress.days.length < days) return 0
@@ -3242,8 +3252,19 @@ export function usePendingRedeems(): RedeemRecord[] {
  * 一天只发一次，判据在账本里（见函数内注释）——
  * 同一个逻辑日里完成第二个长期任务不会再多发一笔：
  * 连击是「天」的奖励，不是「次」的奖励。
+ *
+ * ⚠️ 2026-10-11 起「每天加几分 / 封顶」可以**按任务设**（家长要
+ * 「每个长期任务单独设」），所以这里要拿到**触发它的那条任务**。
+ * 于是出现一个必须说清的后果：
+ *
+ *   **一天里第一条完成的长期任务，按它自己的设置发；同一天后面完成的
+ *   那几条不再发钱，它们自己的设置当天用不上。**
+ *
+ * 这是「一天只发一次」和「按任务设」叠在一起的结果，**没有改发放频率**
+ * —— 改频率是动经济（三条长期任务各发一次 = 每天最多三倍），
+ * 家长没要求，不做。任务编辑页把这句话原样写给家长看。
  */
-async function maybePayStreakBonus(): Promise<number> {
+async function maybePayStreakBonus(task: Pick<Task, 'streakPerDay' | 'streakCap'>): Promise<number> {
   const s = useApp.getState()
   const today = s.todayKey
 
@@ -3268,11 +3289,13 @@ async function maybePayStreakBonus(): Promise<number> {
   const rows = await db.taskInstances.toArray()
   const streak = computeStreak(streakDaysOf(rows, s.tasks, s.settings.dayStartHour), today)
   if (streak <= 1) return 0
-  /* ⚠️ 夹取必须在**这里**做，不能只靠设置页的输入框 ——
+  /* ⚠️ 夹取必须在**这里**做，不能只靠设置页 / 任务编辑的输入框 ——
      导入的旧备份、手改的 IndexedDB、测试里直接 updateSettings 都能绕过输入框，
-     而这两个值会变成账本里真实的分。 */
-  const perDay = clampStreakPerDay(s.settings.streakBonusPerDay)
-  const cap = clampStreakCap(s.settings.streakBonusCap)
+     而这两个值会变成账本里真实的分。
+     取值（任务自己的，或者内置默认）收在 `streakPerDayFor` / `streakCapFor` 里，
+     别在这里再写一遍 `??` —— 编辑器预览也要用同一套优先级。 */
+  const perDay = streakPerDayFor(task)
+  const cap = streakCapFor(task)
   const bonus = Math.min(cap, streak * perDay)
   if (bonus <= 0) return 0
   await postLedger({

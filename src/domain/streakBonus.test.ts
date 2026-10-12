@@ -8,6 +8,8 @@ import {
   MIN_STREAK_PER_DAY,
   clampStreakCap,
   clampStreakPerDay,
+  streakCapFor,
+  streakPerDayFor,
 } from './streakBonus'
 
 /* ============================================================
@@ -54,5 +56,59 @@ describe('连击加成分 —— 默认值与夹取', () => {
     expect(clampStreakPerDay(3.4)).toBe(3)
     expect(clampStreakPerDay(3.6)).toBe(4)
     expect(clampStreakCap(20.5)).toBe(21)
+  })
+})
+
+/* ============================================================
+   按任务取（2026-10-11 家长要「每个长期任务单独设」）
+   ------------------------------------------------------------
+   和 `tierRatioFor` 是同一套取值规则，三个读者共用：
+   编辑器预览 / 设置页那句「不设就用默认的 N 分」/ 真正发分
+   （`maybePayStreakBonus`）。这里守的是**取值规则有没有分叉**，不是算术。
+
+   ⚠️ 2026-10-12 家长拍板「不需要全局设定梯度、连续的。每个任务单独，
+   有默认的就行了」，于是 `fallback` 参数和设置里那两个全局字段一起删了。
+   现在只有两级：**任务自己的 → 内置默认**。
+   ============================================================ */
+
+describe('streakPerDayFor / streakCapFor —— 任务自己的，或者内置默认', () => {
+  it('★ 任务设过 → 用任务的', () => {
+    expect(streakPerDayFor({ streakPerDay: 10 })).toBe(10)
+    expect(streakCapFor({ streakCap: 200 })).toBe(200)
+  })
+
+  it('★ 任务没设 → 兜到默认档，不报错（老任务 / 老备份走的就是这条）', () => {
+    expect(streakPerDayFor({ streakPerDay: undefined })).toBe(DEFAULT_STREAK_PER_DAY)
+    expect(streakCapFor({ streakCap: undefined })).toBe(DEFAULT_STREAK_CAP)
+    expect(streakPerDayFor({})).toBe(DEFAULT_STREAK_PER_DAY)
+    expect(streakCapFor({})).toBe(DEFAULT_STREAK_CAP)
+  })
+
+  it('★ 任务上是个越界值 → 走 clamp，不是原样透传', () => {
+    expect(streakPerDayFor({ streakPerDay: 9999 })).toBe(MAX_STREAK_PER_DAY)
+    expect(streakCapFor({ streakCap: 9999 })).toBe(MAX_STREAK_CAP)
+    expect(streakPerDayFor({ streakPerDay: -3 })).toBe(MIN_STREAK_PER_DAY)
+  })
+
+  it('★ 任务上写了 0 也算「设过」—— 0 是「这条不发连击」，不是「兜到默认」', () => {
+    // 写成 `task.x || DEFAULT_STREAK_PER_DAY` 就会在这里翻车：0 是 falsy，
+    // 家长明明把这条任务的连击关成 0，发出去的却是默认的 2 分。
+    expect(streakPerDayFor({ streakPerDay: 0 })).toBe(0)
+    expect(streakPerDayFor({ streakPerDay: 0 })).not.toBe(DEFAULT_STREAK_PER_DAY)
+    expect(streakCapFor({ streakCap: 0 })).toBe(0)
+  })
+
+  it('★ 两个值互不影响 —— 只设了 perDay 时，cap 仍走内置默认', () => {
+    // 编辑器里两个开关是**一组**，但数据模型上是两个独立字段；
+    // 只设一个（导入的备份 / 手改的库）不该把另一个也变成 0。
+    expect(streakPerDayFor({ streakPerDay: 5 })).toBe(5)
+    expect(streakCapFor({})).toBe(DEFAULT_STREAK_CAP)
+  })
+
+  it('★ 不传参数 = 完全没有覆盖 = 内置默认（设置页那句「用默认的 N 分」靠它）', () => {
+    // `streakPerDayFor({})` 就是设置页连击卡上那个 N。
+    // 它必须等于真正的默认，否则界面上会写一个不存在的数。
+    expect(streakPerDayFor({})).toBe(DEFAULT_STREAK_PER_DAY)
+    expect(streakCapFor({})).toBe(DEFAULT_STREAK_CAP)
   })
 })

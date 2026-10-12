@@ -29,7 +29,7 @@ const checkInPayout = (
   days: string[],
   claimed: number[],
   date: string,
-) => checkInPayoutRaw(task, days, claimed, date, DEFAULT_TIER_RATIO)
+) => checkInPayoutRaw(task, days, claimed, date)
 
 describe('签到阶梯 defaultTiers', () => {
   it('周档是 2 / 6 / 12 —— 2026-10-09 家长要求把「太多了」的奖励压小', () => {
@@ -314,8 +314,11 @@ describe('阶梯倍率真的进了算式（2026-10-10 家长要求「阶梯分�
 
   it('checkInPayout 跟着倍率走 —— 发分与展示共用的就是这一份', () => {
     const weekly = { basePoints: 5, cycle: 'weekly' as const, checkInTargetCount: 5 }
+    /* ⚠️ 2026-10-12 起倍率**只能挂在任务上**（`checkInTierRatio`），
+       不再是 `checkInPayout` 的第 5 个参数 —— 全局设置删了。
+       所以这里改成「同一个任务、不同的倍率」而不是「同一个倍率参数」。 */
     const at = (r: number) =>
-      checkInPayoutRaw(weekly, [], [], '2026-10-05', r)
+      checkInPayoutRaw({ ...weekly, checkInTierRatio: r }, [], [], '2026-10-05')
     // 首日落在第 1 档：基础 5 + 阶梯 2 = 7（默认档，和上面那组对得上）
     expect(at(DEFAULT_TIER_RATIO).total).toBe(7)
     // 倍率压到下限 → 第 1 档从 2 变 1 → 6
@@ -328,8 +331,8 @@ describe('阶梯倍率真的进了算式（2026-10-10 家长要求「阶梯分�
 
   it('倍率只影响阶梯那一段，不动基础分', () => {
     const weekly = { basePoints: 5, cycle: 'weekly' as const, checkInTargetCount: 5 }
-    const low = checkInPayoutRaw(weekly, ['2026-10-05'], [1], '2026-10-06', MIN_TIER_RATIO)
-    const high = checkInPayoutRaw(weekly, ['2026-10-05'], [1], '2026-10-06', MAX_TIER_RATIO)
+    const low = checkInPayoutRaw({ ...weekly, checkInTierRatio: MIN_TIER_RATIO }, ['2026-10-05'], [1], '2026-10-06')
+    const high = checkInPayoutRaw({ ...weekly, checkInTierRatio: MAX_TIER_RATIO }, ['2026-10-05'], [1], '2026-10-06')
     expect(low.base).toBe(high.base)
     expect(low.base).toBe(5)
     expect(low.tierPoints).toBe(high.tierPoints) // 第 2 天不在阶梯日，两边都是 0

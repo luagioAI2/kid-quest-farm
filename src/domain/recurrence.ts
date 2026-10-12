@@ -1,6 +1,6 @@
 import type { Task, TaskInstance } from './types'
 import { appDayKey, periodKeyFor, periodStartDateKey } from './time'
-import { clampTierRatio, DEFAULT_TIER_RATIO } from './tierRatio'
+import { clampTierRatio, DEFAULT_TIER_RATIO, tierRatioFor } from './tierRatio'
 
 /* ============================================================
    任务实例生成
@@ -435,23 +435,26 @@ export interface CheckInPayout {
  * `+task.basePoints`，而实际到账还有阶梯 —— 写 5 实发 7。
  * 这是本项目的老毛病（同一个事实存两份），别再开第二份。
  *
- * ⚠️ `ratio`（阶梯倍率）**故意不给默认值**。给了默认值，新调用点漏传
- * 也能编译过，于是「预览用 80%、实发用家长设的 20%」这种分叉会静默发生 ——
- * 正是上面那段说的老毛病。不给默认值，`tsc` 会挨个点名，漏不掉。
- * 纯函数里的默认口径见 `defaultTiers` / `domain/tierRatio.ts`。
+ * ⚠️ 这里**没有「兜底倍率」参数**了。2026-10-12 家长拍板
+ * 「不需要全局设定梯度、连续的。每个任务单独，有默认的就行了」，
+ * 于是 `settings.checkInTierRatio` 连同设置页那张卡一起删掉。
+ * 倍率只剩两个来源：任务自己的 `checkInTierRatio`，或者
+ * `clampTierRatio(undefined)` 兜到的 `DEFAULT_TIER_RATIO`。
+ * 优先级收在 `tierRatioFor` 里，**别在这里再写一遍 `??`**。
  */
 export function checkInPayout(
-  task: Pick<Task, 'basePoints' | 'cycle' | 'checkInTargetCount'>,
+  task: Pick<Task, 'basePoints' | 'cycle' | 'checkInTargetCount' | 'checkInTierRatio'>,
   confirmedDays: string[],
   claimedTiers: number[],
   date: string,
-  ratio: number,
 ): CheckInPayout {
   const base = Math.max(0, Math.round(task.basePoints))
   // `date` 必须并进去再数天数 —— 否则「今天签完是第几天」永远少一天，
   // 阶梯就永远差一档才触发（而且不报错）。
   const nextDays = [...confirmedDays, date].sort()
 
+  // 任务自己设过就用任务的，没设就用内置默认 —— 唯一事实源。
+  const ratio = tierRatioFor(task)
   const allTiers = defaultTiers(task.cycle, task.checkInTargetCount ?? 5, task.basePoints, ratio)
   const tiers = claimableTiers(allTiers, nextDays.length, claimedTiers)
   const tierPoints = tiers.reduce((n, t) => n + t.points, 0)

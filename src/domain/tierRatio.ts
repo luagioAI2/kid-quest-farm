@@ -31,6 +31,8 @@
        「每次完成多拿 1.5 个基础分」。再高就不是奖励而是主要收入了。
    ============================================================ */
 
+import type { Task } from './types'
+
 /** 默认 0.8 —— 每完成一次，阶梯合计给 0.8 个基础分 */
 export const DEFAULT_TIER_RATIO = 0.8
 
@@ -39,6 +41,16 @@ export const MIN_TIER_RATIO = 0.2
 
 /** 上限：阶梯合计 = 1.5 × 基础分 × 目标天数 */
 export const MAX_TIER_RATIO = 1.5
+
+/**
+ * 界面上给家长点的几个档（20% / 40% / … / 150%）。
+ *
+ * ⚠️ 收在这里，别在「设置 → 规则」和「任务编辑」各写一份数组 ——
+ * 两处各写一份，改一处漏一处，同一个倍率在两个界面显示成两个百分比，
+ * 家长会以为自己设错了。`MIN_TIER_RATIO` / `MAX_TIER_RATIO` 就是首尾两项，
+ * 有单测钉住这条一致性。
+ */
+export const TIER_RATIO_PRESETS = [0.2, 0.4, 0.6, 0.8, 1.0, 1.5] as const
 
 /**
  * 把家长填的值夹到合法区间，并取到 2 位小数。
@@ -54,4 +66,26 @@ export function clampTierRatio(n: number | undefined): number {
   if (n == null || !Number.isFinite(n)) return DEFAULT_TIER_RATIO
   const clamped = Math.min(MAX_TIER_RATIO, Math.max(MIN_TIER_RATIO, n))
   return Math.round(clamped * 100) / 100
+}
+
+/**
+ * 这条签到任务**实际生效**的阶梯倍率 —— 唯一事实源。
+ *
+ * 2026-10-11 家长要「在任务编辑里也能改」，于是 `Task` 上多了
+ * `checkInTierRatio`。
+ * 2026-10-12 家长又拍板「不需要全局设定梯度、连续的。每个任务单独，
+ * **有默认的就行了**」—— 所以原来那个 `fallback` 参数（指向
+ * `settings.checkInTierRatio`）连同设置里那个字段一起删掉了。
+ *
+ * 现在的取值只有两级：
+ *   ① 任务自己设过 → 用任务的（夹紧后）
+ *   ② 没设 → `clampTierRatio(undefined)` 兜到 `DEFAULT_TIER_RATIO`
+ *
+ * ⚠️ 别在调用点写 `task.checkInTierRatio ?? DEFAULT_TIER_RATIO` ——
+ * 那条式子会在「编辑器预览」「家长审核卡」「真正发分」三处各写一遍，
+ * 漏掉任何一处就会分叉。本项目的老毛病（同一个事实存两份），
+ * 这里收成一个函数。
+ */
+export function tierRatioFor(task: Pick<Task, 'checkInTierRatio'>): number {
+  return clampTierRatio(task.checkInTierRatio)
 }

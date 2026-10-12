@@ -3,21 +3,24 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { db } from '@/db/db'
 import { useApp } from '@/store/useApp'
-import { MAX_STREAK_CAP, MAX_STREAK_PER_DAY } from '@/domain/streakBonus'
+import { DEFAULT_STREAK_CAP, DEFAULT_STREAK_PER_DAY } from '@/domain/streakBonus'
 import SettingsPage from './SettingsPage'
 
 /* ============================================================
    设置页 → 规则 → 「连续完成奖励」
    ------------------------------------------------------------
-   家长 2026-10-11 原话：「长期任务 这种 次数的可以有连续奖励。
-   (连击奖励)（可以设置连续的加成的分）。不能两种 同时都有。」
+   ⚠️ 这张卡 2026-10-12 **被砍过一轮**。原来它有：
+     · 一个总开关
+     · 「每连击一天多给 [2] 分」+「一次最多加 [20] 分」两个输入框
+     · 一行「当前：连击第 N 天多给「N × 2」分…」的预览
+   家长拍板：「不需要全局设定梯度、连续的。每个任务单独，有默认的就行了。」
+   → 两个输入框、那行预览、以及背后的 `settings.streakBonusPerDay` /
+     `streakBonusCap` 两个字段全部删掉；加多少改成在**每条长期任务**里设。
 
-   改之前这张卡只有个开关，加成分 2 / 20 **写死在提示文字里**，家长改不了 ——
-   字面上是「可以设置」，实际上不能。这里守四件事：
-   1. 两个数字框真的在，且显示的是当前值；
-   2. 改了就落库（不是只改了个显示）；
-   3. 那行「当前：…」跟着重算（否则家长会以为没生效）；
-   4. 越界被夹到上限，不会把 NaN / 999 写进设置。
+   所以这个文件也瘦了一圈：原来那四条「改了就落库 / 越界被夹 / 预览重算」
+   测的都是被删掉的输入框，现在它们改到**任务编辑**那边测
+   （见 `features/tasks/TaskEditor.tiers.test.tsx`）。
+   这里只守留下来的东西 + 新加的那句实话。
 
    连击**发多少分**在 useApp.test.ts 里测（那边能跑完整结算）；
    这里只测设置页这一层。
@@ -44,8 +47,7 @@ async function openRules() {
  * 连击那张卡。
  *
  * ⚠️ 必须框到卡片里再查控件 —— 「现金对积分」那张卡也有个 number 输入框
- *    （`RatioInput`），全局 `getAllByRole('spinbutton')` 会把它一起捞进来，
- *    于是 `[perDay, cap]` 解构到的其实是「1 元 = ___ 分」那个框。
+ *    （`RatioInput`），全局 `getAllByRole('spinbutton')` 会把它一起捞进来。
  *    这是本项目反复踩的「作用域没收窄，断言就是假的」。
  */
 function streakCard(): HTMLElement {
@@ -53,81 +55,69 @@ function streakCard(): HTMLElement {
   return heading.closest('section') as HTMLElement
 }
 
-/** 卡片里的两个数字框：[每连击一天, 一次最多] */
-function inputs(): HTMLInputElement[] {
-  return within(streakCard()).getAllByRole('spinbutton') as HTMLInputElement[]
-}
-
-/** 卡片里那行「当前：…」 */
-function previewLine(): string {
-  const p = within(streakCard()).getByText(
-    (_, el) => el?.tagName === 'P' && (el.textContent ?? '').includes('连击第 N 天多给'),
-  )
-  return p.textContent ?? ''
-}
-
-/** 填一个数字框并提交（失焦才落库，这是刻意的：中间态不写 store） */
-async function fill(user: ReturnType<typeof userEvent.setup>, el: HTMLInputElement, v: string) {
-  await user.clear(el)
-  await user.type(el, v)
-  await user.tab()
-}
-
-describe('设置页：连续完成奖励的加成分', () => {
+describe('设置页：连续完成奖励（只剩总开关）', () => {
   beforeEach(bootStore)
   afterEach(cleanup)
 
-  it('规则页里有这张卡，默认「每连击一天 2 分、一次最多 20 分」', async () => {
+  it('★ 卡里**没有**任何数字输入框了 —— 加成分不再有全局值', async () => {
     await openRules()
 
-    expect(useApp.getState().settings.streakBonusPerDay).toBe(2)
-    expect(useApp.getState().settings.streakBonusCap).toBe(20)
+    // ⚠️ 这条是本文件的重点：家长明确说不需要全局设定。
+    //    只要有人把输入框加回来，这里立刻红 —— 那正是要拦住的事：
+    //    一个界面上看得见、又和「每条任务单独设」并存的全局值，
+    //    会让家长分不清「我到底改了谁」。
+    expect(
+      within(streakCard()).queryAllByRole('spinbutton'),
+      '连击加成分不该再有全局输入框，去任务编辑里设',
+    ).toHaveLength(0)
 
-    const [perDay, cap] = inputs()
-    expect(perDay.value, '框里要显示当前值，不能是空').toBe('2')
-    expect(cap.value).toBe('20')
+    // 对照：卡片本身确实渲染出来了（否则上面那条会因为「整张卡没渲染」而假绿）
+    expect(within(streakCard()).getByRole('switch', { name: '连续完成奖励' })).toBeTruthy()
   })
 
-  it('★ 把「每连击一天」改成 5 → 真的落库，预览那行跟着重算', async () => {
-    const user = await openRules()
-    const [perDay] = inputs()
-    await fill(user, perDay, '5')
+  it('★ 规则页里**没有**「坚持的奖励阶梯」那张卡了', async () => {
+    await openRules()
 
-    expect(useApp.getState().settings.streakBonusPerDay, '填完必须真的写进设置').toBe(5)
+    /* 2026-10-12 家长拍板删掉的另一半：阶梯倍率的全局档位按钮
+       （20% / 40% / … / 150%）。倍率改成只在任务编辑里设。
+       ⚠️ 只断言「卡不在」是不够的 —— 整页渲染失败也会让它绿。
+       所以配一条正向对照：同一页里**别的**卡确实在。 */
+    expect(
+      screen.queryByRole('heading', { name: /坚持的奖励阶梯/ }),
+      '阶梯倍率不再有全局档位，去任务编辑里设',
+    ).toBeNull()
 
-    const line = previewLine()
-    expect(line).toContain('N × 5')
-    // 例：min(封顶 20, 3×5) = 15
-    expect(line, '例子要按新数现算').toContain('第 3 天多给 15 分')
+    // 正向对照：规则页确实渲染出来了
+    expect(screen.getByRole('heading', { name: /连续完成奖励/ })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: /每一轮最多能赚多少/ })).toBeTruthy()
   })
 
-  it('★ 封顶压到 3 → 连击最多只加 3 分，预览也照实算', async () => {
-    const user = await openRules()
-    const [, cap] = inputs()
-    await fill(user, cap, '3')
+  it('★ 卡里说清了「加多少去每条任务里设」，并给出默认值', async () => {
+    await openRules()
 
-    expect(useApp.getState().settings.streakBonusCap).toBe(3)
-    // min(3, 3×2) = 3
-    expect(previewLine(), '封顶生效后例子要变小').toContain('第 3 天多给 3 分')
-  })
+    expect(
+      within(streakCard()).getByText(/每条长期任务/),
+      '必须指路，否则家长找不到去哪儿设',
+    ).toBeTruthy()
 
-  it('★ 填越界的数会被夹到上限，不会把值写坏', async () => {
-    const user = await openRules()
-    const [perDay, cap] = inputs()
-    await fill(user, perDay, '999')
-    await fill(user, cap, '99999')
-
-    expect(useApp.getState().settings.streakBonusPerDay).toBe(MAX_STREAK_PER_DAY)
-    expect(useApp.getState().settings.streakBonusCap).toBe(MAX_STREAK_CAP)
-    // 夹完要回写到框里，否则家长看到自己填的 999 以为存进去了
-    const [perDayAfter, capAfter] = inputs()
-    expect(perDayAfter.value).toBe(String(MAX_STREAK_PER_DAY))
-    expect(capAfter.value).toBe(String(MAX_STREAK_CAP))
+    // 默认值不能写死 —— 从 domain 常量来，默认改了这里跟着改
+    const card = streakCard().textContent ?? ''
+    expect(card).toContain(`每连一天 +${DEFAULT_STREAK_PER_DAY} 分`)
+    expect(card).toContain(`最多 +${DEFAULT_STREAK_CAP} 分`)
   })
 
   it('★ 关掉开关 → 落库（连击那半边就停了）', async () => {
     const user = await openRules()
     await user.click(within(streakCard()).getByRole('switch', { name: '连续完成奖励' }))
     expect(useApp.getState().settings.streakBonusEnabled).toBe(false)
+  })
+
+  it('★ 再打开 → 也落库（开关是可逆的，不是只能关不能开）', async () => {
+    const user = await openRules()
+    const sw = within(streakCard()).getByRole('switch', { name: '连续完成奖励' })
+    await user.click(sw)
+    expect(useApp.getState().settings.streakBonusEnabled).toBe(false)
+    await user.click(sw)
+    expect(useApp.getState().settings.streakBonusEnabled).toBe(true)
   })
 })

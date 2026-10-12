@@ -101,6 +101,32 @@ export interface Task {
   /** 周期目标次数（如一周 5 天，一月 20 天）。仅 checkInEnabled 时有效 */
   checkInTargetCount?: number
 
+  /* ---------------- 奖励覆盖（2026-10-11 家长要「在任务编辑里能改」） ----------------
+     三个都是**可选覆盖**：`undefined` = 用内置默认值。
+
+     ⚠️ 2026-10-12 家长拍板：「不需要全局设定梯度、连续的。每个任务单独，
+     有默认的就行了。」所以**全局设置里那三个字段已经删掉了**
+     （`Settings.checkInTierRatio` / `streakBonusPerDay` / `streakBonusCap`），
+     回落目标从「设置里的全局值」变成 `domain/` 里的常量：
+     阶梯倍率 `DEFAULT_TIER_RATIO`、连击 `DEFAULT_STREAK_PER_DAY` / `DEFAULT_STREAK_CAP`。
+     别再把它们加回设置页 —— 那就是「同一个事实存两份」。
+
+     ⚠️ 为什么是「可选覆盖」而不是必填：老任务、老备份里根本没有这几列，
+     必填会逼出一条 Dexie 迁移；而本项目所有「老用户数据被清空」的事故
+     都出在迁移上（见 0c087da / 66da238 / 5056e2f）。可选 + 回落 = 不需要迁移。
+
+     ⚠️ 取值**一律走 `tierRatioFor` / `streakPerDayFor` / `streakCapFor`**，
+     别在各处写 `task.x ?? DEFAULT_Y` —— 那又是「同一个事实存两份」。 */
+
+  /** 这条签到任务的阶梯倍率。不填 = 用 `DEFAULT_TIER_RATIO`（0.8） */
+  checkInTierRatio?: number
+
+  /** 这条长期任务的连击加成：每连一天多给几分。不填 = 用 `DEFAULT_STREAK_PER_DAY`（2） */
+  streakPerDay?: number
+
+  /** 这条长期任务的连击封顶。不填 = 用 `DEFAULT_STREAK_CAP`（20） */
+  streakCap?: number
+
   /** 提醒时间（HH:mm），仅用于展示与本地通知预留 */
   remindAt?: string
 
@@ -661,12 +687,14 @@ export interface AppSettings {
   /** 全局：是否允许质量加减分（关闭后五档系数一律按 0 算） */
   qualityBonusEnabled: boolean
 
-  /** 连续完成任务的天数奖励（连击） */
+  /* 连续完成任务的天数奖励（连击）。
+     ⚠️ 2026-10-12 家长拍板：这里**只留总开关**，
+     「每天加几分 / 封顶多少」不再有全局值 —— 那两样去每条长期任务里单独设，
+     不设就用 `domain/streakBonus.ts` 的默认常量（2 / 20）。
+     原来这里还有 `streakBonusPerDay` / `streakBonusCap` 两个字段，已删。
+     别加回来：一个「界面上看不见、却还在影响发分」的全局值，
+     正是本项目最怕的那种 bug（界面看不到 ≠ 不会发生）。 */
   streakBonusEnabled: boolean
-  /** 每连击一天额外积分 */
-  streakBonusPerDay: number
-  /** 连击奖励上限 */
-  streakBonusCap: number
 
   /** 音效 */
   soundEnabled: boolean
@@ -747,17 +775,14 @@ export interface AppSettings {
    */
   pointsPerYuan: number
 
-  /**
-   * 签到「坚持的奖励阶梯」的倍率（2026-10-10 家长要求）。
-   *
-   * 阶梯合计 = 这个倍率 × 基础分 × 目标天数，按 1:3:6 摊到三档。
-   * 默认 0.8 —— 也就是「每完成一次，阶梯多给 0.8 个基础分」。
-   *
-   * ⚠️ 和 `pointsPerYuan` 不同，这个**参与计算**：它进 `defaultTiers`
-   * → `checkInPayout` → 真正落账的分数。预览和实发必须传同一个值。
-   * 口径与夹取区间见 `domain/tierRatio.ts`。
-   */
-  checkInTierRatio: number
+  /* ⚠️ 这里原来还有一个 `checkInTierRatio`（签到阶梯倍率的**全局值**）。
+     2026-10-12 家长拍板「不需要全局设定梯度、连续的。每个任务单独，
+     有默认的就行了」，于是删掉了。
+     现在阶梯倍率只有两个来源：
+       · 任务自己的 `Task.checkInTierRatio`（在任务编辑里设）
+       · 都没有 → `domain/tierRatio.ts` 的 `DEFAULT_TIER_RATIO`（0.8）
+     别再加回设置页 —— 家长已经明确不需要，而且多一个「看不见的全局值」
+     只会让「界面显示的」和「实际发的」有机会走散。 */
 
   /** 农场时间流速设置 */
   farmClock: FarmClockSettings

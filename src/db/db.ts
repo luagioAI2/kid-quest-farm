@@ -2,8 +2,6 @@ import Dexie, { type Table } from 'dexie'
 import { createInitialFarm } from '../domain/farm'
 import { createInitialMarket } from '../domain/market'
 import { PRODUCE_BASE_PRICE } from '../domain/catalog'
-import { DEFAULT_TIER_RATIO } from '../domain/tierRatio'
-import { DEFAULT_STREAK_CAP, DEFAULT_STREAK_PER_DAY } from '../domain/streakBonus'
 import type {
   Animal,
   AppSettings,
@@ -407,8 +405,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   minRatioForPoints: 0,
   qualityBonusEnabled: true,
   streakBonusEnabled: true,
-  streakBonusPerDay: DEFAULT_STREAK_PER_DAY,
-  streakBonusCap: DEFAULT_STREAK_CAP,
   soundEnabled: true,
   hapticsEnabled: true,
   onboardingDone: false,
@@ -436,15 +432,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
    * 口径与夹取区间见 `domain/cash.ts`。
    */
   pointsPerYuan: 10,
-  /**
-   * 签到阶梯的倍率（2026-10-10 家长要求「阶梯分设置」）。
-   *
-   * 阶梯合计 = 这个倍率 × 基础分 × 目标天数。默认 0.8 就是原来写死在
-   * `defaultTiers` 里的那个系数，所以老库升上来行为一字不变
-   * （`loadSettings` 会和 `DEFAULT_SETTINGS` 合并，不需要数据迁移）。
-   * 口径与夹取区间见 `domain/tierRatio.ts`。
-   */
-  checkInTierRatio: DEFAULT_TIER_RATIO,
   farmClock: {
     timeScale: 1,
     showClock: true,

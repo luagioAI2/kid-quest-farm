@@ -1,19 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, BackupFile } from '../../domain/types'
 import { useApp } from '../../store/useApp'
 import { DEFAULT_PROFIT_RATIO } from '../../domain/catalog'
 import { QUALITY_META, QUALITY_ORDER, formatMultiplier } from '../../domain/settlement'
 import { clampPointsPerYuan, formatYuan, MAX_POINTS_PER_YUAN, MIN_POINTS_PER_YUAN } from '../../domain/cash'
-import { clampTierRatio } from '../../domain/tierRatio'
-import {
-  MAX_STREAK_CAP,
-  MAX_STREAK_PER_DAY,
-  MIN_STREAK_CAP,
-  MIN_STREAK_PER_DAY,
-  clampStreakCap,
-  clampStreakPerDay,
-} from '../../domain/streakBonus'
-import { defaultTiers, isCheckInTask } from '../../domain/recurrence'
+/* ⚠️ 2026-10-12：这里原来还 import 了 `TIER_RATIO_PRESETS` / `clampTierRatio` /
+   `clampStreak*` / `defaultTiers` / `isCheckInTask` —— 都是给「坚持的奖励阶梯」
+   那张卡和连击那两个输入框用的。家长拍板删掉那两处全局设置之后，
+   它们全部没有读者了。现在只剩「不设就用默认的 N 分」那一句要用解析器。 */
+import { streakCapFor, streakPerDayFor } from '../../domain/streakBonus'
 import { AVATAR_CHOICES } from '../../domain/avatars'
 import { humanizeAgo } from '../../domain/time'
 import { saveBlob, shareOrDownload } from '../../platform/files'
@@ -38,7 +33,6 @@ export default function SettingsPage({
   onReplayGuide?: () => void
 }) {
   const settings = useApp((s) => s.settings)
-  const tasks = useApp((s) => s.tasks)
   const updateSettings = useApp((s) => s.updateSettings)
   const exportBackup = useApp((s) => s.exportBackup)
   const importBackup = useApp((s) => s.importBackup)
@@ -65,43 +59,21 @@ export default function SettingsPage({
    */
   const ratio = clampPointsPerYuan(settings.pointsPerYuan)
 
-  /**
-   * 签到阶梯的倍率（家长 2026-10-10 要求「阶梯分设置」）。
-   *
-   * 同样走 `clampTierRatio` 而不是直接用 `settings.checkInTierRatio` ——
-   * 导入的旧备份里可能是 `undefined` / 越界值，夹一次，界面上永远不会
-   * 出现「NaN%」。
-   */
-  const tierRatio = clampTierRatio(settings.checkInTierRatio)
+  /* ⚠️ 2026-10-12 家长拍板「不需要全局设定梯度、连续的。每个任务单独，
+     有默认的就行了」，于是这里原来那三个全局值
+     （`tierRatio` / `streakPerDay` / `streakCap`）连同它们的两张卡一起删了。
+     现在这两样都只在**任务编辑**里设，不设就用 `domain/` 里的内置默认。
+     相关的说明见 `domain/tierRatio.ts` / `domain/streakBonus.ts` 的头注释。 */
 
   /**
-   * 连击奖励的加成分（家长 2026-10-11 要求「可以设置连续的加成的分」）。
+   * 连击卡上那句「不设就用默认的 N 分」里的 N。
    *
-   * 同样先夹再用 —— 导入的旧备份里可能是 `undefined` / 越界值，
-   * 界面上不能出现「NaN 分」，算式那边也不能收到越界值。
+   * 走 `streakPerDayFor({})` / `streakCapFor({})`（空任务 = 没有任何覆盖），
+   * 而不是直接写 `DEFAULT_STREAK_PER_DAY` —— 万一默认值以后调了，
+   * 这里跟着变，不会留下一个说旧数的界面。
    */
-  const streakPerDay = clampStreakPerDay(settings.streakBonusPerDay)
-  const streakCap = clampStreakCap(settings.streakBonusCap)
-
-  /**
-   * 卡片里那行「例：…」的预览。
-   *
-   * ⚠️ 用**家长自己的**签到任务现算，而不是写死一个「基础分 5 / 目标 5 天」
-   *    的抽象例子 —— 阶梯分只能是整数，倍率低的时候相邻两档会算出同一个数。
-   *    如果预览举的是别人的例子，家长点了 20% 和 40% 看到一模一样的结果，
-   *    会以为这个设置坏了。用他自己的任务，那个取整就是可见且合理的。
-   *    一个签到任务都没有时（家长全删了），退回新建签到任务的默认档 5 / 5。
-   *
-   * 现算，**不写死** —— 倍率 0.8 时给出 2/6/12，压到 0.2 就变 1/3/6。
-   * 写死的话家长点了 20% 还看到 2/6/12，那是界面在骗人。
-   */
-  const sampleCheckIn = useMemo(() => tasks.find((t) => isCheckInTask(t)), [tasks])
-  const tierPreview = defaultTiers(
-    sampleCheckIn?.cycle ?? 'weekly',
-    sampleCheckIn?.checkInTargetCount ?? 5,
-    sampleCheckIn?.basePoints ?? 5,
-    tierRatio,
-  )
+  const defaultStreakPerDay = streakPerDayFor({})
+  const defaultStreakCap = streakCapFor({})
 
   // 切到 data tab 时自动上锁，防止孩子趁家长没注意时导出/恢复/清空
   useEffect(() => {
@@ -340,6 +312,15 @@ export default function SettingsPage({
                     连着几天完成长期任务（每周 / 每月要做满几次的那种），每天多给一点分。
                     签到任务不算 —— 它有自己的阶梯奖励，两种不会同时发。
                   </p>
+                  {/* ⚠️ 这里**只剩一个总开关**了（2026-10-12 家长拍板）。
+                      原来还有「每连击一天多给 N 分」「一次最多加 N 分」两个输入框，
+                      家长原话：「不需要全局设定梯度、连续的。每个任务单独，
+                      有默认的就行了。」所以那两个框和它们背后的设置字段都删了 ——
+                      加多少改成在**每条长期任务**里单独设，不设就用内置默认。
+                      ⚠️ 别把输入框加回来：留一个界面上看不见、却还在影响发分的
+                      全局值，正是本项目最怕的那种 bug（界面看不到 ≠ 不会发生）。
+                      但总开关**要留**：per-task 的开关只能管单条任务，
+                      没有一个地方能把整个连击功能关掉的话，家长就只能一条条去关。 */}
                   <div className="flex items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="font-display text-base font-extrabold text-ink-900">
@@ -354,39 +335,10 @@ export default function SettingsPage({
                       label="连续完成奖励"
                     />
                   </div>
-                  {/* ⚠️ 两个输入框**各占一行**，不要塞进同一个 `flex-wrap`。
-                      390px 宽度下「每连击一天多给 [2] 分，一次最多加 [20] 分」
-                      放不下，会折成「…一次最多加」+ 换行 +「[20] 分」，
-                      第二个框和它的单位被拆到两行，看着像排版坏了（实测过）。 */}
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="shrink-0 text-sm font-bold text-ink-500">每连击一天多给</span>
-                      <NumberInput
-                        value={streakPerDay}
-                        min={MIN_STREAK_PER_DAY}
-                        max={MAX_STREAK_PER_DAY}
-                        clamp={clampStreakPerDay}
-                        disabled={!gateOpen}
-                        onCommit={(v) => void updateSettings({ streakBonusPerDay: v })}
-                      />
-                      <span className="shrink-0 text-sm font-bold text-ink-500">分</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="shrink-0 text-sm font-bold text-ink-500">一次最多加</span>
-                      <NumberInput
-                        value={streakCap}
-                        min={MIN_STREAK_CAP}
-                        max={MAX_STREAK_CAP}
-                        clamp={clampStreakCap}
-                        disabled={!gateOpen}
-                        onCommit={(v) => void updateSettings({ streakBonusCap: v })}
-                      />
-                      <span className="shrink-0 text-sm font-bold text-ink-500">分</span>
-                    </div>
-                  </div>
-                  <p className="tnum mt-2 text-xs font-bold leading-snug text-ink-500">
-                    当前：连击第 N 天多给「N × {streakPerDay}」分，最多 {streakCap} 分。
-                    例：连到第 3 天多给 {Math.min(streakCap, 3 * streakPerDay)} 分。
+                  <p className="mt-3 text-xs font-bold leading-snug text-ink-400">
+                    加多少分在<b className="text-ink-600">每条长期任务</b>里单独设
+                    （打开任务 → 单独设连击奖励）；不设就用默认的每连一天 +{defaultStreakPerDay} 分、
+                    最多 +{defaultStreakCap} 分。已经发出去的分不会追回。
                   </p>
                 </Card>
 
@@ -459,42 +411,11 @@ export default function SettingsPage({
                   💡 周末和节假日的收成会悄悄多一些，这个不用告诉孩子 —— 他自己会慢慢感觉到。
                 </p>
 
-                <Card title="坚持的奖励阶梯" emoji="🪜">
-                  <p className="mb-3 text-sm text-ink-500">
-                    签到任务里有一条「坚持得越久、奖励越多」的阶梯：坚持到某几天会各多发一次奖励，
-                    具体是哪几天看周期（下面那行就是你的任务）。
-                    这里定它<b className="text-ink-700">一共给多少</b>：
-                    每完成一次签到，阶梯合计给「基础分」的这个比例。
-                    调低 = 阶梯只是个彩头；调高 = 坚持本身也值不少分。
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {([0.2, 0.4, 0.6, 0.8, 1.0, 1.5] as number[]).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        disabled={!gateOpen}
-                        onClick={() => void updateSettings({ checkInTierRatio: v })}
-                        className={
-                          'btn rounded-full px-4 py-2 font-bold shadow-flat disabled:opacity-50 ' +
-                          (tierRatio === v ? 'bg-grass-300 text-ink-900' : 'bg-white text-ink-500')
-                        }
-                      >
-                        {Math.round(v * 100)}%
-                      </button>
-                    ))}
-                  </div>
-                  <p className="tnum mt-2 text-xs font-bold leading-snug text-ink-500">
-                    当前：每完成一次，阶梯合计给基础分的 {Math.round(tierRatio * 100)}%。
-                    {sampleCheckIn ? `以你的「${sampleCheckIn.title}」为例` : '例'}：
-                    {tierPreview.map((t) => `${t.days} 天 +${t.points}`).join('、')}。
-                  </p>
-                  <p className="mt-1 text-xs font-bold leading-snug text-ink-400">
-                    分数只能是整数，所以小任务上相邻两档可能算出一样的数 ——
-                    上面那行就是当前档位的真实结果。改完会影响所有签到任务，
-                    已经发出去的分不会追回。
-                  </p>
-                </Card>
-
+                {/* ⚠️ 这里原来是「坚持的奖励阶梯」整张卡（20% / 40% / … 六个档位按钮）。
+                    2026-10-12 家长拍板「不需要全局设定梯度、连续的。每个任务单独，
+                    有默认的就行了」，于是整张卡删掉 —— 倍率改成在**每条签到任务**里设。
+                    ⚠️ 别把它加回来，也别只把它藏起来：留着字段就等于留了一个
+                    「界面上看不见、却还在影响发分」的全局值。 */}
                 <Card title="每一轮最多能赚多少" emoji="📈">
                   <p className="mb-3 text-sm text-ink-500">
                     种子和动物的价格是定好的，孩子把产出卖完，总收入不会超过成本的这个比例。

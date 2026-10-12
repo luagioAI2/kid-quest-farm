@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { db, postLedger, currentBalance, addItem, consumeItem } from '../db/db'
+import { db, postLedger, currentBalance, addItem, consumeItem, DEFAULT_SETTINGS } from '../db/db'
 
 /* ============================================================
    持久层回归测试
@@ -218,5 +218,46 @@ describe('唯一索引约束', () => {
     }
     expect(rejected).toBe(true)
     expect(await db.checkIns.count()).toBe(1)
+  })
+})
+
+/* ============================================================
+   ⚠️ 三个「全局奖励值」不许回到设置里
+   ------------------------------------------------------------
+   2026-10-12 家长拍板：
+
+   > 「不需要全局设定梯度，连续的。 每个任务单独，有默认的就行了。」
+
+   于是 `checkInTierRatio` / `streakBonusPerDay` / `streakBonusCap`
+   三个字段连同设置页那两处控件一起删掉了。它们现在只有两个来源：
+   任务自己的字段，或者 `domain/` 里的默认常量。
+
+   加这条测试是因为「加回去」看起来太无害了 —— 一个输入框而已。
+   但它的后果很具体：家长在任务编辑里设了 20%，发出去却按设置页那个
+   他早就忘了的 80% 算，而且两处界面都显示得好好的。
+   这是本项目最怕的那类 bug（界面看不到 ≠ 不会发生），所以钉死。
+
+   `Settings` 类型上再加回字段会先被 `tsc` 拦下（`DEFAULT_SETTINGS`
+   要补齐），这条测试是第二道闸 —— 专拦「顺手补个默认值就加回来了」。
+   ============================================================ */
+describe('全局奖励值已经被删掉（2026-10-12 家长拍板）', () => {
+  it('★ 设置里不许再有这三个字段', () => {
+    expect(
+      'checkInTierRatio' in DEFAULT_SETTINGS,
+      '阶梯倍率只在任务编辑里设，别加回设置页',
+    ).toBe(false)
+    expect(
+      'streakBonusPerDay' in DEFAULT_SETTINGS,
+      '连击「每天加几分」只在任务编辑里设',
+    ).toBe(false)
+    expect(
+      'streakBonusCap' in DEFAULT_SETTINGS,
+      '连击封顶只在任务编辑里设',
+    ).toBe(false)
+  })
+
+  it('对照：连击的**总开关**要留着（per-task 的开关管不了「整个功能关掉」）', () => {
+    expect('streakBonusEnabled' in DEFAULT_SETTINGS).toBe(true)
+    expect(DEFAULT_SETTINGS.streakBonusEnabled).toBe(true)
   })
 })

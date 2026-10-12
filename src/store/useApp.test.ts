@@ -20,7 +20,7 @@ import {
   useApp,
 } from './useApp'
 import { checkInPayout, currentDayKey } from '../domain/recurrence'
-import { DEFAULT_TIER_RATIO, MAX_TIER_RATIO, MIN_TIER_RATIO } from '../domain/tierRatio'
+import { MAX_TIER_RATIO, MIN_TIER_RATIO } from '../domain/tierRatio'
 import { periodKeyFor } from '../domain/time'
 import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
 import { REDEEM_PRICE_MIGRATIONS, SEED_REDEEM_ITEMS, SEED_TASKS } from '../domain/seedTasks'
@@ -371,9 +371,9 @@ describe('连击奖励只发长期任务', () => {
     expect(streakRows().length, '今日任务不该再多一条连击流水').toBe(before)
   })
 
-  it('★ 「每连击一天」改成 5 分，发出去的连击跟着变（设置真的接到了发分那一步）', async () => {
+  it('★ 这条任务设成「每连击一天 5 分」→ 发出去的连击跟着变（设置真的接到了发分那一步）', async () => {
     const task = periodTask()
-    await useApp.getState().updateSettings({ streakBonusPerDay: 5, streakBonusCap: 100 })
+    await useApp.getState().updateTask(task.id, { streakPerDay: 5, streakCap: 100 })
     await atDay(5)
     const day1 = await doPeriodTask(task.id)
     await atDay(6)
@@ -381,9 +381,9 @@ describe('连击奖励只发长期任务', () => {
     expect(day2 - day1, '每天 5 分 → 第 2 天多 10 分').toBe(10)
   })
 
-  it('★ 封顶压到 3 分 → 连击最多只多给 3 分', async () => {
+  it('★ 这条任务的封顶压到 3 分 → 连击最多只多给 3 分', async () => {
     const task = periodTask()
-    await useApp.getState().updateSettings({ streakBonusPerDay: 5, streakBonusCap: 3 })
+    await useApp.getState().updateTask(task.id, { streakPerDay: 5, streakCap: 3 })
     await atDay(5)
     const day1 = await doPeriodTask(task.id)
     await atDay(6)
@@ -430,31 +430,223 @@ describe('连击奖励只发长期任务', () => {
      2. **越界的值在「发分」那一刻被夹住。** 备份是用户能手改、也能从
         别处导入的 —— 只在输入框里夹等于没夹。 */
 
-  it('★ 老库里没有这两个字段 → 读出来是 2 / 20，不报错（加字段不需要迁移）', async () => {
-    const old: Record<string, unknown> = { ...DEFAULT_SETTINGS }
-    delete old.streakBonusPerDay
-    delete old.streakBonusCap
-    await setMeta('settings', old)
-
-    const loaded = await loadSettings()
-    expect(loaded.streakBonusPerDay, '缺字段必须回落到 2').toBe(2)
-    expect(loaded.streakBonusCap, '缺字段必须回落到 20').toBe(20)
-    // 对照：删这两个字段不该把别的字段一起带坏（否则「回落」是假的）
-    expect(loaded.childName).toBe(DEFAULT_SETTINGS.childName)
-  })
-
-  it('★ 设置里塞了越界的值 → 发出去的连击按夹紧后的算，不是按 9999 算', async () => {
-    // `updateSettings` 不夹（它只管写），夹的是「用」的时候 —— 这正是要验的。
-    await useApp.getState().updateSettings({ streakBonusPerDay: 9999, streakBonusCap: 9999 })
-
+  it('★ 老任务行上没有这两个字段 → 发出去按内置默认 2 / 20（加字段不需要迁移）', async () => {
+    /* ⚠️ 这条原来是「老**设置**里没有这两个字段」。2026-10-12 家长拍板
+       「不需要全局设定梯度、连续的。每个任务单独，有默认的就行了」，
+       设置里那两个字段删了，所以改成守**任务行**上的老样子 ——
+       老设备升级上来时，DB 里那条任务就是没有 `streakPerDay` / `streakCap` 两列的。
+       这正是「加可选字段不需要 Dexie 迁移」那条结论要守的场景。 */
     const task = periodTask()
+    // `undefined` 会让 Dexie 把键真的删掉（实测过），于是这条任务
+    // 在库里和一条老任务长得一模一样。
+    await useApp.getState().updateTask(task.id, { streakPerDay: undefined, streakCap: undefined })
+    expect(
+      useApp.getState().tasks.find((t) => t.id === task.id)!.streakPerDay,
+      '前提：字段确实被删掉了',
+    ).toBeUndefined()
+
     await atDay(5)
     const day1 = await doPeriodTask(task.id)
     await atDay(6)
     const day2 = await doPeriodTask(task.id)
-    // 夹紧后 = 每天最多 20、封顶 200 → 第 2 天 min(200, 2×20) = 40。
-    // 不夹的话是 min(9999, 2×9999) = 19998 —— 差 500 倍，一眼看得出来。
-    expect(day2 - day1, '9999 必须被夹成 40，不是 19998').toBe(40)
+    expect(day2 - day1, '缺字段 → 内置默认 2 分/天 → 第 2 天 4 分').toBe(4)
+  })
+})
+
+/* ============================================================
+   按任务覆盖奖励设置（2026-10-11）
+   ------------------------------------------------------------
+   家长问了两遍：「为什么任务编辑里还是没有编辑连续奖励和梯度奖励」。
+   以前这两样只能在「设置 → 规则」改，而且是**全局**的。
+   现在每条任务可以覆盖一份，优先级：**任务自己的 > 全局默认**。
+
+   这一组要守的不是「算术对不对」，而是**优先级有没有分叉** ——
+   同一条规则有三个读者：编辑器预览、家长审核卡、真正发分。
+   漏掉任何一处，家长在任务里设了 10 分，发出去的却是设置里的 2 分，
+   而且不报错。所以每条都同时验「设过 → 按任务的」和
+   「没设 → 按全局的」，只验一半等于没验。
+   ============================================================ */
+describe('按任务覆盖奖励设置', () => {
+  const atDay = async (day: number) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, day, 12, 0, 0))
+    await useApp.getState().refresh()
+  }
+
+  /** 完成一次长期任务，返回这次结算实发的分 */
+  async function doPeriodTask(taskId: string): Promise<number> {
+    await useApp.getState().submitPeriodTask(taskId, 10, undefined)
+    const inst = useApp
+      .getState()
+      .instances.filter((i) => i.taskId === taskId && i.status === 'submitted')
+      .at(-1)
+    expect(inst, '「记一次完成」该产出一条待审实例').toBeDefined()
+    return useApp.getState().reviewInstance(inst!.id, undefined, 10)
+  }
+
+  it('★ 这条长期任务单独设「每连一天 10 分」→ 发的是 10，不是设置里的 2', async () => {
+    const task = periodTask()
+    // 设置里保持默认 2 / 20 —— 只有任务自己那一份被改了。
+    await useApp.getState().updateTask(task.id, { streakPerDay: 10 })
+
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(task.id)
+
+    // 第 2 天连击 = min(cap 20, 2 天 × 10) = 20。按全局默认(2)算只会是 4。
+    expect(day2 - day1, '任务自己的 10 分必须生效').toBe(20)
+  })
+
+  it('★ 没设过的长期任务仍然按全局默认走（覆盖是「覆盖」，不是「全局替换」）', async () => {
+    const overridden = periodTask()
+    await useApp.getState().updateTask(overridden.id, { streakPerDay: 10 })
+
+    // 另找一条没设过的长期任务
+    const plain = useApp
+      .getState()
+      .tasks.find((t) => t.id !== overridden.id && !t.checkInEnabled && t.cycle !== 'daily' && t.cycle !== 'once')!
+
+    await atDay(5)
+    const day1 = await doPeriodTask(plain.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(plain.id)
+
+    expect(day2 - day1, '没设过 → 还是全局默认的 2 分/天 → 第 2 天 4 分').toBe(4)
+  })
+
+  it('★ 只设了 perDay、没设 cap → cap 仍走内置默认的 20（两个字段互相独立）', async () => {
+    const task = periodTask()
+    await useApp.getState().updateTask(task.id, { streakPerDay: 100 })
+
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(task.id)
+
+    // min(内置封顶 20, 2 天 × 任务自己的 100) = 20
+    expect(day2 - day1, 'cap 没设 → 用内置默认的 20').toBe(20)
+  })
+
+  it('★ 关掉覆盖（写回 undefined）→ 立刻回到全局默认，不留旧值', async () => {
+    const task = periodTask()
+    await useApp.getState().updateTask(task.id, { streakPerDay: 10 })
+    // 家长把开关关掉：编辑器会写 undefined。实测过 Dexie 的 update
+    // 收到 undefined 会**删掉**这个键 —— 这条测试就是钉住那个实测结论，
+    // 万一以后有人换成 `?? 0` 之类的写法，这里会红。
+    await useApp.getState().updateTask(task.id, { streakPerDay: undefined })
+
+    const after = useApp.getState().tasks.find((t) => t.id === task.id)!
+    expect(after.streakPerDay, 'undefined 必须真的把这个字段删掉').toBeUndefined()
+
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(task.id)
+    expect(day2 - day1, '回到全局默认 → 第 2 天 4 分').toBe(4)
+  })
+
+  it('★ 任务上塞了越界的 perDay → 发分那一刻夹住（不能只靠输入框）', async () => {
+    const task = periodTask()
+    // 直接 updateTask 绕过输入框 —— 导入的备份、手改的 IndexedDB 都走这条路
+    await useApp.getState().updateTask(task.id, { streakPerDay: 9999, streakCap: 9999 })
+
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+    await atDay(6)
+    const day2 = await doPeriodTask(task.id)
+    // 夹紧后 = 每天最多 20、封顶 200 → 第 2 天 min(200, 40) = 40
+    expect(day2 - day1, '9999 必须被夹成 40').toBe(40)
+  })
+
+  /* ---- 签到任务上的阶梯倍率覆盖 ----
+     这一条比连击更值得守：阶梯是**一次发三档**，倍率错了会一次性
+     多发或少发几十上百分，而且家长是照着编辑器上那个数字去信它的。 */
+
+  const W41 = '2026-W41'
+
+  async function seedProgress(
+    taskId: string,
+    days: string[],
+    pendingDays: string[],
+    claimedTiers: number[] = [],
+  ): Promise<void> {
+    await db.checkInProgress.put({
+      id: `cip_${taskId}_${W41}`,
+      taskId,
+      periodKey: W41,
+      days,
+      pendingDays,
+      claimedTiers,
+      updatedAt: Date.now(),
+    })
+    await useApp.getState().refresh()
+  }
+
+  /** 复刻家长审核卡那一行：读 store 的进度行 + 同一个 checkInPayout */
+  function cardSays(taskId: string, date: string): number {
+    const s = useApp.getState()
+    const task = s.tasks.find((t) => t.id === taskId)!
+    const row = s.checkInProgress.find((p) => p.taskId === taskId && p.periodKey === W41)
+    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], date).total
+  }
+
+  it('★ 这条签到任务单独设 20% → 阶梯按 20% 发，且「审核卡写的 = 实发的」', async () => {
+    const task = checkInTask()
+    /* 阶梯是 `unit × 1 / 3 / 6`，`unit = max(1, round(倍率 × 基础分 × 目标天数 / 10))`。
+       全局默认 0.8：unit = round(0.8×5×5/10) = 2 → 2 / 6 / 12。
+       单独压到 0.2：unit = round(0.2×5×5/10) = round(0.5) = 1 → **1 / 3 / 6**。
+       ⚠️ 注意不是 1/1/3 —— `unit` 有 `Math.max(1, …)` 兜底（否则小目标 + 小基础分
+       会算出「+0 分」的档位挂在界面上），所以 0.2 压到 1/3/6 就到底了，
+       这正是 `MIN_TIER_RATIO` 只能定在 0.2 的原因。 */
+    await useApp.getState().updateTask(task.id, { checkInTierRatio: 0.2 })
+
+    // 前两档领过，第 5 档还开着 → 这一签正好触发第 5 档
+    await seedProgress(task.id, ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08'], ['2026-10-09'], [1, 3])
+
+    const said = cardSays(task.id, '2026-10-09')
+    const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-09')
+
+    expect(said, '审核卡写的数 = 点下去实发的数（这是 2026-10-09 修过的那条不变量）').toBe(gained)
+    // 基础 5 + 第 5 档 6 = 11。若覆盖没生效（还按 0.8 算），第 5 档是 12 → 共 17。
+    expect(gained, '0.2 倍率下是 5 + 6 = 11，不是 0.8 倍率下的 17').toBe(11)
+  })
+
+  it('★ 没设过倍率的签到任务仍按全局默认发（不跟着上一条走）', async () => {
+    const overridden = checkInTask()
+    await useApp.getState().updateTask(overridden.id, { checkInTierRatio: 0.2 })
+
+    const plain = useApp.getState().tasks.find((t) => t.checkInEnabled && t.id !== overridden.id)!
+    await seedProgress(plain.id, ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08'], ['2026-10-09'], [1, 3])
+
+    const gained = await useApp.getState().approveCheckIn(plain.id, W41, '2026-10-09')
+    expect(gained, '没设过 → 全局 0.8 → 基础 5 + 第 5 档 12 = 17').toBe(17)
+  })
+
+  it('★ 编辑器里那几档「坚持的奖励阶梯」用的也是任务自己的倍率', async () => {
+    // `tiersFor` 是编辑器和任务页读的那个入口，它必须和发分走同一套优先级。
+    const task = checkInTask()
+    await useApp.getState().updateTask(task.id, { checkInTierRatio: 0.2 })
+    const def = useApp.getState().tasks.find((t) => t.id === task.id)!
+    const tiers = useApp.getState().tiersFor(def)
+
+    expect(tiers.map((t) => t.points), '0.2 倍率下是 1/3/6（unit 兜底到 1，压不下去了）').toEqual([1, 3, 6])
+
+    // 对照：另一条没设过的，仍按全局 0.8
+    const plain = useApp.getState().tasks.find((t) => t.checkInEnabled && t.id !== task.id)!
+    expect(useApp.getState().tiersFor(plain).map((t) => t.points), '没设过 → 2/6/12').toEqual([2, 6, 12])
+  })
+
+  it('★ 任务上塞了越界的倍率 → 发分那一刻夹住，而不是原样透传', async () => {
+    const task = checkInTask()
+    // 直接 updateTask 绕过输入框（导入的备份 / 手改的 IndexedDB 走的就是这条路）
+    await useApp.getState().updateTask(task.id, { checkInTierRatio: 99 })
+    const def = useApp.getState().tasks.find((t) => t.id === task.id)!
+
+    // 夹到 MAX_TIER_RATIO = 1.5 → unit = round(1.5×5×5/10) = round(3.75) = 4 → 4 / 12 / 24
+    expect(useApp.getState().tiersFor(def).map((t) => t.points), '99 必须被夹成 1.5').toEqual([4, 12, 24])
+    // 正向对照：确认它既不是「原样按 99 算」，也不是「悄悄回落到全局 0.8」
+    expect(useApp.getState().tiersFor(def).map((t) => t.points)).not.toEqual([2, 6, 12])
   })
 })
 
@@ -488,10 +680,12 @@ describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
     const s = useApp.getState()
     const task = s.tasks.find((t) => t.id === taskId)!
     const row = s.checkInProgress.find((p) => p.taskId === taskId && p.periodKey === periodKey)
-    // ⚠️ 倍率必须从 settings 读，不能写死默认值 —— 否则家长在设置里把
-    //    阶梯压到 20% 之后，这条「预告 = 实发」的不变量就被测试自己
-    //    放宽成了「预告 = 80% 那套数」，假的绿。
-    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], date, s.settings.checkInTierRatio).total
+    /* ⚠️ 倍率**只从 `task` 来**（2026-10-12 起设置里那个全局值删了），
+       而 `task` 正是上面 `.find()` 出来的那一条 —— 所以「家长在任务里
+       把阶梯压到 20%」之后，这条「预告 = 实发」的不变量自动跟着走。
+       原来这里传的是 `s.settings.checkInTierRatio`，设置删掉之后
+       如果改成写死 0.8，就把这条不变量偷偷放宽成「预告 = 80% 那套数」了。 */
+    return checkInPayout(task, row?.days ?? [], row?.claimedTiers ?? [], date).total
   }
 
   it('首日卡片写 7（基础 5 + 阶梯 2），实发也是 7 —— 老代码这里写 5 实发 7', async () => {
@@ -539,7 +733,7 @@ describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
 
     const s = useApp.getState()
     const row = s.checkInProgress.find((p) => p.taskId === task.id && p.periodKey === W41)!
-    const p = checkInPayout(task, row.days, row.claimedTiers, '2026-10-07', s.settings.checkInTierRatio)
+    const p = checkInPayout(task, row.days, row.claimedTiers, '2026-10-07')
     expect(p.base).toBe(5)
     expect(p.tierPoints).toBe(6)
     expect(p.total, '基础 5 + 第 3 档 6 = 11').toBe(11)
@@ -557,11 +751,10 @@ describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
     const task = checkInTask()
     await seed(task.id, [], [], ['2026-10-05'])
 
-    // 默认档：基础 5 + 第 1 档 2 = 7
-    expect(useApp.getState().settings.checkInTierRatio, '前提：默认倍率').toBe(DEFAULT_TIER_RATIO)
+    // 默认档：基础 5 + 第 1 档 2 = 7（任务没设倍率 → 用内置默认 0.8）
     expect(cardSays(task.id, W41, '2026-10-05')).toBe(7)
 
-    await useApp.getState().updateSettings({ checkInTierRatio: MIN_TIER_RATIO })
+    await useApp.getState().updateTask(task.id, { checkInTierRatio: MIN_TIER_RATIO })
 
     const shown = cardSays(task.id, W41, '2026-10-05')
     expect(shown, '压到下限后第 1 档从 2 变 1 → 5 + 1 = 6').toBe(6)
@@ -576,25 +769,45 @@ describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
     expect(rows.reduce((n, l) => n + l.delta, 0)).toBe(shown)
   })
 
-  it('★ 手动领阶梯也按设置里的倍率发（claimCheckInTier 不是按写死的 0.8）', async () => {
+  it('★ 手动领阶梯也按任务自己的倍率发（claimCheckInTier 不是按写死的 0.8）', async () => {
     const task = checkInTask()
-    await useApp.getState().updateSettings({ checkInTierRatio: MIN_TIER_RATIO })
-    await seed(task.id, ['2026-10-05'], [], [])
+    await useApp.getState().updateTask(task.id, { checkInTierRatio: MIN_TIER_RATIO })
 
-    // 默认档这里会是 2（第 1 档 = round(0.8×5×5/10)）
+    /* ⚠️⚠️ 周期键必须**现算**，不能像上面那几条一样写死 `W41`。
+       `claimCheckInTier` 内部用的是 `periodKeyFor(cycle, Date.now(), …)` ——
+       它不看测试塞进去的那个键。写死 `W41` 的话，这条测试**只在
+       「今天恰好落在 2026-W41」的那一周**是绿的：
+       2026-10-12（周一，日历翻进 W42）它自己就红了，而代码一行没动。
+       这类「跟着日历烂掉」的测试比没有测试更糟 —— 它会在某天突然变红，
+       让人以为自己改坏了，然后花时间去找一个不存在的 bug。 */
+    const pk = periodKeyFor(task.cycle, Date.now(), useApp.getState().settings.dayStartHour)
+    await db.checkInProgress.put({
+      id: `cip_${task.id}_${pk}`,
+      taskId: task.id,
+      periodKey: pk,
+      days: ['2026-10-05'],
+      pendingDays: [],
+      claimedTiers: [],
+      updatedAt: Date.now(),
+    })
+    await useApp.getState().refresh()
+
+    // 0.2 倍率下第 1 档 = round(0.2×5×5/10) → unit 兜底到 1；默认 0.8 时是 2
     expect(await useApp.getState().claimCheckInTier(task.id, 1)).toBe(1)
   })
 
-  it('tiersFor 跟着设置走 —— 编辑器预览 / 审核卡 / 发分共用同一个口径', async () => {
+  it('tiersFor 跟着任务自己的倍率走 —— 编辑器预览 / 审核卡 / 发分共用同一个口径', async () => {
     const task = checkInTask()
+    /** 改完倍率要拿**刷新后**的那条任务 —— `tiersFor` 读的是传进去的对象本身 */
+    const fresh = () => useApp.getState().tasks.find((t) => t.id === task.id)!
 
     expect(useApp.getState().tiersFor(task).map((t) => t.points)).toEqual([2, 6, 12])
 
-    await useApp.getState().updateSettings({ checkInTierRatio: MIN_TIER_RATIO })
-    expect(useApp.getState().tiersFor(task).map((t) => t.points)).toEqual([1, 3, 6])
+    await useApp.getState().updateTask(task.id, { checkInTierRatio: MIN_TIER_RATIO })
+    expect(useApp.getState().tiersFor(fresh()).map((t) => t.points)).toEqual([1, 3, 6])
 
-    await useApp.getState().updateSettings({ checkInTierRatio: MAX_TIER_RATIO })
-    expect(useApp.getState().tiersFor(task).map((t) => t.points)).toEqual([4, 12, 24])
+    await useApp.getState().updateTask(task.id, { checkInTierRatio: MAX_TIER_RATIO })
+    expect(useApp.getState().tiersFor(fresh()).map((t) => t.points)).toEqual([4, 12, 24])
   })
 
   it('倍率只影响阶梯那一段，基础分一分不动', async () => {
@@ -604,8 +817,8 @@ describe('签到：审核卡上写的数 = 点下去实际发的数', () => {
     //    那是测试脚手架的问题，不是被测行为的问题。
     for (const ratio of [MIN_TIER_RATIO, MAX_TIER_RATIO]) {
       await boot()
-      await useApp.getState().updateSettings({ checkInTierRatio: ratio })
       const task = checkInTask()
+      await useApp.getState().updateTask(task.id, { checkInTierRatio: ratio })
       await seed(task.id, ['2026-10-05'], [1], ['2026-10-06'])
       const gained = await useApp.getState().approveCheckIn(task.id, W41, '2026-10-06')
       expect(gained, `倍率 ${ratio} 下第 2 天都该是基础 5`).toBe(5)
@@ -2335,45 +2548,20 @@ describe('现金 : 积分 参考汇率', () => {
 })
 
 /* ============================================================
-   签到阶梯倍率（2026-10-10 家长要求「阶梯分设置」）
+   签到阶梯倍率 —— 这里原来有一组「设置页那个全局倍率」的测试
    ------------------------------------------------------------
-   家长原话：「坚持的奖励阶梯 … 为啥阶梯分 还是这么大。
-   另外阶梯分设置没有。」
+   原来守的是：默认 0.8 / 老库缺字段回落 / 改完能读回来。
 
-   和上面那个汇率**正好相反**：这个倍率是**参与计算**的。
-   所以这里守的是另一组事：
-   1. 默认 0.8 —— 老库升上来行为一字不变（原来写死的就是 0.8）；
-   2. 老库 / 老备份没有这个字段 → 回落到 0.8，不需要 Dexie 迁移；
-   3. **它真的会影响发分** —— 只改预览不改发分就等于这个设置是假的。
-      第 3 条在「签到：家长审核」那一组里用审核卡 + 账本钉过
-      （`★ 倍率压到下限 → 预告和实发一起变小`），这里不重复。
+   ⚠️ 2026-10-12 家长拍板「不需要全局设定梯度、连续的。每个任务单独，
+   有默认的就行了」—— `settings.checkInTierRatio` 这个字段整个删掉了，
+   于是那一组测试**没有被测对象了**，整组作废。它们守的那几件事
+   现在改由「按任务覆盖奖励设置」那一组接管：
+     · 默认 0.8        → `domain/tierRatio.test.ts` 的
+                          「任务没设 → 兜到 DEFAULT_TIER_RATIO」
+     · 老库缺字段回落   → 同上一组（老任务没有这一列 = 没设过）
+     · 改完能读回来     → `★ 保存 → 写进任务；再打开开关关掉保存 → 字段被真的删掉`
+     · 真的影响发分     → `★ 这条签到任务单独设 20% → 阶梯按 20% 发`
    ============================================================ */
-describe('签到阶梯倍率', () => {
-  beforeEach(async () => {
-    await boot()
-  })
-
-  it('默认 0.8 —— 就是原来写死在 defaultTiers 里的那个系数', () => {
-    expect(DEFAULT_SETTINGS.checkInTierRatio).toBe(DEFAULT_TIER_RATIO)
-    expect(useApp.getState().settings.checkInTierRatio).toBe(DEFAULT_TIER_RATIO)
-  })
-
-  it('老库里没有这个字段 → 读出来是 0.8，不报错（加字段不需要迁移）', async () => {
-    const old: Record<string, unknown> = { ...DEFAULT_SETTINGS }
-    delete old.checkInTierRatio
-    await setMeta('settings', old)
-
-    const loaded = await loadSettings()
-    expect(loaded.checkInTierRatio, '缺字段必须回落到默认值 0.8').toBe(DEFAULT_TIER_RATIO)
-  })
-
-  it('改完能读回来', async () => {
-    await useApp.getState().updateSettings({ checkInTierRatio: 0.4 })
-
-    expect((await loadSettings()).checkInTierRatio).toBe(0.4)
-    expect(useApp.getState().settings.checkInTierRatio).toBe(0.4)
-  })
-})
 
 /* ============================================================
    播种的并发闸门
