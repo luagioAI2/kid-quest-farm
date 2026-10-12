@@ -340,6 +340,24 @@ describe('连击奖励只发长期任务', () => {
 
   const streakRows = () => useApp.getState().ledger.filter((l) => l.source === 'streak_bonus')
 
+  it('★ 第 1 天不发连击 —— 那天界面上的徽章也不显示（两边共用 streakPaysOn）', async () => {
+    /* 这条盯的是**边界**：第 1 天算不算「连续」。
+       以前发分那边写的是 `streak <= 1 → 0`，而徽章那边写的是 `streak > 0`，
+       于是第 1 天**徽章挂着「连续 1 天」、分却一分不发** ——
+       界面承诺了一个发不出来的奖励。2026-10-12 家长拍板「第 1 天不显示徽章」，
+       判据收进 `domain/streakBonus.ts` 的 `streakPaysOn`，发分和徽章共用一个。
+       ⚠️ 上面那条「第 2 天比第 1 天多 4 分」其实也能拦住「第 1 天也发」，
+          但那是**算出来的副作用**，读的人看不出发分规则里还有一条边界；
+          这条把边界明说出来。 */
+    const task = periodTask()
+    await atDay(5)
+    const day1 = await doPeriodTask(task.id)
+
+    expect(selectStreak(useApp.getState()), '前提：已经连到第 1 天').toBe(1)
+    expect(streakRows().length, '第 1 天不该有连击流水').toBe(0)
+    expect(day1, '第 1 天只发基础分，不带连击').toBe(task.basePoints)
+  })
+
   it('★ 连到第 2 天，长期任务多拿一份连击（默认每天 2 分 → 多 4 分）', async () => {
     const task = periodTask()
     await atDay(5)

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # 变异验证：把每条新守卫「弄坏」，确认它真的会红。
-# 只读/只改工作区文件，跑完用 git checkout 还原到 HEAD。
+#
+# ⚠️ 还原用的是**跑之前的备份**，不是 `git checkout --`。
+#    早先那版 revert 是 `git checkout -- "$1"`，也就是「还原到 HEAD」——
+#    工作区里只要还有**没提交**的改动，它就会把那部分**一起抹掉**。
+#    2026-10-12 差一点踩上：当时正要验的几条守卫本身就还没提交。
+#    现在改成 mutate 前先 cp 一份，revert 从那份恢复 ——
+#    这样「工作区干净」不再是这个脚本的前提。
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -16,6 +22,9 @@ cd "$(dirname "$0")/.."
 #    「日志里明明写着 1 failed」都看不出来，只有 `cat -A` 才现形。
 #    教训：拿文本当判据之前，先确认那行文本长什么样（`cat -A`）。
 LOG=$(mktemp)
+BACKUP=$(mktemp -d)
+trap 'rm -rf "$BACKUP"' EXIT
+slot() { echo "$BACKUP/$(echo "$1" | tr '/' '_')"; }
 run() { NO_COLOR=1 npx vitest run --config vitest.config.ts "$1" -t "$2" >"$LOG" 2>&1 || true; }
 
 # 变异有效 = 至少跑了 1 条测试、且有测试失败。
@@ -45,6 +54,8 @@ check() { # name file testname
 }
 
 mutate() { # file python-expression
+  # 先备份**当前**（可能是未提交的）状态，revert 时从这里恢复
+  cp "$1" "$(slot "$1")"
   python - "$1" "$2" <<'PY'
 import io, sys
 p, kind = sys.argv[1], sys.argv[2]
@@ -77,6 +88,18 @@ reps = {
             <div className="anim-fade-in space-y-3 rounded-2xl border border-sun-300 bg-sun-50 p-3">"""),
  'm12': ("streakPerDay: isPeriod && streakOn ? effectiveStreakPerDay : undefined,",
          "streakPerDay: isPeriod ? effectiveStreakPerDay : undefined,"),
+ # ---- 2026-10-12 家长拍板「第 1 天不显示徽章」之后的四条 ----
+ # M13/M14 打的是**判据本身**，M15/M16 打的是**两个调用点**。
+ # 分开是故意的：判据对了、调用点写回 `> 0` 正是这次修的 bug 的形状，
+ # 只测判据拦不住它。
+ 'm13': ("export const STREAK_PAY_FROM_DAY = 2",
+         "export const STREAK_PAY_FROM_DAY = 1"),
+ 'm14': ("return streak >= STREAK_PAY_FROM_DAY",
+         "return streak > STREAK_PAY_FROM_DAY"),
+ 'm15': ("if (!streakPaysOn(streak)) return 0",
+         "if (streak < 0) return 0"),
+ 'm16': ("if (!streakPaysOn(streak)) return null",
+         "if (streak <= 0) return null"),
 }
 old, new = reps[kind]
 assert old in s, 'mutation target not found: ' + kind
@@ -84,13 +107,23 @@ io.open(p, 'w', encoding='utf-8', newline='').write(s.replace(old, new, 1))
 PY
 }
 
-revert() { git checkout -- "$1"; }
+# 从备份恢复（**不是** `git checkout --`，那会连未提交的改动一起抹掉）
+revert() {
+  cp "$(slot "$1")" "$1"
+  # 顺手确认真的还原了：变异没被清掉的话，后面的变异会叠在前一个上面，
+  # 结果全乱（而且不会有任何报错）。
+  if ! diff -q "$(slot "$1")" "$1" >/dev/null; then
+    echo "  ✗✗ 还原失败：$1 和备份不一致！后面几条变异不可信。"
+    exit 3
+  fi
+}
 
 T=src/domain/tierRatio.test.ts
 S=src/domain/streakBonus.test.ts
 E=src/features/tasks/TaskEditor.tiers.test.tsx
 U=src/store/useApp.test.ts
 D=src/db/db.test.ts
+B=src/features/tasks/StreakBadge.test.tsx
 
 echo "== M1 tierRatioFor 用 || 代替「只看 null =="
 mutate src/domain/tierRatio.ts m1; check "tierRatioFor 的 0 守卫" $T "0 也算"
@@ -139,6 +172,24 @@ revert src/features/tasks/TaskEditor.tsx
 echo "== M12 保存时不管连击开关 =="
 mutate src/features/tasks/TaskEditor.tsx m12; check "连击覆盖也要能关掉" $E "两个字段都被删掉"
 revert src/features/tasks/TaskEditor.tsx
+
+echo "== M13 起点常量改成 1（第 1 天也发）=="
+# ⚠️ `-t` 的值里**别放 `/`**：vitest 会把它当正则处理，容易出意外。
+#    用「天不发」这种不带斜杠的片段。
+mutate src/domain/streakBonus.ts m13; check "第 1 天不发" $S "天不发"
+revert src/domain/streakBonus.ts
+
+echo "== M14 \">=\" 写成 \">\"（起点变成 3）=="
+mutate src/domain/streakBonus.ts m14; check "第 2 天起发" $S "第 2 天起发"
+revert src/domain/streakBonus.ts
+
+echo "== M15 发分那边不再用共用判据 =="
+mutate src/store/useApp.ts m15; check "第 1 天不发连击" $U "第 1 天不发连击"
+revert src/store/useApp.ts
+
+echo "== M16 徽章写回 streak <= 0 =="
+mutate src/features/tasks/TaskPage.tsx m16; check "徽章第 1 天不显示" $B "第 1 天"
+revert src/features/tasks/TaskPage.tsx
 
 echo
 rm -f "$LOG"

@@ -102,7 +102,7 @@ import {
   produceUnitOf,
 } from '../domain/catalog'
 import { describeRedeemPayment, planRedeemPayment } from '../domain/redeem'
-import { streakCapFor, streakPerDayFor } from '../domain/streakBonus'
+import { streakCapFor, streakPaysOn, streakPerDayFor } from '../domain/streakBonus'
 import { tierRatioFor } from '../domain/tierRatio'
 import {
   advanceMarket,
@@ -3288,7 +3288,10 @@ async function maybePayStreakBonus(task: Pick<Task, 'streakPerDay' | 'streakCap'
      —— 在此之前它一直是错的，而且没有任何测试会红。 */
   const rows = await db.taskInstances.toArray()
   const streak = computeStreak(streakDaysOf(rows, s.tasks, s.settings.dayStartHour), today)
-  if (streak <= 1) return 0
+  /* ⚠️ 判据收在 `streakPaysOn` 里，**别在这里写 `streak <= 1`** ——
+     界面那个「🔥 连续 N 天」徽章用的是同一个函数（第 1 天不显示）。
+     两处各写一遍迟早走散：徽章挂出来了、分却没发。 */
+  if (!streakPaysOn(streak)) return 0
   /* ⚠️ 夹取必须在**这里**做，不能只靠设置页 / 任务编辑的输入框 ——
      导入的旧备份、手改的 IndexedDB、测试里直接 updateSettings 都能绕过输入框，
      而这两个值会变成账本里真实的分。

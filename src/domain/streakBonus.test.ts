@@ -6,9 +6,11 @@ import {
   MAX_STREAK_PER_DAY,
   MIN_STREAK_CAP,
   MIN_STREAK_PER_DAY,
+  STREAK_PAY_FROM_DAY,
   clampStreakCap,
   clampStreakPerDay,
   streakCapFor,
+  streakPaysOn,
   streakPerDayFor,
 } from './streakBonus'
 
@@ -110,5 +112,41 @@ describe('streakPerDayFor / streakCapFor —— 任务自己的，或者内置�
     // 它必须等于真正的默认，否则界面上会写一个不存在的数。
     expect(streakPerDayFor({})).toBe(DEFAULT_STREAK_PER_DAY)
     expect(streakCapFor({})).toBe(DEFAULT_STREAK_CAP)
+  })
+})
+
+/* ============================================================
+   连击从第几天开始发（2026-10-12 家长拍板）
+   ------------------------------------------------------------
+   这条判据有**两个读者**，所以必须只有一个定义：
+     · `useApp.maybePayStreakBonus` —— 决定发不发分
+     · `TaskPage` 那个「🔥 连续 N 天」徽章 —— 决定显不显示
+   以前是两边各写一份（发分写 `streak <= 1`、徽章写 `streak > 0`），
+   于是第 1 天**徽章挂着、分却不发** —— 界面承诺了一个发不出来的奖励。
+   家长原话：「第 1 天不显示徽章」。
+   ============================================================ */
+
+describe('连击从第几天开始发 —— 发分与徽章共用的那一个判据', () => {
+  it('起点是第 2 天（连到第 1 天只说明「今天做了」，第 2 天才叫「连续」）', () => {
+    expect(STREAK_PAY_FROM_DAY).toBe(2)
+  })
+
+  it('★ 第 0 / 1 天不发 —— 徽章也不显示', () => {
+    expect(streakPaysOn(0)).toBe(false)
+    expect(streakPaysOn(1)).toBe(false)
+  })
+
+  it('★ 第 2 天起发 —— 徽章从这天开始挂', () => {
+    expect(streakPaysOn(2)).toBe(true)
+    expect(streakPaysOn(3)).toBe(true)
+    expect(streakPaysOn(30)).toBe(true)
+  })
+
+  it('★ 边界卡死在 1 和 2 之间 —— 往两个方向改各有一条断言兜着', () => {
+    // 判据是 `>= STREAK_PAY_FROM_DAY`，起点常量 = 2。所以：
+    //   · 常量改成 1（第 1 天也发）→ 上一条 `streakPaysOn(1) === false` 红；
+    //   · `>=` 写成 `>`（起点变成 3）→ 上一条 `streakPaysOn(2) === true` 红。
+    // 也就是这个边界往哪边挪都会红，不是只测了一侧。
+    expect([0, 1, 2, 3].map(streakPaysOn)).toEqual([false, false, true, true])
   })
 })

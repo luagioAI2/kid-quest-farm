@@ -87,3 +87,31 @@ export function streakPerDayFor(task: Pick<Task, 'streakPerDay'>): number {
 export function streakCapFor(task: Pick<Task, 'streakCap'>): number {
   return clampStreakCap(task.streakCap)
 }
+
+/* ============================================================
+   从第几天开始发（2026-10-12 家长拍板）
+   ------------------------------------------------------------
+   算式是 `min(cap, 连击天数 × 每天分)`，但**第 1 天不发** ——
+   连到第 1 天只说明「今天做了」，连到第 2 天才叫「连续」。所以起点是 2。
+
+   ⚠️ 这个判据**有两个读者**，必须共用这一个函数：
+     · `useApp.maybePayStreakBonus` —— 决定**发不发分**
+     · `TaskPage` 里那个「🔥 连续 N 天」徽章 —— 决定**显不显示**
+   两处各写一遍 `streak > 1` 迟早走散：徽章挂出来了、分却没发，
+   就是「界面承诺了发不出来的东西」（`TaskPage` 顶上那句注释的原话）。
+   家长 2026-10-12 的原话：「第 1 天不显示徽章」。
+
+   ⚠️ 别把它改成 `>= 1`（第 1 天也发）—— 那等于每天第一条长期任务都白送
+   `perDay` 分，整体产出上调一档；要改先问家长。
+
+   ⚠️ 也**别拿它去管积分页那个「连续 7 天」成就的进度条** ——
+   那里第 1 天就该显示 1/7：它是进度，不是奖励承诺。
+   ============================================================ */
+
+/** 连击从第几天开始发分（含当天）。1 = 第一天就发；2 = 连到第二天才发。 */
+export const STREAK_PAY_FROM_DAY = 2
+
+/** 连到 `streak` 天时，这一天到底发不发连击分（同时决定徽章显不显示）。 */
+export function streakPaysOn(streak: number): boolean {
+  return streak >= STREAK_PAY_FROM_DAY
+}

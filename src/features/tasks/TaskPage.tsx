@@ -4,6 +4,7 @@ import { Portal } from '@/components/Portal'
 import { humanizeMinutes, CYCLE_HINT } from '@/domain/time'
 import { claimableTiers } from '@/domain/recurrence'
 import { previewPoints } from '@/domain/settlement'
+import { streakPaysOn } from '@/domain/streakBonus'
 import type { Task, TaskInstance } from '@/domain/types'
 import { STATUS_KID_LABEL } from '@/domain/types'
 import {
@@ -150,17 +151,19 @@ export default function TaskPage() {
           count={periodTasks.length}
           /* 「🔥 连续 N 天」挂这里，不挂「今日任务」头部。
              连击奖励只发给长期任务（2026-10-11 家长定），挂在今日任务那边
-             会让人以为做今日任务也能连击 —— 界面不该承诺发不出来的东西。 */
-          action={
-            streak > 0 ? (
-              <span className="flex shrink-0 items-center gap-1 rounded-pill bg-tangerine-100 px-2.5 py-1">
-                <span aria-hidden>🔥</span>
-                <span className="tnum font-display text-xs font-extrabold text-tangerine-500">
-                  连续 {streak} 天
-                </span>
-              </span>
-            ) : undefined
-          }
+             会让人以为做今日任务也能连击 —— 界面不该承诺发不出来的东西。
+
+             ⚠️ 2026-10-12 家长拍板：**第 1 天不显示这个徽章**。
+             真因是发分那边（`maybePayStreakBonus`）第 1 天**一分不发**，
+             第 2 天才开始发（2×2 = +4）。于是「连续 1 天」这个徽章会
+             **承诺一个发不出来的奖励**，正是上面那句
+             「界面不该承诺发不出来的东西」要防的事。家长原话：「第 1 天不显示徽章」。
+             ⚠️ 判据走 `streakPaysOn`，**别在这里写 `streak > 1`** ——
+             发分那边用的是同一个函数，两处各写一遍迟早走散
+             （徽章显示了、分却没发）。
+             ⚠️ 也别顺手把 `selectStreak` 一起改了 —— 积分页拿它算
+             「连续 7 天」那个成就的进度（1/7），那里**第 1 天就该显示**。 */
+          action={<StreakBadge streak={streak} />}
         >
           <div className="card-list">
             {periodTasks.map((t) => (
@@ -1239,6 +1242,28 @@ function dateKeyOf(d: Date): string {
 }
 
 /* ---------------- 分区标题 ---------------- */
+
+/* 「🔥 连续 N 天」徽章（长期任务区块右上角）。
+   ------------------------------------------------------------
+   抽成独立组件是为了能在 jsdom 里直接测「第 1 天不显示」——
+   `TaskPage` 自己读 store，整页渲染要把 IndexedDB 整套拖进来，太重。
+
+   ⚠️ 判据是 `streakPaysOn`，**别在这里改回 `streak > 0`**：
+   发分那边（`maybePayStreakBonus`）用的是同一个函数，第 1 天一分不发，
+   所以徽章那天也不该出现。家长 2026-10-12 原话：「第 1 天不显示徽章」。
+   2026-10-12 之前这里写的就是 `streak > 0`，于是第 1 天
+   **徽章挂着、分却不发** —— 界面承诺了一个发不出来的奖励。 */
+export function StreakBadge({ streak }: { streak: number }) {
+  if (!streakPaysOn(streak)) return null
+  return (
+    <span className="flex shrink-0 items-center gap-1 rounded-pill bg-tangerine-100 px-2.5 py-1">
+      <span aria-hidden>🔥</span>
+      <span className="tnum font-display text-xs font-extrabold text-tangerine-500">
+        连续 {streak} 天
+      </span>
+    </span>
+  )
+}
 
 function Section({
   title,

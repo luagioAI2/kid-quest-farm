@@ -444,14 +444,14 @@ try {
 
   // 【事实闸门】页面上写的「N 种作物 / N 种动物」必须对得上 `catalog.ts`。
   //
-  // ⚠️ 作物**故意允许两个读数**，因为「写 8 还是写 12」是一个**还没拍板的内容决定**
-  //    （`.workbuddy-ai/memory/MEMORY.md` 里记着「已把选择权交给家长，不要自己改」）：
-  //      8  = 只数一年生作物，即不带「花 🌸」「多年生 🌳」徽章的那批（`kind === 'annual'`）
-  //      12 = 全部作物（`CROPS.length`），也就是孩子在种子商店里数得到的数
-  //    两个都放行，但会把**当前用的是哪个读数**打出来 —— 真要改口径，
-  //    这条断言会跟着动，不会像以前那样悄悄挂着没人发现。
-  //    ⚠️ 别把它收成「必须等于 12」：那是替家长做决定。
-  // 动物没这个歧义（`ANIMALS` 5 条，全部能领养），所以走严格比对。
+  // 口径（2026-10-12 家长拍板）：**作物对外统一说 12**，即 `CROPS.length`，
+  // 也就是家长在种子商店里数得到的数。
+  //   · 曾有个「8」的读法：8 个 `kind === 'annual'` + 2 花 + 2 多年生，
+  //     App 会给后 4 个打「花 🌸」「多年生 🌳」徽章，所以「8」= 不带徽章的那批。
+  //     说得通，但家长自己一数会对不上（见 MEMORY.md 那条「未决」记录）。
+  //     家长看过两个读法之后选了 12，所以**这里不再放行 8**。
+  //   · `cropAnnual` 仍然算出来，只打在详情里当参照 —— 它不参与判定。
+  // 动物没这个歧义（`ANIMALS` 5 条，全部能领养），本来就走严格比对。
   //
   // 这里不引 TS 编译，直接在源码文本里数条目 —— 够用，而且改了立刻红。
   // ⚠️ 依赖「条目 4 空格缩进 + `id: '…'` / `kind: '…'`」这个排版约定；
@@ -479,12 +479,8 @@ try {
   check('数得出 catalog.ts 里的作物数（闸门的前提）', cropTotal > 0, `CROPS=${cropTotal}`)
   check('数得出 catalog.ts 里的动物数（闸门的前提）', animalTotal > 0, `ANIMALS=${animalTotal}`)
 
-  // 读数 → 人话。作物两读都收；动物只有一个读数。
   const readings = {
-    作物: new Map([
-      [cropAnnual, `只数一年生（不带花/多年生徽章的那批）`],
-      [cropTotal, `全部作物（商店里数得到的数）`],
-    ]),
+    作物: new Map([[cropTotal, `全部作物（商店里数得到的数）`]]),
     动物: new Map([[animalTotal, '全部动物']]),
   }
   const indexRaw = readFileSync(resolve(SITE_DIR, 'index.html'), 'utf8')
@@ -492,6 +488,7 @@ try {
     const claims = [...indexRaw.matchAll(new RegExp(`(\\d+) 种${label}`, 'g'))].map((m) => Number(m[1]))
     const used = [...new Set(claims)]
     const wrong = used.filter((n) => !allowed.has(n))
+    const aside = label === '作物' ? `；参照：只数一年生是 ${cropAnnual}` : ''
     check(
       `页面上「N 种${label}」的说法对得上代码（共 ${claims.length} 处）`,
       claims.length > 0 && wrong.length === 0,
@@ -499,7 +496,7 @@ try {
         ? `页面上一处「种${label}」都没提 —— 闸门形同虚设，要么补回来要么删掉这条断言`
         : wrong.length
           ? `写的是 ${wrong.join(' / ')}，代码里只有 ${[...allowed.keys()].join(' / ')}`
-          : used.map((n) => `${n}=${allowed.get(n)}`).join('；'),
+          : used.map((n) => `${n}=${allowed.get(n)}`).join('；') + aside,
     )
   }
 
