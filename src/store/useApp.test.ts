@@ -409,14 +409,22 @@ describe('连击奖励只发长期任务', () => {
     expect(day2 - day1, 'min(封顶 3, 2×5) = 3').toBe(3)
   })
 
-  it('★ 关掉开关 → 连击一分不发', async () => {
+  it('★ 把这条任务的「每连一天多给」设成 0 → 连击一分不发', async () => {
     const task = periodTask()
-    await useApp.getState().updateSettings({ streakBonusEnabled: false })
+    /* ⚠️ 2026-10-12 家长把设置里那个连击总开关删了（「不需要在家长设置里设定，
+       因为任务里已经可以单独设置了」），所以「关掉连击」现在**只剩一条路**：
+       把这条任务的每天分设成 0。
+       `maybePayStreakBonus` 里 `bonus = min(cap, 天 × 0) = 0` → `bonus <= 0`
+       直接 return 0，**连流水都不落**。
+
+       这条测试就是钉住「0 真的等于不发」—— 否则家长唯一的关法就失效了，
+       而且失效的方式很隐蔽：界面显示 0，分照发。 */
+    await useApp.getState().updateTask(task.id, { streakPerDay: 0 })
     await atDay(5)
     const day1 = await doPeriodTask(task.id)
     await atDay(6)
     const day2 = await doPeriodTask(task.id)
-    expect(day2 - day1, '开关关着就没有连击').toBe(0)
+    expect(day2 - day1, '每天分 0 → 连击加 0 分').toBe(0)
     expect(streakRows(), '也不该留下连击流水').toHaveLength(0)
   })
 

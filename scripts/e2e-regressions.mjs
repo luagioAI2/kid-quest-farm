@@ -849,9 +849,34 @@ try {
       )
       b?.click()
     })
-    await sleep(1400)
 
-    const afterPoints = target.title ? await pointsOfCard(target.title) : null
+    /*
+      ⚠️ 这里原来是 `await sleep(1400)` 然后直接断言 —— 那是一条**会飘**的探针。
+
+      2026-10-12 实测：同一份代码（`dist` 里 bundle 名逐字节相同，
+      `index-BkPCqw-N.js`）连跑三次，**两次红、一次绿**，
+      红的两次报的都是「改前 10 → 改后 10（期望 137）」。
+      当时差点误判成「某次改动把保存弄坏了」—— 拿「2 红 vs 1 绿」去归因，
+      在飘的用例上根本推不出结论（那次还专门把源码回退到 HEAD 复测，
+      结论是错的，白跑两轮）。
+
+      根因：保存要串起 `updateTask` → `syncLiveInstances` → `refresh()`，
+      机器一忙就超过 1400ms。那 1400ms 是**赌**，不是等待。
+
+      ➜ 改成「轮询到出现新值，或到 deadline 才判红」。
+        真的没生效时照样红（返回的还是旧值），只是不再因为**慢**而红。
+    */
+    const waitForPoints = async (title, want, ms) => {
+      const deadline = Date.now() + ms
+      let last = null
+      for (;;) {
+        last = await pointsOfCard(title)
+        if (last === want || Date.now() >= deadline) return last
+        await sleep(250)
+      }
+    }
+
+    const afterPoints = target.title ? await waitForPoints(target.title, NEW_POINTS, 6000) : null
 
     check(
       '退出了设置页、切回任务页',

@@ -74,7 +74,25 @@ reps = {
  'm6': ("const ratio = tierRatioFor(task)",
         "const ratio = tierRatioFor({})"),
  'm7': ("        {isPeriod && (", "        {true && ("),
- 'm8': ("{!settings.streakBonusEnabled && (", "{false && ("),
+ # M8 原来打的是「全局开关关着时编辑器要提醒」那条守卫 —— 2026-10-12 家长把
+ # 连击总开关整个删掉之后，那条守卫和目标文案一起不存在了。
+ # 改成打**新的**「设置页不许再有『连续完成奖励』那张卡」：
+ # 把卡原样加回去，守卫必须红。
+ # ⚠️ 锚点故意选到 `checked={settings.parentReviewEnabled}` 结尾（不带引号）——
+ #    锚点以 `"` 收尾时和三引号连在一起会写出 `\"""`，很难看也容易写错。
+ 'm8': ("""                <Toggle
+                  label="家长确认后才发积分"
+                  hint="孩子点「我做完啦」只是交上来，要用密码确认质量和奖励才真正到账"
+                  emoji="📮"
+                  checked={settings.parentReviewEnabled}""",
+        """                <Card title="连续完成奖励" emoji="🔥">
+                  <p>连着几天完成长期任务，每天多给一点分。</p>
+                </Card>
+                <Toggle
+                  label="家长确认后才发积分"
+                  hint="孩子点「我做完啦」只是交上来，要用密码确认质量和奖励才真正到账"
+                  emoji="📮"
+                  checked={settings.parentReviewEnabled}"""),
  'm9': ("export const TIER_RATIO_PRESETS = [0.2, 0.4, 0.6, 0.8, 1.0, 1.5] as const",
         "export const TIER_RATIO_PRESETS = [0.4, 0.4, 0.6, 0.8, 1.0, 1.5] as const"),
  'm10': ("return defaultTiers(task.cycle, target, task.basePoints, tierRatioFor(task))",
@@ -100,6 +118,21 @@ reps = {
          "if (streak < 0) return 0"),
  'm16': ("if (!streakPaysOn(streak)) return null",
          "if (streak <= 0) return null"),
+ # ---- 2026-10-12 第二轮：家长把连击总开关也删了，配两条「不许加回来」的变异 ----
+ # M17 打的是**字段层面**的护栏（db.test.ts 那条 `in DEFAULT_SETTINGS`）。
+ # ⚠️ vitest 用 esbuild 转译，**不做类型检查** —— 所以往对象字面量里塞一个
+ #    `AppSettings` 上不存在的键，运行时不会报错、测试照跑。
+ #    这正是我们要的：这条护栏必须在「类型系统被绕过」时也拦得住。
+ 'm17': ("  qualityBonusEnabled: true,\n  soundEnabled: true,",
+         "  qualityBonusEnabled: true,\n  streakBonusEnabled: true,\n  soundEnabled: true,"),
+ # M18 打的是**话术层面**：把那条指向已删控件的提醒加回去，守卫必须红。
+ # 这条对应本项目的老坑「删了功能不会通知文案」—— 官网承诺过删掉的功能十天。
+ # ⚠️ 必须写成 `{true && (`。第一版写成 `{false && (`，于是那段 JSX **根本没渲染**，
+ #    变异等于没做 —— 而 harness 只看到「跑了 1 条、全过」，报 GREEN ✗。
+ #    「变异没生效」和「守卫失效」看起来一样，是两码事：
+ #    这次是**变异错了**，不是守卫不行。改完重跑才是真的红。
+ 'm18': ("            {streakOn && (",
+         "            {true && (\n              <p>⚠️ 「设置 → 规则」里的连击奖励总开关现在关着 —— 这里设好了也不会发。</p>\n            )}\n            {streakOn && ("),
 }
 old, new = reps[kind]
 assert old in s, 'mutation target not found: ' + kind
@@ -124,13 +157,19 @@ E=src/features/tasks/TaskEditor.tiers.test.tsx
 U=src/store/useApp.test.ts
 D=src/db/db.test.ts
 B=src/features/tasks/StreakBadge.test.tsx
+G=src/features/settings/SettingsPage.noGlobalRewards.test.tsx
 
 echo "== M1 tierRatioFor 用 || 代替「只看 null =="
 mutate src/domain/tierRatio.ts m1; check "tierRatioFor 的 0 守卫" $T "0 也算"
 revert src/domain/tierRatio.ts
 
 echo "== M2 streakPerDayFor 用 || =="
+# ⚠️ 一条变异配**两条**断言：`|| undefined` 会把任务自己设的 0 当成「没设」，
+#    于是 (a) 域函数层面 0 守卫失效，(b) 端到端「把每天分设成 0 就不发连击」
+#    也失效。两条都验，才说明「0 = 关掉」这条路是真的通的 ——
+#    它现在是家长**唯一**的关法（总开关已删）。
 mutate src/domain/streakBonus.ts m2; check "streakPerDayFor 的 0 守卫" $S "0 也算"
+check "0 = 关掉（端到端）" $U "连击一分不发"
 revert src/domain/streakBonus.ts
 
 echo "== M3 保存时不管开关，永远写覆盖值 =="
@@ -153,9 +192,11 @@ echo "== M7 今日任务也渲染连击设置 =="
 mutate src/features/tasks/TaskEditor.tsx m7; check "今日任务不许有连击设置" $E "没有\*\*连击设置"
 revert src/features/tasks/TaskEditor.tsx
 
-echo "== M8 全局开关关着时不提醒 =="
-mutate src/features/tasks/TaskEditor.tsx m8; check "全局关着要提醒" $E "设了也不会发"
-revert src/features/tasks/TaskEditor.tsx
+echo "== M8 把「连续完成奖励」那张卡加回设置页 =="
+# 2026-10-12 改的目标：原来打的是「全局开关关着时编辑器要提醒」，
+# 总开关删掉之后那条守卫也没了。现在打**新的**「设置页不许再有这张卡」。
+mutate src/features/settings/SettingsPage.tsx m8; check "设置页不许有连击卡" $G "连续完成奖励"
+revert src/features/settings/SettingsPage.tsx
 
 echo "== M9 档位常量首项被改坏 =="
 mutate src/domain/tierRatio.ts m9; check "档位常量首尾=上下限" $T "首尾两项就是夹取上下限"
@@ -190,6 +231,14 @@ revert src/store/useApp.ts
 echo "== M16 徽章写回 streak <= 0 =="
 mutate src/features/tasks/TaskPage.tsx m16; check "徽章第 1 天不显示" $B "第 1 天"
 revert src/features/tasks/TaskPage.tsx
+
+echo "== M17 把连击总开关字段加回 DEFAULT_SETTINGS =="
+mutate src/db/db.ts m17; check "设置里不许再有这四个字段" $D "这四个字段"
+revert src/db/db.ts
+
+echo "== M18 把「总开关」那条提醒加回任务编辑器 =="
+mutate src/features/tasks/TaskEditor.tsx m18; check "编辑器不许再提总开关" $E "那个开关已经删了"
+revert src/features/tasks/TaskEditor.tsx
 
 echo
 rm -f "$LOG"

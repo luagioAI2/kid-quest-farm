@@ -404,7 +404,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   overtimeEnabled: true,
   minRatioForPoints: 0,
   qualityBonusEnabled: true,
-  streakBonusEnabled: true,
   soundEnabled: true,
   hapticsEnabled: true,
   onboardingDone: false,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { db } from '@/db/db'
 import { useApp } from '@/store/useApp'
@@ -398,19 +398,30 @@ describe('任务编辑器：单独设连击奖励（长期任务）', () => {
     expect(row.streakCap, 'cap 也要一起删掉（两个字段是一组）').toBeUndefined()
   })
 
-  it('★ 全局开关关着 → 编辑器要说出来「设了也不会发」，而不是默不作声', async () => {
-    await act(async () => {
-      await useApp.getState().updateSettings({ streakBonusEnabled: false })
-    })
+  it('★ 编辑器里不再提「全局总开关」—— 那个开关已经删了', async () => {
+    /* 2026-10-12 家长把设置里的连击总开关删了（「不需要在家长设置里设定，
+       因为任务里已经可以单独设置了」），所以这里原来那条
+       「总开关现在关着 —— 这里设好了也不会发」的红色提醒**整块删掉**。
+
+       留着它就是一句**指向虚空的话术**：指着一个已经不存在的控件，
+       让家长去那里打开。这正是本项目专门踩过的坑 ——
+       「删了功能不会通知文案」（官网把删掉的功能承诺了十天）。
+
+       ⚠️ 断言配正向对照：光断言「没提到总开关」是单向的，
+         连击那一整块没渲染也会让它绿。 */
     await openEdit(anyPeriodTask())
 
-    // ⚠️ 这块**照常渲染**（不渲染家长就找不到 —— 他正是因为找不到才来问的），
-    //    但必须挂一条实话。渲染了却不提醒 = 界面在承诺一件不会发生的事。
     expect(
-      screen.getByText(/连击奖励总开关现在/),
-      '全局关着时必须提醒，不能默默收下这个设置',
+      screen.queryByText(/连击奖励总开关/),
+      '总开关已经不存在了，别再提它',
+    ).toBeNull()
+    expect(screen.queryByText(/这里设好了也不会发/)).toBeNull()
+
+    // 正向对照：连击那块本身还在
+    expect(
+      screen.getByRole('button', { name: /单独设连击奖励/ }),
+      '连击设置本身没了 —— 上面那条「没提到总开关」就是假绿',
     ).toBeTruthy()
-    expect(screen.getByText(/这里设好了也不会发/)).toBeTruthy()
   })
 
   it('★ 今日任务上**没有**连击设置 —— 连击只给长期任务', async () => {

@@ -656,9 +656,13 @@ export function TaskEditor({
             不然会出现「卡片列在长期任务里、连击却不认它」。
             签到任务在这里**不出现**：它只走上面那套阶梯，两种奖励不会同时发。
 
-            ⚠️ 全局开关关着时必须说出来。不渲染这块 = 家长找不到（他就是
-            因为「找不到」才来问的）；渲染了却不提醒 = 界面在承诺一件
-            不会发生的事。所以：照常渲染，但顶上挂一条实话。 */}
+            ⚠️ 2026-10-12 家长把设置里那个「连击奖励总开关」删了（原话：「不需要在
+            家长设置里设定，因为任务里已经可以单独设置了」）。所以这里原来那条
+            「总开关现在关着，设了也不会发」的红色提醒**整块删掉了** ——
+            它指的控件已经不存在，留着就是一句指向虚空的话术。
+
+            现在连击**永远生效**，这块是唯一的设置入口。想给这条任务关掉：
+            把「每连一天多给」设成 **0**（`min(cap, 天 × 0) = 0`，等价于关掉）。 */}
         {isPeriod && (
           <div className="space-y-3">
             <SwitchRow
@@ -669,12 +673,6 @@ export function TaskEditor({
               onText={`连着几天完成，每多一天多给 ${effectiveStreakPerDay} 分，最多 ${effectiveStreakCap} 分`}
               offText={`不单独设，用默认的每连一天 +${defaultStreakPerDay} 分，最多 +${defaultStreakCap} 分`}
             />
-            {!settings.streakBonusEnabled && (
-              <p className="rounded-xl border border-berry-300 bg-berry-100 px-3 py-2 text-[11px] font-bold leading-relaxed text-berry-500">
-                ⚠️ 「设置 → 规则」里的连击奖励总开关现在<b>关着</b> —— 这里设好了也不会发。
-                想让连击生效，先去那里把它打开。
-              </p>
-            )}
             {streakOn && (
               <div className="anim-fade-in space-y-3 rounded-2xl border border-white bg-white/80 p-3">
                 <Field label="每连一天多给" emoji="➕">

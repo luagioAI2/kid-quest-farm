@@ -911,9 +911,14 @@ async function settleNow(
      判据用 `isPeriodTask`，和「长期任务」区块共用同一个谓词 —— 否则会
      出现「区块里列着它、连击却不发」这种两处口径打架。
      ⚠️ 必须查**任务定义**而不是 `inst.cycle`：单次 / 每日任务也有实例，
-     只看周期会漏判（签到任务同样有 cycle）。 */
+     只看周期会漏判（签到任务同样有 cycle）。
+
+     ⚠️ 2026-10-12 家长把设置里的连击总开关删了（「不需要在家长设置里设定，
+     因为任务里已经可以单独设置了」），所以这里**不再有 `settings.*` 闸门** ——
+     连击永远生效，发多少只看任务自己的 `streakPerDay` / `streakCap`。
+     想给单条任务关掉：把它的「每连一天多给」设成 0（算式 `min(cap, 天×0) = 0`）。 */
   let streakBonus = 0
-  if (settings.streakBonusEnabled && result.points > 0) {
+  if (result.points > 0) {
     const def = get().tasks.find((t) => t.id === inst.taskId)
     // 把任务传进去 —— 连击的「每天加几分 / 封顶」可以按任务设（2026-10-11）。
     if (def && isPeriodTask(def)) streakBonus = await maybePayStreakBonus(def)

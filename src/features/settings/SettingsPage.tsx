@@ -5,10 +5,11 @@ import { DEFAULT_PROFIT_RATIO } from '../../domain/catalog'
 import { QUALITY_META, QUALITY_ORDER, formatMultiplier } from '../../domain/settlement'
 import { clampPointsPerYuan, formatYuan, MAX_POINTS_PER_YUAN, MIN_POINTS_PER_YUAN } from '../../domain/cash'
 /* ⚠️ 2026-10-12：这里原来还 import 了 `TIER_RATIO_PRESETS` / `clampTierRatio` /
-   `clampStreak*` / `defaultTiers` / `isCheckInTask` —— 都是给「坚持的奖励阶梯」
-   那张卡和连击那两个输入框用的。家长拍板删掉那两处全局设置之后，
-   它们全部没有读者了。现在只剩「不设就用默认的 N 分」那一句要用解析器。 */
-import { streakCapFor, streakPerDayFor } from '../../domain/streakBonus'
+   `clampStreak*` / `defaultTiers` / `isCheckInTask` / `streakPerDayFor` /
+   `streakCapFor` —— 都是给「坚持的奖励阶梯」那张卡和「连续完成奖励」那张卡用的。
+   家长连着两轮把这两处全局设置整个删掉之后，它们**一个读者都没有了**。
+   ➜ 这就是「删了规则要连话术一起删」的 import 版：控件删了、import 忘了删，
+     是 `tsc`（`noUnusedLocals`）唯一能替你抓的一类残留。 */
 import { AVATAR_CHOICES } from '../../domain/avatars'
 import { humanizeAgo } from '../../domain/time'
 import { saveBlob, shareOrDownload } from '../../platform/files'
@@ -59,21 +60,19 @@ export default function SettingsPage({
    */
   const ratio = clampPointsPerYuan(settings.pointsPerYuan)
 
-  /* ⚠️ 2026-10-12 家长拍板「不需要全局设定梯度、连续的。每个任务单独，
-     有默认的就行了」，于是这里原来那三个全局值
-     （`tierRatio` / `streakPerDay` / `streakCap`）连同它们的两张卡一起删了。
-     现在这两样都只在**任务编辑**里设，不设就用 `domain/` 里的内置默认。
-     相关的说明见 `domain/tierRatio.ts` / `domain/streakBonus.ts` 的头注释。 */
+  /* ⚠️ 2026-10-12 家长连着两轮拍板，把**所有**全局奖励值都从设置里清掉了：
+     第一轮（删「值」）：「不需要全局设定梯度、连续的。每个任务单独，
+     有默认的就行了。」→ `tierRatio` / `streakPerDay` / `streakCap` 三个全局值删掉。
+     第二轮（删「连击总开关」）：「我是说家长设置里的删掉。不需要在家长设置里
+     设定。因为任务里已经可以单独设置了。」→ `streakBonusEnabled` 也删掉，
+     连字段一起（不只是控件）。
 
-  /**
-   * 连击卡上那句「不设就用默认的 N 分」里的 N。
-   *
-   * 走 `streakPerDayFor({})` / `streakCapFor({})`（空任务 = 没有任何覆盖），
-   * 而不是直接写 `DEFAULT_STREAK_PER_DAY` —— 万一默认值以后调了，
-   * 这里跟着变，不会留下一个说旧数的界面。
-   */
-  const defaultStreakPerDay = streakPerDayFor({})
-  const defaultStreakCap = streakCapFor({})
+     所以设置页现在**完全没有连击 / 阶梯倍率的痕迹**，两样都只在**任务编辑**里设，
+     不设就用 `domain/` 里的内置默认。相关的说明见
+     `domain/tierRatio.ts` / `domain/streakBonus.ts` 的头注释。
+
+     ⚠️ 别把任何一项加回来。留一个界面上看不见、却还在影响发分的全局值，
+     正是本项目最怕的那种 bug（界面看不到 ≠ 不会发生）。 */
 
   // 切到 data tab 时自动上锁，防止孩子趁家长没注意时导出/恢复/清空
   useEffect(() => {
@@ -304,41 +303,6 @@ export default function SettingsPage({
                   <p className="mt-2 text-xs font-bold leading-snug text-ink-500">
                     按每个任务的「基础积分」乘算。中间「良好」不加不减；
                     最差也只是扣光，不会变成负数。
-                  </p>
-                </Card>
-
-                <Card title="连续完成奖励" emoji="🔥">
-                  <p className="mb-3 text-sm text-ink-500">
-                    连着几天完成长期任务（每周 / 每月要做满几次的那种），每天多给一点分。
-                    签到任务不算 —— 它有自己的阶梯奖励，两种不会同时发。
-                  </p>
-                  {/* ⚠️ 这里**只剩一个总开关**了（2026-10-12 家长拍板）。
-                      原来还有「每连击一天多给 N 分」「一次最多加 N 分」两个输入框，
-                      家长原话：「不需要全局设定梯度、连续的。每个任务单独，
-                      有默认的就行了。」所以那两个框和它们背后的设置字段都删了 ——
-                      加多少改成在**每条长期任务**里单独设，不设就用内置默认。
-                      ⚠️ 别把输入框加回来：留一个界面上看不见、却还在影响发分的
-                      全局值，正是本项目最怕的那种 bug（界面看不到 ≠ 不会发生）。
-                      但总开关**要留**：per-task 的开关只能管单条任务，
-                      没有一个地方能把整个连击功能关掉的话，家长就只能一条条去关。 */}
-                  <div className="flex items-center gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-display text-base font-extrabold text-ink-900">
-                        开启
-                      </div>
-                      <div className="text-sm text-ink-500">关掉之后，长期任务只发基础分</div>
-                    </div>
-                    <Switch
-                      checked={settings.streakBonusEnabled}
-                      onChange={(v) => void updateSettings({ streakBonusEnabled: v })}
-                      disabled={!gateOpen}
-                      label="连续完成奖励"
-                    />
-                  </div>
-                  <p className="mt-3 text-xs font-bold leading-snug text-ink-400">
-                    加多少分在<b className="text-ink-600">每条长期任务</b>里单独设
-                    （打开任务 → 单独设连击奖励）；不设就用默认的每连一天 +{defaultStreakPerDay} 分、
-                    最多 +{defaultStreakCap} 分。已经发出去的分不会追回。
                   </p>
                 </Card>
 
