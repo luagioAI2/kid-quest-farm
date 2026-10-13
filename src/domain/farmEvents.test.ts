@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { farmMinutes, isAnimalExpired, rollAnimalEvent, rollHarvestEvent, seasonalBonus } from './farmEvents'
-import type { Animal, CropDef, Plot } from './types'
+import {
+  NEUTRAL_MULT,
+  farmMinutes,
+  isAnimalExpired,
+  rollAnimalEvent,
+  rollAnimalProduceEvent,
+  rollHarvestEvent,
+  seasonalBonus,
+} from './farmEvents'
+import { ANIMALS } from './catalog'
+import type { Animal, AnimalDef, CropDef, Plot } from './types'
 
 /* ============================================================
    农场随机事件引擎测试
@@ -20,6 +29,11 @@ import type { Animal, CropDef, Plot } from './types'
      2. **有硬上限** —— 单次最多 1.2 倍，撑不爆经济
      3. **分布是共享的** —— 期望倍率与作物 id 无关（没有「这作物更娇气」）
      4. **两头都要有** —— 绝收 1% 的「赌场感」 + 风调雨顺 10% 的惊喜
+
+   ⚠️ **第 3 条在 2026-10-12 被家长有意放宽了一次**，但只放宽了「动物 + 明写的效果」：
+   三个带 `trait` 的动物（田园犬 / 北极熊 / 长颈鹿）可以挡掉自己这一批的坏档。
+   放宽的边界写在文件末尾那组 `AnimalTrait` 用例里，改之前先读完。
+   **作物仍然一条都不能有** —— 上面「所有作物共用同一套分布」那条没动。
    ============================================================ */
 
 function mkPlot(index: number, harvestedCount = 0): Plot {
@@ -390,5 +404,249 @@ describe('isAnimalExpired —— 动物有寿命', () => {
     const born = 1_700_000_000_000
     // 12× 流速下，现实 10 分钟 = 农场 120 分钟 > 100
     expect(isAnimalExpired(mkAnimal({ bornAt: born }), 100, born + 10 * 60000, 12)).toBe(true)
+  })
+})
+
+/* ============================================================
+   特殊效果（2026-10-12 家长要求）
+   ------------------------------------------------------------
+   家长原话：
+
+   > 「也可以设定特殊效果。比如狗狗对某些事件预防，长颈鹿会有几率赐福丰收，
+   >   北极熊有几率抵御严寒之类的 你看情况设计。」
+
+   这是对 2026-09-15 那条「所有标的共用同一套分布」的**有意放宽**，
+   但只放宽了一半：**动物 + 明写在数据里的效果**可以，作物一条都不行。
+   这组用例守的就是放宽之后的四条边界：
+
+     1. 效果必须**写在 `AnimalDef.trait` 里**（不是藏在函数里）；
+     2. 效果**只能挡坏档** —— 写了好档一律变空操作，宁可无效也不许减产；
+     3. 挡掉之后按**中性档**结算，不是按 1（按 1 会超过满产，多出来的卖不掉）；
+     4. **幂等**，而且关掉事件开关时不生效（和作物同一条规矩）。
+
+   ⚠️ 别把「chance = 0 等于没有效果」那条删掉 —— 它是**反向验证**：
+   没有它，上面「效果真的生效」的断言有可能是空转（比如 warded 恒为 true 也能绿）。
+   ============================================================ */
+
+/** 一只最小可用的测试动物（产出物借用鸡蛋，不参与经济，只验机制） */
+const BASE_ANIMAL: AnimalDef = {
+  id: 'test-animal',
+  name: '测试兽',
+  emoji: '🐾',
+  babyEmoji: '🐾',
+  matureMinutes: 10,
+  cost: 100,
+  produceItemId: 'egg',
+  produceItemName: '蛋',
+  produceEmoji: '🥚',
+  produceIntervalMinutes: 60,
+  produceAmount: 4,
+  produceTimes: 5,
+}
+
+function mkProduceAnimal(id: string, animalId: string, produceCount = 0): Animal {
+  return {
+    id,
+    animalId,
+    name: animalId,
+    bornAt: 0,
+    lastFedAt: 0,
+    lastProduceAt: 0,
+    pendingProduce: 0,
+    produceCount,
+  } as unknown as Animal
+}
+
+describe('AnimalTrait —— 特殊效果只能挡坏档，不能加产量', () => {
+  /** 必定触发、只挡虫害的测试效果（chance 单独覆盖） */
+  const ALWAYS_PEST: AnimalDef['trait'] = {
+    name: '测试效果',
+    desc: '有几率把虫害挡在外面',
+    wardMsg: '把虫子挡在了外面',
+    emoji: '🛡️',
+    wards: ['pest'],
+    chance: 1,
+  }
+
+  /** 每批产出的**期望倍率**（含枯萎病那一档的 0） */
+  function meanMult(def: AnimalDef, n: number): number {
+    let sum = 0
+    for (let i = 0; i < n; i++) {
+      sum += rollAnimalProduceEvent(mkProduceAnimal(`a${i}`, def.id, 3), def, 1_700_000_000 + i, true)
+        .multiplier
+    }
+    return sum / n
+  }
+
+  /** 单次产出的**期望个数** —— 和 `useApp.collectAnimal` 同口径 */
+  function meanItems(def: AnimalDef, n: number): number {
+    const per = def.produceAmount || 1
+    let sum = 0
+    for (let i = 0; i < n; i++) {
+      const r = rollAnimalProduceEvent(mkProduceAnimal(`a${i}`, def.id, 3), def, 1_700_000_000 + i, true)
+      sum += r.wipedOut ? 0 : Math.max(0, Math.round(per * r.multiplier))
+    }
+    return sum / n
+  }
+
+  it('中性档倍率是「从表里取」的，不是另外写死一个 0.92', () => {
+    expect(NEUTRAL_MULT).toBe(0.92)
+    // 两边必须同源：作物的中性档就是这个常量
+    for (let i = 0; i < 3000; i++) {
+      const r = rollHarvestEvent(mkPlot(i, i), mkCrop(), 1_700_000_000 + i, true, i)
+      if (!r.event && !r.wipedOut) expect(r.multiplier).toBe(NEUTRAL_MULT)
+    }
+  })
+
+  it('关掉事件开关时，效果也不生效（连骰子都不掷）', () => {
+    const def: AnimalDef = { ...BASE_ANIMAL, trait: ALWAYS_PEST }
+    for (let i = 0; i < 300; i++) {
+      const r = rollAnimalProduceEvent(mkProduceAnimal(`o${i}`, def.id, i), def, 1_700_000_000 + i, false)
+      expect(r).toEqual({ multiplier: 1, wipedOut: false })
+    }
+  })
+
+  it('chance = 1 时声明过的坏档一个都漏不掉；没声明的照旧会来', () => {
+    // ⚠️ 这条同时钉两件事，缺一不可：
+    //   ① 声明过的 `pest` 在 chance = 1 下**一次都不能漏**；
+    //   ② 没声明的 `disease` / `weather_bad` **照旧发生** ——
+    //      否则说明效果被写成了「一键无敌」，而不是「按档位挡」。
+    // 只断言 ① 的话，一个「把所有坏档都挡掉」的实现也能绿。
+    const def: AnimalDef = { ...BASE_ANIMAL, trait: ALWAYS_PEST }
+    let warded = 0
+    const escaped = new Set<string>()
+    for (let i = 0; i < 5000; i++) {
+      const r = rollAnimalProduceEvent(mkProduceAnimal(`a${i}`, def.id, i), def, 1_700_000_000 + i, true)
+      if (r.warded) {
+        warded++
+        // 按 1 结算会让这一批超过满产，多出来的永远卖不掉（见 useApp.harvest 的甲）
+        expect(r.multiplier, '挡掉之后必须是中性档，不是 1').toBe(NEUTRAL_MULT)
+        expect(r.wipedOut).toBe(false)
+        expect(r.event?.kind).toBe('warded')
+        expect(r.event?.message).toContain(def.name)
+        expect(r.event?.refId).toBe(`a${i}`)
+        continue
+      }
+      if (r.event && !r.wipedOut) escaped.add(r.event.kind)
+    }
+    expect(warded, 'chance = 1 却一次都没挡到，说明 wards 或档位对不上').toBeGreaterThan(0)
+    expect(escaped.has('pest'), '声明了挡虫害，却还有虫害漏出来').toBe(false)
+    expect(escaped.has('disease'), '没声明挡病害，病害却不来了 —— 效果成了「一键无敌」').toBe(true)
+    expect(escaped.has('weather_bad'), '没声明挡风灾，风灾却不来了 —— 效果成了「一键无敌」').toBe(true)
+  })
+
+  it('挡掉之后这一批「一点没少」—— 产出正好等于满产，不会超过', () => {
+    const per = BASE_ANIMAL.produceAmount
+    // 中性档 round(4 × 0.92) = 4 = 满产。多一点就会变成卖不掉的库存。
+    expect(Math.round(per * NEUTRAL_MULT)).toBe(per)
+  })
+
+  it('chance = 0 等于完全没写效果 —— 逐次逐字段一致（反向验证）', () => {
+    const plain: AnimalDef = { ...BASE_ANIMAL }
+    const zero: AnimalDef = { ...BASE_ANIMAL, trait: { ...ALWAYS_PEST!, chance: 0 } }
+    for (let i = 0; i < 3000; i++) {
+      const a = rollAnimalProduceEvent(mkProduceAnimal(`a${i}`, plain.id, i), plain, 1_700_000_000 + i, true)
+      const b = rollAnimalProduceEvent(mkProduceAnimal(`a${i}`, zero.id, i), zero, 1_700_000_000 + i, true)
+      expect(b).toEqual(a)
+    }
+  })
+
+  it('带效果的动物期望产出确实更高 —— 不是白写一行数据', () => {
+    const plain: AnimalDef = { ...BASE_ANIMAL }
+    const withTrait: AnimalDef = { ...BASE_ANIMAL, trait: { ...ALWAYS_PEST!, chance: 0.6 } }
+    // 只挡虫害（p=0.15）时理论增量 = 0.15 × 0.6 × (4-3) = 0.09 个/次
+    expect(meanItems(withTrait, 6000)).toBeGreaterThan(meanItems(plain, 6000) + 0.05)
+  })
+
+  it('万一有人把好档写进 wards，效果会变成空操作 —— 绝不反过来减产', () => {
+    // `!isGood` 那道兜底就是为这个准备的：误声明由数据契约用例钓出来，
+    // 但不能让孩子的收成真的被扣掉。
+    const weird: AnimalDef = {
+      ...BASE_ANIMAL,
+      trait: { ...ALWAYS_PEST!, wards: ['weather_good'] },
+    }
+    const plain: AnimalDef = { ...BASE_ANIMAL }
+    for (let i = 0; i < 3000; i++) {
+      const a = rollAnimalProduceEvent(mkProduceAnimal(`a${i}`, weird.id, i), weird, 1_700_000_000 + i, true)
+      const b = rollAnimalProduceEvent(mkProduceAnimal(`a${i}`, plain.id, i), plain, 1_700_000_000 + i, true)
+      expect(a.multiplier).toBe(b.multiplier)
+    }
+  })
+
+  it('幂等：同一只动物、同一批产出，刷新多少次都是同一个结果', () => {
+    const def: AnimalDef = { ...BASE_ANIMAL, trait: { ...ALWAYS_PEST!, chance: 0.5 } }
+    for (let i = 0; i < 300; i++) {
+      const a = mkProduceAnimal('same-id', def.id, i)
+      expect(rollAnimalProduceEvent(a, def, 1_700_000_000 + i, true)).toEqual(
+        rollAnimalProduceEvent(a, def, 1_700_000_000 + i, true),
+      )
+    }
+  })
+
+  it('没有 trait 的动物仍然和作物共用同一套分布（放宽没波及它们）', () => {
+    const N = 20000
+    let cropSum = 0
+    for (let i = 0; i < N; i++) {
+      cropSum += rollHarvestEvent(mkPlot(i, i), mkCrop(), 1_700_000_000 + i, true, i).multiplier
+    }
+    const cropMean = cropSum / N
+    const untraited = ANIMALS.filter((a) => !a.trait)
+    expect(untraited.length, '没有一只普通动物了？那这条用例就没意义了').toBeGreaterThan(0)
+    for (const a of untraited) {
+      const m = meanMult(a, N)
+      expect(
+        Math.abs(m - cropMean),
+        `${a.name} 的期望倍率 ${m.toFixed(4)} 偏离作物 ${cropMean.toFixed(4)}`,
+      ).toBeLessThan(0.03)
+    }
+  })
+})
+
+describe('特殊效果的数据契约（catalog.ts）', () => {
+  /** 表里**真的会掷出来**的坏档。`harvest_poor` / `crop_died` 是枯萎病那条分支的，
+   *  不走 `pickTier`，挡它们没有意义（也挡不到）—— 所以不在白名单里。 */
+  const ROLLABLE_BAD = new Set(['pest', 'disease', 'weather_bad'])
+
+  it('三只带效果的动物都在，效果名对得上', () => {
+    const byId = new Map(ANIMALS.map((a) => [a.id, a]))
+    expect(byId.get('dog')?.trait?.name).toBe('看家')
+    expect(byId.get('polar-bear')?.trait?.name).toBe('御寒')
+    expect(byId.get('giraffe')?.trait?.name).toBe('赐福')
+  })
+
+  it('目前**只有三只**带效果 —— 加第四只之前先想清楚经济（见 catalog 文件头第 4 条）', () => {
+    expect(
+      ANIMALS.filter((a) => a.trait)
+        .map((a) => a.id)
+        .sort(),
+    ).toEqual(['dog', 'giraffe', 'polar-bear'])
+  })
+
+  it('效果只能挡「真的会掷出来的坏档」，概率在 (0, 1] 内，且不许重复', () => {
+    for (const a of ANIMALS) {
+      if (!a.trait) continue
+      const t = a.trait
+      expect(t.chance, `${a.name} 的概率 ${t.chance}`).toBeGreaterThan(0)
+      expect(t.chance, `${a.name} 的概率 ${t.chance}`).toBeLessThanOrEqual(1)
+      expect(t.wards.length, `${a.name} 一个档都没挡`).toBeGreaterThan(0)
+      expect(new Set(t.wards).size, `${a.name} 的 wards 有重复`).toBe(t.wards.length)
+      for (const w of t.wards) {
+        expect(ROLLABLE_BAD.has(w), `${a.name} 的 wards 里有挡不到的「${w}」`).toBe(true)
+      }
+    }
+  })
+
+  it('每个效果都能显示出来 —— 界面不能有一个说不出口的效果', () => {
+    // 「做了界面不说」和「界面承诺做不到的事」是同一种病：
+    // 孩子看不见效果，就学不到东西，这个效果等于白做。
+    for (const a of ANIMALS) {
+      if (!a.trait) continue
+      const t = a.trait
+      expect(t.name.length, `${a.name} 的效果没名字`).toBeGreaterThan(0)
+      expect(t.wardMsg.length, `${a.name} 的效果没有成功提示`).toBeGreaterThan(0)
+      expect(t.emoji.length, `${a.name} 的效果没有 emoji`).toBeGreaterThan(0)
+      // 效果是概率的，说明里必须写「有几率」—— 写成必定发生就是骗人
+      expect(t.desc, `${a.name} 的说明没写「有几率」`).toContain('有几率')
+    }
   })
 })

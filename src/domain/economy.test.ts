@@ -148,16 +148,22 @@ describe('配置表：上限回收与基准单价自洽', () => {
       'produce-tomato': '个',
       'produce-pumpkin': '个',
       'produce-watermelon': '个',
+      'produce-pineapple': '个',
       'produce-apple': '个',
       lemonade: '杯',
       'produce-sunflower': '朵',
       'produce-magic-bean': '颗',
+      'produce-cotton': '团',
+      'produce-plum': '颗',
       // 动物
       egg: '个',
       feather: '片',
       wool: '团',
       truffle: '颗',
       milk: '瓶',
+      bone: '根',
+      ice: '块',
+      leaf: '片',
     }
 
     for (const c of CROPS) {

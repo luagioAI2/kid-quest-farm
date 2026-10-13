@@ -1,4 +1,4 @@
-import type { Animal, CropDef, FarmEvent, Plot } from './types'
+import type { Animal, AnimalTrait, CropDef, FarmEvent, Plot } from './types'
 
 /* ============================================================
    农场随机事件引擎 —— 「像赌场下注一样」
@@ -134,6 +134,15 @@ const HARVEST_TIERS: Array<{
 const WITHER_P = 0.01
 
 /**
+ * 「什么都没发生」那一档的倍率（中性档）—— **从表里取，不要另写一个 0.92。**
+ *
+ * 特殊效果挡掉一次减产之后，就按这一档结算，语义是「这批一点没少」。
+ * 中性档和好档算出来的产出**本来就一样**（都顶到满产，见 `useApp.harvest` 的甲），
+ * 所以「挡掉减产」是这个模型里唯一能真实生效的增益 —— 加产量是零效果的。
+ */
+export const NEUTRAL_MULT = HARVEST_TIERS.find((t) => t.kind === 'none')!.lo
+
+/**
  * 从档位表里抽一档（**不含**枯萎病那一档，调用方自己先判）。
  *
  * 抽出来是为了让**作物和动物共用同一套分布** —— 两处各写一遍循环，
@@ -254,6 +263,8 @@ export interface AnimalProduceEventResult {
   multiplier: number
   /** 是否颗粒无收 */
   wipedOut: boolean
+  /** 这一次减产被特殊效果挡掉了吗（2026-10-12） */
+  warded?: boolean
   event?: FarmEvent
 }
 
@@ -284,7 +295,7 @@ export interface AnimalProduceEventResult {
  */
 export function rollAnimalProduceEvent(
   animal: Animal,
-  def: { name: string; produceItemName: string },
+  def: { name: string; produceItemName: string; trait?: AnimalTrait },
   now: number,
   enabled = true,
   salt = 0,
@@ -315,6 +326,38 @@ export function rollAnimalProduceEvent(
 
   // 中性档：不生成事件、不给提示 —— 大部分时候就该是「什么都没发生」
   if (kind === 'none') return { multiplier: mult, wipedOut: false }
+
+  /* --- 特殊效果：把这一次的减产挡掉（2026-10-12，见 `AnimalTrait`）---
+   *
+   * 三条刻意的写法：
+   *
+   * 1. **只有坏档才挡，而且只挡声明过的档。** `!isGood` 是**兜底**：
+   *    万一有人把 `weather_good` 写进 `wards`，这里会让它变成空操作，
+   *    而不是把 1.15 压到 0.92（那等于「特殊效果反而减产」）。
+   *    误声明由测试钓出来，不能让孩子吃亏。
+   * 2. **`seed + 11`** —— 和档位那一掷（`pickTier` 里的 `seed + 7`）、
+   *    文案那一掷（`seed + 3`）用不同的偏移，保证三掷互不相关。
+   * 3. **`NEUTRAL_MULT` 而不是 `1`。** 挡掉之后是「没损失」，不是「白赚」——
+   *    按 1 结算会让这一批**超过满产**，多出来的照样卖不掉（甲）。
+   *    而且中性档和好档算出来的产出本来就一样，按 1 是纯粹的账面自嗨。
+   */
+  const trait = def.trait
+  if (trait && !isGood && trait.wards.includes(kind) && hashRandom(seed + 11) < trait.chance) {
+    return {
+      multiplier: NEUTRAL_MULT,
+      wipedOut: false,
+      warded: true,
+      event: {
+        id: `ev-${seed}-wd`,
+        kind: 'warded',
+        message: `${def.name}${trait.wardMsg} —— 这批一点没少！`,
+        emoji: trait.emoji,
+        multiplier: NEUTRAL_MULT,
+        createdAt: now,
+        refId: animal.id,
+      },
+    }
+  }
 
   const pool = isGood ? ANIMAL_GOOD : ANIMAL_BAD
   const e = pool[Math.floor(hashRandom(seed + 3) * pool.length)]
@@ -425,6 +468,10 @@ export function eventEmoji(kind: FarmEvent['kind']): string {
       return '📉'
     case 'holiday_bonus':
       return '🎉'
+    case 'warded':
+      // 兜底。真发出来的事件自己带 `trait.emoji`（🛡️ / 🧣 / 🦒…），
+      // 这个分支只在有人手搓了一个不带 emoji 的 warded 事件时用到。
+      return '🛡️'
     default:
       return '❓'
   }

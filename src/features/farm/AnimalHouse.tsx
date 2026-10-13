@@ -129,7 +129,12 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
         <div className="grid size-16 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-sun-50">
           <span className="flex items-center text-2xl">
             {def.babyEmoji}
-            <span className="mx-0.5 text-xs text-ink-500">→</span>
+            {/* ⚠️ 有些动物没有幼崽 emoji（长颈鹿只有 🦒 一个），
+                这时 `babyEmoji === emoji`，硬画箭头会显示成「🦒 → 🦒」，
+                看着像 bug。所以相等就不画。 */}
+            {def.babyEmoji !== def.emoji ? (
+              <span className="mx-0.5 text-xs text-ink-500">→</span>
+            ) : null}
             {def.emoji}
           </span>
         </div>
@@ -137,6 +142,11 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <p className="font-display text-lg font-extrabold text-ink-900">{def.name}</p>
+            {def.trait ? (
+              <span className="shrink-0 rounded-full bg-grass-100 px-2 py-0.5 text-[11px] font-bold text-grass-700">
+                {def.trait.emoji} {def.trait.name}
+              </span>
+            ) : null}
             {def.fragility != null && def.fragility > 1 ? (
               <span className="text-[11px] font-bold text-berry-500">比较娇气</span>
             ) : null}
@@ -147,11 +157,24 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
             {def.produceAmount} {produceUnitOf(def.produceItemId)}
             {def.produceItemName}
           </p>
+          {/* 特殊效果必须在**买之前**说清楚。
+              藏起来的增益和做不到的承诺是同一种病：孩子看不见就学不到。 */}
+          {def.trait ? (
+            <p className="mt-1 text-xs font-bold text-grass-700">
+              {def.trait.emoji} {def.trait.desc}
+            </p>
+          ) : null}
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <CoinPill amount={def.cost} tone={affordable ? 'sun' : 'danger'} />
+            {/* ⚠️ 不满一天要按小时说。
+                原来恒写「约 {round(lifeHours / 24)} 天」——
+                小鸡（315 分钟 = 5 小时）会显示成「**能陪我们约 0 天**」，
+                小鸭也一样。界面说了句假话，还正好是最容易让人截图吐槽的那种。 */}
             {lifeHours > 0 ? (
               <span className="text-[11px] text-ink-500">
-                能陪我们约 {Math.round(lifeHours / 24)} 天
+                {lifeHours >= 24
+                  ? `能陪我们约 ${Math.round(lifeHours / 24)} 天`
+                  : `能陪我们约 ${lifeHours} 小时`}
               </span>
             ) : null}
             {perMinute > 0 ? (
@@ -288,6 +311,14 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
               {animal.name}
             </p>
             {!mature ? <span className="text-xs text-ink-500">幼崽</span> : null}
+            {/* 特殊效果挂在名字旁边 —— 孩子得知道「这只不一样」，
+                否则效果触发了（「小狗把虫子挡在了外面」）也不知道跟谁有关。
+                详细说明在领养那一栏，这里只放名字，省地方。 */}
+            {def?.trait ? (
+              <span className="shrink-0 rounded-full bg-grass-100 px-2 text-[11px] font-bold text-grass-700">
+                {def.trait.emoji} {def.trait.name}
+              </span>
+            ) : null}
             {sick ? (
               <span className="rounded-full bg-berry-200 px-2 text-xs font-bold text-berry-600">
                 生病

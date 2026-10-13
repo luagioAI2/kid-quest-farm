@@ -31,11 +31,29 @@ import type { ItemDef, CropDef, AnimalDef } from './types'
       不要再退回「靠寿命一直产」——旧模型下小鸡成本 40 能换回约 20000。
    3. **配置表数值是定的，实际产出会被灾害打折。** 灾害把产量期望压到
       约 0.9 倍，所以实测期望浮盈 +44%~+48%，而不是贴着 60% 上限。
-   4. **所有标的共用同一套灾害分布，没有「这作物更娇气」这回事。**
+   4. **默认共用同一套灾害分布；只有声明过的特殊效果能例外。**
       旧的 `CropDef.fragility` 已删除（2026-09-15）：一旦每个作物有自己的
       减产概率，上面那条「单价 = 上限回收 ÷ 满产」推出来的
       期望浮盈就不再统一，§5.6 那张表全部作废。要差异化请改**成本 / 次数 / 间隔**，
       不要偷偷加回一个概率倍率。
+
+      ⚠️ **2026-10-12 家长明确要求「特殊效果」，这条锁被有意放宽了一次。**
+      家长原话：「也可以设定特殊效果。比如狗狗对某些事件预防，长颈鹿会有几率
+      赐福丰收，北极熊有几率抵御严寒之类的 你看情况设计。」
+
+      放宽的**不是**「可以偷偷挂概率」，而是「可以明着挂，但要付代价」：
+
+        · 效果只能写在 `AnimalDef.trait` 里（见 `types.ts` 的 `AnimalTrait`），
+          不许藏在函数里 —— 这是「声明」和「偷偷」的区别；
+        · 效果**只能挡掉坏档**，不许加产量 —— 量过：中性档和好档算出来的
+          产出**一模一样**（都顶到满产），加产量是零效果，只会变成卖不掉的库存；
+        · 带效果的标的，期望浮盈必须**仍然落在 +40% ~ +55%**
+          （`economy.test.ts` 的「动物也吃减产骰子」替我们守着）。
+          实测三个带效果的动物都落在 **+50% ~ +51%**，比普通动物（+45%）高
+          5~6 个点 —— 那点差价就是「效果」的价格，不是白送的。
+        · 效果**只护自己这一批**，不是全农场光环。全农场光环会把所有标的的
+          期望浮盈一起抬上去，而 `economy.test.ts` 是直接调 `rollHarvestEvent`
+          模拟的 —— 它看不见「农场里有没有狗」，于是会**继续绿着说谎**。
    5. **成本必须是整数。** `postLedger` 里写着 `Math.round(entry.delta)` ——
       成本写成 2.5 的话，`plant()` 用 2.5 判余额、实际扣 3，账对不上。
       所以 B1 的推导里 `成本 = 满产 × 单价 ÷ 1.6` **必须落在整数上**，
@@ -129,6 +147,24 @@ export const CROPS: CropDef[] = [
     unlockLevel: 2,
   },
   {
+    id: 'cotton',
+    name: '棉花',
+    emoji: '🌸',
+    stageEmojis: ['🌱', '🌿', '🌼', '🌸'],
+    growMinutes: 10,
+    regrowMinutes: 4,
+    // 每分钟浮盈 **0.806** —— L2 的窗口只有 (胡萝卜 0.753, 南瓜 0.870)，
+    // 很窄。改 grow / regrow 之前先跑 `economy.test.ts` 那条阶梯用例。
+    // 满产 8 × 单价 5 = 上限 40 = 成本 25 × 1.6（整数，恰好）。
+    seedCost: 25,
+    harvestPoints: 20,
+    produceItemId: 'produce-cotton',
+    produceAmount: 4,
+    regrowCount: 2,
+    kind: 'annual',
+    unlockLevel: 2,
+  },
+  {
     id: 'tomato',
     name: '番茄',
     emoji: '🍅',
@@ -176,6 +212,27 @@ export const CROPS: CropDef[] = [
     kind: 'annual',
     unlockLevel: 4,
   },
+  {
+    id: 'pineapple',
+    name: '菠萝',
+    emoji: '🍍',
+    stageEmojis: ['🌱', '🌿', '🌾', '🍍'],
+    growMinutes: 40,
+    regrowMinutes: 14,
+    // 每分钟浮盈 **1.322** —— 必须高于西瓜（L4 的 1.165）、低于魔法豆（L6 的 1.983）。
+    //
+    // ⚠️ 它和西瓜的成本 / 上限**一模一样**（240 / 384），区别只在时间：
+    // 西瓜 30+3×21=93 分钟收 4 次，菠萝 40+3×14=82 分钟收 4 次 ——
+    // 同样投入，菠萝更快。所以它必须比西瓜**晚一档解锁**（L5 vs L4），
+    // 否则西瓜就没人买了。改 unlockLevel 之前先想清楚这件事。
+    seedCost: 240,
+    harvestPoints: 96,
+    produceItemId: 'produce-pineapple',
+    produceAmount: 4,
+    regrowCount: 4,
+    kind: 'annual',
+    unlockLevel: 5,
+  },
   /* ---------------- 多年生：一次种下，反复结果 ---------------- */
   {
     id: 'apple-tree',
@@ -207,6 +264,27 @@ export const CROPS: CropDef[] = [
     regrowCount: 10,
     kind: 'perennial',
     lifespanMinutes: 60 * 24 * 26,
+    unlockLevel: 5,
+  },
+  {
+    id: 'plum',
+    name: '西梅',
+    emoji: '🫐',
+    stageEmojis: ['🌱', '🌿', '🌳', '🫐'],
+    growMinutes: 60,
+    regrowMinutes: 36,
+    // 每分钟浮盈 **0.700** —— 多年生档的 L5，要高于苹果树（L4 的 0.523）。
+    // 落在柠檬树（0.655）之上、同一档位，所以这两棵树是「贵的更好」而不是互斥。
+    //
+    // ⚠️ emoji 里**没有西梅**。用 🫐 顶替（形状颜色最接近：深紫的小圆果）。
+    // 别改成 🍇 —— 那是葡萄，一串的，孩子一眼就看出不对。
+    seedCost: 375,
+    harvestPoints: 100,
+    produceItemId: 'produce-plum',
+    produceAmount: 4,
+    regrowCount: 6,
+    kind: 'perennial',
+    lifespanMinutes: 60 * 24 * 24,
     unlockLevel: 5,
   },
   {
@@ -246,6 +324,13 @@ export const CROPS: CropDef[] = [
  *
  * `lifespanMinutes` 已降级为纯展示（等于生产窗口），**不再决定产出**。
  * 老模型是「活 8 天、每 12 分钟下一个蛋」，小鸡成本 40 能换回约 20000 —— 已废弃。
+ *
+ * 成本推导和作物同源：`成本 = 满产 × 单价 ÷ 1.6`，满产 = `单次产量 × 产出次数`。
+ * 所以 `产出次数 × 单价` 必须是**偶数**，成本才落得到整数上
+ * （`db.postLedger` 会 `Math.round`，落不到整数就是「检查用 2.5、扣款用 3」）。
+ *
+ * 带 `trait` 的三只是 2026-10-12 加的（田园犬 / 北极熊 / 长颈鹿），
+ * 它们的期望浮盈是 +50%~+51%，比普通动物（+45%）高一档 —— 见文件头第 4 条。
  */
 export const ANIMALS: AnimalDef[] = [
   {
@@ -340,6 +425,101 @@ export const ANIMALS: AnimalDef[] = [
     fragility: 1.2,
     unlockLevel: 4,
   },
+
+  /* ---------------- 带特殊效果的动物（2026-10-12 家长要求） ----------------
+     ⚠️ 这三只的成本仍然按「满产 × 单价 ÷ 1.6」推，**没有为效果额外加价**。
+     效果让期望浮盈从 +45% 抬到 +50%~+51%（实测），那 5~6 个点就是效果的价钱。
+     想让某只更「值」就抬它的解锁等级，别去动成本 ——
+     动成本会连带改上限、改阶梯，见文件头第 4 条。
+     ---------------------------------------------------------------------- */
+  {
+    id: 'dog',
+    name: '田园犬',
+    emoji: '🐕',
+    babyEmoji: '🐶',
+    matureMinutes: 25,
+    // 满产 24 × 单价 12 = 上限 288 = 成本 180 × 1.6
+    cost: 180,
+    produceItemId: 'bone',
+    produceItemName: '小骨头',
+    produceEmoji: '🦴',
+    produceIntervalMinutes: 200,
+    produceAmount: 4,
+    produceTimes: 6,
+    lifespanMinutes: 1500,
+    fragility: 0.8,
+    unlockLevel: 3,
+    trait: {
+      name: '看家',
+      desc: '有几率把虫害和小病挡在外面，这一批就一点不少',
+      wardMsg: '把虫子和小病都挡在了外面',
+      emoji: '🛡️',
+      wards: ['pest', 'disease'],
+      // 0.6 → 实测挡掉 12.2% 的批次，期望浮盈 +51.0%
+      chance: 0.6,
+    },
+  },
+  {
+    id: 'polar-bear',
+    name: '北极熊',
+    emoji: '🐻‍❄️',
+    // 没有「北极熊幼崽」的 emoji，用 🐻（熊崽）—— 和 🐶→🐕 同一个套路
+    babyEmoji: '🐻',
+    matureMinutes: 50,
+    // 满产 32 × 单价 30 = 上限 960 = 成本 600 × 1.6
+    cost: 600,
+    produceItemId: 'ice',
+    produceItemName: '冰块',
+    produceEmoji: '🧊',
+    produceIntervalMinutes: 240,
+    produceAmount: 4,
+    produceTimes: 8,
+    lifespanMinutes: 2200,
+    fragility: 1,
+    unlockLevel: 4,
+    trait: {
+      name: '御寒',
+      desc: '有几率挡住寒潮，也少生受寒的小病',
+      wardMsg: '挡在风口上，严寒没能进来',
+      emoji: '🧣',
+      // ⚠️ `weather_bad` 在表里只有 4% —— 光挡它的话效果几乎看不见（实测 +1.5pt）。
+      // 所以把 `disease` 也算进来（「受寒容易生病」），两个一起才够得上一档。
+      wards: ['weather_bad', 'disease'],
+      // 0.7 → 实测挡掉 6.8% 的批次，期望浮盈 +50.2%
+      chance: 0.7,
+    },
+  },
+  {
+    id: 'giraffe',
+    name: '长颈鹿',
+    emoji: '🦒',
+    // ⚠️ emoji 里只有 🦒 一个长颈鹿，**没有幼崽版**。
+    // 所以 `babyEmoji === emoji` —— `AdoptRow` 里对这种情况会**不画那个「→」**，
+    // 否则商店里会出现「🦒 → 🦒」，看着像 bug。
+    babyEmoji: '🦒',
+    matureMinutes: 60,
+    // 满产 24 × 单价 50 = 上限 1200 = 成本 750 × 1.6
+    cost: 750,
+    produceItemId: 'leaf',
+    produceItemName: '树叶',
+    produceEmoji: '🍃',
+    produceIntervalMinutes: 300,
+    produceAmount: 4,
+    produceTimes: 6,
+    lifespanMinutes: 2100,
+    fragility: 0.6,
+    unlockLevel: 5,
+    trait: {
+      name: '赐福',
+      desc: '有几率赐福这一批，什么灾都不吃',
+      wardMsg: '赐福了这一批',
+      emoji: '🌈',
+      // 三个坏档全挡 —— 概率低一点（0.4），因为覆盖面最广
+      wards: ['pest', 'disease', 'weather_bad'],
+      // 0.4 → 实测挡掉 10.1% 的批次，期望浮盈 +50.4%
+      chance: 0.4,
+    },
+  },
 ]
 
 export const ITEMS: ItemDef[] = [
@@ -349,10 +529,13 @@ export const ITEMS: ItemDef[] = [
   { id: 'seed-rose', name: '玫瑰种子', emoji: '🌰', desc: '开花了可以反复摘，很受欢迎', rarity: 'common', speciesId: 'rose' },
   { id: 'seed-strawberry', name: '草莓种子', emoji: '🌰', desc: '甜甜的草莓，还能反复结果', rarity: 'common', speciesId: 'strawberry' },
   { id: 'seed-corn', name: '玉米种子', emoji: '🌰', desc: '金黄的玉米棒子', rarity: 'common', speciesId: 'corn' },
+  { id: 'seed-cotton', name: '棉花种子', emoji: '🌰', desc: '开完花会结出白白的棉桃', rarity: 'common', speciesId: 'cotton' },
   { id: 'seed-tomato', name: '番茄种子', emoji: '🌰', desc: '红彤彤的番茄', rarity: 'rare', speciesId: 'tomato' },
   { id: 'seed-pumpkin', name: '南瓜种子', emoji: '🌰', desc: '能长好大的南瓜', rarity: 'rare', speciesId: 'pumpkin' },
   { id: 'seed-watermelon', name: '西瓜种子', emoji: '🌰', desc: '夏天最想要的西瓜', rarity: 'rare', speciesId: 'watermelon' },
   { id: 'seed-apple-tree', name: '苹果树苗', emoji: '🌳', desc: '种一次，年年都有苹果摘', rarity: 'rare', speciesId: 'apple-tree' },
+  { id: 'seed-pineapple', name: '菠萝苗', emoji: '🌱', desc: '热带来的大菠萝，摘完还会再长', rarity: 'epic', speciesId: 'pineapple' },
+  { id: 'seed-plum', name: '西梅树苗', emoji: '🌳', desc: '结的果子酸酸甜甜', rarity: 'epic', speciesId: 'plum' },
   { id: 'seed-lemon-tree', name: '柠檬树苗', emoji: '🌳', desc: '结的柠檬能榨汁卖钱', rarity: 'epic', speciesId: 'lemon-tree' },
   { id: 'seed-sunflower', name: '向日葵种子', emoji: '🌰', desc: '会朝着太阳开花', rarity: 'epic', speciesId: 'sunflower' },
   { id: 'seed-magic-bean', name: '魔法豆种子', emoji: '✨', desc: '传说中的魔法豆，长得很慢但很值钱', rarity: 'epic', speciesId: 'magic-bean' },
@@ -363,6 +546,9 @@ export const ITEMS: ItemDef[] = [
   { id: 'baby-sheep', name: '小羊羔', emoji: '🐏', desc: '软绵绵的，会产羊毛', rarity: 'rare', animalId: 'sheep' },
   { id: 'baby-pig', name: '小猪仔', emoji: '🐖', desc: '会帮你找松露', rarity: 'rare', animalId: 'pig' },
   { id: 'baby-cow', name: '小牛犊', emoji: '🐮', desc: '长大后产牛奶', rarity: 'epic', animalId: 'cow' },
+  { id: 'baby-dog', name: '小狗崽', emoji: '🐶', desc: '长大后看家护院，帮你挡住虫害', rarity: 'rare', animalId: 'dog' },
+  { id: 'baby-polar-bear', name: '北极熊幼崽', emoji: '🐻', desc: '怕热不怕冷，会挡住寒潮', rarity: 'epic', animalId: 'polar-bear' },
+  { id: 'baby-giraffe', name: '长颈鹿幼崽', emoji: '🦒', desc: '脖子长长的，会赐福这一批收成', rarity: 'epic', animalId: 'giraffe' },
 
   // --- 收获产出物（**可卖**，是收入本体） ---
   { id: 'produce-radish', name: '小萝卜', emoji: '🥬', desc: '刚从地里拔出来的', rarity: 'common' },
@@ -370,6 +556,7 @@ export const ITEMS: ItemDef[] = [
   { id: 'rose-bloom', name: '玫瑰花', emoji: '🌹', desc: '可以送人，也可以卖掉', rarity: 'common' },
   { id: 'produce-strawberry', name: '草莓', emoji: '🍓', desc: '甜甜的，市场里很抢手', rarity: 'common' },
   { id: 'produce-corn', name: '玉米', emoji: '🌽', desc: '金灿灿的玉米棒', rarity: 'common' },
+  { id: 'produce-cotton', name: '棉花', emoji: '☁️', desc: '软软的，可以织布', rarity: 'common' },
   { id: 'produce-tomato', name: '番茄', emoji: '🍅', desc: '红彤彤的', rarity: 'rare' },
   { id: 'produce-pumpkin', name: '南瓜', emoji: '🎃', desc: '好大一个', rarity: 'rare' },
   { id: 'produce-watermelon', name: '西瓜', emoji: '🍉', desc: '夏天最想要的', rarity: 'rare' },
@@ -382,6 +569,11 @@ export const ITEMS: ItemDef[] = [
   { id: 'wool', name: '羊毛', emoji: '🧶', desc: '可以织毛衣', rarity: 'common' },
   { id: 'truffle', name: '松露', emoji: '🍄', desc: '很稀有的美味', rarity: 'rare' },
   { id: 'milk', name: '牛奶', emoji: '🥛', desc: '每天一杯长高高', rarity: 'common' },
+  { id: 'produce-pineapple', name: '菠萝', emoji: '🍍', desc: '酸甜多汁，摘完还会再长', rarity: 'rare' },
+  { id: 'produce-plum', name: '西梅', emoji: '🫐', desc: '深紫色的小果子', rarity: 'rare' },
+  { id: 'bone', name: '小骨头', emoji: '🦴', desc: '小狗在田里刨出来的', rarity: 'common' },
+  { id: 'ice', name: '冰块', emoji: '🧊', desc: '凉丝丝的，夏天最受欢迎', rarity: 'common' },
+  { id: 'leaf', name: '树叶', emoji: '🍃', desc: '从高高的树顶上够下来的', rarity: 'common' },
 
   // --- 收藏品（**不可卖**，只是纪念） ---
   { id: 'fertilizer', name: '神奇肥料', emoji: '💩', desc: '让作物立刻长大一截', rarity: 'rare' },
@@ -481,16 +673,22 @@ export const PRODUCE_BASE_PRICE: Record<string, number> = {
   'produce-tomato': 16,
   'produce-pumpkin': 6,
   'produce-watermelon': 24,
+  'produce-pineapple': 24,
   'produce-apple': 15,
   lemonade: 27,
   'produce-sunflower': 50,
   'produce-magic-bean': 53,
+  'produce-cotton': 5,
+  'produce-plum': 25,
   // 动物
   egg: 6,
   feather: 10,
   wool: 18,
   truffle: 37,
   milk: 35,
+  bone: 12,
+  ice: 30,
+  leaf: 50,
 }
 
 /** 市场里可以卖的产出，按展示顺序 */
@@ -523,16 +721,22 @@ export const PRODUCE_UNIT: Record<string, string> = {
   'produce-tomato': '个',
   'produce-pumpkin': '个',
   'produce-watermelon': '个',
+  'produce-pineapple': '个',
   'produce-apple': '个',
   lemonade: '杯',
   'produce-sunflower': '朵',
   'produce-magic-bean': '颗',
+  'produce-cotton': '团',
+  'produce-plum': '颗',
   // 动物
   egg: '个',
   feather: '片',
   wool: '团',
   truffle: '颗',
   milk: '瓶',
+  bone: '根',
+  ice: '块',
+  leaf: '片',
 }
 
 /**
