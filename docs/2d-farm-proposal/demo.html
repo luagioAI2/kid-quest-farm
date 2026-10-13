@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2D 农场 · 方案原型（DOM + SVG 精灵，零新依赖）</title>
+<style>
+  :root{
+    --paper:#fffaf2; --paper-2:#fdf3e3; --ink-900:#33281e; --ink-700:#5b4a3a;
+    --ink-500:#8a7663; --ink-300:#c9b8a4; --line:rgba(51,40,30,.10);
+    --grass:#16a34a; --grass-300:#86efac; --grass-500:#22c55e; --grass-700:#15803d;
+    --sun:#f59e0b; --sun-300:#fcd34d; --sun-500:#f59e0b;
+    --soil:#a37f5a; --soil-dark:#8a6a4a; --soil-rim:#7a5c3f;
+    --berry:#e11d48;
+    --shadow-flat:0 2px 0 rgba(51,40,30,.10);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink-900);
+    font-family:ui-rounded,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:24px 18px 56px}
+
+  h1{font-size:22px;margin:0 0 6px}
+  .sub{color:var(--ink-500);font-size:13px;margin:0 0 20px;line-height:1.7}
+
+  /* ---------- 舞台 ---------- */
+  .stage{position:relative;border:1px solid var(--line);border-radius:22px;
+    overflow:hidden;background:linear-gradient(180deg,#e8f5e9 0%,#f3f9ec 42%,var(--paper-2) 100%);
+    padding:14px;box-shadow:var(--shadow-flat)}
+  .sky{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+  .cloud{position:absolute;fill:#fff;opacity:.85}
+  .cloud.a{animation:drift 46s linear infinite;top:16px;left:-90px}
+  .cloud.b{animation:drift 68s linear infinite;top:52px;left:-140px;opacity:.6}
+  @keyframes drift{from{transform:translateX(0)}to{transform:translateX(1100px)}}
+
+  /* ⚠️ `grid-cols-3` 这个类名是刻意保留的：现有 4 个脚本靠
+     document.querySelector('div.grid.grid-cols-3 > button') 定位地块。
+     DOM 结构不变，e2e 与遮挡探针一行都不用改。 */
+  .grid{position:relative;display:grid;grid-template-columns:repeat(3,1fr);
+    gap:10px;margin-top:64px}
+  .grid.grid-cols-3{grid-template-columns:repeat(3,1fr)}
+  @media(min-width:640px){.grid{grid-template-columns:repeat(4,1fr)}}
+  @media(min-width:900px){.grid{grid-template-columns:repeat(6,1fr)}}
+
+  .plot{position:relative;aspect-ratio:1/1;border:0;padding:0;cursor:pointer;
+    background:none;border-radius:16px;transition:transform .12s ease}
+  .plot:active{transform:scale(.94)}
+  .plot .bed{position:absolute;inset:0}
+  .plot .crop{position:absolute;left:0;right:0;bottom:8%;height:76%;pointer-events:none;
+    transform-origin:50% 92%}
+  .plot.growing .crop{animation:sway 3.2s ease-in-out infinite}
+  @keyframes sway{0%,100%{transform:rotate(-1.6deg)}50%{transform:rotate(1.6deg)}}
+  .plot.mature .bed{filter:drop-shadow(0 0 12px rgba(245,158,11,.8)) brightness(1.06)}
+  .plot.mature::after{content:"";position:absolute;inset:-4px;border-radius:20px;
+    border:3px solid var(--sun-500);animation:pulse 1.5s ease-in-out infinite;pointer-events:none}
+  .plot.mature::before{content:"";position:absolute;right:2%;top:2%;width:14px;height:14px;
+    background:var(--sun-300);border-radius:50% 0 50% 50%;rotate:45deg;pointer-events:none;
+    animation:twinkle 1.5s ease-in-out infinite}
+  @keyframes twinkle{0%,100%{scale:.7;opacity:.5}50%{scale:1.15;opacity:1}}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+
+  .bar{position:absolute;left:16%;right:16%;bottom:11%;height:5px;border-radius:99px;
+    background:rgba(51,40,30,.14);overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--grass-500);border-radius:99px;
+    transition:width .3s linear}
+
+  .hint{position:absolute;left:50%;bottom:20%;translate:-50% 0;font-size:11px;font-weight:800;
+    color:var(--ink-700);background:rgba(255,250,242,.9);border-radius:99px;padding:1.5px 8px;
+    pointer-events:none;white-space:nowrap}
+
+  /* 飘字 / 特效 */
+  .float{position:absolute;left:50%;top:24%;translate:-50% 0;font-weight:800;font-size:15px;
+    color:var(--grass-700);pointer-events:none;animation:rise .95s ease-out forwards;z-index:5}
+  @keyframes rise{to{translate:-50% -34px;opacity:0}}
+  .drop{position:absolute;width:7px;height:10px;border-radius:0 60% 60% 60%;
+    background:#60a5fa;rotate:45deg;pointer-events:none;animation:fall .62s ease-in forwards}
+  @keyframes fall{from{translate:0 -26px;opacity:0}30%{opacity:1}to{translate:0 16px;opacity:0}}
+
+  /* ---------- 动物栏 ---------- */
+  .pen{position:relative;margin-top:14px;height:78px;border-radius:16px;
+    background:linear-gradient(180deg,#dff0d0,#cfe8bd);border:1px solid var(--line);overflow:hidden}
+  .pen .fence{position:absolute;inset:0;background:
+    repeating-linear-gradient(90deg,transparent 0 26px,rgba(122,92,63,.28) 26px 30px)}
+  .animal{position:absolute;bottom:10px;height:46px;animation:walk linear infinite}
+  @keyframes walk{from{translate:-60px 0}to{translate:820px 0}}
+  .animal.rev{animation-direction:reverse}
+  .animal.bob{animation-name:walk}
+  .animal svg{height:100%;animation:bob .5s ease-in-out infinite}
+  @keyframes bob{0%,100%{translate:0 0}50%{translate:0 -4px}}
+
+  /* ---------- 说明 ---------- */
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:18px}
+  .pick{display:flex;gap:8px}
+  .pick button{display:flex;align-items:center;gap:6px;border:1px solid var(--line);
+    background:#fff;border-radius:14px;padding:8px 12px;font:inherit;font-weight:700;
+    font-size:13px;cursor:pointer;box-shadow:var(--shadow-flat)}
+  .pick button[aria-pressed="true"]{background:var(--grass-300);border-color:var(--grass-700)}
+  .pick svg{height:22px;width:22px}
+
+  .notes{margin-top:26px;border-top:1px solid var(--line);padding-top:18px;
+    color:var(--ink-700);font-size:13.5px;line-height:1.85}
+  .notes h2{font-size:15px;margin:18px 0 8px;color:var(--ink-900)}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0 4px}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left}
+  th{background:var(--paper-2);font-weight:800}
+  code{background:var(--paper-2);padding:1px 5px;border-radius:5px;font-size:12px}
+  .good{color:var(--grass-700);font-weight:800}
+  .bad{color:var(--berry);font-weight:800}
+
+  @media(prefers-reduced-motion:reduce){
+    .cloud,.plot .crop,.plot.mature::after,.plot.mature::before,
+    .animal,.animal svg,.float,.drop{animation:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>2D 农场 · 方案原型</h1>
+  <p class="sub">
+    用 <b>DOM + 内联 SVG 精灵</b> 做出「QQ 农场」那种观感：地块、生长阶段、浇水、收获、动物走动。<br>
+    零新依赖、零外部请求。下面这 12 块地和现有 App 是<b>同一个 DOM 结构</b>
+    （<code>div.grid.grid-cols-3 &gt; button</code>），所以 4 个 e2e 脚本和遮挡探针都不用改。
+  </p>
+
+  <!-- 精灵表：所有图案都是内联 SVG，不用 emoji（emoji 粗细调不了） -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#bfe3ff"/><stop offset="1" stop-color="#e8f5e9"/>
+      </linearGradient>
+    </defs>
+
+    <!-- 地块底：翻好的土 -->
+    <symbol id="s-bed" viewBox="0 0 80 80">
+      <rect x="3" y="9" width="74" height="66" rx="16" fill="var(--soil-rim)"/>
+      <rect x="5" y="11" width="70" height="62" rx="14" fill="var(--soil)"/>
+      <g stroke="var(--soil-dark)" stroke-width="2.4" stroke-linecap="round" opacity=".55">
+        <path d="M16 30h48"/><path d="M14 42h52"/><path d="M18 54h44"/>
+      </g>
+      <g fill="#8f6c48" opacity=".5">
+        <circle cx="24" cy="24" r="2.2"/><circle cx="54" cy="36" r="1.9"/>
+        <circle cx="34" cy="62" r="2"/><circle cx="62" cy="58" r="1.7"/>
+      </g>
+    </symbol>
+
+    <!-- 已开垦但没种的空位：虚框 -->
+    <symbol id="s-empty" viewBox="0 0 80 80">
+      <rect x="6" y="12" width="68" height="60" rx="14" fill="#c9b8a4" opacity=".35"/>
+      <rect x="6" y="12" width="68" height="60" rx="14" fill="none"
+            stroke="var(--ink-300)" stroke-width="2.5" stroke-dasharray="7 6"/>
+      <path d="M40 34v12M34 40h12" stroke="var(--ink-500)" stroke-width="3"
+            stroke-linecap="round" opacity=".7"/>
+    </symbol>
+
+    <!-- ===== 胡萝卜：3 个生长阶段 ===== -->
+    <symbol id="s-carrot-1" viewBox="0 0 80 80">
+      <path d="M40 62V52" stroke="var(--grass-700)" stroke-width="3" stroke-linecap="round"/>
+      <path d="M40 56c-6-1-9-5-8-10 5 0 8 4 8 10Z" fill="var(--grass-500)"/>
+      <path d="M40 54c6-1 9-5 8-10-5 0-8 4-8 10Z" fill="var(--grass-300)"/>
+    </symbol>
+    <symbol id="s-carrot-2" viewBox="0 0 80 80">
+      <path d="M40 66V46" stroke="var(--grass-700)" stroke-width="3.4" stroke-linecap="round"/>
+      <g fill="var(--grass-500)">
+        <path d="M40 54c-8-2-12-8-10-15 7 1 11 7 10 15Z"/>
+        <path d="M40 50c8-2 12-8 10-15-7 1-11 7-10 15Z"/>
+      </g>
+      <path d="M40 58c-6-1-9-5-8-10 5 0 8 4 8 10Z" fill="var(--grass-300)"/>
+    </symbol>
+    <symbol id="s-carrot-3" viewBox="0 0 80 80">
+      <path d="M40 52V40" stroke="var(--grass-700)" stroke-width="3" stroke-linecap="round"/>
+      <g fill="var(--grass-500)">
+        <path d="M40 48c-10-2-14-9-12-18 9 1 13 9 12 18Z"/>
+        <path d="M40 44c10-2 14-9 12-18-9 1-13 9-12 18Z"/>
+        <path d="M40 52c-8-1-11-7-10-14 7 0 10 6 10 14Z"/>
+      </g>
+      <path d="M40 49c7 0 10 6 9 12-1 8-5 15-9 15s-8-7-9-15c-1-6 2-12 9-12Z" fill="#f97316"/>
+      <path d="M40 51c-4 1-6 6-5 11" stroke="#ea580c" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <g stroke="#ea580c" stroke-width="1.5" stroke-linecap="round" opacity=".65">
+        <path d="M33 56h14"/><path d="M35 63h10"/>
+      </g>
+    </symbol>
+
+    <!-- ===== 小麦：3 个生长阶段 ===== -->
+    <symbol id="s-wheat-1" viewBox="0 0 80 80">
+      <g stroke="var(--grass-500)" stroke-width="3" stroke-linecap="round" fill="none">
+        <path d="M32 62V54"/><path d="M48 62V56"/>
+      </g>
+    </symbol>
+    <symbol id="s-wheat-2" viewBox="0 0 80 80">
+      <g stroke="var(--grass-500)" stroke-width="3.2" stroke-linecap="round" fill="none">
+        <path d="M30 64V44"/><path d="M40 64V40"/><path d="M50 64V46"/>
+      </g>
+      <g fill="var(--grass-300)">
+        <path d="M30 50c-5-1-7-4-6-8 4 0 6 3 6 8Z"/><path d="M50 52c5-1 7-4 6-8-4 0-6 3-6 8Z"/>
+      </g>
+    </symbol>
+    <symbol id="s-wheat-3" viewBox="0 0 80 80">
+      <g stroke="#ca8a04" stroke-width="3.2" stroke-linecap="round" fill="none">
+        <path d="M28 64V40"/><path d="M40 64V34"/><path d="M52 64V40"/>
+      </g>
+      <g fill="#eab308">
+        <ellipse cx="28" cy="36" rx="4.4" ry="7"/><ellipse cx="40" cy="30" rx="4.6" ry="7.6"/>
+        <ellipse cx="52" cy="36" rx="4.4" ry="7"/>
+      </g>
+      <g fill="#fde047">
+        <ellipse cx="28" cy="30" rx="3" ry="4.4"/><ellipse cx="40" cy="24" rx="3.1" ry="4.8"/>
+        <ellipse cx="52" cy="30" rx="3" ry="4.4"/>
+      </g>
+    </symbol>
+
+    <!-- ===== 番茄：3 个生长阶段 ===== -->
+    <symbol id="s-tomato-1" viewBox="0 0 80 80">
+      <path d="M40 64V54" stroke="var(--grass-700)" stroke-width="3" stroke-linecap="round"/>
+      <path d="M40 58c-5-1-8-4-7-9 4 0 7 4 7 9Z" fill="var(--grass-500)"/>
+      <path d="M40 57c5-1 8-4 7-9-4 0-7 4-7 9Z" fill="var(--grass-300)"/>
+    </symbol>
+    <symbol id="s-tomato-2" viewBox="0 0 80 80">
+      <path d="M40 66V44" stroke="var(--grass-700)" stroke-width="3.2" stroke-linecap="round"/>
+      <g fill="var(--grass-500)">
+        <path d="M40 56c-9-1-13-7-12-15 8 0 12 7 12 15Z"/>
+        <path d="M40 52c9-1 13-7 12-15-8 0-12 7-12 15Z"/>
+      </g>
+      <g fill="#fef08a"><circle cx="30" cy="46" r="2.6"/><circle cx="50" cy="44" r="2.6"/></g>
+    </symbol>
+    <symbol id="s-tomato-3" viewBox="0 0 80 80">
+      <path d="M40 66V42" stroke="var(--grass-700)" stroke-width="3.4" stroke-linecap="round"/>
+      <g fill="var(--grass-500)">
+        <path d="M40 54c-10-1-14-8-13-17 9 0 13 8 13 17Z"/>
+        <path d="M40 50c10-1 14-8 13-17-9 0-13 8-13 17Z"/>
+      </g>
+      <g>
+        <circle cx="29" cy="46" r="6.4" fill="#ef4444"/>
+        <circle cx="51" cy="43" r="6.4" fill="#dc2626"/>
+        <circle cx="40" cy="54" r="5.6" fill="#f87171"/>
+        <g fill="var(--grass-700)">
+          <path d="M29 40l2.6 2.4L29 45l-2.6-2.6Z"/><path d="M51 37l2.6 2.4L51 42l-2.6-2.6Z"/>
+        </g>
+      </g>
+    </symbol>
+
+    <!-- 枯萎 -->
+    <symbol id="s-dead" viewBox="0 0 80 80">
+      <path d="M40 64V50" stroke="#8a7663" stroke-width="3" stroke-linecap="round"/>
+      <g stroke="#a89478" stroke-width="3" stroke-linecap="round" fill="none">
+        <path d="M40 56c-7 0-10-4-11-9"/><path d="M40 54c7 0 10-4 11-9"/>
+      </g>
+    </symbol>
+
+    <!-- 动物 -->
+    <symbol id="s-dog" viewBox="0 0 64 48">
+      <ellipse cx="30" cy="30" rx="18" ry="11" fill="#c8a27a"/>
+      <circle cx="47" cy="21" r="9" fill="#d8b48e"/>
+      <path d="M42 13l-2-8 6 4Z" fill="#a87f52"/><path d="M52 13l2-8-6 4Z" fill="#a87f52"/>
+      <circle cx="50" cy="20" r="1.7" fill="#33281e"/><circle cx="45" cy="20" r="1.7" fill="#33281e"/>
+      <ellipse cx="47" cy="26" rx="3.4" ry="2.6" fill="#fff"/>
+      <circle cx="47" cy="26" r="1.6" fill="#33281e"/>
+      <path d="M22 38l-3 7M34 38l3 7" stroke="#a87f52" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M13 24c-6-4-8 2-4 5" stroke="#c8a27a" stroke-width="4" stroke-linecap="round" fill="none"/>
+    </symbol>
+    <symbol id="s-chicken" viewBox="0 0 64 48">
+      <ellipse cx="30" cy="30" rx="15" ry="11" fill="#fffdf8"/>
+      <circle cx="43" cy="20" r="7.6" fill="#fffdf8"/>
+      <path d="M43 11c-2-4 1-6 3-3 2-3 4-1 2 3Z" fill="#ef4444"/>
+      <circle cx="45" cy="19" r="1.6" fill="#33281e"/>
+      <path d="M50 21l7 2-7 2Z" fill="#f59e0b"/>
+      <ellipse cx="26" cy="32" rx="8" ry="6" fill="#f1e6d4"/>
+      <path d="M30 40l-2 6M22 40l2 6" stroke="#f59e0b" stroke-width="2.8" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="s-bear" viewBox="0 0 64 48">
+      <ellipse cx="30" cy="29" rx="18" ry="12" fill="#fffdf8"/>
+      <circle cx="47" cy="20" r="9.4" fill="#fffdf8"/>
+      <circle cx="42" cy="12" r="3.6" fill="#e8e2d6"/><circle cx="52" cy="12" r="3.6" fill="#e8e2d6"/>
+      <circle cx="50" cy="19" r="1.8" fill="#33281e"/><circle cx="44" cy="19" r="1.8" fill="#33281e"/>
+      <ellipse cx="47" cy="25" rx="3.2" ry="2.4" fill="#d8d2c6"/>
+      <circle cx="47" cy="24" r="1.5" fill="#33281e"/>
+      <path d="M20 39l-2 6M32 39l2 6" stroke="#e8e2d6" stroke-width="4" stroke-linecap="round"/>
+    </symbol>
+  </svg>
+
+  <!-- ---------- 舞台 ---------- -->
+  <div class="stage">
+    <div class="sky">
+      <svg class="cloud a" width="86" height="30" viewBox="0 0 86 30">
+        <ellipse cx="26" cy="20" rx="24" ry="10"/><ellipse cx="46" cy="14" rx="20" ry="13"/>
+        <ellipse cx="64" cy="21" rx="18" ry="8"/>
+      </svg>
+      <svg class="cloud b" width="66" height="24" viewBox="0 0 86 30">
+        <ellipse cx="26" cy="20" rx="24" ry="10"/><ellipse cx="50" cy="15" rx="22" ry="12"/>
+      </svg>
+    </div>
+
+    <div class="grid grid-cols-3" id="grid"></div>
+
+    <div class="pen" id="pen">
+      <div class="fence"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <span style="font-size:13px;font-weight:700;color:var(--ink-500)">种什么：</span>
+    <div class="pick" id="pick">
+      <button data-crop="carrot" aria-pressed="true">
+        <svg viewBox="0 0 80 80"><use href="#s-carrot-3"/></svg>胡萝卜</button>
+      <button data-crop="wheat" aria-pressed="false">
+        <svg viewBox="0 0 80 80"><use href="#s-wheat-3"/></svg>小麦</button>
+      <button data-crop="tomato" aria-pressed="false">
+        <svg viewBox="0 0 80 80"><use href="#s-tomato-3"/></svg>番茄</button>
+    </div>
+    <button class="pick" id="reset" style="border:1px solid var(--line);background:#fff;border-radius:14px;padding:8px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;box-shadow:var(--shadow-flat)">全部重来</button>
+  </div>
+
+  <div class="notes">
+    <h2>这个原型证明的三件事</h2>
+    <p>
+      ① <b>不用引擎也能有「图片感」</b>——上面每个作物都是手写内联 SVG，三个生长阶段各一个
+      <code>&lt;symbol&gt;</code>，切换只是换一个 <code>&lt;use href&gt;</code>。<br>
+      ② <b>DOM 契约没变</b>——地块还是 <code>button</code>，还是 <code>div.grid.grid-cols-3</code>，
+      点击/遮挡/截图全都能照旧测。<br>
+      ③ <b>动画都是 CSS</b>——摇摆、浇水水滴、收获飘字、动物走动，全是
+      <code>@keyframes</code>，并且带 <code>prefers-reduced-motion</code> 降级。
+    </p>
+
+    <h2>为什么不上 Pixi —— 实测的体积账</h2>
+    <table>
+      <tr><th>打包内容</th><th>raw</th><th>gzip</th></tr>
+      <tr><td><b>现有整个 App</b>（4 个 tab + 农场 + 市场 + 积分 + 全部逻辑）</td>
+          <td>594,769</td><td class="good">176,456</td></tr>
+      <tr><td>Pixi 最小用法（Application + Sprite + Assets）</td>
+          <td>589,003</td><td class="bad">172,947</td></tr>
+      <tr><td>Pixi 农场级用法（+ Text / Graphics / 滤镜）</td>
+          <td>622,280</td><td class="bad">183,632</td></tr>
+    </table>
+    <p>
+      一个<b>最小</b>的 Pixi 包，几乎等于<b>整个 App 现在的大小</b>。
+      加进来 JS 会翻倍（176 KB → 约 350 KB gzip），而它换来的能力
+      （上千精灵、着色器、粒子）在「12 块地 + 8 只动物」这个量级上<b>一点都用不到</b>。
+    </p>
+
+    <h2>真正的成本是美术，不是引擎</h2>
+    <p>
+      15 种作物 × 4 个阶段 = 60 张图，8 种动物，12 块地皮，再加特效 —— 约 <b>90～100 个素材</b>。
+      这部分无论用 DOM 还是 Pixi 都要做。所以先把钱和时间花在素材上，
+      表现层用最省事、最可测、最不容易翻车的方案。
+    </p>
+  </div>
+</div>
+
+<script>
+const CROPS = { carrot:{name:'胡萝卜',price:4}, wheat:{name:'小麦',price:3}, tomato:{name:'番茄',price:6} };
+const STAGES = 3;
+const GROW_MS = 5200;          // 演示用：一颗约 5 秒长成
+const WATER_SKIP = 0.34;       // 浇一次水推进 34%
+
+let pick = 'carrot';
+const plots = Array.from({length:12}, () => ({crop:null, stage:0, t:0, dead:false}));
+
+const grid = document.getElementById('grid');
+const pen  = document.getElementById('pen');
+
+/* ---------- 建 12 块地 ---------- */
+for (let i=0;i<12;i++){
+  const b = document.createElement('button');
+  b.className = 'plot';
+  b.type = 'button';
+  b.dataset.plot = String(i);
+  b.setAttribute('aria-label', `地块 ${i+1}`);
+  b.innerHTML = `
+    <svg class="bed" viewBox="0 0 80 80"><use href="#s-bed"/></svg>
+    <svg class="crop" viewBox="0 0 80 80" hidden><use/></svg>
+    <span class="hint">空地</span>
+    <span class="bar" hidden><i style="width:0%"></i></span>`;
+  b.addEventListener('click', () => tap(i));
+  grid.appendChild(b);
+}
+
+/* ---------- 动物 ---------- */
+[['s-dog',58,7],['s-chicken',52,11],['s-bear',64,15]].forEach(([sym,dur,delay],k)=>{
+  const d = document.createElement('div');
+  d.className = 'animal' + (k%2 ? ' rev' : '');
+  d.style.animationDuration = dur + 's';
+  d.style.animationDelay = (-delay) + 's';
+  d.innerHTML = `<svg viewBox="0 0 64 48"><use href="#${sym}"/></svg>`;
+  pen.appendChild(d);
+});
+
+/* ---------- 交互 ---------- */
+function tap(i){
+  const p = plots[i], el = grid.children[i];
+  if (!p.crop){                       // 空地 → 种下
+    p.crop = pick; p.stage = 1; p.t = 0; p.dead = false;
+    paint(i); bump(el); return;
+  }
+  if (p.dead){                        // 枯萎 → 清掉重来
+    p.crop = null; p.stage = 0; p.t = 0; p.dead = false;
+    paint(i); return;
+  }
+  if (p.stage >= STAGES){             // 成熟 → 收
+    const gain = CROPS[p.crop].price * 4;
+    float(el, `+${gain}`);
+    p.crop = null; p.stage = 0; p.t = 0;
+    paint(i); bump(el); return;
+  }
+  p.t = Math.min(1, p.t + WATER_SKIP); // 生长期 → 浇水
+  splash(el); paint(i);
+}
+
+function paint(i){
+  const p = plots[i], el = grid.children[i];
+  const cropSvg = el.querySelector('.crop');
+  const use = cropSvg.querySelector('use');
+  const hint = el.querySelector('.hint');
+  const bar  = el.querySelector('.bar');
+  el.classList.toggle('mature', p.crop && p.stage >= STAGES && !p.dead);
+  el.classList.toggle('growing', !!p.crop && p.stage < STAGES && !p.dead);
+
+  if (!p.crop){
+    use.setAttribute('href','#s-empty'); cropSvg.hidden = false;
+    hint.textContent = '空地'; hint.hidden = false;
+    bar.hidden = true; return;
+  }
+  if (p.dead){
+    use.setAttribute('href','#s-dead'); cropSvg.hidden = false;
+    hint.textContent = '枯萎了'; hint.hidden = false; bar.hidden = true; return;
+  }
+  use.setAttribute('href', `#s-${p.crop}-${p.stage}`);
+  cropSvg.hidden = false;
+  hint.hidden = true;
+  bar.hidden = p.stage >= STAGES;
+  bar.querySelector('i').style.width = Math.round(p.t*100) + '%';
+}
+
+function bump(el){ el.animate([{transform:'scale(1)'},{transform:'scale(1.12)'},{transform:'scale(1)'}],
+  {duration:220, easing:'ease-out'}); }
+
+function float(el, text){
+  const s = document.createElement('span');
+  s.className = 'float'; s.textContent = text;
+  el.appendChild(s); setTimeout(()=>s.remove(), 950);
+}
+
+function splash(el){
+  for (let k=0;k<5;k++){
+    const d = document.createElement('span');
+    d.className = 'drop';
+    d.style.left = (30 + Math.random()*40) + '%';
+    d.style.animationDelay = (k*45) + 'ms';
+    el.appendChild(d); setTimeout(()=>d.remove(), 700);
+  }
+}
+
+/* ---------- 生长循环 ---------- */
+setInterval(() => {
+  let dirty = false;
+  plots.forEach((p,i) => {
+    if (!p.crop || p.dead || p.stage >= STAGES) return;
+    p.t += 220 / GROW_MS;
+    if (p.t >= 1){ p.t = 0; p.stage++; if (p.stage >= STAGES) p.stage = STAGES; }
+    if (Math.random() < 0.0012 && p.stage < STAGES) { p.dead = true; }
+    paint(i); dirty = true;
+  });
+}, 220);
+
+/* ---------- 选种 / 重来 ---------- */
+document.getElementById('pick').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-crop]'); if (!b) return;
+  pick = b.dataset.crop;
+  [...e.currentTarget.querySelectorAll('button')].forEach(x =>
+    x.setAttribute('aria-pressed', String(x === b)));
+});
+document.getElementById('reset').addEventListener('click', () => {
+  plots.forEach((p,i) => { p.crop=null; p.stage=0; p.t=0; p.dead=false; paint(i); });
+});
+
+plots.forEach((_,i) => paint(i));
+</script>
+</body>
+</html>
