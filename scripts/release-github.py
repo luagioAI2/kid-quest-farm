@@ -22,7 +22,9 @@
   令牌从 `~/.git-credentials` 读（不进 shell 历史、不打印）。
 
 ★ 三道守卫：
-  1. tag 必须**已存在**且**指向 HEAD** —— 否则停（防止发出一个指错提交的 release）；
+  1. tag 必须**已存在**，且它的提交**能从 HEAD 走到**（ancestor，不是「等于 HEAD」——
+     发完版之后正常还会往 main 提交，那时 HEAD 越过 tag 不算错）—— 否则停，
+     防止发出一个指向无关提交的 release；
   2. release 幂等：已存在就复用；
   3. 资源**按 sha256 判重**：已存在且一致就跳过（不做「先删后传」，那有中断窗口）；
      最后把资源**下载回来比对 sha256** —— 不比时间戳，比内容。
@@ -110,15 +112,22 @@ if DRY:
     print("\n（--dry-run：只打印，不写远端）")
     sys.exit(0)
 
-# ---------- 守卫 1：tag 必须存在且指向 HEAD ----------
+# ---------- 守卫 1：tag 必须存在，且它的提交必须能从 HEAD 走到 ----------
+# 注意不是「tag == HEAD」：发完 v1.1.0 之后正常还会往 main 上提交（比如改文档），
+# 那时 HEAD 已经越过 tag —— 那不算错。要拦的是「tag 指向一个跟 main 无关
+# 或更旧的提交」，所以判据是 ancestor（git merge-base --is-ancestor）。
 try:
     ref = call(f"{API}/repos/{REPO}/git/ref/tags/{TAG}")
     sha = ref["object"]["sha"]
     if ref["object"]["type"] == "tag":  # 附注标签要再解一层
         sha = call(f"{API}/repos/{REPO}/git/tags/{sha}")["object"]["sha"]
-    if sha != TARGET:
-        die(f"tag {TAG} 指向 {sha[:8]}，而 HEAD 是 {TARGET[:8]} —— 先把 tag 推对再发")
-    print(f"✓ tag {TAG} 存在且指向 HEAD（{sha[:8]}）")
+    anc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", sha, TARGET], cwd=ROOT
+    ).returncode
+    if anc != 0:
+        die(f"tag {TAG} 指向 {sha[:8]}，但它不是 HEAD（{TARGET[:8]}）的祖先 —— 先推对 tag 再发")
+    same = "（就是 HEAD）" if sha == TARGET else f"（HEAD 已在其之后）"
+    print(f"✓ tag {TAG} → {sha[:8]} 可从 HEAD 走到 {same}")
 except urllib.error.HTTPError as e:
     if e.code == 404:
         die(f"远端没有 tag {TAG} —— 先 git push origin {TAG}")
