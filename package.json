@@ -19,7 +19,8 @@
     "splash:measure": "node scripts/measure-splash.mjs",
     "splash:check": "node scripts/measure-splash.mjs --check",
     "site": "node scripts/build-site.mjs",
-    "site:check": "node scripts/check-site.mjs"
+    "site:check": "node scripts/check-site.mjs",
+    "release:github": "python scripts/release-github.py"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
