@@ -14,6 +14,81 @@
 }
 
 /* ============================================================
+   天空 —— 四档色调 + 日月（`Sky.tsx`）
+   ------------------------------------------------------------
+   分档的判据在 `domain/farmClock.ts` 的 `skyToneFor`
+   （05–08 晨 / 08–17 昼 / 17–20 昏 / 20–05 夜）。
+   这里只管「长什么样」，不重复那个判断。
+
+   ⚠️ `--day` 那条渐变和原来 Tailwind 的
+   `from-sky-300 via-sky-200 to-sun-100` **逐色相同** ——
+   白天是绝大多数时候看到的画面，不该跟着这次改动变。
+   ============================================================ */
+.kqf-sky {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 11rem; /* = 原来的 h-44 */
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.kqf-sky--dawn {
+  background-image: linear-gradient(to bottom, #7dd3fc 0%, #fde68a 55%, #fed7aa 100%);
+}
+.kqf-sky--day {
+  background-image: linear-gradient(to bottom, #7dd3fc 0%, #bae6fd 50%, #fef3c7 100%);
+}
+.kqf-sky--dusk {
+  background-image: linear-gradient(to bottom, #bae6fd 0%, #fdba74 55%, #fda4af 100%);
+}
+/* 夜空：调色板里没有深蓝 —— `ink-900` 是**棕色**（#33281e），铺上去像一滩泥。
+   所以这一档用三个字面量深紫蓝，色相贴着 `grape`（动物面板用的那支）。 */
+.kqf-sky--night {
+  background-image: linear-gradient(to bottom, #1e1b4b 0%, #312e81 45%, #4c1d95 100%);
+}
+
+/* 太阳 / 月亮：**外层定位、内层浮动**。
+   两层都用 `transform`，合并到一个元素上会互相覆盖
+   （`anim-float` 的 keyframes 写的就是 `transform: translateY(...)`）。 */
+.kqf-sky__body {
+  position: absolute;
+  display: block;
+  transform: translate(-50%, -50%);
+}
+
+.kqf-sky__stars {
+  position: absolute;
+  inset: 0;
+}
+.kqf-star {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: #fff;
+  animation: kqf-twinkle 2.6s ease-in-out infinite;
+}
+@keyframes kqf-twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 云在夜里要压暗 —— 白得发亮的云压在深紫天上，一眼假 */
+.kqf-sky--night .kqf-cloud {
+  opacity: 0.28;
+}
+.kqf-sky--dusk .kqf-cloud {
+  opacity: 0.75;
+}
+
+/* ============================================================
    2D 地块（内联 SVG 精灵）
    ------------------------------------------------------------
    图案全部来自 `cropSprites.tsx` 的 `<symbol>`。
@@ -112,6 +187,8 @@
   /* 摇摆 / 浮动由 `anim-sway` / `anim-float` 提供，这里一并停掉 */
   .kqf-plot__art,
   .kqf-animal,
+  .kqf-sky__body,
+  .kqf-star,
   .kqf-plot--mature::after {
     animation: none !important;
   }

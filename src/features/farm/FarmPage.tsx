@@ -12,6 +12,7 @@ import {
   isCropAging,
   isCropMature,
 } from '@/domain/farm'
+import { farmClockAt, farmClockText, type FarmClock } from '@/domain/farmClock'
 import type { Plot } from '@/domain/types'
 import { SeedShop } from './SeedShop'
 import { AnimalHouse } from './AnimalHouse'
@@ -20,6 +21,7 @@ import { HarvestSheet } from './HarvestSheet'
 import { FarmLog } from './FarmLog'
 import { GrowthBar, countdownText } from './farmUi'
 import { CropSprite, FarmSpriteDefs, PlotBed, PlotDead } from './cropSprites'
+import { Sky } from './Sky'
 import { useFarmTick } from './useFarmTick'
 import './farm.css'
 
@@ -53,6 +55,9 @@ export default function FarmPage() {
   const [harvestPlot, setHarvestPlot] = useState<Plot | null>(null)
 
   const now = useFarmTick(1000)
+  /* 农场世界的时间 —— **只算这一次**，顶栏和天空共用。
+     两处各算一遍就是「同一个事实存两份」，迟早走散。 */
+  const clock = farmClockAt(now, farmClock.timeScale)
   const pendingCrop = pendingCropId ? CROP_BY_ID.get(pendingCropId) : undefined
   const emptyUnlocked = useMemo(
     () => plots.filter((p) => p.unlocked && !p.crop).length,
@@ -82,15 +87,8 @@ export default function FarmPage() {
           ⚠️ 别挪进 `<button>` —— symbol 定义会被地块的 overflow:hidden 裁掉。 */}
       <FarmSpriteDefs />
 
-      {/* ------- 天空 ------- */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-sky-300 via-sky-200 to-sun-100">
-        <span className="absolute right-6 top-8 text-6xl anim-float" aria-hidden>
-          ☀️
-        </span>
-        <Cloud className="left-[8%] top-12" delay="0s" />
-        <Cloud className="left-[52%] top-24" delay="1.4s" />
-        <Cloud className="left-[74%] top-4" delay="2.6s" />
-      </div>
+      {/* ------- 天空（色调 + 日月，由农场小时驱动） ------- */}
+      <Sky clock={clock} />
 
       {/* ------- 草地 ------- */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 top-32 bg-grass-300" />
@@ -109,6 +107,7 @@ export default function FarmPage() {
         <TopBar
           level={level}
           animalCount={animals.length}
+          clock={clock}
           timeScale={farmClock.timeScale}
           showClock={farmClock.showClock}
           unreadEvents={unreadEvents}
@@ -261,23 +260,15 @@ export default function FarmPage() {
  * 所以这里显示的是**农场世界的时间** —— 流速 2 时，
  * 现实过了 12 小时，农场就已经过了一整天。
  * 这让孩子可以理解"为什么萝卜几分钟就熟了"。
+ *
+ * ⚠️ 换算**不在这里**：`farmClockAt` 在 `domain/farmClock.ts`。
+ * 天空的色调 / 日月读的是同一个 `clock`（`FarmPage` 算一次、两处用），
+ * 各自算一遍迟早走散。
  */
-function farmClockLabel(timeScale: number): { day: number; hhmm: string } {
-  // 以「今天 0 点」为农场世界的起点，按流速换算
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  const realMinutesToday = (Date.now() - start.getTime()) / 60000
-  const farmMinutesToday = realMinutesToday * timeScale
-  const day = Math.floor(farmMinutesToday / (60 * 24)) + 1
-  const minutesInDay = farmMinutesToday % (60 * 24)
-  const hh = String(Math.floor(minutesInDay / 60)).padStart(2, '0')
-  const mm = String(Math.floor(minutesInDay % 60)).padStart(2, '0')
-  return { day, hhmm: `${hh}:${mm}` }
-}
-
 function TopBar({
   level,
   animalCount,
+  clock,
   timeScale,
   showClock,
   unreadEvents,
@@ -285,13 +276,13 @@ function TopBar({
 }: {
   level: { level: number; into: number; need: number }
   animalCount: number
+  clock: FarmClock
   timeScale: number
   showClock: boolean
   unreadEvents: number
   onOpenLog: () => void
 }) {
   const ratio = level.need > 0 ? level.into / level.need : 1
-  const clock = farmClockLabel(timeScale)
   return (
     <div className="surface mt-2 p-2.5">
       {/*
@@ -343,7 +334,7 @@ function TopBar({
           </span>
           <span className="text-[11px] font-bold text-ink-600">
             农场第 <span className="tnum font-extrabold text-ink-900">{clock.day}</span> 天 ·{' '}
-            <span className="tnum font-extrabold text-ink-900">{clock.hhmm}</span>
+            <span className="tnum font-extrabold text-ink-900">{farmClockText(clock)}</span>
           </span>
           {timeScale !== 1 && (
             <span className="ml-auto rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-bold text-ink-500">
@@ -578,21 +569,5 @@ function PlotTile({
         )}
       </div>
     </button>
-  )
-}
-
-/* ---------------- 云朵 ---------------- */
-
-function Cloud({ className, delay }: { className: string; delay: string }) {
-  return (
-    <span
-      className={clsx('kqf-cloud absolute flex items-end', className)}
-      style={{ animationDelay: delay }}
-      aria-hidden
-    >
-      <span className="block h-6 w-14 rounded-full bg-white/85 blur-[1px]" />
-      <span className="-ml-4 block h-9 w-9 rounded-full bg-white/90 blur-[1px]" />
-      <span className="-ml-3 block h-5 w-10 rounded-full bg-white/80 blur-[1px]" />
-    </span>
   )
 }

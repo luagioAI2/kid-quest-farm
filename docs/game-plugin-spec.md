@@ -643,7 +643,8 @@ MarketState { quotes: MarketQuote[], history: MarketHistoryPoint[] }
 | 动物精灵 | ✅ **已完成**（2026-10-15） | 8 种 × 2 帧（幼崽 / 成年）= 16 帧，`animalSprites.tsx`；替掉了 emoji |
 | 地块皮 | ⚠️ **做不了** | 旧表写的「已浇水 / 干旱 / 肥沃」**游戏里没有这三个状态**：`Plot` 上没有水 / 旱 / 肥字段，`water()` 其实是**施肥**（吃 `fertilizer`、把生长推进 50%）。**先有机制才谈得上画** |
 | 动物走路 / 进食帧 | ⬜ 未做 | 动物小屋是**静态列表**，没有「走 / 吃」状态；同样要先有状态 |
-| 天气与昼夜 | 🟡 **一半** | 天空渐变 + 草坡 + 云已经在 `FarmPage.tsx` 里；缺太阳、雨 / 雪粒子、昼夜变体 |
+| 昼夜（天空色调 + 日月） | ✅ **已完成**（2026-10-15） | 四档色调（晨 / 昼 / 昏 / 夜）+ 内联 SVG 太阳 / 月亮 + 夜空 10 颗星。判据在 `domain/farmClock.ts` 的 `skyToneFor`，由**已经在顶栏显示的农场小时**驱动 —— 状态**存在**，所以这一条做得成 |
+| 雨 / 雪粒子 | ⚠️ **做不了** | 和「地块皮」同一类：天气是**收获时的一次性掷骰**（`weather_bad` 是 `FarmEvent`，带一个倍率），**没有「正在下雨」这种持续状态**。粒子没有东西驱动 |
 | 收获 / 施肥特效 | ⬜ 未做 | 现在只有水滴和飘字 |
 | 建筑与装饰 | ⬜ 未做 | 谷仓 / 篱笆 / 水井 / 稻草人 |
 
@@ -783,8 +784,8 @@ MarketState { quotes: MarketQuote[], history: MarketHistoryPoint[] }
 **E. 场景图层（自下而上）**
 
 ```
-1. 天空渐变（sky-300 → sky-200 → sun-100）
-2. 太阳 + 云（3 朵，不同延迟）
+1. 天空（**四档色调**，由 `skyToneFor(农场小时)` 选；`day` 那一档仍是 sky-300 → sky-200 → sun-100）
+2. 太阳 / 月亮（内联 SVG，`celestialFor(农场小时)` 定位）+ 夜空 10 颗星 + 云（3 朵，不同延迟）
 3. 远山（草地顶部的弧形，不侵入地块区）
 4. 草地（grass-300，通栏）
 5. 地块网格（.page-col 收窄）
@@ -801,7 +802,8 @@ MarketState { quotes: MarketQuote[], history: MarketHistoryPoint[] }
 | **① 作物** | ~~15 种 × 4 帧~~ → **2 + 7 + 15 = 24 帧**（见 C 节） | 24 | 高 | ✅ **已完成** |
 | **② 地块皮** | 普通土 / 已浇水 / 干旱 / 肥沃 | 4~6 | 高 | ⚠️ **阻塞**：没有水 / 旱 / 肥状态（`water()` 是施肥） |
 | **③ 动物** | 8 种 × 2 帧（幼崽 / 成年） | 16 | 中 | ✅ **已完成**（2026-10-15） |
-| **④ 天气昼夜** | 太阳 + 雨 / 雪 / 落叶粒子 + 昼夜变体（天空与云已有） | 1 套 | 中 | 🟡 一半 |
+| **④ 昼夜** | 天空四档色调 + 内联 SVG 太阳 / 月亮 + 夜空星星（`Sky.tsx`） | 1 套 | 中 | ✅ **已完成**（2026-10-15） |
+| **④b 雨 / 雪粒子** | 雨 / 雪 / 落叶粒子 | 1 套 | 中 | ⚠️ **阻塞**：天气是收获时的**一次性掷骰**，不是「正在下雨」这种持续状态 |
 | **⑤ 特效** | 浇水 / 施肥 / 收获 / 升级 | 4~5 | 中 | ⬜ 未做 |
 | **⑥ 建筑装饰** | 谷仓 / 篱笆 / 水井 / 稻草人 / 告示牌 | 5~8 | 低 | ⬜ 未做 |
 
@@ -898,7 +900,8 @@ export const GAMES: GamePlugin[] = [farmPlugin, clawPlugin]
 
 ## 10. 落地路线（把现有 App 插件化）
 
-**进度（2026-10-15）**：A、C、D 已完成；**E 进行中**（动物精灵已落地）；B 未做，F 未开始。
+**进度（2026-10-15）**：A、C、D 已完成；**E 进行中**（动物精灵、昼夜天空已落地；
+地块皮 / 雨雪粒子**被前置状态卡住**）；B 未做，F 未开始。
 
 | 阶段 | 做什么 | 状态 |
 | --- | --- | --- |
@@ -906,7 +909,7 @@ export const GAMES: GamePlugin[] = [farmPlugin, clawPlugin]
 | **B** | `RedeemItem` 加 `coin?` 字段 + 迁移；`planRedeemPayment` 按币种分发 | ⬜ 未做 |
 | **C** | 底部导航改成遍历注册表 | ✅ **已完成**（固定 3 格 + 游戏格运行时算；`data-tour` 见 §7.2） |
 | **D** | 家长栏的「游戏」页：商城币钱包 + 已购买 + 当前游戏 + 购买动作 | ✅ **已完成**（购买按钮目前走不到，见 §2.1 末尾） |
-| **E** | 农场美术补到 QQ 农场级（§8.5 的待做清单） | 🟡 **进行中**（2026-10-15）：**动物精灵已完成** —— 8 种 × 2 帧（幼崽 / 成年）= 16 帧，`animalSprites.tsx`，替掉了 emoji；作物 24 帧本来就有；**地块皮被前置状态卡住**（见 §8.5 校正表） |
+| **E** | 农场美术补到 QQ 农场级（§8.5 的待做清单） | 🟡 **进行中**（2026-10-15）：**动物精灵已完成** —— 8 种 × 2 帧（幼崽 / 成年）= 16 帧，`animalSprites.tsx`，替掉了 emoji；**昼夜天空已完成** —— 四档色调 + 内联 SVG 日月 + 星星，`Sky.tsx` + `domain/farmClock.ts`；作物 24 帧本来就有；**地块皮 / 雨雪粒子被前置状态卡住**（见 §8.5 校正表） |
 | **F** | 第二个游戏（娃娃机）按 §9 实现 | ⬜ 未开始 |
 
 ### ⚠️ A 阶段踩到的坑：注册表**不能 import 页面组件**
@@ -964,6 +967,7 @@ TypeError: GAMES is not iterable
 | 内容清单（作物 / 动物 / 物品） | `src/domain/catalog.ts` |
 | 随机事件 / 动物特殊效果 | `src/domain/farmEvents.ts` |
 | 生长阶段 / 成熟判断 | `src/domain/farm.ts` |
+| **农场时间 / 昼夜分档** | `src/domain/farmClock.ts`（`farmClockAt` / `skyToneFor` / `celestialFor`） |
 | 任务评分（五档系数） | `src/domain/settlement.ts` |
 | 打卡 / 连击 | `src/domain/recurrence.ts`、`streakBonus.ts`、`tierRatio.ts` |
 | 持久化 / 迁移 | `src/db/db.ts` |
@@ -976,11 +980,12 @@ TypeError: GAMES is not iterable
 | 农场页面 | `src/features/farm/FarmPage.tsx` |
 | 农场精灵表 | `src/features/farm/cropSprites.tsx` |
 | 动物精灵表 | `src/features/farm/animalSprites.tsx` |
+| 天空（昼夜 + 日月） | `src/features/farm/Sky.tsx` |
 | 农场样式 / 动效 | `src/features/farm/farm.css` |
 | 家长闸门 | `src/features/parent/ParentGate.tsx` |
 | 主题色板 | `src/styles/theme.css` |
 | 2D 农场方案与实测 | `docs/2d-farm-proposal/README.md`、`demo.html` |
-| 走查脚本 | `scripts/capture.mjs`；**盲区各有一份**：`capture-games.mjs`（游戏栏）、`capture-animals.mjs`（动物小屋）、`capture-tablet-onboarding.mjs`（新手导览） |
+| 走查脚本 | `scripts/capture.mjs`；**盲区各有一份**：`capture-games.mjs`（游戏栏）、`capture-animals.mjs`（动物小屋）、`capture-sky.mjs`（天空昼夜，用 `evaluateOnNewDocument` 钉死 `Date.now` 才有确定性）、`capture-tablet-onboarding.mjs`（新手导览） |
 | e2e 套件 | `scripts/e2e-check.mjs`、`e2e-gameplay.mjs`、`e2e-bag-sell.mjs`、`e2e-regressions.mjs` |
 | 官网事实闸门 | `scripts/check-site.mjs` |
 
@@ -1011,3 +1016,19 @@ TypeError: GAMES is not iterable
 旧表把「作物 60 帧」列成待做（与 §8.10C 冲突，实际 24 帧早已完成），
 并把「地块皮 / 动物走路帧」列成待做（**前置状态不存在** —— `water()` 是施肥，
 动物小屋是静态列表）。写 backlog 前先问「这个外观对应哪个状态」。*
+
+*v1.3（2026-10-15）：E 阶段第二批 —— **昼夜天空落地**。天空从一条静态渐变
+改成**四档色调**（晨 / 昼 / 昏 / 夜）+ 内联 SVG 太阳 / 月亮 + 夜空 10 颗星
+（`Sky.tsx`）。判据抽到 `domain/farmClock.ts` 的 `skyToneFor` / `celestialFor`，
+**顶栏时钟和天空共用同一次换算**（`FarmPage` 算一次、两处读），
+色调和日月共用同一个分档 —— 所以不可能出现「天是黑的、太阳还挂着」。
+「雨 / 雪粒子」一并标成**被前置状态卡住**（天气是收获时的一次性掷骰）。*
+
+> ★ **这次新增的走查教训**：**按时间变化的界面，截图天生不确定** ——
+> 跑一次是白天、跑一次是夜里。`capture-sky.mjs` 用
+> `page.evaluateOnNewDocument` 把 `Date.now()` 钉在指定的本地小时上
+> （只改 `Date.now`，不动 `window.Date`，免得波及 Dexie），
+> 四个时刻各跑一遍，四档就都被覆盖到。而且分档边界**从 `farmClock.ts` 读**、
+> 不抄进脚本 —— 抄一份的话改了分档脚本还是绿的（守卫**悄悄变弱**而不是变红，
+> 本项目已经踩过两次）。断言里必须有一条**对照组**：
+> 四个时刻要真的产出四档**不同**的色调，否则「天空跟着小时走」根本没被验证。
