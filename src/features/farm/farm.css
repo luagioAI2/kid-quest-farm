@@ -56,6 +56,16 @@
   pointer-events: none;
 }
 
+/* 动物精灵（`animalSprites.tsx`）。
+   尺寸由**调用方**的 className 决定（h-* / w-*），这里只管两件事：
+   ① 不接收点击 —— 命中测试要落在 button / li 上；
+   ② `display:block` —— 行内元素会在下面多出几 px 基线空隙，
+      在 size-[68px] 的方框里就是「动物没居中」。 */
+.kqf-animal {
+  display: block;
+  pointer-events: none;
+}
+
 /* 成熟地块：土垄发光 + 一圈呼吸的金边 */
 .kqf-plot--mature .kqf-plot__bed {
   filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.75)) brightness(1.05);
@@ -101,6 +111,7 @@
   }
   /* 摇摆 / 浮动由 `anim-sway` / `anim-float` 提供，这里一并停掉 */
   .kqf-plot__art,
+  .kqf-animal,
   .kqf-plot--mature::after {
     animation: none !important;
   }

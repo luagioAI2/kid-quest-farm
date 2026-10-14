@@ -13,6 +13,36 @@ import {
 } from '@/domain/farm'
 import type { Animal, AnimalDef, AnimalMood } from '@/domain/types'
 import { BottomSheet, CoinPill, GrowthBar, countdownText } from './farmUi'
+import { AnimalSprite, FarmAnimalSpriteDefs, hasAnimalSprite } from './animalSprites'
+
+/**
+ * 一只动物的图标。
+ *
+ * 画过精灵的（8 种全都画了）走内联 SVG；**没画过的回落成 emoji** ——
+ * 兜底留在调用点而不是组件里，这样「用精灵还是用 emoji」的判据只有一处
+ * （`hasAnimalSprite`），加新动物时不会一边画了精灵、一边还在用 emoji。
+ *
+ * 兜底那一支用 `h-full w-full` 吃满父容器：调用点的方框有 68px 也有 64px，
+ * 写死尺寸反而会让 emoji 那一支错位。
+ */
+function AnimalIcon({
+  id,
+  mature,
+  fallback,
+  className,
+}: {
+  id: string
+  mature: boolean
+  fallback: string
+  className?: string
+}) {
+  if (!hasAnimalSprite(id)) {
+    return (
+      <span className="grid h-full w-full place-items-center text-2xl">{fallback}</span>
+    )
+  }
+  return <AnimalSprite animalId={id} mature={mature} className={className} />
+}
 
 type Tab = 'mine' | 'adopt'
 
@@ -60,6 +90,10 @@ export function AnimalHouse({
       title="动物小屋"
       headerRight={<CoinPill amount={balance} />}
     >
+      {/* 精灵表挂在这一层（0×0、不可见）—— 动物小屋是唯一用到动物精灵的地方，
+          自己带上定义就不用去改 FarmPage。⚠️ 别挪进 <button> 里：会被裁掉。 */}
+      <FarmAnimalSpriteDefs />
+
       <div className="mb-3 flex gap-2 rounded-full border border-ink-900/10 bg-white p-1">
         <TabButton active={tab === 'mine'} onClick={() => setTab('mine')}>
           🐾 我的动物
@@ -127,15 +161,23 @@ function AdoptRow({ def, balance, level }: { def: AnimalDef; balance: number; le
     >
       <div className="flex items-center gap-3 p-3">
         <div className="grid size-16 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-sun-50">
-          <span className="flex items-center text-2xl">
-            {def.babyEmoji}
-            {/* ⚠️ 有些动物没有幼崽 emoji（长颈鹿只有 🦒 一个），
-                这时 `babyEmoji === emoji`，硬画箭头会显示成「🦒 → 🦒」，
-                看着像 bug。所以相等就不画。 */}
-            {def.babyEmoji !== def.emoji ? (
+          <span className="flex items-center">
+            <AnimalIcon
+              id={def.id}
+              mature={false}
+              fallback={def.babyEmoji}
+              className="h-6 w-6"
+            />
+            {/* 「幼崽 → 成年」的箭头。
+                ⚠️ 判据分两种：画了精灵的（8 种全画了）两帧**一定**不同 ——
+                幼崽是同一套几何缩到 0.62，所以长颈鹿现在也有箭头了。
+                以前 `babyEmoji === emoji`（🦒 → 🦒）看着像 bug，才故意不画；
+                现在两帧真的不一样，画出来才有信息量。
+                还没画精灵的动物仍按 emoji 判，相等就不画。 */}
+            {hasAnimalSprite(def.id) || def.babyEmoji !== def.emoji ? (
               <span className="mx-0.5 text-xs text-ink-500">→</span>
             ) : null}
-            {def.emoji}
+            <AnimalIcon id={def.id} mature fallback={def.emoji} className="h-8 w-8" />
           </span>
         </div>
 
@@ -289,14 +331,15 @@ function MyAnimalCard({ animal, now }: { animal: Animal; now: number }) {
             sick ? 'bg-berry-50' : mature ? 'bg-grass-50' : 'bg-sun-50',
           )}
         >
-          <span
+          <AnimalIcon
+            id={def?.id ?? ''}
+            mature={mature}
+            fallback={mature ? (def?.emoji ?? '🐾') : (def?.babyEmoji ?? '🐣')}
             className={clsx(
-              'text-4xl',
+              'h-16 w-16',
               sick ? 'anim-wiggle' : mature ? 'anim-float' : 'anim-wiggle',
             )}
-          >
-            {mature ? (def?.emoji ?? '🐾') : (def?.babyEmoji ?? '🐣')}
-          </span>
+          />
           <span
             className="absolute -bottom-1 -right-1 grid size-7 place-items-center rounded-full border border-white bg-white text-lg shadow-flat"
             aria-label={`状态：${MOOD_LABEL[mood]}`}
