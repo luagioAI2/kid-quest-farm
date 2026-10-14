@@ -1,4 +1,4 @@
-/* 农场模块专用动画 —— 不能改动 src/styles/theme.css，故独立一份 */
+/* 农场模块专用动画 / 版式 —— 不能改动 src/styles/theme.css，故独立一份 */
 
 @keyframes kqf-drift {
   from {
@@ -13,9 +13,95 @@
   animation: kqf-drift 30s linear infinite;
 }
 
+/* ============================================================
+   2D 地块（内联 SVG 精灵）
+   ------------------------------------------------------------
+   图案全部来自 `cropSprites.tsx` 的 `<symbol>`。
+   这里只管**摆位和动效**，不画任何形状。
+
+   ⚠️ 摇摆 / 浮动的 `@keyframes` 复用 theme.css 里的 `anim-sway`
+   （它已经带 `transform-origin: 50% 100%`，正好是植物根部）和 `anim-float`，
+   别在这里再定义一份同名的。
+   ============================================================ */
+
+/* 精灵表本体：0×0，不占位、不可见 */
+.kqf-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* 地块底图：铺满整块地 */
+.kqf-plot__bed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 作物 / 枯茬：站在土上；不接收点击（点击要落在 button 上）。
+   ★ 这组数字和 `cropSprites.tsx` 的坐标约定（地面线 y=78）是一对：
+     植株底部距地块下沿 37%、高度吃掉 62%。
+     **为什么底部要留这么高**：底部那 ~40px 是文字层（「可以收啦!」+ 产出药丸，
+     成熟态两行）—— 留少了，文字会横穿果实的中间。
+     第一版写的是 bottom:30% / height:70%，手机上就是「红字压在草莓上」。 */
+.kqf-plot__art {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 37%;
+  height: 62%;
+  pointer-events: none;
+}
+
+/* 成熟地块：土垄发光 + 一圈呼吸的金边 */
+.kqf-plot--mature .kqf-plot__bed {
+  filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.75)) brightness(1.05);
+}
+
+.kqf-plot--mature::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 3px solid var(--color-sun-500);
+  animation: kqf-ring 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes kqf-ring {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 底部文字层：进度条 / 倒计时 / 「可以收啦」都挂在这上面 */
+.kqf-plot__foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px 6px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kqf-cloud {
     animation: none;
     transform: translateX(10vw);
+  }
+  /* 摇摆 / 浮动由 `anim-sway` / `anim-float` 提供，这里一并停掉 */
+  .kqf-plot__art,
+  .kqf-plot--mature::after {
+    animation: none !important;
   }
 }

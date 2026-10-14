@@ -19,6 +19,7 @@ import { MarketSheet } from './MarketSheet'
 import { HarvestSheet } from './HarvestSheet'
 import { FarmLog } from './FarmLog'
 import { GrowthBar, countdownText } from './farmUi'
+import { CropSprite, FarmSpriteDefs, PlotBed, PlotDead } from './cropSprites'
 import { useFarmTick } from './useFarmTick'
 import './farm.css'
 
@@ -77,6 +78,10 @@ export default function FarmPage() {
 
   return (
     <div className="relative flex min-h-full flex-1 flex-col overflow-hidden">
+      {/* 地块 / 作物的 SVG 精灵表：0×0，挂在页面根节点下渲染一次。
+          ⚠️ 别挪进 `<button>` —— symbol 定义会被地块的 overflow:hidden 裁掉。 */}
+      <FarmSpriteDefs />
+
       {/* ------- 天空 ------- */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-sky-300 via-sky-200 to-sun-100">
         <span className="absolute right-6 top-8 text-6xl anim-float" aria-hidden>
@@ -451,36 +456,33 @@ function PlotTile({
         onClick={clearWithered}
         className={clsx(
           'btn relative flex aspect-square flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl border shadow-flat active:btn-press',
-          withered
-            ? 'border-ink-300 bg-ink-100'
-            : 'bg-grass-100',
+          withered ? 'border-ink-300' : 'border-grass-600/25',
           !withered && highlight
             ? 'border-grass-500 ring-4 ring-grass-300'
             : !withered && 'border-dashed border-grass-500/50',
           bump && 'anim-pop',
         )}
       >
+        {/* 土垄底图：枯死的降饱和，一眼看出这块地废了 */}
+        <PlotBed className={withered ? 'opacity-40 saturate-50' : undefined} />
+
         {withered ? (
           <>
-            <span className="text-3xl" aria-hidden>
-              🥀
-            </span>
-            <span className="font-display text-[11px] font-extrabold text-ink-500">
+            <PlotDead />
+            <span className="kqf-plot__foot font-display text-[11px] font-extrabold text-ink-700">
               枯掉了·点我清理
             </span>
           </>
         ) : (
           <>
-            {/* 翻好的土垄 */}
-            <span className="absolute inset-x-3 top-3 h-1.5 rounded-full bg-grass-500/25" />
-            <span className="absolute inset-x-2 top-7 h-1.5 rounded-full bg-grass-500/20" />
-            <span className="absolute inset-x-4 top-11 h-1.5 rounded-full bg-grass-500/15" />
+            {/* ➕ / 🌰 是「这里可以点」的**操作提示**，不是作物图案 ——
+                作物图案才用 SVG（emoji 的粗细由系统字体定，永远调不了）。 */}
             <span className="relative text-3xl drop-shadow-sm" aria-hidden>
               {highlight ? '🌰' : '➕'}
             </span>
             <span
               className={clsx(
-                'relative font-display text-[11px] font-extrabold',
+                'relative rounded-full bg-white/75 px-2 font-display text-[11px] font-extrabold',
                 highlight ? 'text-grass-700' : 'text-grass-600',
               )}
             >
@@ -511,13 +513,21 @@ function PlotTile({
       type="button"
       onClick={onTap}
       className={clsx(
-        'btn relative flex aspect-square flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl border shadow-flat active:btn-press',
-        mature
-          ? 'border-sun-400/50 bg-gradient-to-b from-sun-100 to-sun-200'
-          : 'border-ink-900/15 bg-gradient-to-b from-grass-100 to-grass-200',
+        'btn kqf-plot relative aspect-square overflow-hidden rounded-2xl border shadow-flat active:btn-press',
+        mature ? 'kqf-plot--mature border-sun-400/50' : 'border-ink-900/15',
         bump && 'anim-pop',
       )}
     >
+      {/* 土垄底图 + 这株作物。
+          ⚠️ 两层都 `pointer-events:none` —— 命中测试必须落在 button 上，
+          4 个 e2e 脚本的 `div.grid.grid-cols-3 > button` 和遮挡探针都靠它。 */}
+      <PlotBed />
+      <CropSprite
+        cropId={plot.crop.cropId}
+        stage={stage}
+        className={mature ? 'anim-float' : 'anim-sway'}
+      />
+
       {mature ? (
         <span className="absolute right-1 top-1 anim-sparkle text-sm" aria-hidden>
           ✨
@@ -528,48 +538,45 @@ function PlotTile({
           🍂
         </span>
       ) : null}
+      {leftHarvests > 1 ? (
+        <span className="tnum absolute left-1 top-1 rounded-full bg-white/80 px-1.5 text-[10px] font-bold text-grass-700">
+          ×{leftHarvests}
+        </span>
+      ) : null}
 
-      <span
-        className={clsx('text-4xl leading-none', mature ? 'anim-float' : 'anim-sway')}
-        aria-hidden
-      >
-        {def?.stageEmojis[stage] ?? '🌱'}
-      </span>
+      <div className="kqf-plot__foot">
+        {mature ? (
+          <>
+            <span className="font-display text-[11px] font-extrabold text-sun-700">可以收啦!</span>
+            {/* ⚠️ 这里不能写 🪙 —— 收获**不发积分**，产出物进背包，
+                钱要等卖出才结算（而且是 🌾 不是 🪙）。显示产出物才对。
 
-      {mature ? (
-        <>
-          <span className="font-display text-[11px] font-extrabold text-sun-700">可以收啦!</span>
-          {/* ⚠️ 这里不能写 🪙 —— 收获**不发积分**，产出物进背包，
-              钱要等卖出才结算（而且是 🌾 不是 🪙）。显示产出物才对。
-
-              ⚠️ 也**不要写 `≈`**（2026-09-20 去掉的）。那个符号是从「积分时代」
-              遗留下来的：最早的标签是 `≈{harvestPoints} 🪙`，而当时的收获积分
-              是 `3.6` 这种**连续小数**，所以 `≈` 是诚实的。
-              B1 整数化（§6.1.3）+ 甲 产量封顶（§6.1.2）之后，`produceAmount`
-              是**整数 4**，且实际产量 `min(满产, round(...))` 也只在
-              `0/2/3/4` 这几个整数上取值 —— 这里根本不存在「约等于」。
-              `≈` 是数学符号，孩子看不懂，看起来就像个显示错误。
-              歉收那几档（2/3 个）是**离散事件**，由收获时的 toast 负责讲
-              （「虫灾！这次只收了 2 个」），不该由标签用 `≈` 提前打折扣。
-              动物页 `AnimalHouse.tsx` 一直是 `{produceAmount} 个`，改完两边也一致了。
-              2026-09-21：量词改成 `produceUnitOf(produceItemId)` —— 原来是硬编码
-              「个」，于是牛奶写「4 个」、萝卜写「4 个」。见 §5.7。 */}
-          <span className="tnum rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-extrabold text-sun-700">
-            {ITEM_BY_ID.get(def?.produceItemId ?? '')?.emoji ?? '🧺'} {def?.produceAmount ?? 1}{' '}
-            {produceUnitOf(def?.produceItemId)}
-          </span>
-        </>
-      ) : (
-        <>
-          <GrowthBar value={progress} className="mx-3 !h-1.5" />
-          <span className="tnum text-[11px] font-bold text-ink-700">{countdownText(remain)}</span>
-          {leftHarvests > 1 ? (
-            <span className="tnum absolute left-1 top-1 rounded-full bg-white/80 px-1.5 text-[10px] font-bold text-grass-700">
-              ×{leftHarvests}
+                ⚠️ 也**不要写 `≈`**（2026-09-20 去掉的）。那个符号是从「积分时代」
+                遗留下来的：最早的标签是 `≈{harvestPoints} 🪙`，而当时的收获积分
+                是 `3.6` 这种**连续小数**，所以 `≈` 是诚实的。
+                B1 整数化（§6.1.3）+ 甲 产量封顶（§6.1.2）之后，`produceAmount`
+                是**整数 4**，且实际产量 `min(满产, round(...))` 也只在
+                `0/2/3/4` 这几个整数上取值 —— 这里根本不存在「约等于」。
+                `≈` 是数学符号，孩子看不懂，看起来就像个显示错误。
+                歉收那几档（2/3 个）是**离散事件**，由收获时的 toast 负责讲
+                （「虫灾！这次只收了 2 个」），不该由标签用 `≈` 提前打折扣。
+                动物页 `AnimalHouse.tsx` 一直是 `{produceAmount} 个`，改完两边也一致了。
+                2026-09-21：量词改成 `produceUnitOf(produceItemId)` —— 原来是硬编码
+                「个」，于是牛奶写「4 个」、萝卜写「4 个」。见 §5.7。 */}
+            <span className="tnum rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-extrabold text-sun-700">
+              {ITEM_BY_ID.get(def?.produceItemId ?? '')?.emoji ?? '🧺'} {def?.produceAmount ?? 1}{' '}
+              {produceUnitOf(def?.produceItemId)}
             </span>
-          ) : null}
-        </>
-      )}
+          </>
+        ) : (
+          <>
+            <GrowthBar value={progress} className="!h-1.5" />
+            <span className="tnum rounded-full bg-white/75 px-2 text-[11px] font-bold text-ink-700">
+              {countdownText(remain)}
+            </span>
+          </>
+        )}
+      </div>
     </button>
   )
 }
