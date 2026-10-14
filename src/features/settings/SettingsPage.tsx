@@ -16,6 +16,8 @@ import { saveBlob, shareOrDownload } from '../../platform/files'
 // 复用家长端同一个 PinPad，不要在这里再抄一份 —— 之前抄出来的副本
 // 带着"第 4 位自动提交读不到最新值"的 bug，两边各修一次很容易漏。
 import { PinPad, ParentPinPanel } from '../parent/ParentGate'
+import { GamesSection } from './GamesSection'
+import { Card } from './ui'
 
 /* ============================================================
    家长设置 + 数据导出/导入
@@ -23,7 +25,7 @@ import { PinPad, ParentPinPanel } from '../parent/ParentGate'
    导出走 JSON 全量快照，可在任何设备上恢复（单机优先，不依赖服务端）。
    ============================================================ */
 
-type Tab = 'child' | 'rules' | 'data'
+type Tab = 'child' | 'rules' | 'game' | 'data'
 
 export default function SettingsPage({
   onBack,
@@ -139,11 +141,23 @@ export default function SettingsPage({
       </header>
 
       <nav>
-        <div className="page-col flex gap-2 overflow-x-auto px-4 py-3 no-scrollbar">
+        {/*
+          ⚠️ 2026-10-14 加「🎮 游戏」之后这里从 3 栏变成 4 栏，**手机上放不下了**：
+          每颗药丸 99px，4 颗 + 间距 + 内边距 = 451px > 390px。原来那套
+          `overflow-x-auto` + `no-scrollbar` 会把最后一栏裁掉一半，而且**不报错**、
+          滚动条也被藏起来了 —— 家长只会以为「数据」那一栏坏了。
+          （实测：`scrollWidth=451 clientWidth=390`。）
+
+          改成栅格：手机上 2×2 换行，≥640px 一行四颗。这样**永远放得下**，
+          而且加第 5 栏时也只是多一行，不会重演一次裁剪。
+          药丸保持原尺寸居中，观感不变。
+        */}
+        <div className="page-col grid grid-cols-2 justify-items-center gap-2 px-4 py-3 sm:grid-cols-4">
           {(
             [
               ['child', '👦 孩子'],
               ['rules', '📏 规则'],
+              ['game', '🎮 游戏'],
               ['data', '💾 数据'],
             ] as [Tab, string][]
           ).map(([k, label]) => (
@@ -151,7 +165,7 @@ export default function SettingsPage({
               key={k}
               onClick={() => setTab(k)}
               className={
-                'btn shrink-0 rounded-full px-5 py-2.5 text-base font-bold ' +
+                'btn rounded-full px-5 py-2.5 text-base font-bold ' +
                 (tab === k
                   ? 'bg-sun-300 text-ink-900 shadow-flat'
                   : 'bg-white text-ink-500 shadow-flat')
@@ -518,6 +532,36 @@ export default function SettingsPage({
           </>
         )}
 
+        {/*
+          游戏（插件骨架，2026-10-14）。
+          「设为当前」和（将来的）购买都会改状态 / 花钱，所以和「规则」页一样
+          先要家长密码 —— 用同一个 `locked`，在规则页解过锁这里就不用再输一遍。
+        */}
+        {tab === 'game' && (
+          <>
+            {needsPin && locked ? (
+              <Card title="请输入家长密码" emoji="🔒">
+                <PinPad
+                  value={pin}
+                  onChange={setPin}
+                  onSubmit={(final) => {
+                    const candidate = final ?? pin
+                    if (candidate === settings.parentPin) {
+                      setLocked(false)
+                      setPin('')
+                    } else {
+                      pushToast({ kind: 'warn', title: '密码不对哦', emoji: '🔒' })
+                      setPin('')
+                    }
+                  }}
+                />
+              </Card>
+            ) : (
+              <GamesSection gateOpen={gateOpen} />
+            )}
+          </>
+        )}
+
         {tab === 'data' && (
           <>
             {needsPin && dataLocked ? (
@@ -631,24 +675,8 @@ export default function SettingsPage({
 
 /* ---------------- 小组件 ---------------- */
 
-function Card({
-  title,
-  emoji,
-  children,
-}: {
-  title: string
-  emoji: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="surface p-4">
-      <h2 className="mb-3 font-display text-lg font-extrabold text-ink-900">
-        {emoji} {title}
-      </h2>
-      {children}
-    </section>
-  )
-}
+/* `Card` 搬到了 `./ui` —— `GamesSection.tsx` 也要用它，两边各留一份
+   就是同一个事实存两份（改样式只改一处，两块卡片长得不一样且不报错）。 */
 
 /** 开关本体。`Toggle` 和需要更多控件的卡片共用它 —— 开关只该有一份实现。 */
 function Switch({

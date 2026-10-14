@@ -12,6 +12,7 @@ import type {
   HarvestMode,
   InventorySlot,
   LedgerEntry,
+  MallEntry,
   MarketState,
   PendingCheckIn,
   Plot,
@@ -26,6 +27,7 @@ import {
   consumeItem,
   currentBalance,
   currentHarvestBalance,
+  currentMallBalance,
   db,
   DEFAULT_SETTINGS,
   loadAllRedeemItems,
@@ -48,8 +50,11 @@ import {
   savePlots,
   saveQuotaCarry,
   saveSettings,
+  spendMall,
   wipeAll,
 } from '../db/db'
+import { DEFAULT_GAME_ID } from '../games/ids'
+import { GAMES, gameById, ownedByDefault, purchasedIdsFrom } from '../games/registry'
 import { hapticLight, playTone, type ToneKind } from '../platform/files'
 import { settleInstance, type SettleParams } from '../domain/settlement'
 import {
@@ -174,6 +179,22 @@ interface AppState {
   balance: number
   /** 丰收币余额 —— 只能花在兑换商城的丰收档，**不能回流农场、不能换积分** */
   harvestBalance: number
+  /**
+   * 商城币流水 / 余额（第三套币，2026-10-14 起）。
+   *
+   * **这一轮只建钱包，没有发币入口**（来源将来是付费或兑换码），所以
+   * `mallBalance` 恒为 0、购买按钮也不会出现。见 `MallEntry` 的注释。
+   */
+  mallLedger: MallEntry[]
+  mallBalance: number
+  /** 当前正在玩的游戏 id。底部导航的游戏 tab 跟着它走。 */
+  activeGameId: string
+  /**
+   * 已拥有的游戏 id。**派生值，不是存储值** ——
+   * = `defaultOwned` 的那款 + 账本里有过 `game_purchase` 支出的那些。
+   * 见 `games/registry.ts` 的 `purchasedIdsFrom`。
+   */
+  ownedGameIds: string[]
   todayKey: string
 
   toasts: Toast[]
@@ -312,6 +333,24 @@ interface AppState {
   fulfillRedeem: (recordId: string) => Promise<void>
   /** 今日已兑换次数（用于 limitPerDay 校验） */
   redeemedToday: (itemId: string) => number
+
+  /* ---- 游戏（插件骨架，2026-10-14 起） ---- */
+  /**
+   * 切换「当前正在玩的游戏」。底部导航的游戏 tab 跟着它走。
+   *
+   * 只接受**已拥有且可玩**的 id；其余一律忽略（见实现里的两道守卫）。
+   * 不抛异常 —— 它可能被旧存档 / 手改的 IndexedDB 触发，那种情况应该
+   * 安静地保持原样，而不是把整个页面炸掉。
+   */
+  setActiveGame: (id: string) => Promise<void>
+  /**
+   * 用**商城币**买一款游戏。
+   *
+   * ⚠️ 这一轮没有任何发币入口，所以余额恒为 0、这个动作在界面上走不到。
+   * 它已经写好并有用例，是为了「付费入口 / 兑换码」接上时不用重写经济逻辑。
+   * 返回值说明结果，调用方负责给家长反馈 —— 别让它静默失败。
+   */
+  buyGame: (id: string) => Promise<{ ok: boolean; message: string }>
 
   /* ---- 设置与数据 ---- */
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>
@@ -568,6 +607,7 @@ const BACKUP_ARRAY_FIELDS = [
   'taskInstances',
   'ledger',
   'harvestLedger',
+  'mallLedger',
   'inventory',
   'animals',
   'checkIns',
@@ -583,6 +623,7 @@ const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
   'taskInstances',
   'ledger',
   'harvestLedger',
+  'mallLedger',
   'animals',
   'checkIns',
   'checkInProgress',
@@ -631,6 +672,43 @@ function sortTasks(rows: Task[]): Task[] {
     if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
   })
+}
+
+/* ---------------- 游戏：拥有关系与「当前」（插件骨架，2026-10-14 起） ---------------- */
+
+/**
+ * 已拥有的游戏 id = 「默认拥有」的 + 「账本里买过」的。**只有这一个来源。**
+ *
+ * 刻意**不**往 `settings` 里存一份 `ownedGames` —— 那就成了第二份事实：
+ * 退款、清库、导入备份、兑换码补发，任何一处忘了同步就会走散，
+ * 而且不报错（本项目在 `Task` / `TaskInstance` 上已经吃过一次这个亏）。
+ *
+ * 账本里可能出现**注册表里已经没有的 id**（游戏下线了）。这里照样收进来：
+ * 万一它以后又上架，家长的购买记录还在。反正渲染层只认注册表。
+ */
+function ownedGameIdsFrom(mallLedger: readonly MallEntry[]): string[] {
+  const ids = new Set<string>()
+  for (const g of GAMES) if (ownedByDefault(g)) ids.add(g.id)
+  for (const id of purchasedIdsFrom(mallLedger)) ids.add(id)
+  return [...ids]
+}
+
+/**
+ * 把 `settings.activeGame` 解析成一个**真的能用**的 id。
+ *
+ * 存档里那个 id 有三种失效方式：
+ *   ① 那款游戏还没买（清库 / 退款 / 导入了别的设备的备份）；
+ *   ② 注册表里已经没有它了（改过 id / 游戏下线）；
+ *   ③ 字段根本不存在（老库）。
+ * 三种都回落到 `DEFAULT_GAME_ID`（首款，免费且默认拥有，所以兜底一定有效）。
+ *
+ * ⚠️ 少了这一步，底部导航会指着一个不存在的页面 —— 而 React 那边
+ * 只是渲染出一个空白 tab，**不报错**。本项目最怕的就是这种静默失效。
+ */
+function resolveActiveGame(rawId: string | undefined, owned: readonly string[]): string {
+  const g = gameById(rawId)
+  if (g && g.status === 'available' && owned.includes(g.id)) return g.id
+  return DEFAULT_GAME_ID
 }
 
 async function doRefresh(
@@ -742,12 +820,14 @@ async function doRefresh(
     instances,
     ledger,
     harvestLedger,
+    mallLedger,
     inventory,
     animals,
     checkIns,
     checkInProgress,
     balance,
     harvestBalance,
+    mallBalance,
     redeemItems,
     allRedeemItems,
     redeemRecords,
@@ -761,12 +841,15 @@ async function doRefresh(
     db.ledger.orderBy('createdAt').reverse().toArray(),
     // 丰收币流水同理，全量读。
     db.harvestLedger.orderBy('createdAt').reverse().toArray(),
+    // 商城币流水同理。这一轮它通常是空的（没有发币入口）。
+    db.mallLedger.orderBy('createdAt').reverse().toArray(),
     db.inventory.toArray(),
     db.animals.toArray(),
     db.checkIns.toArray(),
     db.checkInProgress.toArray(),
     currentBalance(),
     currentHarvestBalance(),
+    currentMallBalance(),
     loadRedeemItems(),
     loadAllRedeemItems(),
     loadRedeemRecords(),
@@ -774,12 +857,17 @@ async function doRefresh(
     loadQuotaCarry(),
   ])
 
+  // 拥有关系从账本派生；「当前游戏」再按拥有关系解析一遍 ——
+  // 顺序不能反，否则会拿旧账本去判「买了没」。
+  const ownedGameIds = ownedGameIdsFrom(mallLedger)
+
   set({
     tasks,
     allTasks,
     instances,
     ledger,
     harvestLedger,
+    mallLedger,
     inventory,
     animals,
     plots: farm.plots,
@@ -798,6 +886,9 @@ async function doRefresh(
     market,
     balance,
     harvestBalance,
+    mallBalance,
+    ownedGameIds,
+    activeGameId: resolveActiveGame(settings.activeGame, ownedGameIds),
     todayKey: today,
   })
 }
@@ -1185,6 +1276,7 @@ export const useApp = create<AppState>((set, get) => ({
   instances: [],
   ledger: [],
   harvestLedger: [],
+  mallLedger: [],
   inventory: [],
   animals: [],
   plots: createInitialFarm().plots,
@@ -1197,6 +1289,9 @@ export const useApp = create<AppState>((set, get) => ({
   market: createInitialMarket(PRODUCE_BASE_PRICE),
   balance: 0,
   harvestBalance: 0,
+  mallBalance: 0,
+  activeGameId: DEFAULT_GAME_ID,
+  ownedGameIds: ownedGameIdsFrom([]),
   todayKey: appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour),
   toasts: [],
   settleFlash: null,
@@ -2528,6 +2623,50 @@ export const useApp = create<AppState>((set, get) => ({
     await get().refresh()
   },
 
+  /* ================= 游戏（插件骨架） ================= */
+
+  setActiveGame: async (id) => {
+    // 两道守卫，缺一不可：
+    //   ① 注册表里真有它，而且**可玩**（`comingSoon` 的不算）；
+    //   ② 已经拥有它。
+    // 不满足就**安静地什么都不做** —— 这个动作可能被旧存档、手改的
+    // IndexedDB 或测试触发，那种情况不该把页面炸掉。
+    const g = gameById(id)
+    if (!g || g.status !== 'available') return
+    if (!get().ownedGameIds.includes(g.id)) return
+    if (get().activeGameId === g.id) return
+    await get().updateSettings({ activeGame: g.id })
+    await get().refresh()
+  },
+
+  buyGame: async (id) => {
+    const g = gameById(id)
+    if (!g) return { ok: false, message: '没有这款游戏' }
+    if (g.status !== 'available') return { ok: false, message: '这款游戏还没做好' }
+    if (get().ownedGameIds.includes(g.id)) return { ok: false, message: '已经买过了' }
+    if (g.priceMall <= 0) {
+      // 免费游戏不该走购买流程 —— 它应该直接是 `defaultOwned`。
+      // 真碰到说明注册表配错了；这里**不写一笔 0 币的假账**，直接拒绝。
+      return { ok: false, message: '这款游戏是免费的，不用买' }
+    }
+    // 扣款走 `spendMall`：**守卫（余额够不够）和扣款在同一个事务里**。
+    // 别改成「先读余额、再 postMall」—— 那会把守卫放到事务外面，
+    // 并发时两边都读到「够」然后都扣（`consumeItem` 的注释里记过这次事故）。
+    const ok = await spendMall(g.priceMall, {
+      source: 'game_purchase',
+      refId: g.id,
+      memo: `购买「${g.name}」`,
+    })
+    if (!ok) {
+      const balance = await currentMallBalance()
+      return { ok: false, message: `商城币不够，还差 ${g.priceMall - balance}` }
+    }
+    await get().refresh()
+    // ⚠️ 买完**不自动切成当前**。家长可能是在提前囤游戏；
+    //    切「当前」是一次显式操作（家长栏里那一行上的按钮）。
+    return { ok: true, message: `已购买「${g.name}」` }
+  },
+
   /* ================= 设置与数据 ================= */
 
   /**
@@ -2568,6 +2707,7 @@ export const useApp = create<AppState>((set, get) => ({
       taskInstances,
       ledger,
       harvestLedger,
+      mallLedger,
       inventory,
       animals,
       checkIns,
@@ -2585,6 +2725,7 @@ export const useApp = create<AppState>((set, get) => ({
       db.taskInstances.toArray(),
       db.ledger.toArray(),
       db.harvestLedger.toArray(),
+      db.mallLedger.toArray(),
       db.inventory.toArray(),
       db.animals.toArray(),
       db.checkIns.toArray(),
@@ -2607,6 +2748,10 @@ export const useApp = create<AppState>((set, get) => ({
         taskInstances,
         ledger,
         harvestLedger,
+        /** 商城币账本。**必须导出** —— 它是「买过哪些游戏」的唯一依据
+            （见 `games/registry.ts` 的 `purchasedIdsFrom`），漏掉就等于
+            导出/导入一次把买过的游戏全退掉。 */
+        mallLedger,
         inventory,
         animals,
         checkIns,
@@ -2676,6 +2821,7 @@ export const useApp = create<AppState>((set, get) => ({
         ledger: pickArray<LedgerEntry>(d.ledger) ?? [],
         // 老备份里没有这个字段，`pickArray(undefined)` 返回 null，落到空数组。
         harvestLedger: pickArray<HarvestEntry>(d.harvestLedger) ?? [],
+        mallLedger: pickArray<MallEntry>(d.mallLedger) ?? [],
         // ⚠️ 背包的主键是 `itemId`，不是 `id` —— 见上面 `pickArray` 的注释
         inventory: pickArray<InventorySlot>(d.inventory, 'itemId') ?? [],
         animals: pickArray<Animal>(d.animals) ?? [],
@@ -2701,6 +2847,7 @@ export const useApp = create<AppState>((set, get) => ({
           db.redeemRecords,
           db.farmEvents,
           db.harvestLedger,
+          db.mallLedger,
           db.meta,
         ],
         async () => {
@@ -2709,6 +2856,7 @@ export const useApp = create<AppState>((set, get) => ({
             db.taskInstances.clear(),
             db.ledger.clear(),
             db.harvestLedger.clear(),
+            db.mallLedger.clear(),
             db.inventory.clear(),
             db.animals.clear(),
             db.checkIns.clear(),
@@ -2722,6 +2870,7 @@ export const useApp = create<AppState>((set, get) => ({
           await db.taskInstances.bulkPut(rows.taskInstances)
           await db.ledger.bulkPut(rows.ledger)
           if (rows.harvestLedger.length > 0) await db.harvestLedger.bulkPut(rows.harvestLedger)
+          if (rows.mallLedger.length > 0) await db.mallLedger.bulkPut(rows.mallLedger)
           await db.inventory.bulkPut(rows.inventory)
           await db.animals.bulkPut(rows.animals)
           await db.checkIns.bulkPut(rows.checkIns)

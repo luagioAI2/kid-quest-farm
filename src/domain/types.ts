@@ -292,6 +292,54 @@ export interface HarvestEntry {
   createdAt: number
 }
 
+/* ---------------- 商城币（第三套货币，2026-10-14 起） ---------------- */
+
+/**
+ * 商城币的来源。
+ *
+ * **目前只有出口，没有入口。** 家长 2026-10-14 拍板：
+ * > 「商城币 跟积分 和 丰收币都不一样。首款免费并且默认购买。」
+ * > 「（来源）以后支付购买。或者兑换码。」
+ *
+ * 所以这一轮**只建钱包**：账本、余额、购买扣费全都在，但没有任何发币入口，
+ * 币恒为 0。这样界面上就不会出现一个「按下去什么都不会发生」的购买按钮 ——
+ * 本项目最忌讳的就是**界面承诺了它做不到的事**。
+ *
+ * 等付费入口或兑换码接上时，再往这里加成员。
+ */
+export type MallSource =
+  | 'game_purchase' // 买游戏（负数）
+  | 'redemption_code' // 兑换码（【提案】—— 本轮没有入口）
+  | 'manual_adjust' // 家长手工调整
+
+/**
+ * 商城币账本条目。字段与 `HarvestEntry` 同形，**存在第三张表里**。
+ *
+ * ## 为什么又是「单开一张表」
+ *
+ * 理由和 `HarvestEntry` 那段完全一样：把「商城币不算进任何别的余额」
+ * 做成**结构性**约束，而不是靠每个读余额的地方都记得加过滤。
+ * `currentBalance()` 只读 `db.ledger`、`currentHarvestBalance()` 只读
+ * `db.harvestLedger` —— 两者**在物理上**都看不到 `mallLedger`。
+ *
+ * ## 三套币之间一条通路都没有
+ *
+ * 积分 ⇸ 丰收币、丰收币 ⇸ 积分、商城币 ⇸ 任何别的币，全都不存在。
+ * ⚠️ **任何两条币之间的双向通路都是印钞机**（`HarvestEntry` 的注释里
+ * 算过一次：每轮 2 分钟，1 小时 ≈ 1300 万）。加通路之前先把那张账重算一遍。
+ */
+export interface MallEntry {
+  id: string
+  /** 正数为收入，负数为支出 */
+  delta: number
+  balanceAfter: number
+  source: MallSource
+  /** 关联对象 id（游戏 id 等） */
+  refId?: string
+  memo: string
+  createdAt: number
+}
+
 /* ---------------- 道具与背包 ---------------- */
 
 export type ItemRarity = 'common' | 'rare' | 'epic'
@@ -876,6 +924,23 @@ export interface AppSettings {
      别再加回设置页 —— 家长已经明确不需要，而且多一个「看不见的全局值」
      只会让「界面显示的」和「实际发的」有机会走散。 */
 
+  /**
+   * **当前正在玩的那款游戏 id**（2026-10-14 起）。
+   *
+   * 底部导航上那个游戏 tab（图标 / 名字）跟着它走，见 `src/App.tsx`。
+   *
+   * 只存 id，**不存游戏对象** —— 名字、图标、页面、价格都在
+   * `src/games/registry.ts` 里，存进来就是第二份事实，迟早走散。
+   *
+   * 可选：老库里没有这个字段，`loadSettings` 会和 `DEFAULT_SETTINGS` 合并
+   * 拿到 `DEFAULT_GAME_ID`，所以**不需要数据迁移**。
+   *
+   * ⚠️ 读到「未拥有」或「已经不在注册表里」的 id 时必须**回落到
+   * `DEFAULT_GAME_ID`** —— 见 `store/useApp.ts` 的 `resolveActiveGame()`。
+   * 否则清库 / 退款之后，底部导航会指着一个根本不存在的页面。
+   */
+  activeGame?: string
+
   /** 农场时间流速设置 */
   farmClock: FarmClockSettings
 
@@ -895,6 +960,8 @@ export interface BackupFile {
     ledger: LedgerEntry[]
     /** 丰收币账本。老备份里没有这个字段，导入时按空数组处理。 */
     harvestLedger?: HarvestEntry[]
+    /** 商城币账本。同上，老备份里没有，导入时按空数组处理。 */
+    mallLedger?: MallEntry[]
     inventory: InventorySlot[]
     farm: FarmState
     checkIns: CheckInRecord[]

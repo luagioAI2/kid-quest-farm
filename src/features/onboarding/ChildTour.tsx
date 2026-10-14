@@ -40,7 +40,7 @@ import { Portal } from '../../components/Portal'
       气泡会被推出屏幕下沿。判据是「目标中心在不在视口上半」。
    ============================================================ */
 
-export type TourTabKey = 'tasks' | 'farm' | 'redeem' | 'points'
+export type TourTabKey = 'tasks' | 'game' | 'redeem' | 'points'
 
 interface TourStep {
   /** 气泡的稳定标识。e2e 靠它定位（别改成「第几个」） */
@@ -77,9 +77,14 @@ const STEPS: TourStep[] = [
     //    （现价 × 个数），那个差额恒为 0。2026-09-16 修过一次，见 `MarketSheet` 文件头。
     // 但孩子走完导览如果只知道「农场能种地」，那一课就没有引子，等于没有。
     // **别把这两句改回「买种子、种地、换丰收币」的纯操作说明。**
+    //
+    // ⚠️ 2026-10-14 插件化：`tab` 从 `'farm'` 改成 `'game'`（底部导航那一格
+    // 现在叫「游戏」，内容跟着当前游戏走），但 `anchor` **保持 `'tab-farm'`** ——
+    // 农场是首款且默认拥有，那一格的 `data-tour` 就是 `tab-<当前游戏 id>`。
+    // 改 `anchor` 会同时弄断 e2e-check 和 capture-tablet。
     id: 'farm',
     anchor: 'tab-farm',
-    tab: 'farm',
+    tab: 'game',
     audience: 'kid',
     emoji: '🌾',
     title: '农场',

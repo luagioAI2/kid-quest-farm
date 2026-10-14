@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { db, postLedger, currentBalance, addItem, consumeItem, DEFAULT_SETTINGS } from '../db/db'
+import {
+  db,
+  postLedger,
+  currentBalance,
+  addItem,
+  consumeItem,
+  DEFAULT_SETTINGS,
+  currentMallBalance,
+  postMall,
+  spendMall,
+} from '../db/db'
 
 /* ============================================================
    持久层回归测试
@@ -264,5 +274,55 @@ describe('全局奖励值已经被删掉（2026-10-12 家长拍板）', () => {
       'streakBonusEnabled' in DEFAULT_SETTINGS,
       '连击不再有全局开关；要关某条任务就把它的「每连一天多给」设成 0',
     ).toBe(false)
+  })
+})
+
+/* ============================================================
+   商城币账本（第三套币，2026-10-14）
+   ------------------------------------------------------------
+   结构和丰收币完全对称，所以这里只钉两件**独有**的事：
+     ① 三套币互不可见（商城币不进积分、也不进丰收币）；
+     ② `spendMall` 的守卫在**事务里面** —— 并发扣款不能超支。
+   ============================================================ */
+describe('商城币账本', () => {
+  it('余额 = 所有 delta 之和，且不串进积分 / 丰收币', async () => {
+    await postLedger({ delta: 100, source: 'task', memo: '积分' })
+    await postMall({ delta: 30, source: 'manual_adjust', memo: '商城币' })
+    expect(await currentMallBalance()).toBe(30)
+    // 三张表各算各的：加了 30 商城币，积分余额一个数都不该动
+    expect(await currentBalance()).toBe(100)
+  })
+
+  it('余额不够时一分不扣，也不留半条记录', async () => {
+    await postMall({ delta: 30, source: 'manual_adjust', memo: '只有 30' })
+    const ok = await spendMall(50, { source: 'game_purchase', refId: 'x', memo: '买 x' })
+    expect(ok).toBe(false)
+    expect(await currentMallBalance()).toBe(30)
+    expect(await db.mallLedger.count()).toBe(1)
+  })
+
+  it('够的时候正常扣', async () => {
+    await postMall({ delta: 100, source: 'manual_adjust', memo: '充值' })
+    const ok = await spendMall(50, { source: 'game_purchase', refId: 'x', memo: '买 x' })
+    expect(ok).toBe(true)
+    expect(await currentMallBalance()).toBe(50)
+  })
+
+  it('★ 并发扣款不会超支（守卫和扣款在同一个事务里）', async () => {
+    // 修复前的那种写法是「先读余额判断、再 postMall」—— 两次调用会
+    // 各自读到同一个 100，于是**都**扣成功，余额变成 -20。
+    // 和 `consumeItem` 的超卖是同一个事故（那边是库存 1 卖两次）。
+    await postMall({ delta: 100, source: 'manual_adjust', memo: '充值' })
+    const results = await Promise.all([
+      spendMall(60, { source: 'game_purchase', refId: 'a', memo: '买 a' }),
+      spendMall(60, { source: 'game_purchase', refId: 'b', memo: '买 b' }),
+    ])
+    expect(results.filter(Boolean)).toHaveLength(1)
+    expect(await currentMallBalance()).toBe(40)
+  })
+
+  it('金额一律取整（和 postLedger / postHarvest 同口径）', async () => {
+    await postMall({ delta: 10.4, source: 'manual_adjust', memo: '小数' })
+    expect(await currentMallBalance()).toBe(10)
   })
 })

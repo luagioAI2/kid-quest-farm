@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie'
 import { createInitialFarm } from '../domain/farm'
 import { createInitialMarket } from '../domain/market'
 import { PRODUCE_BASE_PRICE } from '../domain/catalog'
+import { DEFAULT_GAME_ID } from '../games/ids'
 import type {
   Animal,
   AppSettings,
@@ -12,6 +13,8 @@ import type {
   HarvestEntry,
   InventorySlot,
   LedgerEntry,
+  MallEntry,
+  MallSource,
   MarketState,
   RedeemItem,
   RedeemRecord,
@@ -37,6 +40,8 @@ class KidQuestFarmDB extends Dexie {
   ledger!: Table<LedgerEntry, string>
   /** 丰收币账本。与 `ledger` 物理隔离，见 `HarvestEntry` 的注释。 */
   harvestLedger!: Table<HarvestEntry, string>
+  /** 商城币账本。第三套币，同样物理隔离，见 `MallEntry` 的注释。 */
+  mallLedger!: Table<MallEntry, string>
   inventory!: Table<InventorySlot, string>
   animals!: Table<Animal, string>
   checkIns!: Table<CheckInRecord, string>
@@ -96,6 +101,19 @@ class KidQuestFarmDB extends Dexie {
     // 都记得加过滤**。漏一个 filter 就静默算错，而且不报错。
     this.version(5).stores({
       harvestLedger: 'id, source, createdAt, refId',
+    })
+    // v6：商城币独立账本（第三套币，2026-10-14）。
+    //
+    // 家长原话：「商城币 跟积分 和 丰收币都不一样。」同样是**单开一张表**
+    // 而不是给 ledger 加 currency 字段 —— 理由与 v5 的丰收币一字不差：
+    // 让「商城币不算进任何别的余额」由表结构保证，而不是靠每个读余额的
+    // 地方都记得加过滤（漏一个就静默算错，且不报错）。
+    //
+    // 这一轮**只建钱包，没有发币入口**（来源将来是付费或兑换码），
+    // 所以这张表通常一直是空的 —— 购买按钮也不会出现。
+    // ⚠️ 建了表不等于建了币。别为了「让表里有东西」先塞一笔假数据。
+    this.version(6).stores({
+      mallLedger: 'id, source, createdAt, refId',
     })
   }
 }
@@ -395,6 +413,95 @@ export async function postHarvest(
   })
 }
 
+/* ---------------- 商城币账本 ---------------- */
+
+/**
+ * 商城币余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
+ *
+ * **只读 `db.mallLedger`** —— 这就是「商城币不算进积分、也不算进丰收币」
+ * 这条约束的落点。
+ */
+export async function currentMallBalance(): Promise<number> {
+  const rows = await db.mallLedger.toArray()
+  return rows.reduce((sum, r) => sum + r.delta, 0)
+}
+
+/** 取「下一笔商城币账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
+export async function mallTip(): Promise<{ createdAt: number; balance: number }> {
+  const rows = await db.mallLedger.toArray()
+  const maxAt = rows.reduce((m, r) => (r.createdAt > m ? r.createdAt : m), 0)
+  return {
+    createdAt: Math.max(Date.now(), maxAt + 1),
+    balance: rows.reduce((sum, r) => sum + r.delta, 0),
+  }
+}
+
+/** 商城币账本行的**唯一**构造处 —— `postMall` 和 `spendMall` 都走它，别各写一份。 */
+function mallRow(
+  tip: { createdAt: number; balance: number },
+  entry: {
+    delta: number
+    source: MallSource
+    refId?: string
+    memo: string
+    id?: string
+    createdAt?: number
+  },
+): MallEntry {
+  const delta = Math.round(entry.delta)
+  return {
+    id: entry.id ?? `ml_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+    delta,
+    balanceAfter: tip.balance + delta,
+    source: entry.source,
+    refId: entry.refId,
+    memo: entry.memo,
+    createdAt: Math.max(entry.createdAt ?? tip.createdAt, tip.createdAt),
+  }
+}
+
+/**
+ * 记一笔商城币。**唯一**允许改动商城币余额的入口。
+ *
+ * 与 `postHarvest` 完全对称，只是换了张表。
+ */
+export async function postMall(
+  entry: Omit<MallEntry, 'id' | 'balanceAfter' | 'createdAt'> & {
+    id?: string
+    createdAt?: number
+  },
+): Promise<MallEntry> {
+  return db.transaction('rw', db.mallLedger, async () => {
+    const row = mallRow(await mallTip(), entry)
+    await db.mallLedger.put(row)
+    return row
+  })
+}
+
+/**
+ * 扣一笔商城币，**在同一个事务里先验余额**。余额不够返回 `false`，一分不扣。
+ *
+ * ## 为什么不「先 `currentMallBalance()` 判断，再 `postMall()`」
+ *
+ * 那是把**守卫放在事务外面**：两次并发调用会各自读到同一个「够」，
+ * 于是都扣 —— **超支**，而且每条 `balanceAfter` 都自洽、不报错。
+ * `consumeItem` 的注释里记过一模一样的事故（库存 1 个时并发卖两次，
+ * 返回 `[true, true]`）。**守卫和扣款必须在同一个事务里。**
+ */
+export async function spendMall(
+  amount: number,
+  entry: { source: MallSource; refId?: string; memo: string },
+): Promise<boolean> {
+  const cost = Math.round(amount)
+  if (cost <= 0) return false
+  return db.transaction('rw', db.mallLedger, async () => {
+    const tip = await mallTip()
+    if (tip.balance < cost) return false
+    await db.mallLedger.put(mallRow(tip, { ...entry, delta: -cost }))
+    return true
+  })
+}
+
 /* ---------------- 设置 ---------------- */
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -431,6 +538,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
    * 口径与夹取区间见 `domain/cash.ts`。
    */
   pointsPerYuan: 10,
+  /**
+   * 当前正在玩的游戏。默认首款（农场）—— 见 `games/ids.ts` 的 `DEFAULT_GAME_ID`。
+   *
+   * 和别的设置一样，`loadSettings` 会和 `DEFAULT_SETTINGS` 合并，
+   * 所以**老库里没有这个字段也能拿到默认值**，不需要数据迁移。
+   */
+  activeGame: DEFAULT_GAME_ID,
   farmClock: {
     timeScale: 1,
     showClock: true,
@@ -469,6 +583,7 @@ export async function wipeAll(): Promise<void> {
       db.redeemRecords,
       db.farmEvents,
       db.harvestLedger,
+      db.mallLedger,
       db.meta,
     ],
     async () => {
@@ -477,6 +592,7 @@ export async function wipeAll(): Promise<void> {
         db.taskInstances.clear(),
         db.ledger.clear(),
         db.harvestLedger.clear(),
+        db.mallLedger.clear(),
         db.inventory.clear(),
         db.animals.clear(),
         db.checkIns.clear(),

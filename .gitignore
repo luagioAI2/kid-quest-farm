@@ -1,5 +1,7 @@
 # 依赖
 node_modules/
+# 中断的安装留下的半成品目录（117MB，2026-10-14 在 farm-2d worktree 里发现）
+node_modules.partial/
 
 # 构建产物
 dist/

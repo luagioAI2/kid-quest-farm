@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { selectPendingCheckIns, selectPendingReview, useApp } from './store/useApp'
 import TaskPage from './features/tasks/TaskPage'
 import PointsPage from './features/tasks/PointsPage'
-import FarmPage from './features/farm/FarmPage'
 import RedeemPage from './features/redeem/RedeemPage'
 import SettingsPage from './features/settings/SettingsPage'
 import { ReviewSheetModal } from './features/parent/ReviewSheet'
@@ -11,15 +10,28 @@ import { SetupWizard } from './features/onboarding/SetupWizard'
 import { ChildTour } from './features/onboarding/ChildTour'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { isNative, playTone } from './platform/files'
+import { GAME_FARM } from './games/ids'
+import { gameById } from './games/registry'
+import { pageFor } from './games/pages'
 import './features/farm/farm.css'
 
-type TabKey = 'tasks' | 'farm' | 'redeem' | 'points'
+type TabKey = 'tasks' | 'game' | 'redeem' | 'points'
 
-const TABS: { key: TabKey; label: string; emoji: string }[] = [
-  { key: 'tasks', label: '任务', emoji: '📋' },
-  { key: 'farm', label: '农场', emoji: '🌾' },
-  { key: 'redeem', label: '兑换', emoji: '🎁' },
-  { key: 'points', label: '积分', emoji: '🪙' },
+/**
+ * 底部导航里**固定**的那三格。
+ *
+ * ⚠️ **游戏那一格不在这里。** 它的图标和名字跟着「当前正在玩的游戏」走
+ * （见组件里的 `tabs`），所以只能运行时算出来。
+ *
+ * `tour` 是给新手导览和 4 个走查脚本定位用的 `data-tour` 值。
+ * 游戏那一格的值是 `tab-<当前游戏 id>` —— 默认（农场）时正好是 `tab-farm`，
+ * 而 `ChildTour.tsx` 的导览步骤和 `capture-tablet.mjs` / `e2e-check.mjs`
+ * 都钉着这个字符串。**别把它改成固定的 `tab-game`**，那会同时弄断导览和 e2e。
+ */
+const STATIC_TABS: { key: TabKey; label: string; emoji: string; tour: string }[] = [
+  { key: 'tasks', label: '任务', emoji: '📋', tour: 'tab-tasks' },
+  { key: 'redeem', label: '兑换', emoji: '🎁', tour: 'tab-redeem' },
+  { key: 'points', label: '积分', emoji: '🪙', tour: 'tab-points' },
 ]
 
 /**
@@ -41,6 +53,15 @@ export default function App() {
   const boot = useApp((s) => s.boot)
   const tick = useApp((s) => s.tick)
   const settings = useApp((s) => s.settings)
+  /**
+   * 当前正在玩的游戏。底部导航的游戏那一格（图标 + 名字）跟着它走。
+   *
+   * `activeGameId` 已经在 store 里被 `resolveActiveGame()` 兜过底 ——
+   * 它保证是一个**注册表里有、可玩、且已拥有**的 id，所以这里再查一次
+   * 注册表拿到的 `activeGame` 一定有值。查不到时按「兜底」渲染，不炸。
+   */
+  const activeGameId = useApp((s) => s.activeGameId)
+  const activeGame = gameById(activeGameId)
 
   const [tab, setTab] = useState<TabKey>('tasks')
   const [showSettings, setShowSettings] = useState(false)
@@ -132,6 +153,37 @@ export default function App() {
     [instances, checkInProgress],
   )
 
+  /**
+   * 底部导航的全部四格：把「游戏」那一格插在「任务」和「兑换」之间。
+   *
+   * 游戏格是**运行时算**的 —— 图标、名字、`data-tour` 全都来自当前游戏。
+   * 农场是首款且默认拥有，所以默认状态下这一格就是原来的「🌾 农场 / tab-farm」，
+   * 观感和锚点零变化。
+   */
+  const tabs = useMemo(
+    () => [
+      STATIC_TABS[0],
+      {
+        key: 'game' as const,
+        label: activeGame?.name ?? '游戏',
+        emoji: activeGame?.emoji ?? '🎮',
+        tour: `tab-${activeGameId}`,
+      },
+      STATIC_TABS[1],
+      STATIC_TABS[2],
+    ],
+    [activeGame, activeGameId],
+  )
+
+  /**
+   * 当前游戏的页面组件。
+   *
+   * 页面挂在 `games/pages.ts` 里（注册表是纯数据，不能 import UI —— 见那边的注释）。
+   * `comingSoon` 的游戏拿不到页面，所以正常走不到「切过去了但没有页面」那种情况；
+   * 真走到了就渲染空白，而不是把整个 App 炸掉。
+   */
+  const GamePage = pageFor(activeGame)
+
   // 启动：加载数据 + 补齐今日任务
   useEffect(() => {
     void boot()
@@ -218,15 +270,25 @@ export default function App() {
                   {balance}
                 </span>
               </div>
-              <div
-                className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
-                aria-label={`丰收币 ${harvestBalance}`}
-              >
-                <span className="text-base leading-none">🌾</span>
-                <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">
-                  {harvestBalance}
-                </span>
-              </div>
+              {/*
+                丰收币是**农场这一款游戏**的币，不是全局的 —— 每款游戏有自己的
+                账本和自己的余额（见 `games/registry.ts`）。
+                所以只有当前游戏是农场时才渲染这枚币；否则会显示一枚跟眼前
+                这个游戏毫无关系的币，等于界面在说一件不成立的事。
+                ⚠️ 第二款游戏上线时，这里要改成「按当前游戏取它自己的币 + 余额」，
+                不能继续共用 `harvestBalance`。
+              */}
+              {activeGameId === GAME_FARM && (
+                <div
+                  className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
+                  aria-label={`丰收币 ${harvestBalance}`}
+                >
+                  <span className="text-base leading-none">🌾</span>
+                  <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">
+                    {harvestBalance}
+                  </span>
+                </div>
+              )}
               {/* 家长确认：放在设置旁边，和「家长相关」的事聚在一起。
                   尺寸从 40 提到 44 —— 44 是触控目标的下限，
                   这两个按钮孩子也会点（👀 能看自己交了什么）。 */}
@@ -261,7 +323,7 @@ export default function App() {
           <main key={tab} className="flex flex-1 flex-col anim-fade-in">
             <ErrorBoundary resetKey={tab}>
               {tab === 'tasks' && <TaskPage />}
-              {tab === 'farm' && <FarmPage />}
+              {tab === 'game' && GamePage && <GamePage />}
               {tab === 'redeem' && <RedeemPage />}
               {tab === 'points' && <PointsPage />}
             </ErrorBoundary>
@@ -272,14 +334,14 @@ export default function App() {
               拇指够得着底边，够不着侧边中段。 */}
           <nav className="sticky bottom-0 z-30 border-t border-ink-900/10 bg-paper/95 backdrop-blur">
             <div className="page-col flex items-stretch justify-center gap-1 px-2 py-2 pb-safe">
-              {TABS.map((t) => {
+              {tabs.map((t) => {
                 const active = tab === t.key
                 return (
                   <button
                     key={t.key}
                     onClick={() => setTab(t.key)}
                     /* 新手导览靠这个属性定位，不靠「第几个 button」（见 ChildTour 注释） */
-                    data-tour={`tab-${t.key}`}
+                    data-tour={t.tour}
                     className={
                       /* `max-w-[7.5rem]`：不加上限的话，tab 在平板上会被 flex-1
                          拉到 192~256px 宽，选中态那个圆角药丸会胖成一条。

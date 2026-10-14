@@ -198,7 +198,11 @@ describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
     expect(screen.getByText('1 / 6')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
-    expect(onStepChange).toHaveBeenLastCalledWith('farm')
+    // ⚠️ 2026-10-14 插件化之后这一步的 `tab` 是 `'game'`（底部那一格叫「游戏」，
+    // 内容跟着当前游戏走），但**高亮锚点仍然是 `tab-farm`** —— 农场是首款且
+    // 默认拥有，那一格的 `data-tour` 就是 `tab-<当前游戏 id>`。
+    // 锚点见下面 `data-tour-root` 那条断言，别把它一起改成 `tab-game`。
+    expect(onStepChange).toHaveBeenLastCalledWith('game')
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
     expect(onStepChange).toHaveBeenLastCalledWith('redeem')

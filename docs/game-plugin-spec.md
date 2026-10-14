@@ -60,13 +60,35 @@
 
 ## 2. 货币体系（唯一的跨模块接口）
 
-### 2.1 三个角色
+### 2.1 四个角色
 
 | 角色 | 符号 | 谁产生 | 谁消耗 | 现有实现 |
 | --- | --- | --- | --- | --- |
 | **积分** | 🪙 | 任务结算（`settleNow` → `postLedger`） | **所有游戏**的投入 + 兑换 | `ledger` 表，`state.balance` |
 | **游戏币** | 各游戏自定 | 该游戏内部的产出循环 | **只能**在兑换商城花 | 农场 = `harvestLedger` 表，`state.harvestBalance` |
+| **商城币** | 🎫 | **【还没接】将来是付费购买 / 兑换码** | **买游戏**（家长栏 →「游戏」） | `mallLedger` 表，`state.mallBalance` |
 | **兑换品** | — | 家长在「兑换商城」里配 | 孩子兑换，家长兑现 | `redeemItems` / `redeemRecords` |
+
+**三套币，三张表，互相一条通路都没有。** 积分 ⇸ 丰收币、丰收币 ⇸ 积分、
+商城币 ⇸ 任何别的币 —— 全都不存在。
+
+⚠️ **任何两条币之间的双向通路都是印钞机**（见 §2.2 那张账）。加通路之前先把账重算一遍。
+
+#### 商城币现在是什么状态（2026-10-14）
+
+家长原话：
+
+> 「商城币 跟积分 和 丰收币都不一样。首款免费并且默认购买。」
+> 「（来源）以后支付购买。或者兑换码。」
+
+所以**这一轮只建了钱包**：表、余额、扣款（`spendMall`）、购买动作（`buyGame`）
+全都在并且有用例，但**没有任何发币入口**，余额恒为 0。
+
+由此推出两条界面纪律（**别当成临时状态删掉**）：
+1. `status: 'comingSoon'` 的游戏**不渲染购买按钮、也不显示价格** —— 买了也没得玩；
+2. 家长栏的「商城币」卡片直接把「还没做」写出来，而不是摆一个按不动的按钮。
+
+➜ 等付费 / 兑换码接上，把这两条改掉即可。**不要为了「让表里有东西」先塞一笔假币。**
 
 **余额不是存出来的，是算出来的。** 这是本项目的一个关键选择：
 
@@ -105,9 +127,17 @@ export async function ledgerTip() {
 
 同一张表加 `currency` 字段的话，`currentBalance()` 只要漏一个
 `.filter(r => r.currency === 'points')`，游戏币就悄悄算进积分余额 —— **而且不报任何错**。
-分成两张表之后，`currentBalance()` 只读 `db.ledger`，它**在物理上不可能**看到丰收币。
+分成三张表之后，`currentBalance()` 只读 `db.ledger`、`currentHarvestBalance()` 只读
+`db.harvestLedger`、`currentMallBalance()` 只读 `db.mallLedger` —— 三个函数**在物理上
+不可能**看到彼此的币。
 
-**你的游戏必须自己开一张表**，不要往 `ledger` / `harvestLedger` 里塞。
+**你的游戏必须自己开一张表**，不要往 `ledger` / `harvestLedger` / `mallLedger` 里塞。
+
+⚠️ **扣款要带守卫时，守卫必须在事务里面。** 别写成「先 `currentXxxBalance()` 判断、
+再 `postXxx()`」—— 两次并发调用会各自读到同一个「够」，于是都扣（**超支**），
+而且每条 `balanceAfter` 都自洽、不报错。`spendMall` / `consumeItem` 是正确写法，
+可以照抄；`consumeItem` 的注释里记着那次事故的实测数据（库存 1 个并发卖两次，
+返回 `[true, true]`）。
 
 ### 2.4 兑换时的付款规则（先花游戏币，再补积分）
 
@@ -510,6 +540,16 @@ document.querySelector('div.grid.grid-cols-3')          // 网格
 ⚠️ **不要引入下标定位**（`children[1]`）—— 加一层包裹就会静默失效
 （曾经 `header.children[1]` 当锚点，加包裹后断言**假失败**，已改成 `[data-child-name]`）。
 
+**游戏那一格 tab 的锚点是 `tab-<当前游戏 id>`，不是固定的 `tab-game`。**
+
+默认（农场）时它就是 `tab-farm`，而 `ChildTour.tsx` 的导览步骤（`anchor: 'tab-farm'`）、
+`capture-tablet.mjs`、`e2e-check.mjs` 都钉着这个字符串。所以：
+
+- ⚠️ **别把游戏格改成固定的 `tab-game`** —— 会同时弄断新手导览和两个走查脚本；
+- 导览那一步的 `anchor` 要跟着当前游戏走，但它的 `tab` 字段**始终是 `'game'`**
+  （`tab` 是「停在哪个页面」，`anchor` 是「高亮哪个元素」，两者 2026-10-14 起不再同名）；
+- 底部导航另外三格（任务 / 兑换 / 积分）的锚点没变。
+
 **你的游戏**：网格 / 列表容器加 `data-*`，元素加 `data-<thing>-id`，例如
 `[data-claw-grid]` / `[data-claw-prize="bear"]`。
 
@@ -844,14 +884,44 @@ export const GAMES: GamePlugin[] = [farmPlugin, clawPlugin]
 
 ## 10. 落地路线（把现有 App 插件化）
 
-| 阶段 | 做什么 | 验收 |
+**进度（2026-10-14）**：A、C、D 已完成，B 未做，E / F 未开始。
+
+| 阶段 | 做什么 | 状态 |
 | --- | --- | --- |
-| **A** | 抽 `src/games/registry.ts` + `GameManifest` 类型；农场改成第一个实现（**行为零变化**） | 现有 524 单测 + 6 个 e2e 套件全绿，且**截图逐字节无差异** |
-| **B** | `RedeemItem` 加 `coin?` 字段 + 迁移；`planRedeemPayment` 按币种分发 | 新老记录都能读出正确的分账（`paidOf()` 兼容） |
-| **C** | 底部导航改成遍历 registry；tab 超过 5 个时收进「更多」 | 手机上 tab 不换行、触控 ≥44 |
-| **D** | 家长设置加「游戏开关」（`settings.enabledGames`） | 关掉的游戏不渲染 tab，但**存档保留** |
-| **E** | 农场美术补到 QQ 农场级（§8.5 的待做清单） | 走查图 + 单帧节点数 ≤30 + 体积 ≤ +15KB gzip |
-| **F** | 第二个游戏（娃娃机）按 §9 实现 | 同上四层验收 |
+| **A** | 抽 `src/games/registry.ts` + `GameDef` 类型；农场改成第一个实现（**行为零变化**） | ✅ **已完成**。注册表是**纯数据**，页面在 `src/games/pages.ts` —— 理由见下 |
+| **B** | `RedeemItem` 加 `coin?` 字段 + 迁移；`planRedeemPayment` 按币种分发 | ⬜ 未做 |
+| **C** | 底部导航改成遍历注册表 | ✅ **已完成**（固定 3 格 + 游戏格运行时算；`data-tour` 见 §7.2） |
+| **D** | 家长栏的「游戏」页：商城币钱包 + 已购买 + 当前游戏 + 购买动作 | ✅ **已完成**（购买按钮目前走不到，见 §2.1 末尾） |
+| **E** | 农场美术补到 QQ 农场级（§8.5 的待做清单） | ⬜ 未开始 |
+| **F** | 第二个游戏（娃娃机）按 §9 实现 | ⬜ 未开始 |
+
+### ⚠️ A 阶段踩到的坑：注册表**不能 import 页面组件**
+
+第一版把 `Page` 直接挂在 `GAMES` 的条目上，结果形成环：
+
+```
+store/useApp.ts  ──►  games/registry.ts  ──►  features/farm/FarmPage.tsx
+       ▲                                              │
+       └──────────────────────────────────────────────┘
+```
+
+`FarmPage` 要读 store，所以注册表只要静态 import 它，环就成立。环本身不致命，
+但**谁先 import 注册表谁就炸** —— `useApp.ts` 的模块顶层会遍历 `GAMES` 算初始值，
+而那一刻注册表还没求值完，读到的 `GAMES` 还在暂时性死区里：
+
+```
+TypeError: GAMES is not iterable
+```
+
+加 `registry.test.ts` 时就是这么炸的（测试文件先 import 了注册表）。
+**应用里没炸只是碰巧 import 顺序对** —— 这种「靠顺序活着」的依赖不能留。
+
+➜ 拆成两个文件：
+- `src/games/registry.ts` —— 纯数据 + 类型 + 纯函数（`store` 读它）；
+- `src/games/pages.ts` —— `GAME_PAGES: Record<id, ComponentType>`（只有 `App.tsx` 读它）。
+
+两边的一致性由 `registry.test.ts` 钉着（可玩的必须有页面、`pages.ts` 里不许有野页面）。
+**加游戏时数据加 registry、页面加 pages。**
 
 ### 这一路上最容易踩的坑（都是本项目真实踩过的）
 
@@ -885,6 +955,10 @@ export const GAMES: GamePlugin[] = [farmPlugin, clawPlugin]
 | 持久化 / 迁移 | `src/db/db.ts` |
 | store（所有动作） | `src/store/useApp.ts` |
 | 页面外壳 / tab | `src/App.tsx` |
+| **游戏注册表（纯数据）** | `src/games/registry.ts` |
+| **游戏 id 常量** | `src/games/ids.ts` |
+| **游戏 id → 页面组件** | `src/games/pages.ts` |
+| **家长栏「游戏」页** | `src/features/settings/GamesSection.tsx` |
 | 农场页面 | `src/features/farm/FarmPage.tsx` |
 | 农场精灵表 | `src/features/farm/cropSprites.tsx` |
 | 农场样式 / 动效 | `src/features/farm/farm.css` |
@@ -901,6 +975,7 @@ export const GAMES: GamePlugin[] = [farmPlugin, clawPlugin]
 | --- | --- |
 | **积分 🪙** | 任务赚来的唯一货币，所有游戏的入水口 |
 | **丰收币 🌾** | 农场的游戏币，只能在兑换商城花 |
+| **商城币 🎫** | 第三套币，用来**买游戏**。来源（付费 / 兑换码）还没接，余额恒为 0 |
 | **上限回收** | `成本 × (1 + r)`，一件产出物一辈子最多能卖多少币 —— 通胀闸门 |
 | **满产** | 单次收获的上限，`min(满产, round(基础 × 倍率))` |
 | **逻辑日** | `dayStartHour`（默认 4）划出来的「一天」，00:00–04:00 算前一天 |
@@ -912,3 +987,6 @@ export const GAMES: GamePlugin[] = [farmPlugin, clawPlugin]
 
 *本规范 v1 基于 `kid-quest-farm` 仓库 2026-10-14 的状态写成。
 标 `【提案】` 的部分尚未实现；其余全部来自现有代码。*
+
+*v1.1（同日）：插件化 A / C / D 已落地（`src/games/*`、家长栏「游戏」页、
+商城币钱包），§2.1 与 §10 已按实际实现改写。B（多币种兑换）与 E / F 仍未做。*
