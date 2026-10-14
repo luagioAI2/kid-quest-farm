@@ -12,7 +12,13 @@ import {
   isCropAging,
   isCropMature,
 } from '@/domain/farm'
-import { farmClockAt, farmClockText, type FarmClock } from '@/domain/farmClock'
+import {
+  farmClockAt,
+  farmClockText,
+  skyToneFor,
+  type FarmClock,
+  type SkyTone,
+} from '@/domain/farmClock'
 import type { Plot } from '@/domain/types'
 import { SeedShop } from './SeedShop'
 import { AnimalHouse } from './AnimalHouse'
@@ -21,7 +27,7 @@ import { HarvestSheet } from './HarvestSheet'
 import { FarmLog } from './FarmLog'
 import { GrowthBar, countdownText } from './farmUi'
 import { CropSprite, FarmSpriteDefs, PlotBed, PlotDead } from './cropSprites'
-import { Sky } from './Sky'
+import { CelestialIcon, SkyBand, skyRowClass, skySceneFilter } from './Sky'
 import { useFarmTick } from './useFarmTick'
 import './farm.css'
 
@@ -58,6 +64,9 @@ export default function FarmPage() {
   /* 农场世界的时间 —— **只算这一次**，顶栏和天空共用。
      两处各算一遍就是「同一个事实存两份」，迟早走散。 */
   const clock = farmClockAt(now, farmClock.timeScale)
+  /* 色调也从同一个小时算 —— 三个读者：天空带子、草地压暗、时钟条底色。
+     同一个纯函数算一次传下去，不是「存了两份」。 */
+  const tone = skyToneFor(clock.hour)
   const pendingCrop = pendingCropId ? CROP_BY_ID.get(pendingCropId) : undefined
   const emptyUnlocked = useMemo(
     () => plots.filter((p) => p.unlocked && !p.crop).length,
@@ -87,18 +96,31 @@ export default function FarmPage() {
           ⚠️ 别挪进 `<button>` —— symbol 定义会被地块的 overflow:hidden 裁掉。 */}
       <FarmSpriteDefs />
 
-      {/* ------- 天空（色调 + 日月，由农场小时驱动） ------- */}
-      <Sky clock={clock} />
+      {/* ------- 天空（只有色调和云） ------- */}
+      <SkyBand tone={tone} />
 
-      {/* ------- 草地 ------- */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 top-32 bg-grass-300" />
-      {/* 远处的山丘：只在草地顶部露一个弧形，不侵入地块区域 */}
-      <div className="pointer-events-none absolute inset-x-0 top-32 h-16 overflow-hidden">
-        <div className="absolute -left-8 top-4 h-32 w-48 rounded-full bg-grass-200" />
-        <div className="absolute left-1/4 top-0 h-32 w-56 rounded-full bg-grass-200/90" />
-        <div className="absolute -right-10 top-5 h-32 w-52 rounded-full bg-grass-200" />
+      {/* ------- 草地 / 山丘 -------
+          ★ 它们跟着天空色调压暗（`skySceneFilter`）。草地是页面上**唯一 100% 可见**
+          的大面积 —— 昼夜靠它才真的「感觉得到」：天空那条带子被顶栏卡片盖住了
+          100%（实测见 `Sky.tsx` 的头注释），只靠它的话夜里看不出区别。
+
+          外面这层 `absolute inset-0` 只是为了挂 `filter`；里面四块的定位和以前逐字相同。
+          （`filter` 非 none 会让这层成为子元素的包含块，而它正好等于页面根节点的大小，
+          所以坐标一个像素都没动。） */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        data-sky-scene={tone}
+        style={{ filter: skySceneFilter(tone) }}
+      >
+        <div className="absolute inset-x-0 bottom-0 top-32 bg-grass-300" />
+        {/* 远处的山丘：只在草地顶部露一个弧形，不侵入地块区域 */}
+        <div className="absolute inset-x-0 top-32 h-16 overflow-hidden">
+          <div className="absolute -left-8 top-4 h-32 w-48 rounded-full bg-grass-200" />
+          <div className="absolute left-1/4 top-0 h-32 w-56 rounded-full bg-grass-200/90" />
+          <div className="absolute -right-10 top-5 h-32 w-52 rounded-full bg-grass-200" />
+        </div>
+        <div className="absolute inset-x-0 top-32 h-3 rounded-t-[3rem] bg-grass-200" />
       </div>
-      <div className="pointer-events-none absolute inset-x-0 top-32 h-3 rounded-t-[3rem] bg-grass-200" />
 
       {/* ------- 内容 ------- */}
       {/* 天空 / 草地 / 山丘是**通栏**的（它们是场景，铺满才自然），
@@ -108,6 +130,7 @@ export default function FarmPage() {
           level={level}
           animalCount={animals.length}
           clock={clock}
+          tone={tone}
           timeScale={farmClock.timeScale}
           showClock={farmClock.showClock}
           unreadEvents={unreadEvents}
@@ -269,6 +292,7 @@ function TopBar({
   level,
   animalCount,
   clock,
+  tone,
   timeScale,
   showClock,
   unreadEvents,
@@ -277,6 +301,8 @@ function TopBar({
   level: { level: number; into: number; need: number }
   animalCount: number
   clock: FarmClock
+  /** 此刻的色调 —— 时钟条的底色和图标跟着它走 */
+  tone: SkyTone
   timeScale: number
   showClock: boolean
   unreadEvents: number
@@ -328,10 +354,20 @@ function TopBar({
       </div>
 
       {showClock && (
-        <div className="mt-2 flex items-center gap-2 rounded-2xl bg-sky-100/70 px-2.5 py-1.5">
-          <span className="text-base" aria-hidden>
-            🌍
-          </span>
+        /*
+          ★ 这一条是**唯一能看见日月的地方** —— 它在内容层，不会被卡片盖住。
+          底色和图标都由色调驱动（`skyRowClass` / `CelestialIcon`），
+          而色调来自上面那个 `farmClockAt`。第一版把日月画在天空带子里，
+          实测 0% 可见（见 `Sky.tsx` 的头注释）。
+          ⚠️ 原来的 🌍 被换成日 / 月 —— emoji 的粗细永远调不了，和作物 / 动物同一个理由。
+        */
+        <div
+          className={clsx(
+            'mt-2 flex items-center gap-2 rounded-2xl px-2.5 py-1.5',
+            skyRowClass(tone),
+          )}
+        >
+          <CelestialIcon tone={tone} />
           <span className="text-[11px] font-bold text-ink-600">
             农场第 <span className="tnum font-extrabold text-ink-900">{clock.day}</span> 天 ·{' '}
             <span className="tnum font-extrabold text-ink-900">{farmClockText(clock)}</span>

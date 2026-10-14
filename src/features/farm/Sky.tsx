@@ -1,81 +1,80 @@
 import clsx from 'clsx'
-import { celestialFor, skyToneFor, type FarmClock } from '@/domain/farmClock'
+import type { SkyTone } from '@/domain/farmClock'
 
 /* ============================================================
-   农场的天空
+   农场的「天」
    ------------------------------------------------------------
-   ★ 为什么天空单独一个文件，而不是留在 `FarmPage.tsx`：
-   色调和「太阳 / 月亮的位置」**都从农场小时算**，而小时是
-   `domain/farmClock.ts` 算的。把「算时间」和「用时间」分开之后，
-   顶栏的 `hh:mm` 和这片天空就不可能走散
-   （本项目已经因为 `Task` / `TaskInstance` 存两份出过「改得分不生效」）。
+   ★★ 2026-10-15：这一版**推翻了同一批里先写的一版**。原因不是审美，是量出来的。
 
-   ★ 为什么太阳从 emoji 换成内联 SVG：
-   emoji 的粗细 / 配色 / 基线由系统 emoji 字体决定，**永远调不了** ——
-   在 56px 这个尺寸上，☀️ 和旁边的内联 SVG 作物明显不是一套东西。
-   和 `cropSprites.tsx` / `animalSprites.tsx` 同一个理由。
-   （`➕` / `🌰` / `🔒` 这类**操作提示**仍然用 emoji，它们不是「图案」。）
+   先写的那版把太阳 / 月亮 / 星星画在页面顶上那条天空带子里（`h-44`），
+   走查脚本也全绿 —— 因为它量的是「日月中心在不在天空框内」。
+   **那只证明它画在那儿，不证明它看得见。**
 
-   ⚠️ 太阳 / 月亮**故意不做成 `<symbol>` 精灵**：精灵是为了「同一张图被画很多次」
-   （12 块地、8 种动物 × 2 帧）。天空一天只画一个，直接内联更短也更好读。
+   后来按 12×12 网格采样日月的包围盒、用 `elementFromPoint` 数
+   「最上面那一层到底是不是它」（`.e2e-scratch/probe-sky-occlusion.mjs`）：
 
-   ★ 为什么这件事值得做（而不是「凭空加一层装饰」）：
-   `farmClockAt` 的小时**已经在顶栏显示**了，天空只是跟着同一个值走。
-   反面例子是 spec §8.5 的「地块皮」—— 它要的「已浇水 / 干旱 / 肥沃」
-   三个状态游戏里根本不存在，所以做不了。
-   判据是：**这个外观对应的状态，存在吗？** 这里存在。
+       手机 390×844 ：天空可见 **0%**  · 日月可见 **0%**（四档全 0）
+       平板 834×1112：天空可见 17%     · 日月可见 **0%**
+
+   因为天空带子是 y=63..239，而顶栏那张 `.surface` 卡片是 y=79..187 ——
+   卡片把天空从 79 一直盖到 176，**只留下卡片两侧十几像素的缝**。
+
+   ➜ 判据（比「有没有画」硬得多的一条）：**美术必须真的可见。**
+     画在别人底下 = 没画。所以：
+
+       ① 那条带子**只留色调** —— 它在卡片两侧的缝里看得见，夜里的紫一眼能认；
+       ② 太阳 / 月亮搬进**时钟条** —— 那是内容层，一定在卡片上面；
+       ③ **草地 / 山丘跟着色调压暗** —— 它们 100% 可见，昼夜这才「感觉得到」。
+
+   ⚠️ 由此删掉的东西（别以为是漏了）：
+     · `celestialFor()` 和它那条正弦弧 —— 弧的 x / y 没有任何地方能显示出来；
+     · 夜空那 10 颗星 —— 画在带子里等于没画，搬到 20px 的时钟条里又挤成一团。
    ============================================================ */
 
-/** 夜空里的星星：固定位置（[x%, y%, 闪烁延迟 s]），只在夜里渲染 */
-const STARS: Array<[number, number, number]> = [
-  [9, 20, 0],
-  [21, 9, 0.6],
-  [33, 30, 1.2],
-  [45, 14, 0.3],
-  [57, 34, 1.5],
-  [68, 11, 0.9],
-  [80, 26, 0],
-  [90, 44, 1.8],
-  [14, 46, 2.1],
-  [73, 52, 1.1],
-]
+/**
+ * 时钟条按色调取的底色。
+ * ⚠️ `day` 必须**逐字**保留原来的 `bg-sky-100/70` —— 白天是绝大多数时候看到的画面。
+ */
+const TONE_ROW: Record<SkyTone, string> = {
+  dawn: 'bg-tangerine-100/80',
+  day: 'bg-sky-100/70',
+  dusk: 'bg-berry-100/80',
+  night: 'bg-grape-200/70',
+}
 
-export function Sky({ clock }: { clock: FarmClock }) {
-  const tone = skyToneFor(clock.hour)
-  const body = celestialFor(clock.hour)
+export function skyRowClass(tone: SkyTone): string {
+  return TONE_ROW[tone]
+}
 
+/**
+ * 草地 / 山丘按色调压暗 —— 这一层是**真正让昼夜看得见**的地方。
+ *
+ * `day` 返回 `undefined`：白天一个像素都不许变（和色调、时钟条同一个原则）。
+ */
+export function skySceneFilter(tone: SkyTone): string | undefined {
+  switch (tone) {
+    case 'day':
+      return undefined
+    case 'dawn':
+      return 'brightness(0.97)'
+    case 'dusk':
+      return 'brightness(0.88) saturate(1.06)'
+    case 'night':
+      return 'brightness(0.7) saturate(0.75)'
+  }
+}
+
+/* ---------------- 页面顶上那条带子 ---------------- */
+
+/**
+ * 天空带子 —— **只有色调和云**。
+ *
+ * ⚠️ 别再往里画日月 / 星星：这条带子被顶栏卡片盖住了 100%（见文件头）。
+ * 要加「天上有什么」，加到时钟条（`CelestialIcon`）里去。
+ */
+export function SkyBand({ tone }: { tone: SkyTone }) {
   return (
     <div className={clsx('kqf-sky', `kqf-sky--${tone}`)} aria-hidden>
-      {tone === 'night' ? (
-        <div className="kqf-sky__stars">
-          {STARS.map(([x, y, delay], i) => (
-            <span
-              key={i}
-              className="kqf-star"
-              style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${delay}s` }}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {/*
-        太阳 / 月亮。
-        ⚠️ 定位在**外层**（`.kqf-sky__body` 的 `translate(-50%, -50%)`），
-        浮动动画在**内层** —— `anim-float` 的 keyframes 也是写 `transform`，
-        两层不分开就会互相覆盖（外层那个居中变换会被动画顶掉，
-        太阳就会「左上角对齐」而不是中心对齐）。
-        `data-sky-body` 是给走查脚本读的稳定锚点（别用下标定位）。
-      */}
-      <span
-        className="kqf-sky__body"
-        data-sky-body={body.kind}
-        style={{ left: `${body.x * 100}%`, top: `${body.y * 100}%` }}
-      >
-        <span className="block anim-float">
-          {body.kind === 'sun' ? <SunShape /> : <MoonShape />}
-        </span>
-      </span>
-
       <Cloud className="left-[8%] top-12" delay="0s" />
       <Cloud className="left-[52%] top-24" delay="1.4s" />
       <Cloud className="left-[74%] top-4" delay="2.6s" />
@@ -83,27 +82,45 @@ export function Sky({ clock }: { clock: FarmClock }) {
   )
 }
 
+/* ---------------- 时钟条上的「此刻的天」 ---------------- */
+
+/**
+ * 太阳 / 月亮。**这是日月唯一可见的位置** —— 它在内容层，不会被卡片盖住。
+ *
+ * 「是太阳还是月亮」由色调直接推出来（`tone === 'night'`），不是另立一个
+ * 带自己分档的函数 —— 同一个表达式，走散不了。
+ *
+ * `data-sky-body` 是给走查脚本读的稳定锚点；`capture-sky.mjs` 会按网格采样
+ * 它、断言它**真的在最上面**（而不是像第一版那样「画了但看不见」）。
+ */
+export function CelestialIcon({ tone }: { tone: SkyTone }) {
+  const kind = tone === 'night' ? 'moon' : 'sun'
+  return (
+    <span className="block size-5 shrink-0" aria-hidden>
+      <span className="block size-5" data-sky-body={kind}>
+        {kind === 'sun' ? <SunShape /> : <MoonShape />}
+      </span>
+    </span>
+  )
+}
+
 /* ---------------- 太阳 ---------------- */
 
 function SunShape() {
   return (
-    <svg viewBox="0 0 56 56" className="h-14 w-14" aria-hidden focusable="false">
-      {/* 外圈光晕 */}
-      <circle cx="28" cy="28" r="26" fill="var(--color-sun-300)" opacity="0.3" />
-      {/* 八根光芒 */}
-      <g stroke="var(--color-sun-400)" strokeWidth="3.2" strokeLinecap="round">
-        <line x1="28" y1="4" x2="28" y2="10" />
-        <line x1="28" y1="46" x2="28" y2="52" />
-        <line x1="4" y1="28" x2="10" y2="28" />
-        <line x1="46" y1="28" x2="52" y2="28" />
-        <line x1="11" y1="11" x2="15.2" y2="15.2" />
-        <line x1="40.8" y1="40.8" x2="45" y2="45" />
-        <line x1="11" y1="45" x2="15.2" y2="40.8" />
-        <line x1="40.8" y1="15.2" x2="45" y2="11" />
+    <svg viewBox="0 0 56 56" className="block h-5 w-5" aria-hidden focusable="false">
+      <circle cx="28" cy="28" r="25" fill="var(--color-sun-300)" opacity="0.35" />
+      <g stroke="var(--color-sun-400)" strokeWidth="6" strokeLinecap="round">
+        <line x1="28" y1="3" x2="28" y2="11" />
+        <line x1="28" y1="45" x2="28" y2="53" />
+        <line x1="3" y1="28" x2="11" y2="28" />
+        <line x1="45" y1="28" x2="53" y2="28" />
+        <line x1="10.3" y1="10.3" x2="16" y2="16" />
+        <line x1="40" y1="40" x2="45.7" y2="45.7" />
+        <line x1="10.3" y1="45.7" x2="16" y2="40" />
+        <line x1="40" y1="16" x2="45.7" y2="10.3" />
       </g>
-      <circle cx="28" cy="28" r="15" fill="var(--color-sun-400)" />
-      {/* 左上高光，让圆盘不是一个死板的实心圆 */}
-      <circle cx="24" cy="24" r="8" fill="var(--color-sun-200)" opacity="0.55" />
+      <circle cx="28" cy="28" r="16" fill="var(--color-sun-400)" />
     </svg>
   )
 }
@@ -112,24 +129,22 @@ function SunShape() {
 
 function MoonShape() {
   return (
-    <svg viewBox="0 0 56 56" className="h-11 w-11" aria-hidden focusable="false">
+    <svg viewBox="0 0 56 56" className="block h-5 w-5" aria-hidden focusable="false">
       <defs>
         {/*
           月牙 = 一个圆盘减去一个偏移的圆。
-          ⚠️ 用 `mask` 而不是手写两段 `A` 弧的 path：
-          path 的两个端点必须是两个圆的**真实交点**，算错了会画成一瓣奇怪的东西，
-          而且改一个半径就得重算一遍。mask 是「所见即所得」的。
-          `maskUnits="userSpaceOnUse"` 必须写 —— 默认是按元素的 bbox 取 -10%..120%，
+          ⚠️ 用 `mask` 而不是手写两段 `A` 弧的 path：弧的两个端点必须是两个圆的
+          **真实交点**，算错了画出来是一瓣奇怪的东西，而且改一个半径就得重算。
+          `maskUnits="userSpaceOnUse"` 必须写 —— 默认按元素 bbox 取 -10%..120%，
           那个区域里没有我们铺的白底 rect，整个月亮会被遮掉。
         */}
         <mask id="kqf-moon-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="56" height="56">
           <rect x="0" y="0" width="56" height="56" fill="#fff" />
-          <circle cx="38" cy="24" r="17" fill="#000" />
+          <circle cx="40" cy="22" r="18" fill="#000" />
         </mask>
       </defs>
-      {/* 月光晕 */}
-      <circle cx="28" cy="28" r="26" fill="var(--color-sun-200)" opacity="0.22" />
-      <circle cx="28" cy="28" r="18" fill="var(--color-sun-100)" mask="url(#kqf-moon-mask)" />
+      <circle cx="28" cy="28" r="25" fill="var(--color-sun-200)" opacity="0.3" />
+      <circle cx="28" cy="28" r="20" fill="var(--color-sun-100)" mask="url(#kqf-moon-mask)" />
     </svg>
   )
 }

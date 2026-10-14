@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { celestialFor, farmClockAt, farmClockText, skyToneFor } from './farmClock'
+import { farmClockAt, farmClockText, skyToneFor } from './farmClock'
 
 /* ============================================================
    农场世界的时间 + 天空（2026-10-15，阶段 E「天气与昼夜」）
@@ -7,9 +7,9 @@ import { celestialFor, farmClockAt, farmClockText, skyToneFor } from './farmCloc
    这个文件守两类东西，而且它们的失败方式完全不同：
 
    ① `farmClockAt` 是**算术**。算错了，顶栏的 `hh:mm` 就是错的。
-   ② `skyToneFor` / `celestialFor` 是**分档**。档分错了不会报错，
-      只会「天黑了太阳还挂着」—— 所以这里最重要的一条是
-      **色调和日月必须共用同一个判据**（见最后一组）。
+   ② `skyToneFor` 是**分档**。档分错了不会报错，只会「天黑了天空还是亮的」——
+      所以这里最重要的是**边界**（05 / 08 / 17 / 20 都是闭开区间）
+      和「0–23 每一小时恰好落进一档」。
 
    ⚠️ 时间戳一律用 `new Date(y, mo, d, h, m)`（**本地时区**）构造。
    `farmClockAt` 内部是 `setHours(0,0,0,0)`，也是本地时区 ——
@@ -94,58 +94,16 @@ describe('skyToneFor —— 四档色调的边界', () => {
   })
 })
 
-describe('celestialFor —— 太阳 / 月亮', () => {
-  it('★ 色调和日月共用同一个判据 —— 不会出现「天是黑的、太阳还挂着」', () => {
-    // 这是这一组里最值钱的一条：它把两个函数的**一致性**钉住。
-    // 任何一边单独改分档（比如只把 skyToneFor 的 20 改成 21），
-    // 这一条立刻红 —— 而分别测各自的边界是测不出来的。
-    for (let h = 0; h < 24; h++) {
-      const expected = skyToneFor(h) === 'night' ? 'moon' : 'sun'
-      expect(celestialFor(h).kind, `${h} 点`).toBe(expected)
-    }
-  })
+/* ============================================================
+   ⚠️ **这里曾经有一组 `celestialFor` 的测试（7 条），别再补回来。**
 
-  it('白天是太阳、夜里是月亮（含两个交界点）', () => {
-    expect(celestialFor(5).kind).toBe('sun')
-    expect(celestialFor(12).kind).toBe('sun')
-    expect(celestialFor(19).kind).toBe('sun')
-    expect(celestialFor(20).kind).toBe('moon')
-    expect(celestialFor(0).kind).toBe('moon')
-    expect(celestialFor(4).kind).toBe('moon')
-  })
+   它们测的是「太阳 / 月亮在天空里的位置」那条正弦弧：x 单调递增、
+   正午最高、起点贴左边、终点贴右边……**全绿**。
+   但那条弧**一个像素都显示不出来** —— 天空带子被顶栏卡片盖住 100%
+   （实测见 `src/features/farm/Sky.tsx` 的头注释）。
 
-  it('★ 位置永远落在框内（0..1）—— 否则太阳会飞出天空那条带子', () => {
-    for (let h = 0; h < 24; h++) {
-      const c = celestialFor(h)
-      expect(c.x, `${h} 点 x`).toBeGreaterThanOrEqual(0)
-      expect(c.x, `${h} 点 x`).toBeLessThanOrEqual(1)
-      expect(c.y, `${h} 点 y`).toBeGreaterThanOrEqual(0)
-      expect(c.y, `${h} 点 y`).toBeLessThanOrEqual(1)
-    }
-  })
-
-  it('★ 太阳从左走到右，且正午最高（y 越小越高）', () => {
-    expect(celestialFor(8).x).toBeLessThan(celestialFor(12).x)
-    expect(celestialFor(12).x).toBeLessThan(celestialFor(17).x)
-    // 正午比早晨 / 傍晚都高
-    expect(celestialFor(12).y).toBeLessThan(celestialFor(8).y)
-    expect(celestialFor(12).y).toBeLessThan(celestialFor(17).y)
-    // 且确实「到了中高处」，不是只抬高了一点点
-    expect(celestialFor(12).y).toBeLessThan(0.2)
-  })
-
-  it('★ 月亮从 20:00 的左边升起来，半夜到最高，次日 5 点落到右边', () => {
-    const rise = celestialFor(20)
-    const apex = celestialFor(0)
-    const set = celestialFor(4)
-    expect(rise.x).toBeLessThan(apex.x)
-    expect(apex.x).toBeLessThan(set.x)
-    // 半夜比刚升起时高
-    expect(apex.y).toBeLessThan(rise.y)
-  })
-
-  it('起点贴着左边、终点贴着右边（弧要铺满整条天空）', () => {
-    expect(celestialFor(5).x).toBeCloseTo(0.08, 5)
-    expect(celestialFor(4.999).x).toBeGreaterThan(0.9)
-  })
-})
+   这是本项目第二次栽在同一件事上：**断言「画了什么」，不等于「看得见什么」。**
+   上一轮是动物幼崽 / 成年两帧的 id 写反（数量对、语义反，走查全绿）。
+   现在的守卫换了个层次：`scripts/capture-sky.mjs` 用 `elementFromPoint`
+   按网格采样，**断言日月真的在最上面那一层**。
+   ============================================================ */

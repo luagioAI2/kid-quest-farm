@@ -49,36 +49,15 @@
   background-image: linear-gradient(to bottom, #1e1b4b 0%, #312e81 45%, #4c1d95 100%);
 }
 
-/* 太阳 / 月亮：**外层定位、内层浮动**。
-   两层都用 `transform`，合并到一个元素上会互相覆盖
-   （`anim-float` 的 keyframes 写的就是 `transform: translateY(...)`）。 */
-.kqf-sky__body {
-  position: absolute;
-  display: block;
-  transform: translate(-50%, -50%);
-}
+/*
+  ⚠️ 这里**曾经**有 `.kqf-sky__body`（把日月按弧的坐标绝对定位在天空带子里）
+  和 `.kqf-star` / `@keyframes kqf-twinkle`（夜空 10 颗星）。
 
-.kqf-sky__stars {
-  position: absolute;
-  inset: 0;
-}
-.kqf-star {
-  position: absolute;
-  width: 3px;
-  height: 3px;
-  border-radius: 999px;
-  background: #fff;
-  animation: kqf-twinkle 2.6s ease-in-out infinite;
-}
-@keyframes kqf-twinkle {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
-  }
-}
+  2026-10-15 删掉：天空带子被顶栏卡片盖住 100%，画在里面的日月 / 星星
+  **一个像素都看不见**（实测见 `Sky.tsx` 的头注释）。
+  日月搬进时钟条（`CelestialIcon`，内容层，一定在卡片上面），
+  不再需要这一层定位；星星则整个去掉（20px 的时钟条里放不下）。
+*/
 
 /* 云在夜里要压暗 —— 白得发亮的云压在深紫天上，一眼假 */
 .kqf-sky--night .kqf-cloud {
@@ -187,8 +166,6 @@
   /* 摇摆 / 浮动由 `anim-sway` / `anim-float` 提供，这里一并停掉 */
   .kqf-plot__art,
   .kqf-animal,
-  .kqf-sky__body,
-  .kqf-star,
   .kqf-plot--mature::after {
     animation: none !important;
   }

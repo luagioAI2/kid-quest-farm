@@ -68,30 +68,20 @@ export function skyToneFor(hour: number): SkyTone {
   return 'dusk'
 }
 
-export interface Celestial {
-  kind: 'sun' | 'moon'
-  /** 0..1，天空框内从左到右 */
-  x: number
-  /** 0..1，天空框内从上到下（0 = 最高） */
-  y: number
-}
-
 /**
- * 太阳 / 月亮的位置。
+ * ⚠️ **墓碑：这里曾经有一个 `celestialFor(hour)`，别再把它加回来。**
  *
- * 白天（`skyToneFor !== 'night'`）是太阳，夜里是月亮 —— **和色调共用同一档判据**，
- * 所以不会出现「天是黑的、太阳还挂着」。
- * 位置沿一条正弦弧走：起点在左低、正午到中高、终点在右低。
+ * 它算的是「太阳 / 月亮在天空里的位置」，一条从左到右的正弦弧
+ * （`x` 0.08→0.92、`y` 中高到低），还配了 7 条单测。2026-10-15 整个删掉，
+ * 原因是**它算出来的坐标没有任何地方能显示出来**：
+ * 天空那条带子被顶栏卡片盖住了 100%（实测见 `Sky.tsx` 的头注释），
+ * 而时钟条只有 20px 高，放不下一条弧。
+ *
+ * 于是「是太阳还是月亮」改成在**画它的那一个地方**直接由色调推出来：
+ *
+ *     tone === 'night' ? 'moon' : 'sun'
+ *
+ * 比原来的「两个函数 + 一条一致性断言」更强 —— **同一个表达式，走散不了**。
+ * 教训：**能靠结构保证的，别靠测试保证**；而「画了什么」和「看得见什么」
+ * 是两件事，只有前者能被 `querySelector` 验证。
  */
-export function celestialFor(hour: number): Celestial {
-  const isSun = skyToneFor(hour) !== 'night'
-  // 太阳 05:00→20:00（15 小时），月亮 20:00→次日 05:00（9 小时）
-  const span = isSun ? 15 : 9
-  const from = isSun ? 5 : 20
-  const t = Math.min(1, Math.max(0, ((hour - from + 24) % 24) / span))
-  return {
-    kind: isSun ? 'sun' : 'moon',
-    x: 0.08 + t * 0.84,
-    y: 0.5 - Math.sin(Math.PI * t) * 0.36,
-  }
-}

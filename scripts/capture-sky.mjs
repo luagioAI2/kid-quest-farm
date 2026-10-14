@@ -1,30 +1,38 @@
 /**
- * 天空（昼夜 + 日月）走查图 + 结构自检。
+ * 天空（昼夜）走查图 + 结构自检。
  *
  * 用法：node scripts/capture-sky.mjs [url] [outDir]
  *
  * 为什么单独一份：`capture.mjs` / `e2e-check.mjs` / `e2e-gameplay.mjs` /
- * `capture-animals.mjs` **都不管天空** —— 天空是这四个脚本共同的盲区
+ * `capture-animals.mjs` **都不管天空** —— 天空是这些脚本共同的盲区
  * （和 `capture-tablet-onboarding.mjs` / `capture-games.mjs` 同一类问题）。
  *
  * ------------------------------------------------------------
- * ★ 这一版的核心难点：**天空是按时间变的，所以截图天生不确定。**
- *   直接把「当前时刻」画下来，跑一次是白天、跑一次是夜里，
- *   断言只能写成「有天空」这种废话。
+ * ★★ 这一版是**重写**，起因是上一版「全绿但没用」：
  *
- *   所以这里用 `evaluateOnNewDocument` 把 `Date.now()` **钉死**在
- *   指定的本地小时上 —— 农场小时就是那个小时（timeScale 强制为 1）。
- *   四个小时各跑一遍，四档色调就都被覆盖到了。
+ * 上一版断言的是「日月的中心在天空框内」—— 那只证明它**画在**那里。
+ * 实际上天空那条带子被顶栏卡片盖住了 100%，日月**一个像素都看不见**，
+ * 断言照样全绿。（量出来的数：手机天空可见 0% / 日月可见 0%。）
  *
- * ★ 另一个难点：**别把分档边界抄进脚本。**
- *   边界（5 / 8 / 17 / 20）从 `src/domain/farmClock.ts` **读**出来
- *   （`scripts/lib/quality.mjs` 解析 `settlement.ts` 是同一个套路）。
- *   抄一份的话，改了分档脚本还是绿的 —— 守卫会**悄悄变弱**，
- *   而不是变红。这正是本项目踩过两次的坑。
+ * ➜ 现在最值钱的一条断言是 **「日月真的在最上面那一层」**：
+ *   按网格采样它的包围盒，用 `elementFromPoint` 数「最上层是不是它」。
+ *   这条断言对「被别的元素盖住」这种失败**结构性敏感**，不靠人眼。
  *
- * ★ 断言里必须有一条**对照组**：四个时刻必须真的产出四档**不同**的色调。
- *   否则「天空跟着小时走」这句话根本没被验证 —— 如果色调恒为 'day'，
- *   白天那一条照样绿。
+ * ★ 两个难点，各自的解法：
+ *
+ * 1. **天空是按时间变的，截图天生不确定。**
+ *    跑一次是白天、跑一次是夜里，断言只能写成「有天空」这种废话。
+ *    ➜ 用 `evaluateOnNewDocument` 把 `Date.now()` 钉死在指定的本地小时上
+ *      （只改 `Date.now`，不动 `window.Date`，免得波及 Dexie），
+ *      并把 `timeScale` 锁成 1。四个时刻各跑一遍，四档就都被覆盖到。
+ *
+ * 2. **别把分档边界抄进脚本。**
+ *    边界（5 / 8 / 17 / 20）从 `src/domain/farmClock.ts` **读**出来
+ *    （`scripts/lib/quality.mjs` 解析 `settlement.ts` 是同一个套路）。
+ *    抄一份的话，改了分档脚本还是绿的 —— 守卫会**悄悄变弱**，而不是变红。
+ *
+ * ★ 断言里必须有一条**对照组**：四个时刻要真的产出四档**不同**的色调。
+ *   否则若色调恒为 'day'，「天空跟着小时走」根本没被验证，而白天那一条照样绿。
  */
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
@@ -60,14 +68,14 @@ function check(name, ok, detail = '') {
 const SRC = readFileSync(new URL('../src/domain/farmClock.ts', import.meta.url), 'utf8')
 const fnBody = SRC.slice(
   SRC.indexOf('export function skyToneFor'),
-  SRC.indexOf('export interface Celestial'),
+  SRC.indexOf('⚠️ **墓碑'),
 )
 const lt = [...fnBody.matchAll(/hour\s*<\s*(\d+)/g)].map((m) => Number(m[1]))
 const ge = [...fnBody.matchAll(/hour\s*>=\s*(\d+)/g)].map((m) => Number(m[1]))
 
 /* 结构守卫：解析不出来就**直接退出**，绝不退化成「随便测点什么」。
-   哪天有人把 skyToneFor 改写成查表 / switch，这里会红，
-   提醒来改脚本 —— 而不是静默地把边界当成 0。 */
+   哪天有人把 skyToneFor 改写成查表 / switch，这里会红，提醒来改脚本 ——
+   而不是静默地把边界当成 0。 */
 if (lt.length !== 3 || ge.length !== 1) {
   console.error(
     `无法从 farmClock.ts 解析 skyToneFor 的分档边界（hour< ${lt.length} 个 / hour>= ${ge.length} 个）。` +
@@ -99,6 +107,8 @@ const VIEWPORTS = [
 ]
 
 const seenTones = []
+/** 记下每档的草地 filter，用来做「昼夜真的不一样」的对照 */
+const sceneFilters = {}
 
 for (const vp of VIEWPORTS) {
   const browser = await puppeteer.launch({
@@ -110,7 +120,9 @@ for (const vp of VIEWPORTS) {
 
   for (const hour of PROBES) {
     const want = toneFor(hour)
-    console.log(`\n── ${vp.name} ${vp.width}×${vp.height} · 农场 ${String(hour).padStart(2, '0')}:00 → ${want} ──`)
+    console.log(
+      `\n── ${vp.name} ${vp.width}×${vp.height} · 农场 ${String(hour).padStart(2, '0')}:00 → ${want} ──`,
+    )
     const page = await browser.newPage()
     const consoleErrors = []
     page.on('console', (m) => {
@@ -140,7 +152,7 @@ for (const vp of VIEWPORTS) {
       })
     })
 
-    /* 进农场页：默认就在农场，但别假设 —— 找不到天空就点一下底栏 */
+    /* 进农场页：App 默认开在「任务」页，别假设 */
     if (!(await page.$('.kqf-sky'))) {
       await page.evaluate(() => {
         const b = [...document.querySelectorAll('nav button')].find((x) =>
@@ -154,10 +166,49 @@ for (const vp of VIEWPORTS) {
 
     const got = await page.evaluate(() => {
       const sky = document.querySelector('.kqf-sky')
-      const body = document.querySelector('[data-sky-body]')
-      const skyRect = sky.getBoundingClientRect()
-      const bodyRect = body?.getBoundingClientRect()
       const toneClasses = [...sky.classList].filter((c) => c.startsWith('kqf-sky--'))
+      const body = document.querySelector('[data-sky-body]')
+      const scene = document.querySelector('[data-sky-scene]')
+
+      /* ★★ 遮挡探针：按 8×8 网格采样日月的包围盒，
+         数「最上面那一层到底是不是它」。 */
+      let visible = 0
+      let total = 0
+      let blocker = null
+      if (body) {
+        const r = body.getBoundingClientRect()
+        for (let i = 1; i < 8; i++) {
+          for (let j = 1; j < 8; j++) {
+            const x = r.left + (r.width * i) / 8
+            const y = r.top + (r.height * j) / 8
+            if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue
+            total++
+            const el = document.elementFromPoint(x, y)
+            /* ⚠️ 只认「它就是它 / 它是它的后代」。
+               **不能**写 `el.contains(body)` —— 那样「被祖先兜住」也算可见，
+               而 `pointer-events:none` 或「被兄弟节点盖住」时
+               `elementFromPoint` 返回的正好就是祖先，这条断言就永远绿了。 */
+            if (el && (el === body || body.contains(el))) visible++
+            else if (!blocker && el) {
+              const cls =
+                typeof el.className === 'string' ? '.' + el.className.split(/\s+/).slice(0, 2).join('.') : ''
+              blocker = `${el.tagName.toLowerCase()}${cls}`
+            }
+          }
+        }
+      }
+
+      /* 时钟条：底色是不是跟着色调走（往上找带 bg- 类的那一层） */
+      let row = body
+      let rowClass = null
+      while (row && row !== document.body) {
+        const cls = typeof row.className === 'string' ? row.className : ''
+        if (cls.includes('bg-')) {
+          rowClass = cls.split(/\s+/).filter((c) => c.startsWith('bg-')).join(' ')
+          break
+        }
+        row = row.parentElement
+      }
       /* 顶栏那行「农场第 N 天 · hh:mm」—— 时钟和天空必须是**同一个小时** */
       const m = (document.body.innerText ?? '').match(
         /农场第\s*(\d+)\s*天\s*[·・.]\s*(\d{1,2}):(\d{2})/,
@@ -166,23 +217,21 @@ for (const vp of VIEWPORTS) {
         tone: toneClasses[0]?.replace('kqf-sky--', '') ?? null,
         toneClassCount: toneClasses.length,
         kind: body?.getAttribute('data-sky-body') ?? null,
-        stars: document.querySelectorAll('.kqf-star').length,
-        cloudOpacity: getComputedStyle(document.querySelector('.kqf-cloud')).opacity,
+        bodyW: body ? Math.round(body.getBoundingClientRect().width) : null,
+        pct: total ? Math.round((visible / total) * 100) : -1,
+        sampled: total,
+        blocker,
+        rowClass,
+        sceneTone: scene?.getAttribute('data-sky-scene') ?? null,
+        sceneFilter: scene ? getComputedStyle(scene).filter : null,
         clockDay: m ? Number(m[1]) : null,
         clockHour: m ? Number(m[2]) : null,
         clockText: m ? m[0] : null,
-        sky: { w: skyRect.width, h: skyRect.height },
-        /* 日月中心相对天空框的位置（0..1）；null = 没量到 */
-        center: bodyRect
-          ? {
-              x: (bodyRect.left + bodyRect.width / 2 - skyRect.left) / skyRect.width,
-              y: (bodyRect.top + bodyRect.height / 2 - skyRect.top) / skyRect.height,
-            }
-          : null,
       }
     })
 
     seenTones.push(got.tone)
+    sceneFilters[want] = got.sceneFilter
 
     check(
       `天空色调 = ${want}`,
@@ -191,35 +240,32 @@ for (const vp of VIEWPORTS) {
     )
     check('天空只挂了一个色调类（没有两档同时生效）', got.toneClassCount === 1)
     check(
-      '★ 日 / 月和色调是同一个判据（不会「天黑着、太阳还挂着」）',
+      '★ 日 / 月和色调一致（不会「天黑着、太阳还挂着」）',
       got.kind === (want === 'night' ? 'moon' : 'sun'),
       `色调 ${got.tone} → 画的是 ${got.kind}`,
     )
+    /* ★★ 本文件存在的理由：画了 ≠ 看得见 */
     check(
-      '星星只在夜里渲染',
-      want === 'night' ? got.stars === 10 : got.stars === 0,
-      `夜里应为 10，实际 ${got.stars}`,
+      '★★ 日月**真的可见**（采样点上最上层就是它，没被任何东西盖住）',
+      got.pct === 100,
+      `可见 ${got.pct}%（采样 ${got.sampled} 点）${got.blocker ? ` · 挡住它的是 ${got.blocker}` : ''}`,
     )
+    check('日月画出来了（20px 的小图标）', got.bodyW === 20, `宽 ${got.bodyW}px`)
     check(
       '★ 顶栏时钟的小时 == 天空用的小时（同一个事实，不是两份）',
       got.clockHour === hour,
       `顶栏「${got.clockText ?? '（没读到）'}」→ ${got.clockHour} 点`,
     )
     check(
-      '日月落在天空框内（没飞到草地上、也没出左右边界）',
-      !!got.center && got.center.x >= 0 && got.center.x <= 1 && got.center.y >= 0 && got.center.y <= 1,
-      got.center ? `x=${got.center.x.toFixed(2)} y=${got.center.y.toFixed(2)}` : '没量到',
+      '时钟条的底色跟着色调走（找到了带 bg- 的那一层）',
+      !!got.rowClass,
+      `底色类 = ${got.rowClass}`,
     )
-    /* 天空那条带子是 11rem；草地从 top-32(128px) 开始 —— 日月的中心必须在带上 */
     check(
-      '日月没有压到草地那条线（中心仍在天空带内）',
-      !!got.center && got.center.y * got.sky.h < 128,
-      got.center ? `中心距顶 ${(got.center.y * got.sky.h).toFixed(0)}px / 带高 ${got.sky.h.toFixed(0)}px` : '没量到',
+      '★ 草地 / 山丘也拿到了这一档（昼夜要「感觉得到」）',
+      got.sceneTone === want,
+      `data-sky-scene = ${got.sceneTone}`,
     )
-    if (want === 'night') {
-      check('夜里的云被压暗了（白亮的云压深紫天上太假）', Number(got.cloudOpacity) < 0.5, `opacity=${got.cloudOpacity}`)
-    }
-
     check('控制台无错误', consoleErrors.length === 0, consoleErrors.slice(0, 2).join(' | '))
 
     await page.screenshot({
@@ -247,6 +293,18 @@ check(
   `期望集合与实际不符时这里会红`,
 )
 check('分档表与探针一致（探针自身没选错）', new Set(EXPECTED_TONES).size === 4)
+
+/* 草地必须真的随昼夜变 —— 白天不动，夜里明显压暗 */
+check(
+  '★ 白天草地**没有**被加滤镜（观感零变化）',
+  !sceneFilters.day || sceneFilters.day === 'none',
+  `day filter = ${sceneFilters.day}`,
+)
+check(
+  '★ 夜里的草地确实被压暗了（昼夜看得见）',
+  !!sceneFilters.night && sceneFilters.night !== 'none' && sceneFilters.night !== sceneFilters.day,
+  `night filter = ${sceneFilters.night}`,
+)
 
 console.log(`\n${'─'.repeat(52)}`)
 console.log(failed === 0 ? '全部通过 ✓' : `失败 ${failed} 项 ✗`)
