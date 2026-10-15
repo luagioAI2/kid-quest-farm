@@ -1223,7 +1223,7 @@ TypeError: GAMES is not iterable
 | --- | --- | --- |
 | **A. 远端 ESM + blob 加载**（**推荐**） | 每个游戏**独立 Vite 构建**成自包含 ESM；下载 → 校验 → 存 Filesystem → `Blob` + `import()` | ✅ 与 sideload APK 兼容，浏览器里就能验 |
 | **B. iframe 小程序** | 每个游戏是一个下载来的 HTML，塞进 `<iframe>`，`postMessage` 通信 | ✅ 隔离最强；但边界重，游戏得自己管整页 |
-| **C. Play Feature Delivery** | Android 官方的「按需下载模块」 | ❌ 要求走 **Google Play**；本项目是 GitHub Releases 分发 sideload APK |
+| **C. Play Feature Delivery** | Android 官方的「按需下载模块」（动态功能模块 / 资源包） | ⚠️ 可行但**不必**：见 §12.4 —— Play 政策**明确豁免**「WebView 里的 JS」。只在「游戏里有原生代码」时才需要它 |
 | **D. 只下数据、不下代码** | 游戏 = 数据，引擎内置在 APK | ✅ 最安全最小；但游戏形态被限死 |
 
 **推荐 A**。加载机制（关键：blob URL 继承页面 origin，绕开 CORS / 混合内容）：
@@ -1253,6 +1253,31 @@ mod.default.mount(container, hostApi)                     // 见 12.5
 
 > 不做 2 / 3 = **谁拿下那台静态服务器，谁就能在孩子的手机里跑任意代码**。
 > 这不是「以后再加」的项，是 P2 的准入条件。
+
+#### Play 政策：为什么这条路**在 Play 上是合规的**（2026-10-15 查证）
+
+家长 2026-10-15 拍板「**上 Play**」，所以这一条必须查清楚再动手。
+Play「Device and Network Abuse」政策原文：
+
+> An app may not download executable code (such as dex, JAR, .so files) from a source
+> other than Google Play. **This restriction does not apply to code that runs in a
+> virtual machine or an interpreter** where either provides indirect access to Android
+> APIs (**such as JavaScript in a webview** or browser).
+
+⇒ **「WebView 里的 JS」是政策点名的豁免项**。禁令针对的是 dex / JAR / .so 这类
+**原生可执行代码**。所以我们**不需要** Play Feature Delivery（方案 C）——
+它的适用场景是「游戏里有原生代码」，本项目没有。
+
+但政策还有两条**附加条件**，直接决定了实现细节：
+
+| 条件（原文） | 对我们的约束 |
+| --- | --- |
+| 「interpreted languages … loaded at run time … **must not allow potential violations of Google Play policies**」 | 下发的 JS **不能**引入违规行为（插广告、外传数据、绕过家长闸门）。游戏是自家写的，可控 —— 但**不能**做成「任意第三方都能投稿」的开放商店 |
+| 「webview with added JavaScript Interface that loads **untrusted** web content (for example, `http://`) or **unverified URLs** obtained from untrusted sources」列为违规示例 | 必须 ① **只走 HTTPS**（`allowMixedContent: false` 已经堵了 http 降级）；② 目录 URL **不能来自 Intent / 用户输入**，要写死在 App 里；③ **签名校验**把「未验证的来源」变成「已签名验证的来源」 |
+
+> ★ 所以 §12.4 的**签名不是「安全上的额外保险」，它同时是过审论据** ——
+> 它把「从一个 URL 下载 JS」变成「下载并验证一个由开发者签名的包」。
+> 这条让 12.4 从「最好做」升级成「**必须做**」。
 
 ### 12.5 运行时契约 v2（【提案】，取代 §4.2 的 `Page: React.ComponentType`）
 
@@ -1311,10 +1336,20 @@ interface HostApi {
 >
 > ⚠️ P4 与 §2.1 是同一件事 —— 现在「购买」按钮走不到，就是因为没有发币入口。
 
-### 12.8 需要家长拍板的五件事
+**已定的执行顺序（家长 2026-10-15）**：**P1 → 阶段 E 美术（⑤ 升级特效 / ⑥ 建筑装饰）**；
+P2 / P3 等托管方到位；**P4 暂时不做**。
 
-1. **游戏包放哪？**（GitHub Releases / 对象存储 / 自建）—— 项目目前**没有任何后端**；
-2. **上不上 Google Play？** —— 决定能不能用官方的按需下载（方案 C）；
-3. **游戏存储走 (a) 还是 (b)？**（建议：默认 (a)，允许 (b)，(b) 强制实现导出钩子）
-4. **接受「App 从零网络 → 需要网络拉目录」吗？**（离线仍可用，但产品语义变了）
-5. **首批几个游戏、单包体上限多少？**（现在整包 185 KB gzip，§6.5 给美术的上限是 +15 KB gzip）
+⚠️ P1 期间**不许**把任何托管域名写进代码 —— 见 §12.8。
+
+### 12.8 决策记录（家长 2026-10-15）
+
+| 问题 | 拍板 |
+| --- | --- |
+| **上不上 Google Play？** | ✅ **上 Play** ⇒ 查证后确认方案 A 合规（§12.4 的补节），**不需要** Play Feature Delivery |
+| **游戏存储走 (a) 还是 (b)？** | ✅ **(a) 宿主通用表 `gameKv`**（默认）。(b) 暂不实现 |
+| **游戏包放哪？** | ⏳ **暂时没有**，以后大概率是**对象存储 / CDN**。⇒ **实现上必须与托管方解耦**：目录 URL 是一个配置项，不许把任何域名写进逻辑 |
+| **先做哪一步？** | ✅ **先 P1（让游戏真的可插拔），后阶段 E 美术**（⑤ 升级特效 / ⑥ 建筑装饰）。**P4 发币入口暂时不需要** |
+| 首批几个游戏 / 单包体上限 | ⏳ 待定（现在整包 185 KB gzip，§6.5 给美术的上限是 +15 KB gzip） |
+
+> ⚠️ 「暂时没有托管」**不是**「可以先随便写死一个 URL」。
+> P1 的全部验收都在**本地路径**上完成（见 12.7），托管方到位后 P2 只换一个来源。
