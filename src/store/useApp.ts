@@ -2951,7 +2951,18 @@ export const useApp = create<AppState>((set, get) => ({
 
   pushToast: (t) => {
     const id = uid('ts')
-    set({ toasts: [...get().toasts, { ...t, id }] })
+    /* ★ 同时最多留 2 条 —— 原来不封顶，一直往上堆。
+       为什么要封：toast 一条高 74px、活 3.4s，而它是 `fixed top-3` 的浮层，
+       堆起来会盖住**农场第一排地块**（第一排从 y=195 起）。2026-10-15 实测：
+
+         2 条 → 浮层底边 y=168  ← 不碰地块
+         3 条 → 浮层底边 y=250  ← 盖住收获特效，可见率掉到 71%
+
+       而收获特效就画在地块里，被盖住就是「画了看不见」。
+       所以上限不是拍脑袋定的，是**按「别碰到地块」量出来的**：
+       再加一条就会碰到，`capture-harvest-fx.mjs` 会红。
+       丢最老的、留最新的：最新的才是刚发生的事。 */
+    set({ toasts: [...get().toasts, { ...t, id }].slice(-2) })
     setTimeout(() => get().dismissToast(id), 3400)
     // 音效 / 震动**统一挂在这里**，不散到几十个调用点去加。
     // 理由：toast 是「发生了一件值得告诉孩子的事」的唯一收口 ——

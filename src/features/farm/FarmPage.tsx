@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useShallow } from 'zustand/react/shallow'
 import { useApp, selectFarmLevel } from '@/store/useApp'
@@ -383,6 +383,72 @@ function TopBar({
   )
 }
 
+/* ---------------- 收获特效 ---------------- */
+
+/**
+ * 「这一格刚刚收过了」—— 由**状态变化**推导，不由调用点触发。
+ *
+ * ★ 为什么不做成回调：收获有不止一条路径（孩子走 `HarvestSheet`、
+ *   调试句柄 `__kqf__` 直接调 store）。回调只能覆盖其中一条，
+ *   而 `crop.harvestedCount` 是**唯一的事实** —— 谁都绕不过它。
+ *   （同一个道理见 REFERENCE.md「同一个事实存两份就一定会走散」。）
+ *
+ * 两个「收了」的判据：
+ *   ① 多次收的作物：`harvestedCount` 前进
+ *   ② 一次性作物：`crop` 被清空 —— 但**要排除「清理枯茬」**
+ *      （那条路也会把 crop 置空，此时 `before.diedAt` 有值）。
+ */
+function usePlotBurst(plot: Plot): { n: number; emoji: string } | null {
+  const prev = useRef<Plot['crop']>(undefined)
+  const seq = useRef(0)
+  const [burst, setBurst] = useState<{ n: number; emoji: string } | null>(null)
+  const crop = plot.crop
+
+  useEffect(() => {
+    const before = prev.current
+    prev.current = crop
+    if (!before) return // 首次渲染没有「之前」可比
+    const harvested =
+      (!!crop && crop.harvestedCount > before.harvestedCount) || (!crop && !before.diedAt)
+    if (!harvested) return
+    seq.current += 1
+    setBurst({ n: seq.current, emoji: CROP_BY_ID.get(before.cropId)?.emoji ?? '🧺' })
+  }, [crop])
+
+  // 动画 900ms，这里也 900ms —— 两个数字是一对，改一个就得改另一个
+  useEffect(() => {
+    if (!burst) return
+    const t = setTimeout(() => setBurst(null), 900)
+    return () => clearTimeout(t)
+  }, [burst])
+
+  return burst
+}
+
+/**
+ * 收获时从土面蹦出来的产出图案。**纯装饰**：
+ * `pointer-events:none` + `aria-hidden`，命中测试仍然落在 `<button>` 上
+ * （`div.grid.grid-cols-3 > button` 那四个脚本靠它）。
+ *
+ * ⚠️ `data-plot-fx` 是走查脚本的锚（`scripts/capture-harvest-fx.mjs`）——
+ * 别改成靠类名找，类名一改脚本就静默找不到（本项目踩过）。
+ */
+function PlotBurst({ burst }: { burst: { n: number; emoji: string } }) {
+  return (
+    <span
+      className="pointer-events-none absolute inset-x-0 bottom-[38%] z-[1] flex justify-center"
+      aria-hidden
+      data-plot-fx="harvest"
+    >
+      <span className="kqf-burst__item relative text-2xl leading-none" data-fx-item>
+        {burst.emoji}
+      </span>
+      <span className="anim-sparkle absolute -left-1.5 top-0 text-xs">✨</span>
+      <span className="anim-sparkle anim-delay-1 absolute -right-1.5 top-1 text-xs">✨</span>
+    </span>
+  )
+}
+
 /* ---------------- 单块地 ---------------- */
 
 function PlotTile({
@@ -407,6 +473,8 @@ function PlotTile({
   const balance = useApp((s) => s.balance)
   const timeScale = useApp((s) => s.settings.farmClock.timeScale)
   const [bump, setBump] = useState(false)
+  /* 收获特效 —— 由这一格自己的 `crop.harvestedCount` 推导（见 `usePlotBurst`） */
+  const burst = usePlotBurst(plot)
 
   const def = cropDefOf(plot)
   const withered = !!plot.crop?.diedAt
@@ -493,6 +561,9 @@ function PlotTile({
         {/* 土垄底图：枯死的降饱和，一眼看出这块地废了 */}
         <PlotBed className={withered ? 'opacity-40 saturate-50' : undefined} />
 
+        {/* 一次性作物收干净之后，这一格会走到这个分支 —— 特效得挂在这儿 */}
+        {burst ? <PlotBurst key={burst.n} burst={burst} /> : null}
+
         {withered ? (
           <>
             <PlotDead />
@@ -554,6 +625,9 @@ function PlotTile({
         stage={stage}
         className={mature ? 'anim-float' : 'anim-sway'}
       />
+
+      {/* 多次收的作物收完这一茬，植株还在 —— 特效落在植株上 */}
+      {burst ? <PlotBurst key={burst.n} burst={burst} /> : null}
 
       {mature ? (
         <span className="absolute right-1 top-1 anim-sparkle text-sm" aria-hidden>

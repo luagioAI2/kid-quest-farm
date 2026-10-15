@@ -158,6 +158,37 @@
   padding: 4px 6px 6px;
 }
 
+/* ============================================================
+   收获特效：产出从土里蹦出来（`FarmPage.tsx` 的 `PlotBurst`）
+   ------------------------------------------------------------
+   触发**不靠调用点**，靠 `PlotTile` 比较自己这一格的
+   `crop.harvestedCount`（见 `usePlotBurst` 的注释）。
+
+   ⚠️ 这块地是 `overflow-hidden` 的，所以位移必须留在格子内 ——
+   起点 `bottom: 38%`（正好是 `.kqf-plot__art` 的底部，即土面）
+   上浮 30px，在手机 3 列（格子约 115px）里还有富余。
+   ============================================================ */
+@keyframes kqf-harvest-pop {
+  0% {
+    transform: translateY(10px) scale(0.5);
+    opacity: 0;
+  }
+  30% {
+    transform: translateY(-2px) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-30px) scale(0.9);
+    opacity: 0;
+  }
+}
+
+/* 只在 `PlotBurst` 里用；动画本身带 `both`，播完停在 opacity:0，
+   父级 900ms 后把整块卸载掉（两个时间要一致）。 */
+.kqf-burst__item {
+  animation: kqf-harvest-pop 900ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kqf-cloud {
     animation: none;
@@ -168,5 +199,9 @@
   .kqf-animal,
   .kqf-plot--mature::after {
     animation: none !important;
+  }
+  /* 收获特效：去掉位移，但**保留**产出图案本身 —— 减少动效不等于删掉反馈 */
+  .kqf-burst__item {
+    animation: none;
   }
 }
