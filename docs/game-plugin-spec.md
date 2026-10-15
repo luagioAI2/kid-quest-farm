@@ -30,6 +30,7 @@
 | 不引入新的运行时依赖（不许加 Pixi / three / 动画库） | 见 §6.2 的实测体积账 |
 | 提供 `data-*` 锚点，不用下标定位 DOM | 见 §7.2 |
 | 经济参数必须写进 manifest，可被家长看到 | 见 §4.4 |
+| 要能**独立下载 / 独立更新**的游戏：自带存储 + 实现 `exportData()` / `importData()`，并声明 `minHostApi` | 见 §12 —— 否则备份静默丢数据、或一次游戏更新把宿主搞崩 |
 
 ---
 
@@ -959,6 +960,9 @@ export const GAMES: GamePlugin[] = [farmPlugin, clawPlugin]
 **进度（2026-10-15）**：A、C、D 已完成；**E 进行中**（作物 24 帧、动物精灵、昼夜天空、
 收获特效都已落地；地块皮 / 雨雪粒子**被前置状态卡住**，浇水 / 施肥特效
 **被「状态走不到」卡住**）；B 未做，F 未开始。
+**新增 G：平台化 / 游戏的独立分发**（家长 2026-10-15 提的目标）—— 见 **§12**，
+其中 **P1（让游戏真的可插拔）是 P2（下载）的前置**，而 P2 的准入条件是
+「哈希 + 签名校验」，不是可选项。
 
 | 阶段 | 做什么 | 状态 |
 | --- | --- | --- |
@@ -1170,3 +1174,147 @@ TypeError: GAMES is not iterable
 > 否则「探针烂掉」和「没被盖住」长得一模一样；③ 前 ~100ms 弹层遮罩还在
 > （`harvest()` 内部 await 了 refresh），那几帧特效本身 `opacity:0`，不算被盖住。
 > 先红后绿的证据：把 toast 封顶去掉 → 手机 **31%** / 平板 **71%**、退出码 1。
+
+---
+
+## 12. 平台化：游戏的**独立分发**（2026-10-15 提案）
+
+家长原话：
+
+> 「最终 我希望的是 app 最后成为平台。设置 游戏里 可以 展示新的游戏。用户可以点购买下载。
+> 所以我需要游戏能够比较独立。游戏也在项目里。以后会添加更多的游戏。
+> 但是允许用户独立更新下载。第一次安装只是农场。以免包太大了。」
+
+### 12.1 现状 vs 目标（哪些已经对了，哪些是假的）
+
+| 目标 | 现状 | 判据 |
+| --- | --- | --- |
+| 游戏之间互相独立 | ✅ **已经对了** | 各自的账本表、各自的页面、互不 import（§4.3 / §10 的环） |
+| 第一次安装只有农场 | ⚠️ **只是碰巧** | 现在确实只有农场能玩，但那是因为**别的游戏还没做**；构建上所有游戏都打进同一个包（`pages.ts` 静态 `Record<id, ComponentType>`） |
+| 独立下载 / 独立更新 | ❌ **做不到** | 没有任何下载路径；App **零网络请求**（`grep -rn "fetch(" src/` 为空） |
+| 包体不随游戏增长 | ❌ **做不到** | 加一个游戏 = 重打 APK |
+
+**已经就位的底座**（这部分不用动）：`@capacitor/filesystem` 已在用（`src/platform/files.ts`）、
+`INTERNET` 权限已在 manifest、Capacitor `webDir: dist` / `allowMixedContent: false`、
+游戏有自己的账本与命名空间、`buyGame` 的扣款守卫已在事务里。
+
+### 12.2 ★★ 先解决这个：现有数据模型**装不下**下载来的游戏
+
+§4.3 说「表名带 `<gameId>.` 前缀（`claw.prizes`）」。但表**必须声明在 `src/db/db.ts` 里**，
+而 `db.ts` 是**打进 APK 的编译产物**（`this.version(N).stores({...})` 是固定列表，
+`scripts/e2e-upgrade.mjs` 就是解析它来对账的）。
+
+> **⇒ 下载安装的游戏无法给自己建表。** 不解决这条，「独立下载」就是假的 ——
+> 每个新游戏仍然要发一次 APK。
+
+两条出路，**建议同时支持、按需选**：
+
+| 方案 | 机制 | 好处 | 代价 |
+| --- | --- | --- | --- |
+| **(a) 宿主通用表**（默认） | 宿主加一张 `gameKv: { key, value }`，key = `${gameId}:${k}` | `exportBackup` / `importBackup` **天然覆盖**，零额外工作 | 游戏拿不到索引查询，只能整块读写 |
+| **(b) 游戏自带 IndexedDB** | 游戏 bundle 里自带 Dexie，运行时开**自己的库** | 真正独立、可以有自己的表结构 | 宿主 `exportBackup` **枚举不到**它 ⇒ 游戏**必须**实现 `exportData()` / `importData()` |
+
+⚠️ 选 (b) 却不实现导出钩子 = **备份静默丢数据**，正是本项目最忌讳的那类 bug
+（「同一个事实存两份就一定会走散」的同族）。所以 (b) 的钩子是**强制**的，且要有断言钉住。
+
+### 12.3 三种分发方案（技术选型）
+
+| 方案 | 怎么做 | 适配本项目？ |
+| --- | --- | --- |
+| **A. 远端 ESM + blob 加载**（**推荐**） | 每个游戏**独立 Vite 构建**成自包含 ESM；下载 → 校验 → 存 Filesystem → `Blob` + `import()` | ✅ 与 sideload APK 兼容，浏览器里就能验 |
+| **B. iframe 小程序** | 每个游戏是一个下载来的 HTML，塞进 `<iframe>`，`postMessage` 通信 | ✅ 隔离最强；但边界重，游戏得自己管整页 |
+| **C. Play Feature Delivery** | Android 官方的「按需下载模块」 | ❌ 要求走 **Google Play**；本项目是 GitHub Releases 分发 sideload APK |
+| **D. 只下数据、不下代码** | 游戏 = 数据，引擎内置在 APK | ✅ 最安全最小；但游戏形态被限死 |
+
+**推荐 A**。加载机制（关键：blob URL 继承页面 origin，绕开 CORS / 混合内容）：
+
+```ts
+const code = await fetch(url).then((r) => r.text())
+await assertSha256(code, expected)                       // 见 12.4，不可省
+await Filesystem.writeFile({
+  path: `games/${id}/${version}/game.js`,
+  data: code, directory: Directory.Data, encoding: Encoding.UTF8, recursive: true,
+})
+const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))
+const mod = await import(/* @vite-ignore */ blobUrl)
+mod.default.mount(container, hostApi)                     // 见 12.5
+```
+
+⇒ 因为 blob 模块**不能有裸模块说明符**，每个游戏必须打成**单文件自包含** ESM
+（自带 React / 自带依赖）。这正好也把「游戏和宿主零耦合」变成物理事实。
+
+### 12.4 ★ 安全：不可让步的一条
+
+**下载并执行远端 JS = 在这个 App 里执行任意代码**，而它握着孩子的数据、还能写文件系统。所以：
+
+1. 必须 HTTPS（`allowMixedContent: false` 已经堵了 http 降级）；
+2. `catalog.json` 里每个游戏带 **SHA-256**，**安装前校验**；
+3. `catalog.json` 本身用 **Ed25519 签名**（`catalog.json.sig`），公钥**烧进 APK**。
+
+> 不做 2 / 3 = **谁拿下那台静态服务器，谁就能在孩子的手机里跑任意代码**。
+> 这不是「以后再加」的项，是 P2 的准入条件。
+
+### 12.5 运行时契约 v2（【提案】，取代 §4.2 的 `Page: React.ComponentType`）
+
+```ts
+interface GameBundle {
+  manifest: {
+    id: string; name: string; emoji: string; tabLabel: string
+    version: string          // 语义化版本，用于「可更新」判断
+    minHostApi: number       // 见下
+    coin: { id: string; name: string; emoji: string }
+    economy: { playCost: number; expectedPayout: number; capPerPrize: number }
+  }
+  /** 挂到一个容器里；返回卸载函数（切走 / 卸载游戏时调用） */
+  mount(container: HTMLElement, host: HostApi): () => void
+}
+
+interface HostApi {
+  spendPoints(n: number, memo: string): Promise<boolean>
+  mintGameCoin(n: number, memo: string): Promise<void>
+  storage: { get(k: string): Promise<unknown>; set(k: string, v: unknown): Promise<void> }
+  /** 只有选 12.2(b) 的游戏需要实现 */
+  exportData?(): Promise<unknown>
+  importData?(d: unknown): Promise<void>
+  pushToast(t: { kind: string; title: string; detail?: string }): void
+  haptic(): void
+  tone(kind: string): void
+}
+```
+
+**两点变化，都是有意的**：
+
+- **不再传 React 组件，传「容器 + 纯数据 API」**。游戏可以用任何框架、自带 React、
+  和宿主零耦合 —— 顺手把 §10 那个「注册表不能 import 页面组件」的环**从根上解掉**。
+- **`minHostApi` 版本门**：宿主声明 `HOST_API`，游戏声明它要求的最低版本；
+  不匹配就**拒绝安装 / 提示升级 App**。没有这道门，一次游戏更新就能把宿主搞崩。
+
+### 12.6 离线与降级（现在是零网络应用，别把它弄丢）
+
+- **农场永远内置**，离线永远可用（它是首款、免费、默认拥有）；
+- 已下载的游戏**存本地**，离线可用；
+- 拉不到 `catalog.json` → **只显示已安装的**，不报错、不空转、不摆灰按钮
+  （沿用 §2.1 末尾那条纪律：不承诺做不到的事）。
+
+### 12.7 分阶段路线
+
+| 阶段 | 做什么 | 能不能只靠浏览器验 |
+| --- | --- | --- |
+| **P0** | 拍板：游戏包放哪 / 上不上 Play / 隔离模型（A 还是 B） | — |
+| **P1** | 让「游戏」**真的可插拔**：独立构建产物 + `mount()` 契约 + 通用存储 + 导出钩子。**先不做下载** | ✅ 能（本地路径先当「已安装」） |
+| **P2** | 下载与安装：catalog + 哈希/签名校验 + Filesystem + 从存储加载 + 设置页（商店 / 已安装 / 可更新 / 卸载） | 部分（浏览器用 fetch 模拟） |
+| **P3** | 更新与回滚：原子安装（临时目录 → 校验 → 替换）、加载失败回滚、`minHostApi` 门 | 部分 |
+| **P4** | **发币入口**（付费 / 兑换码）—— 没有它「购买」永远点不通 | ✅ 能 |
+
+> ⚠️ **P1 是关键**：它不涉及网络，却把「宿主 ↔ 游戏」的边界从「同一份构建」改成
+> 「运行时装配」。**P1 做完，P2 只是加一条下载管道**；P1 不做，P2 无从下手。
+>
+> ⚠️ P4 与 §2.1 是同一件事 —— 现在「购买」按钮走不到，就是因为没有发币入口。
+
+### 12.8 需要家长拍板的五件事
+
+1. **游戏包放哪？**（GitHub Releases / 对象存储 / 自建）—— 项目目前**没有任何后端**；
+2. **上不上 Google Play？** —— 决定能不能用官方的按需下载（方案 C）；
+3. **游戏存储走 (a) 还是 (b)？**（建议：默认 (a)，允许 (b)，(b) 强制实现导出钩子）
+4. **接受「App 从零网络 → 需要网络拉目录」吗？**（离线仍可用，但产品语义变了）
+5. **首批几个游戏、单包体上限多少？**（现在整包 185 KB gzip，§6.5 给美术的上限是 +15 KB gzip）
