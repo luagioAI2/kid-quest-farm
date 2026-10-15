@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useApp } from '../../store/useApp'
 import { GAMES } from '../../games/registry'
 import { Card } from './ui'
@@ -5,10 +6,11 @@ import { Card } from './ui'
 /**
  * 家长栏 → 「游戏」。
  *
- * 三块，各回答一个问题：
+ * 四块，各回答一个问题：
  *   ① **商城币** —— 有多少、从哪来；
- *   ② **已购买** —— 我有哪些、现在玩的是哪一个（可切换）；
- *   ③ **敬请期待** —— 还没做的。
+ *   ② **已购买** —— 内置游戏里我有哪些、现在玩的是哪一个（可切换）；
+ *   ③ **已下载** —— 运行时装进来的游戏（装了才显示，见那边的注释）；
+ *   ④ **敬请期待** —— 还没做的。
  *
  * ## 文案口径（这个项目被家长点过名）
  *
@@ -22,6 +24,9 @@ import { Card } from './ui'
  *   · `comingSoon` 的游戏**不显示价格、也不渲染购买按钮** —— 买了也没得玩；
  *   · 商城币卡片直接把「还没做」写出来，而不是摆一个按不动的按钮。
  * 等付费 / 兑换码接上，把这两条改掉即可（`buyGame` 已经写好并有用例）。
+ *
+ * 同一条口径也管着 ③：**没有托管地址就装不出东西**，所以 ③ 整块是
+ * 「有才渲染」，而不是摆一个空栏目 + 一个点了会失败的按钮。
  */
 
 /** 商城币的图标。只有这一处定义，别在别处再写一个 emoji。 */
@@ -34,9 +39,15 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
   const setActiveGame = useApp((s) => s.setActiveGame)
   const buyGame = useApp((s) => s.buyGame)
   const pushToast = useApp((s) => s.pushToast)
+  const installedGames = useApp((s) => s.installedGames)
+  const uninstallGame = useApp((s) => s.uninstallGame)
+
+  /** 正在等二次确认的插件游戏 id —— 卸载会连存档一起删，不能一下点掉 */
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
   const owned = GAMES.filter((g) => ownedGameIds.includes(g.id))
   const notOwned = GAMES.filter((g) => !ownedGameIds.includes(g.id))
+  const installed = Object.values(installedGames)
 
   const buy = async (id: string) => {
     const res = await buyGame(id)
@@ -113,7 +124,90 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
         </p>
       </Card>
 
-      {/* ③ 敬请期待 */}
+      {/*
+        ③ 已下载 —— **运行时装进来的游戏**（spec §12）。
+
+        和 ② 的区别：② 是编译进 App 的内置游戏，③ 是家长自己装进来的包。
+        P1 还没有托管地址，所以正常装不出东西来；这一段**只有装了才渲染**，
+        不摆一个永远空着的栏目 —— 那就是「界面承诺了它做不到的事」。
+        等 P2 接上托管，这一段会自己出现。
+      */}
+      {installed.length > 0 && (
+        <Card title="已下载" emoji="📦">
+          <ul className="space-y-2">
+            {installed.map((m) => {
+              const isCurrent = m.id === activeGameId
+              const isConfirming = confirmingId === m.id
+              return (
+                <li
+                  key={m.id}
+                  className="flex items-center gap-3 rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-3 py-2.5"
+                >
+                  <span className="text-2xl">{m.emoji}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-display text-base font-extrabold text-ink-900">
+                      {m.name}
+                      <span className="ml-1.5 text-xs font-bold text-ink-500">v{m.version}</span>
+                    </span>
+                    <span className="block text-xs leading-snug text-ink-500">
+                      游戏币：{m.coin.emoji} {m.coin.name}
+                    </span>
+                  </span>
+                  {isConfirming ? (
+                    <>
+                      <button
+                        disabled={!gateOpen}
+                        onClick={() => {
+                          setConfirmingId(null)
+                          void uninstallGame(m.id)
+                        }}
+                        className="btn shrink-0 rounded-full bg-berry-500 px-3 py-1.5 text-xs font-extrabold text-white shadow-flat active:btn-press disabled:opacity-50"
+                      >
+                        确认卸载
+                      </button>
+                      <button
+                        onClick={() => setConfirmingId(null)}
+                        className="btn shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press"
+                      >
+                        取消
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {isCurrent ? (
+                        <span className="shrink-0 rounded-full bg-grass-300 px-3 py-1 text-xs font-extrabold text-ink-900">
+                          当前
+                        </span>
+                      ) : (
+                        <button
+                          disabled={!gateOpen}
+                          onClick={() => void setActiveGame(m.id)}
+                          className="btn shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press disabled:opacity-50"
+                        >
+                          设为当前
+                        </button>
+                      )}
+                      <button
+                        disabled={!gateOpen}
+                        onClick={() => setConfirmingId(m.id)}
+                        aria-label={`卸载 ${m.name}`}
+                        className="btn shrink-0 rounded-full bg-white px-2.5 py-1.5 text-xs font-extrabold text-ink-500 shadow-flat active:btn-press disabled:opacity-50"
+                      >
+                        卸载
+                      </button>
+                    </>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          <p className="mt-3 text-xs leading-snug text-ink-500">
+            卸载会把这个游戏的存档一起删掉，下次装回来是重新开始。
+          </p>
+        </Card>
+      )}
+
+      {/* ④ 敬请期待 */}
       <Card title="敬请期待" emoji="🔜">
         {notOwned.length === 0 ? (
           <p className="text-sm text-ink-500">没有别的游戏了。</p>

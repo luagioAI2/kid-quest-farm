@@ -8,6 +8,11 @@ dist/
 dist-ssr/
 *.local
 
+# 游戏包产物（`npm run build:games` → games-src/ 的独立构建）。
+# ⚠️ **刻意不入库、也不进 App 的 dist** —— 它们是要**下发**的东西，
+# 不该被打进 APK（那正是「独立下载」要解决的问题，见 spec §12）。
+games-dist/
+
 # 编辑器
 .vscode/*
 !.vscode/extensions.json

@@ -202,6 +202,9 @@ const SOURCE: Record<LedgerSource, { emoji: string; label: string }> = {
   redeem: { emoji: '🎁', label: '兑换' },
   streak_bonus: { emoji: '🔥', label: '连续奖励' },
   manual_adjust: { emoji: '🔧', label: '手动调整' },
+  // 插件游戏的一次投入（`HostApi.spendPoints`）。`refId` 是游戏 id，
+  // 所以同一笔在不同游戏下能分开看。
+  game_spend: { emoji: '🎮', label: '游戏投入' },
 }
 
 function LedgerRow({ entry }: { entry: LedgerEntry }) {

@@ -20,7 +20,8 @@
     "splash:check": "node scripts/measure-splash.mjs --check",
     "site": "node scripts/build-site.mjs",
     "site:check": "node scripts/check-site.mjs",
-    "release:github": "python scripts/release-github.py"
+    "release:github": "python scripts/release-github.py",
+    "build:games": "vite build --config games-src/vite.config.ts"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",

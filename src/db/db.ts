@@ -13,6 +13,7 @@ import type {
   HarvestEntry,
   InventorySlot,
   LedgerEntry,
+  LedgerSource,
   MallEntry,
   MallSource,
   MarketState,
@@ -34,6 +35,22 @@ export interface MetaRow {
   value: unknown
 }
 
+/**
+ * 通用键值行 —— **下载来的游戏**的状态都存这里（Dexie v7，spec §12.2 方案 a）。
+ *
+ * `key` 是 `${gameId}:${游戏自己的键}`，所以**主键天然带命名空间**；
+ * `gameId` 单独一列只是为了让「卸载某款游戏」能一次删干净（`clearGameKv`），
+ * 以及让「读这款游戏的全部状态」不用扫全表。
+ *
+ * ⚠️ 为什么不是「每个游戏一张表」：见 `this.version(7)` 的注释 ——
+ * 表必须编译期声明，而下载来的游戏是在运行时才出现的。
+ */
+export interface GameKvRow {
+  key: string
+  gameId: string
+  value: unknown
+}
+
 class KidQuestFarmDB extends Dexie {
   tasks!: Table<Task, string>
   taskInstances!: Table<TaskInstance, string>
@@ -49,6 +66,8 @@ class KidQuestFarmDB extends Dexie {
   redeemItems!: Table<RedeemItem, string>
   redeemRecords!: Table<RedeemRecord, string>
   farmEvents!: Table<FarmEvent, string>
+  /** 通用键值 —— **下载来的游戏**的状态都存这里，见 `GameKvRow`。 */
+  gameKv!: Table<GameKvRow, string>
   meta!: Table<MetaRow, string>
 
   constructor() {
@@ -115,10 +134,105 @@ class KidQuestFarmDB extends Dexie {
     this.version(6).stores({
       mallLedger: 'id, source, createdAt, refId',
     })
+    // v7：**通用键值表** —— 给「独立下载的游戏」用（2026-10-15，spec §12）。
+    //
+    // 为什么必须有这张表：Dexie 的 schema 是**编译期固定**的（就是上面这一串
+    // `this.version(N).stores({...})`，`scripts/e2e-upgrade.mjs` 还解析它对账）。
+    // 一个**运行时下载**进来的游戏**没法给自己建表** —— 除非发新 APK。
+    // 于是宿主提供这一张通用表：`key = `${gameId}:${游戏自己的键}``。
+    //
+    // 代价：没有索引查询，只能整块读写（小游戏够用）。
+    // 好处：`exportBackup` / `importBackup` / `wipeAll` **天然覆盖**它 ——
+    // 不用为每个新游戏改备份逻辑（本项目在「同一个事实存两份」上吃过大亏，
+    // 这里刻意只存一份）。
+    //
+    // ⚠️ 加这张表**不等于**有了下载功能。它只是让「下载来的游戏有地方存状态」。
+    // 别为了「让表里有东西」先塞假数据。
+    this.version(7).stores({
+      gameKv: 'key, gameId',
+    })
   }
 }
 
 export const db = new KidQuestFarmDB()
+
+/* ---------------- 通用键值（下载来的游戏用） ---------------- */
+
+/**
+ * 拼一个带命名空间的键。**只在这里拼** ——
+ * 别在别处手写 `` `${gameId}:${k}` ``，那样改名 / 改分隔符时必然漏一处，
+ * 而漏掉的那处**不报错**，只会静默读写到另一个键上。
+ */
+export function gameKvKey(gameId: string, key: string): string {
+  return `${gameId}:${key}`
+}
+
+/** 读一款游戏的一个键。没存过返回 `undefined`。 */
+export async function getGameKv<T>(gameId: string, key: string): Promise<T | undefined> {
+  const row = await db.gameKv.get(gameKvKey(gameId, key))
+  return row?.value as T | undefined
+}
+
+/** 写一款游戏的一个键。整块覆盖（没有局部更新 —— 见 v7 注释的「没有索引」）。 */
+export async function setGameKv(gameId: string, key: string, value: unknown): Promise<void> {
+  await db.gameKv.put({ key: gameKvKey(gameId, key), gameId, value })
+}
+
+/** 读一款游戏的全部键值，**键名已去掉前缀**。 */
+export async function listGameKv(gameId: string): Promise<Record<string, unknown>> {
+  const rows = await db.gameKv.where('gameId').equals(gameId).toArray()
+  const out: Record<string, unknown> = {}
+  for (const r of rows) out[r.key.slice(gameId.length + 1)] = r.value
+  return out
+}
+
+/** 卸载一款游戏：只删**它自己的**状态，返回删掉的行数。 */
+export async function clearGameKv(gameId: string): Promise<number> {
+  return db.gameKv.where('gameId').equals(gameId).delete()
+}
+
+/**
+ * 插件**包体本身**在 `gameKv` 里的保留键。
+ *
+ * ⚠️ 把「代码文本」放进键值表是个**权宜**：它可能几百 KB，
+ * 而 `gameKv` 是「状态」表。P2 会把它挪到 `Filesystem`（那里适合放大文件），
+ * 状态继续留在 `gameKv`。现在先放这儿，是因为 P1 要验的是**装配**，
+ * 不是存储位置 —— 而多一个存储层会让「存档到底丢了没有」更难判断。
+ */
+export const BUNDLE_KEY = '__bundle'
+
+/**
+ * 列出所有**已安装**的游戏包。
+ *
+ * 怎么找：扫 `gameKv` 里 key 正好是 `<某 gameId>:__bundle` 的行。
+ * **不另存一份「已安装列表」** —— 那份列表和这些行一旦不同步，
+ * 就会出现「列表里显示装了、其实没装」或反过来（本项目的老毛病）。
+ */
+export async function listInstalledBundles(): Promise<{ gameId: string; code: string }[]> {
+  const rows = await db.gameKv.toArray()
+  const out: { gameId: string; code: string }[] = []
+  for (const r of rows) {
+    if (r.key === gameKvKey(r.gameId, BUNDLE_KEY) && typeof r.value === 'string') {
+      out.push({ gameId: r.gameId, code: r.value })
+    }
+  }
+  return out
+}
+
+/**
+ * `gameKv` 表里出现过的**全部 gameId**（去重）。
+ *
+ * ★ 走查脚本用这个验「命名空间隔离」：正常只该有已安装游戏自己的 id。
+ * 冒出别的 id 就说明有东西往别人的命名空间里写了 —— 前缀拼错、或者插件
+ * 拿到了不该拿的 gameId —— 而这**不会报错**，只会静默串味。
+ *
+ * 用 `toArray()` 而不是索引去重：这张表只会随「装了几个游戏」增长，
+ * 量级是几十行，没必要为它引入一个索引 API 的语义依赖。
+ */
+export async function listGameKvOwnerIds(): Promise<string[]> {
+  const rows = await db.gameKv.toArray()
+  return [...new Set(rows.map((r) => r.gameId))]
+}
 
 /* ---------------- meta 便捷读写 ---------------- */
 
@@ -361,6 +475,43 @@ export async function postLedger(
   })
 }
 
+/**
+ * 扣一笔**积分**，**在同一个事务里先验余额**。余额不够返回 `false`，一分不扣。
+ *
+ * 与 `spendMall` 完全对称，只是换了张表。**插件游戏碰钱的唯一入口**
+ * （spec §3.2 / §12.5 的 `HostApi.spendPoints`）。
+ *
+ * ## 为什么不「先 `currentBalance()` 判断，再 `postLedger()`」
+ *
+ * 那是把**守卫放在事务外面**：两次并发调用会各自读到同一个「够」，于是都扣
+ * —— **超支**，而且每条 `balanceAfter` 都自洽、不报错。
+ * `consumeItem` 的注释里记过一模一样的事故。**守卫和扣款必须在同一个事务里。**
+ *
+ * ⚠️ 农场的种子 / 动物 / 开地**不走这里** —— 它们各有自己的 source
+ * （`farm_plant` / `farm_purchase`），历史账目别被改写。这条是给插件用的。
+ */
+export async function spendPoints(
+  amount: number,
+  entry: { source: LedgerSource; refId?: string; memo: string },
+): Promise<boolean> {
+  const cost = Math.round(amount)
+  if (cost <= 0) return false
+  return db.transaction('rw', db.ledger, async () => {
+    const tip = await ledgerTip()
+    if (tip.balance < cost) return false
+    await db.ledger.put({
+      id: `lg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+      delta: -cost,
+      balanceAfter: tip.balance - cost,
+      source: entry.source,
+      refId: entry.refId,
+      memo: entry.memo,
+      createdAt: Math.max(Date.now(), tip.createdAt),
+    })
+    return true
+  })
+}
+
 /* ---------------- 丰收币账本 ---------------- */
 
 /**
@@ -584,6 +735,7 @@ export async function wipeAll(): Promise<void> {
       db.farmEvents,
       db.harvestLedger,
       db.mallLedger,
+      db.gameKv,
       db.meta,
     ],
     async () => {
@@ -593,6 +745,7 @@ export async function wipeAll(): Promise<void> {
         db.ledger.clear(),
         db.harvestLedger.clear(),
         db.mallLedger.clear(),
+        db.gameKv.clear(),
         db.inventory.clear(),
         db.animals.clear(),
         db.checkIns.clear(),

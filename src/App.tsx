@@ -13,6 +13,7 @@ import { isNative, playTone } from './platform/files'
 import { GAME_FARM } from './games/ids'
 import { gameById } from './games/registry'
 import { pageFor } from './games/pages'
+import { PluginGameHost } from './games/PluginGameHost'
 import './features/farm/farm.css'
 
 type TabKey = 'tasks' | 'game' | 'redeem' | 'points'
@@ -57,11 +58,16 @@ export default function App() {
    * 当前正在玩的游戏。底部导航的游戏那一格（图标 + 名字）跟着它走。
    *
    * `activeGameId` 已经在 store 里被 `resolveActiveGame()` 兜过底 ——
-   * 它保证是一个**注册表里有、可玩、且已拥有**的 id，所以这里再查一次
-   * 注册表拿到的 `activeGame` 一定有值。查不到时按「兜底」渲染，不炸。
+   * 它保证是一个**可玩**的 id，但**不保证它在注册表里**：
+   * 下载来的游戏（spec §12）是运行时装进来的，`gameById` 找不到它。
+   * 所以「游戏叫什么、长什么样」有**两个来源**，按优先级取：
+   *   ① 注册表（内置游戏，编译进来，永远优先）
+   *   ② `installedGames`（下载来的游戏的清单，从 `gameKv` 派生）
+   * 两个都没有时按兜底渲染，不炸。
    */
   const activeGameId = useApp((s) => s.activeGameId)
   const activeGame = gameById(activeGameId)
+  const activePlugin = useApp((s) => s.installedGames[activeGameId])
 
   const [tab, setTab] = useState<TabKey>('tasks')
   const [showSettings, setShowSettings] = useState(false)
@@ -165,22 +171,25 @@ export default function App() {
       STATIC_TABS[0],
       {
         key: 'game' as const,
-        label: activeGame?.name ?? '游戏',
-        emoji: activeGame?.emoji ?? '🎮',
+        label: activeGame?.name ?? activePlugin?.name ?? '游戏',
+        emoji: activeGame?.emoji ?? activePlugin?.emoji ?? '🎮',
         tour: `tab-${activeGameId}`,
       },
       STATIC_TABS[1],
       STATIC_TABS[2],
     ],
-    [activeGame, activeGameId],
+    [activeGame, activePlugin, activeGameId],
   )
 
   /**
    * 当前游戏的页面组件。
    *
-   * 页面挂在 `games/pages.ts` 里（注册表是纯数据，不能 import UI —— 见那边的注释）。
-   * `comingSoon` 的游戏拿不到页面，所以正常走不到「切过去了但没有页面」那种情况；
-   * 真走到了就渲染空白，而不是把整个 App 炸掉。
+   * 内置游戏的页面挂在 `games/pages.ts` 里（注册表是纯数据，不能 import UI ——
+   * 见那边的注释）。`comingSoon` 的游戏拿不到页面，所以正常走不到
+   * 「切过去了但没有页面」那种情况。
+   *
+   * **下载来的游戏拿不到 `GamePage`**（它不在注册表里）—— 那种情况交给
+   * `PluginGameHost` 按 `mount()` 契约装配。两条路都走不到才渲染空白。
    */
   const GamePage = pageFor(activeGame)
 
@@ -323,7 +332,12 @@ export default function App() {
           <main key={tab} className="flex flex-1 flex-col anim-fade-in">
             <ErrorBoundary resetKey={tab}>
               {tab === 'tasks' && <TaskPage />}
-              {tab === 'game' && GamePage && <GamePage />}
+              {tab === 'game' &&
+                (GamePage ? (
+                  <GamePage />
+                ) : activePlugin ? (
+                  <PluginGameHost gameId={activeGameId} />
+                ) : null)}
               {tab === 'redeem' && <RedeemPage />}
               {tab === 'points' && <PointsPage />}
             </ErrorBoundary>

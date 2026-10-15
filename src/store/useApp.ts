@@ -24,12 +24,18 @@ import type {
 } from '../domain/types'
 import {
   addItem,
+  BUNDLE_KEY,
+  clearGameKv,
   consumeItem,
   currentBalance,
   currentHarvestBalance,
   currentMallBalance,
   db,
   DEFAULT_SETTINGS,
+  getGameKv,
+  listGameKv,
+  listGameKvOwnerIds,
+  listInstalledBundles,
   loadAllRedeemItems,
   loadFarm,
   loadFarmEvents,
@@ -50,11 +56,17 @@ import {
   savePlots,
   saveQuotaCarry,
   saveSettings,
+  setGameKv,
   spendMall,
   wipeAll,
+  type GameKvRow,
 } from '../db/db'
 import { DEFAULT_GAME_ID } from '../games/ids'
 import { GAMES, gameById, ownedByDefault, purchasedIdsFrom } from '../games/registry'
+import { makeHostApi } from '../games/hostApi'
+import { importBundle, mountBundle } from '../games/loader'
+import { HOST_API } from '../games/plugin'
+import type { GameBundle, GameManifestV2, HostApi } from '../games/plugin'
 import { hapticLight, playTone, type ToneKind } from '../platform/files'
 import { settleInstance, type SettleParams } from '../domain/settlement'
 import {
@@ -195,6 +207,16 @@ interface AppState {
    * 见 `games/registry.ts` 的 `purchasedIdsFrom`。
    */
   ownedGameIds: string[]
+  /**
+   * **已安装的插件游戏**（下载来的那些）：id → manifest（spec §12.5）。
+   *
+   * 只存 manifest（很小），**不存代码** —— 代码在 `gameKv` 的 `__bundle` 里，
+   * 要装配的时候现读（见 `mountGame`）。
+   *
+   * ⚠️ 这份清单是**从 `gameKv` 派生**的，不是另存一份。另存就会出现
+   * 「清单说装了、其实包里没有」或反过来 —— 本项目的老毛病。
+   */
+  installedGames: Record<string, GameManifestV2>
   todayKey: string
 
   toasts: Toast[]
@@ -218,6 +240,20 @@ interface AppState {
   refresh: () => Promise<void>
   /** 每分钟推进一次：动物产出、跨日检测 */
   tick: () => Promise<void>
+
+  /* ---- 插件游戏（spec §12） ---- */
+  /**
+   * 从 URL 拉一个游戏包 → 校验 → 装进本地。
+   *
+   * ⚠️ P1 里这就是「下载」，但它**没有**做完整性校验（哈希 / 签名）——
+   * 那必须在 P2 补上，且必须发生在**执行代码之前**（spec §12.4）。
+   * 现在它的用途是「证明装配管道通」，来源是开发者自己的静态目录。
+   */
+  installGameFromUrl: (url: string) => Promise<{ ok: boolean; message: string }>
+  /** 卸载一款插件游戏：**连包带状态一起删**（不然重装会捡到上一次的存档）。 */
+  uninstallGame: (gameId: string) => Promise<void>
+  /** 把已安装的游戏挂进一个容器，返回**卸载函数**。 */
+  mountGame: (gameId: string, container: HTMLElement) => Promise<() => void>
 
   /* ---- 任务 ---- */
   addTask: (input: NewTaskInput) => Promise<Task>
@@ -608,6 +644,7 @@ const BACKUP_ARRAY_FIELDS = [
   'ledger',
   'harvestLedger',
   'mallLedger',
+  'gameKv',
   'inventory',
   'animals',
   'checkIns',
@@ -696,19 +733,73 @@ function ownedGameIdsFrom(mallLedger: readonly MallEntry[]): string[] {
 /**
  * 把 `settings.activeGame` 解析成一个**真的能用**的 id。
  *
- * 存档里那个 id 有三种失效方式：
+ * 存档里那个 id 有四种失效方式：
  *   ① 那款游戏还没买（清库 / 退款 / 导入了别的设备的备份）；
  *   ② 注册表里已经没有它了（改过 id / 游戏下线）；
- *   ③ 字段根本不存在（老库）。
- * 三种都回落到 `DEFAULT_GAME_ID`（首款，免费且默认拥有，所以兜底一定有效）。
+ *   ③ 字段根本不存在（老库）；
+ *   ④ **下载来的游戏被卸载了**（包没了，但 `settings.activeGame` 还指着它）。
+ * 前三种回落到 `DEFAULT_GAME_ID`（首款，免费且默认拥有，所以兜底一定有效）；
+ * ④ 也一样 —— 不回落的话底部导航会指着一个挂不起来的游戏。
+ *
+ * ⚠️ `installed` 要**先判**：下载来的游戏**不在注册表里**（`gameById` 找不到它），
+ * 所以按注册表那条路走它永远解析不出来 —— 整个插件系统就退化成「能装不能玩」。
+ * 这就是本项目最怕的那种「静默失效」：不报错，只是永远回落到农场。
  *
  * ⚠️ 少了这一步，底部导航会指着一个不存在的页面 —— 而 React 那边
- * 只是渲染出一个空白 tab，**不报错**。本项目最怕的就是这种静默失效。
+ * 只是渲染出一个空白 tab，**不报错**。
  */
-function resolveActiveGame(rawId: string | undefined, owned: readonly string[]): string {
+function resolveActiveGame(
+  rawId: string | undefined,
+  owned: readonly string[],
+  installed: ReadonlySet<string>,
+): string {
+  // 下载来的游戏：**装了就是可玩的**，没有「拥有」这一层（P1 不做购买）。
+  if (rawId && installed.has(rawId)) return rawId
   const g = gameById(rawId)
   if (g && g.status === 'available' && owned.includes(g.id)) return g.id
   return DEFAULT_GAME_ID
+}
+
+/* ---------------- 插件游戏：宿主 API 与「已安装」清单 ---------------- */
+
+/**
+ * 造一个绑定到某款游戏的 `HostApi`。
+ *
+ * ⚠️ 依赖一律**现读** `useApp.getState()`，不要在造的时候把余额 / 开关
+ * 快照进去 —— 那样插件看到的是一个永远不变的旧余额。
+ */
+function pluginHostApi(gameId: string): HostApi {
+  return makeHostApi({
+    getBalance: () => useApp.getState().balance,
+    refresh: () => useApp.getState().refresh(),
+    pushToast: (t) => useApp.getState().pushToast(t),
+    soundEnabled: () => useApp.getState().settings.soundEnabled,
+    hapticsEnabled: () => useApp.getState().settings.hapticsEnabled,
+  })(gameId)
+}
+
+/**
+ * 读出**已安装**的游戏清单（id → manifest）。
+ *
+ * 每个包都要 `importBundle` 一次才能拿到 manifest，也就是启动时要把已安装的
+ * 包都求值一遍。包小、数量少时没问题；将来包多了要改成「manifest 另存一份
+ * 小文件、代码按需求值」（P2 的事，spec §12.7）。
+ *
+ * 现在**刻意不另存一份 manifest** —— 那就是第二份事实，迟早和包本身走散。
+ */
+async function loadInstalledGames(): Promise<Record<string, GameManifestV2>> {
+  const out: Record<string, GameManifestV2> = {}
+  for (const { code } of await listInstalledBundles()) {
+    try {
+      const b = await importBundle(code)
+      out[b.manifest.id] = b.manifest
+    } catch (e) {
+      // 包坏了（下载截断 / 手改过库 / 契约变了）**不能把整个 App 拦下来** ——
+      // 跳过它，宿主照常启动。但必须**留下痕迹**，否则就成了静默消失。
+      console.warn('[games] 已安装的包加载失败，已跳过：', e)
+    }
+  }
+  return out
 }
 
 async function doRefresh(
@@ -860,6 +951,8 @@ async function doRefresh(
   // 拥有关系从账本派生；「当前游戏」再按拥有关系解析一遍 ——
   // 顺序不能反，否则会拿旧账本去判「买了没」。
   const ownedGameIds = ownedGameIdsFrom(mallLedger)
+  // 已安装的插件游戏：**从 `gameKv` 派生**（扫 `__bundle` 行），不另存清单。
+  const installedGames = await loadInstalledGames()
 
   set({
     tasks,
@@ -868,6 +961,7 @@ async function doRefresh(
     ledger,
     harvestLedger,
     mallLedger,
+    installedGames,
     inventory,
     animals,
     plots: farm.plots,
@@ -888,7 +982,11 @@ async function doRefresh(
     harvestBalance,
     mallBalance,
     ownedGameIds,
-    activeGameId: resolveActiveGame(settings.activeGame, ownedGameIds),
+    activeGameId: resolveActiveGame(
+      settings.activeGame,
+      ownedGameIds,
+      new Set(Object.keys(installedGames)),
+    ),
     todayKey: today,
   })
 }
@@ -1292,6 +1390,7 @@ export const useApp = create<AppState>((set, get) => ({
   mallBalance: 0,
   activeGameId: DEFAULT_GAME_ID,
   ownedGameIds: ownedGameIdsFrom([]),
+  installedGames: {},
   todayKey: appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour),
   toasts: [],
   settleFlash: null,
@@ -2626,7 +2725,19 @@ export const useApp = create<AppState>((set, get) => ({
   /* ================= 游戏（插件骨架） ================= */
 
   setActiveGame: async (id) => {
-    // 两道守卫，缺一不可：
+    // **下载来的游戏**：装了就能设为当前。P1 没有「购买」这一层
+    // （spec §12.7：先不做下载，也就没有要收费的东西），所以判据就是
+    // 「包在不在 `installedGames` 里」。
+    // ⚠️ 这一支必须在注册表那两支**之前** —— 下载来的游戏不在注册表里，
+    //    走到下面会直接被 `!g` 拦掉，于是「装好了却切不过去」。
+    if (get().installedGames[id]) {
+      if (get().activeGameId === id) return
+      await get().updateSettings({ activeGame: id })
+      await get().refresh()
+      return
+    }
+
+    // 内置游戏两道守卫，缺一不可：
     //   ① 注册表里真有它，而且**可玩**（`comingSoon` 的不算）；
     //   ② 已经拥有它。
     // 不满足就**安静地什么都不做** —— 这个动作可能被旧存档、手改的
@@ -2665,6 +2776,69 @@ export const useApp = create<AppState>((set, get) => ({
     // ⚠️ 买完**不自动切成当前**。家长可能是在提前囤游戏；
     //    切「当前」是一次显式操作（家长栏里那一行上的按钮）。
     return { ok: true, message: `已购买「${g.name}」` }
+  },
+
+  /* ---- 插件游戏：装配（spec §12.5） ---- */
+
+  installGameFromUrl: async (url) => {
+    let code: string
+    try {
+      const res = await fetch(url)
+      if (!res.ok) return { ok: false, message: `下载失败：HTTP ${res.status}` }
+      code = await res.text()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { ok: false, message: `下载失败：${msg}` }
+    }
+
+    // ★★ 顺序很重要：**先校验，再执行**。
+    //    P1 这一步还没有哈希 / 签名校验（P2 补，见 spec §12.4）——
+    //    但**校验的位置**已经在这里了：它必须在 `importBundle` **之前**。
+    //    反了就等于「先把陌生代码跑起来，再检查它该不该被跑」。
+    let bundle: GameBundle
+    try {
+      bundle = await importBundle(code)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { ok: false, message: msg }
+    }
+
+    // ★★ **下载来的包不许占用内置游戏的 id。**
+    //    否则一个包就能顶掉「农场」——`gameById` 会先命中注册表，
+    //    于是家长看到的是「农场」，玩到的却是别人的代码；卸载它又会把
+    //    内置游戏一起带下水（`uninstallGame` 会 `clearGameKv` 并回落当前游戏）。
+    //    这不是「重名」，这是**劫持**，所以放在这里硬拦。
+    if (gameById(bundle.manifest.id)) {
+      return {
+        ok: false,
+        message: `安装包用了内置游戏的 id「${bundle.manifest.id}」，已拒绝`,
+      }
+    }
+
+    await setGameKv(bundle.manifest.id, BUNDLE_KEY, code)
+    await get().refresh()
+    return {
+      ok: true,
+      message: `已安装「${bundle.manifest.name}」v${bundle.manifest.version}`,
+    }
+  },
+
+  uninstallGame: async (gameId) => {
+    // 连包带状态一起删。只删包不删状态的话，重装会**捡到上一次的存档**，
+    // 看起来像「卸载没生效」。
+    await clearGameKv(gameId)
+    // 正在玩的就是它 → 回落，否则底部导航会指向一个已经不存在的游戏
+    if (get().activeGameId === gameId) {
+      await get().updateSettings({ activeGame: DEFAULT_GAME_ID })
+    }
+    await get().refresh()
+  },
+
+  mountGame: async (gameId, container) => {
+    const code = await getGameKv<string>(gameId, BUNDLE_KEY)
+    if (typeof code !== 'string') throw new Error(`游戏「${gameId}」没有安装`)
+    const bundle = await importBundle(code)
+    return mountBundle(container, bundle, pluginHostApi(gameId))
   },
 
   /* ================= 设置与数据 ================= */
@@ -2708,6 +2882,7 @@ export const useApp = create<AppState>((set, get) => ({
       ledger,
       harvestLedger,
       mallLedger,
+      gameKv,
       inventory,
       animals,
       checkIns,
@@ -2726,6 +2901,7 @@ export const useApp = create<AppState>((set, get) => ({
       db.ledger.toArray(),
       db.harvestLedger.toArray(),
       db.mallLedger.toArray(),
+      db.gameKv.toArray(),
       db.inventory.toArray(),
       db.animals.toArray(),
       db.checkIns.toArray(),
@@ -2752,6 +2928,15 @@ export const useApp = create<AppState>((set, get) => ({
             （见 `games/registry.ts` 的 `purchasedIdsFrom`），漏掉就等于
             导出/导入一次把买过的游戏全退掉。 */
         mallLedger,
+        /**
+         * **下载来的游戏**的状态（Dexie v7 的 `gameKv`，spec §12.2 方案 a）。
+         *
+         * ⚠️ 必须导出。它是那些游戏的**唯一**存档位置 —— 漏掉就等于
+         * 「导出再导入一次，所有下载来的游戏进度清零」，而且不报错。
+         * 宿主内置的农场不在这里（它用 `meta` / 自己的表），所以漏掉的后果
+         * **只在装了下载游戏的设备上**才看得见 —— 更容易漏。
+         */
+        gameKv,
         inventory,
         animals,
         checkIns,
@@ -2822,6 +3007,8 @@ export const useApp = create<AppState>((set, get) => ({
         // 老备份里没有这个字段，`pickArray(undefined)` 返回 null，落到空数组。
         harvestLedger: pickArray<HarvestEntry>(d.harvestLedger) ?? [],
         mallLedger: pickArray<MallEntry>(d.mallLedger) ?? [],
+        // ⚠️ 主键是 `key`（形如 `${gameId}:${k}`），**不是 `id`** —— 和背包一样要显式传键名
+        gameKv: pickArray<GameKvRow>(d.gameKv, 'key') ?? [],
         // ⚠️ 背包的主键是 `itemId`，不是 `id` —— 见上面 `pickArray` 的注释
         inventory: pickArray<InventorySlot>(d.inventory, 'itemId') ?? [],
         animals: pickArray<Animal>(d.animals) ?? [],
@@ -2848,6 +3035,7 @@ export const useApp = create<AppState>((set, get) => ({
           db.farmEvents,
           db.harvestLedger,
           db.mallLedger,
+          db.gameKv,
           db.meta,
         ],
         async () => {
@@ -2857,6 +3045,7 @@ export const useApp = create<AppState>((set, get) => ({
             db.ledger.clear(),
             db.harvestLedger.clear(),
             db.mallLedger.clear(),
+            db.gameKv.clear(),
             db.inventory.clear(),
             db.animals.clear(),
             db.checkIns.clear(),
@@ -2871,6 +3060,7 @@ export const useApp = create<AppState>((set, get) => ({
           await db.ledger.bulkPut(rows.ledger)
           if (rows.harvestLedger.length > 0) await db.harvestLedger.bulkPut(rows.harvestLedger)
           if (rows.mallLedger.length > 0) await db.mallLedger.bulkPut(rows.mallLedger)
+          if (rows.gameKv.length > 0) await db.gameKv.bulkPut(rows.gameKv)
           await db.inventory.bulkPut(rows.inventory)
           await db.animals.bulkPut(rows.animals)
           await db.checkIns.bulkPut(rows.checkIns)
@@ -3236,11 +3426,53 @@ declare global {
        * 只用于本地调试，不参与业务逻辑。
        */
       syncSeedTasks: () => Promise<void>
+      /**
+       * **插件游戏**（spec §12）。P1 的验收入口。
+       *
+       * 真实入口是家长栏的「游戏」页；这里是为了让走查脚本能在**不点 UI** 的
+       * 情况下驱动整条装配链路（下载 → 校验 → 落盘 → 装配 → 读写状态），
+       * 这样「装配坏了」和「UI 没接线」能被分开诊断。
+       */
+      plugin: {
+        /** 宿主 API 版本（脚本要核对包的 `minHostApi` 门真的生效） */
+        hostApiVersion: number
+        /** 已安装的清单（id → manifest），从 `gameKv` 派生 */
+        installed: () => Record<string, GameManifestV2>
+        /** 从 URL 下载并安装（P2 会在这里插哈希 / 验签） */
+        installFromUrl: (url: string) => Promise<{ ok: boolean; message: string }>
+        uninstall: (gameId: string) => Promise<void>
+        /**
+         * 把已安装的游戏挂进 `selector` 命中的容器，返回是否成功。
+         * 卸载函数存在句柄上，脚本可以 `plugin.unmountAll()` 收尾。
+         */
+        mountInto: (gameId: string, selector: string) => Promise<boolean>
+        unmountAll: () => void
+        /**
+         * 读某款游戏在 `gameKv` 里的**全部键**（键已剥掉 `<gameId>:` 前缀，
+         * 也就是插件自己看到的那份视图）。走查脚本用它验：
+         * 「状态真的写进去了」+「刷新后还在」。
+         */
+        kv: (gameId: string) => Promise<string[]>
+        /**
+         * `gameKv` 表里出现过的**全部 gameId**。
+         *
+         * ★ 这是「命名空间隔离」的判据：正常只该有已安装游戏自己的 id。
+         * 出现别的 id = 有东西往别人的命名空间里写了（前缀拼错、或者插件
+         * 拿到了不该拿的 gameId）—— 而那**不会报错**，只会静默串味。
+         */
+        kvOwnerIds: () => Promise<string[]>
+      }
     }
   }
 }
 
 if (typeof window !== 'undefined') {
+  /**
+   * 已挂载的插件游戏的卸载函数。**必须留着** —— 不调用它，
+   * 插件注册的监听 / 定时器会一直活着（症状是「切走再切回来跑了两遍」）。
+   */
+  const pluginUnmounts: (() => void)[] = []
+
   window.__kqf__ = {
     getState: () => useApp.getState(),
     exportBackup: () => useApp.getState().exportBackup(),
@@ -3335,6 +3567,33 @@ if (typeof window !== 'undefined') {
       }
       console.log('[kqf-cheat] 已添加', added, '个新任务')
       window.location.reload()
+    },
+    plugin: {
+      hostApiVersion: HOST_API,
+      installed: () => useApp.getState().installedGames,
+      installFromUrl: (url) => useApp.getState().installGameFromUrl(url),
+      uninstall: (gameId) => useApp.getState().uninstallGame(gameId),
+      mountInto: async (gameId, selector) => {
+        const el = document.querySelector(selector)
+        if (!(el instanceof HTMLElement)) {
+          // 找不到容器**必须吭声** —— 静默返回 false 会让脚本报「游戏没渲染」，
+          // 而真因是选择器写错了（`scrollIntoView` 那个坑的同款）。
+          console.warn('[games] mountInto 找不到容器：', selector)
+          return false
+        }
+        const unmount = await useApp.getState().mountGame(gameId, el)
+        pluginUnmounts.push(unmount)
+        return true
+      },
+      unmountAll: () => {
+        // `splice(0)` 一次取走并清空：不这样写，二次调用会把同一批卸载函数
+        // 再跑一遍（每个游戏卸载两次）。
+        for (const u of pluginUnmounts.splice(0)) u()
+      },
+      // 返回**键名**而不是整份值：值里最大的一项是包代码本身，
+      // 打进日志只会淹掉真正要看的东西。
+      kv: async (gameId) => Object.keys(await listGameKv(gameId)),
+      kvOwnerIds: () => listGameKvOwnerIds(),
     },
   }
 }

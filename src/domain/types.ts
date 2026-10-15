@@ -223,6 +223,8 @@ export type LedgerSource =
   | 'redeem' // 兑换消耗
   | 'manual_adjust'
   | 'streak_bonus'
+  /** 插件游戏的一次投入（负数）。宿主 `HostApi.spendPoints` 用这个 source。 */
+  | 'game_spend'
 
 export interface LedgerEntry {
   id: string
