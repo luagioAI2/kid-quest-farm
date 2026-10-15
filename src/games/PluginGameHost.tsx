@@ -79,13 +79,29 @@ export function PluginGameHost({ gameId }: { gameId: string }) {
         </div>
       ) : (
         /*
+         * ★ **宽度由宿主给（`.page-col`），内边距由插件自己给。**
+         *
+         * `.page-col` 是 App **唯一**的宽度来源（430 / 672 / 896 / 1024，
+         * 见 `theme.css`）。宿主必须把它套上：插件的作者**不知道**这个
+         * App 的断点，让每个游戏自己定宽 = 平板上一款游戏铺满 1024px、
+         * 别的页面收在 896px，一眼就看出来不是同一个 App。
+         *
+         * 宿主**不加**内边距 —— 那是插件自己的事（样板游戏的根节点带
+         * `padding:16px`，和别的页面的 16px 边距一致）。两边都加就会
+         * 叠成 32px，手机上白扔掉一行字。
+         *
+         * ⚠️ 手机上这个改动是**恒等**的：`page-col` 在 390px 视口下
+         * 就是 `width:100%`，量出来的宽度和没套之前一模一样。
+         *
          * 容器**必须留在这里、由宿主渲染** —— 插件不该自己往 `document.body`
          * 上挂东西，那样宿主就没法在切 tab 时把它一起收走。
          *
-         * `flex-1` 让插件占满剩余高度；`min-h-0` 是关键 —— 少了它，
-         * 子元素的 `overflow` 撑不住，插件内部滚动会变成整页滚动。
+         * `min-h-0` 是关键：少了它，子元素的 `overflow` 撑不住，
+         * 插件内部滚动会变成整页滚动。
          */
-        <div ref={boxRef} data-plugin-host={gameId} className="min-h-0 flex-1" />
+        <div className="page-col flex w-full min-h-0 flex-1 flex-col">
+          <div ref={boxRef} data-plugin-host={gameId} className="min-h-0 flex-1" />
+        </div>
       )}
     </div>
   )

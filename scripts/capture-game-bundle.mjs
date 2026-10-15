@@ -373,6 +373,69 @@ check('插件画的是它自己的标题', mounted.title === GAME_NAME, mounted.
 await page.screenshot({ path: `${OUT}/1-插件游戏挂起来了.png`, fullPage: true })
 console.log(`  · 已存图 ${OUT}/1-插件游戏挂起来了.png`)
 
+/**
+ * ★ **平板宽度：插件必须和别的页面同宽。**
+ *
+ * `.page-col` 是这个 App **唯一**的宽度来源（430 / 672 / 896 / 1024）。
+ * 宿主忘了套它的话，一款下载来的游戏会在横屏平板上铺满整个 1024px，
+ * 而任务 / 兑换 / 积分页收在 896px —— 一眼就看出来不是同一个 App。
+ *
+ * ⚠️ 手机上这条是**恒等**的（`page-col` 在 390px 下就是 `width:100%`），
+ * 所以**只在手机视口上量是量不出来的** —— 必须真的把视口调宽再量。
+ * 这是本项目「平板适配」那条线最容易漏掉的回归点。
+ */
+{
+  const before = page.viewport()
+  await page.setViewport({ width: 834, height: 1112, deviceScaleFactor: 2 })
+  await wait(500)
+  const wide = await page.evaluate((id) => {
+    const host = document.querySelector(`[data-plugin-host="${id}"]`)
+    const col = host?.closest('.page-col')
+    const r = host?.getBoundingClientRect()
+    /*
+     * ★ 探针自证：**临时把 `page-col` 摘掉再量一次**。
+     *
+     * 不摘的话，「≤672」这条断言可能只是因为视口本来就窄 / 容器碰巧
+     * 有别的约束才成立的 —— 那就是**恒真**的断言。摘掉之后必须量到
+     * 接近整个视口宽（= 宿主忘了套 `page-col` 时的真实后果），
+     * 拿回来又必须回到 ≤672。两次都量到才算这条断言有效。
+     */
+    const saved = col?.className
+    if (col) col.className = saved.replace('page-col', '')
+    const bare = host?.getBoundingClientRect().width ?? -1
+    if (col && saved) col.className = saved
+
+    return {
+      hasCol: !!col,
+      width: r ? Math.round(r.width) : -1,
+      bare: Math.round(bare),
+      left: r ? Math.round(r.left) : -1,
+      right: r ? Math.round(innerWidth - r.right) : -1,
+      vw: innerWidth,
+    }
+  }, GAME_ID)
+  check('★ 插件容器被收进 `.page-col`（宽度由宿主给）', wide.hasCol === true)
+  check(
+    '★ 平板 834px 下没铺满（≤672，和别的页面同宽）',
+    wide.width > 0 && wide.width <= 672,
+    `量到 ${wide.width}px（视口 ${wide.vw}px）`,
+  )
+  check(
+    '★★ 探针自证：摘掉 `page-col` 必须铺满（否则「≤672」是恒真的）',
+    wide.bare > 672,
+    `摘掉后量到 ${wide.bare}px`,
+  )
+  check(
+    '★ 平板下是**居中**的（左右留白基本相等）',
+    Math.abs(wide.left - wide.right) <= 2,
+    `左 ${wide.left}px / 右 ${wide.right}px`,
+  )
+  await page.screenshot({ path: `${OUT}/3-平板宽度.png`, fullPage: false })
+  console.log(`  · 已存图 ${OUT}/3-平板宽度.png`)
+  await page.setViewport(before)
+  await wait(400)
+}
+
 /* ============================================================
    7. ★★ 遮挡探针：画了什么 ≠ 看得见什么
    ============================================================ */
