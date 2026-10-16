@@ -36,14 +36,27 @@
  *   改用**等价性对照**：把装饰临时抬到最上层（`z-index:99999`）再量一次，
  *   两次数字必须**一模一样** —— 抬上去毫无变化，就等于「本来就没有东西盖着它」。
  *
- * ★ 「手机 / 平板」不是「藏起来 / 露出来」，是**量出来的**：
- *   装饰锚在地块网格下沿（`top-full`），两档都落在网格和按钮之间的那条带上。
- *   手机那条带只有 ~23px（装不下道具，只有篱笆），平板 ~172px（装得下四件）。
- *   ➜ 断言：**两档篱笆都要可见；道具只在 ≥768px 才渲染**。
+ * ★ 「显示 / 隐藏」不是「手机 / 平板」，是**「装得下吗」**：
+ *   装饰锚在地块网格下沿（`top-full`），落在网格和按钮之间的那条带上。
+ *   那条带有多高，**同时**取决于**视口高**和**网格行数** —— 量出来是
+ *   24 / 93 / 196px 不等（表在下面 `VIEWPORTS` 上面）。
+ *   ➜ 所以断言是**等价断言**：道具的显示与否 == 「这一档装不装得下」，
+ *     **不是**「宽度 ≥ 768」。后者在 6 档里有 4 档是错的。
  *
  * ★ 版面安全**不靠绝对数字**（这台机器上页面本来就有 17px 溢出，与装饰无关）：
  *   把装饰临时 `display:none` 再量一次，**网格 / 按钮的几何和页面高度必须一模一样**。
  *   这才是「装饰没推动版面」的直接证据 —— 手机上的布局余量只有约 8px。
+ *
+ * ★★ **「在折线以下」不等于「被裁掉」—— 这一条是横屏两档逼出来的。**
+ *   横屏手机（844×390）上，整条装饰带落在 **y679**，而视口只有 **390** 高 ⇒
+ *   采样 **0 点** ⇒ 判据返回 `-1` ⇒ 「篱笆看得见」「探针自检 A/B」「判据自检」
+ *   五条断言**一起变红**，看着像探针坏了。
+ *   实际量下来：页面 `scrollHeight` 是 **854**（滚 464px 之后篱笆 100% 可见），
+ *   而农场根节点（`overflow-hidden`）的 `scrollHeight === clientHeight`（**708 = 708**）
+ *   —— 说明**什么都没被裁掉**，只是要滚动。
+ *   ➜ 采样前先 `scrollIntoView`；并**单独钉一条断言**：「滚完还在视口外」才算真被裁掉，
+ *     另配一条「overflow 祖先的 `scrollHeight` 没有超过 `clientHeight`」。
+ *   ⚠️ 别把「看不见」和「滚一下才看得见」混为一谈 —— 后者是量法错了，不是装饰错了。
  */
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
@@ -74,15 +87,49 @@ function check(name, ok, detail = '') {
   if (!ok) failed++
 }
 
+/** 每一档的「空隙 / 需要 / 到底显示没显示」—— 循环外用来配**活性**断言 */
+const tally = []
+
 /** 四件道具。顺序不重要 —— 脚本从 DOM 里读实际有哪些，这里只用来核对齐全 */
 const EXPECT_PROPS = ['barn', 'well', 'scarecrow', 'sign']
 
+/**
+ * ⚠️ 视口**不能只测两档**。
+ *
+ * 道具原来是用 `hidden md:flex` 藏的 —— 那是个**只看宽度**的规则。
+ * 于是「横屏手机」（844×390，宽 844 ≥ 768）会被判成「地方够」，把 122px 的
+ * 谷仓塞进一条 **0px** 高的带里，**压在底部按钮上**。
+ *
+ * 实测（`room` = 第一个按钮顶边 − 网格包裹层底边）：
+ *
+ *   | 视口 | room | 道具需要 122px | 只看宽度会怎样 |
+ *   | --- | --- | --- | --- |
+ *   | 390×844 | 24px | 不够 | 隐藏 ✓ |
+ *   | 844×390 横屏手机 | 24px | 不够 | **显示 ✗** |
+ *   | 1112×834 横屏平板 | 24px | 不够 | **显示 ✗** |
+ *   | 1024×768 | 24px | 不够 | **显示 ✗** |
+ *   | 1280×800 | 93px | 不够 | **显示 ✗** |
+ *   | 834×1112 竖屏平板 | 196px | 够 | 显示 ✓ |
+ *
+ * ➜ 判据必须是**「装得下吗」，不是「够宽吗」**（见下面的 room / need 等价断言）。
+ */
 const VIEWPORTS = [
-  { name: 'phone', width: 390, height: 844, props: false },
-  { name: 'tablet', width: 834, height: 1112, props: true },
+  { name: 'phone', width: 390, height: 844 },
+  { name: 'phone-landscape', width: 844, height: 390 },
+  { name: 'tablet', width: 834, height: 1112 },
+  { name: 'tablet-landscape', width: 1112, height: 834 },
+  { name: 'desktop', width: 1280, height: 800 },
 ]
 
-for (const vp of VIEWPORTS) {
+/* 只跑指定的视口：node scripts/capture-horizon-decor.mjs <url> <outDir> <name,name> */
+const ONLY = (process.argv[4] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+const SELECTED = ONLY.length ? VIEWPORTS.filter((v) => ONLY.includes(v.name)) : VIEWPORTS
+if (!SELECTED.length) {
+  console.error(`没有匹配的视口：${ONLY.join(',')}`)
+  process.exit(2)
+}
+
+for (const vp of SELECTED) {
   console.log(`\n══ ${vp.name} ${vp.width}×${vp.height} ══`)
   const browser = await puppeteer.launch({
     executablePath: chrome,
@@ -111,6 +158,16 @@ for (const vp of VIEWPORTS) {
   /* 注入共用的「肉眼看到的是哪个元素」判据（见 `lib/paint.mjs`） */
   await page.evaluate(PAINT_HELPERS)
 
+  /* ★★ 采样前先把装饰**滚进视口**。
+     横屏两档整条装饰带在折线以下（844×390 时篱笆在 y679，视口只有 390 高），
+     不滚的话采样 0 点 ⇒ `pct = -1` ⇒ 五条断言一起红，看着像探针坏了。
+     ⚠️ 滚完**还在视口外**才是真的被裁掉 —— 下面 ⓪ 有专门的断言钉住。 */
+  await page.evaluate(async () => {
+    document.querySelector('[data-farm-decor="horizon"]')?.scrollIntoView({ block: 'center' })
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+  })
+  await wait(120)
+
   /* ---- 对照组：装饰挂上去了没有 ----
      没有这一条，下面所有「量得到」的断言都是空的。 */
   check('对照组：地平线装饰已经挂在页面上', (await page.$('[data-farm-decor="horizon"]')) !== null)
@@ -137,6 +194,18 @@ for (const vp of VIEWPORTS) {
     if (!decor) return { missing: true }
     const fence = decor.querySelector('.kqf-decor__fence')
     const propsWrap = decor.querySelector('.kqf-decor__props')
+
+    /* 道具「本来需要多高」—— 临时把容器打开量一次（量完立刻还原）。
+       这是「装得下吗」里的**需要多少**，从 DOM 量出来，**不写死 122**。 */
+    let naturalPropH = 0
+    if (propsWrap) {
+      const prevD = propsWrap.style.display
+      propsWrap.style.display = 'flex'
+      for (const el of decor.querySelectorAll('[data-decor-item]')) {
+        naturalPropH = Math.max(naturalPropH, Math.round(el.getBoundingClientRect().height))
+      }
+      propsWrap.style.display = prevD
+    }
 
     /* ⚠️ 道具是 `<svg>` 包着 `<use>` 指向 `<symbol>`；命中测试可能返回 `<use>`、
        也可能返回 shadow 树里的图形。两种情况都要认（shadow 树里往上走 host）。 */
@@ -284,8 +353,30 @@ for (const vp of VIEWPORTS) {
     return {
       vw: innerWidth,
       vh: innerHeight,
+      scrollY: Math.round(scrollY),
+      /* 「在折线以下」和「被裁掉」是两回事：沿祖先链找第一个 `overflow` 不为
+         `visible` 的节点，看它的 `scrollHeight` 有没有超过 `clientHeight`
+         —— 超了才叫真的裁掉了内容。 */
+      clipAncestor: (() => {
+        for (let n = decor.parentElement; n; n = n.parentElement) {
+          const cs = getComputedStyle(n)
+          if (cs.overflow !== 'visible' || cs.overflowY !== 'visible') {
+            return {
+              cls: (n.getAttribute('class') || '').slice(0, 52),
+              scrollH: n.scrollHeight,
+              clientH: n.clientHeight,
+              cut: n.scrollHeight > n.clientHeight + 1,
+            }
+          }
+        }
+        return null
+      })(),
       decor: { box: box(decor), position: getComputedStyle(decor).position, shippedPE },
       propsWrap: { display: propsWrap ? getComputedStyle(propsWrap).display : '?' },
+      /* 「网格包裹层底边 → 第一个按钮顶边」到底有多少地方。
+         ⚠️ 这是**量出来的**，不是拿断点推的 —— 它同时取决于视口高和网格行数。 */
+      room: firstBtn ? Math.round(firstBtn.getBoundingClientRect().top - decor.getBoundingClientRect().top) : null,
+      naturalPropH,
       fence: { box: box(fence), blind: blind.pct, pct: fencePct.pct, top: fenceTop.pct, samples: fencePct.n },
       judgeProbe,
       props,
@@ -308,8 +399,10 @@ for (const vp of VIEWPORTS) {
   }
 
   const f = m.fence
+  console.log(`  · 视口高 ${m.vh} · 已滚到 y=${m.scrollY}（装饰滚进视口后才量）`)
   console.log(`  · 篱笆 ${f.box.top}–${f.box.bottom}（高 ${f.box.h}）  x ${f.box.left}–${f.box.right}`)
   console.log(`  · 网格 ${m.withDecor.grid.top}–${m.withDecor.grid.bottom} · 按钮顶边 ${m.withDecor.btn?.top}`)
+  console.log(`  · **空隙 ${m.room}px**（网格底 → 按钮顶）· 道具本身需要 ${m.naturalPropH}px`)
   console.log(`  · 道具容器 display=${m.propsWrap.display}`)
   for (const p of m.props) {
     console.log(
@@ -318,6 +411,23 @@ for (const vp of VIEWPORTS) {
       }`,
     )
   }
+
+  /* ============ ⓪ 「在折线以下」≠「被裁掉」 ============
+     ⚠️ 这两条是横屏两档逼出来的（见文件头）。篱笆在 y679、视口只有 390 高时
+     采样 0 点，判据返回 -1，五条断言一起红 —— 但那是**量法**错了。
+     ➜ 先滚进视口再量；「滚完还在视口外」才是真的被裁掉。 */
+  check(
+    '★★ 滚动之后篱笆**确实进了视口**（横屏时它在折线以下；滚进来还在外面 = 真的被裁掉了）',
+    f.samples > 0 && f.box.top >= 0 && f.box.bottom <= m.vh,
+    `滚到 y=${m.scrollY} · 篱笆 ${f.box.top}–${f.box.bottom} · 视口高 ${m.vh} · 采样 ${f.samples} 点`,
+  )
+  check(
+    '★ 折线以下 ≠ 被裁掉：`overflow-hidden` 祖先**没有裁掉任何内容**（`scrollHeight === clientHeight`）',
+    !m.clipAncestor || !m.clipAncestor.cut,
+    m.clipAncestor
+      ? `${m.clipAncestor.cls} · scrollH ${m.clipAncestor.scrollH} vs clientH ${m.clipAncestor.clientH}`
+      : '祖先链上没有 `overflow` 不为 `visible` 的节点',
+  )
 
   /* ============ ① 判据自检：SVG 的 `fill` 分支真的走到了 ============ */
   const jp = m.judgeProbe
@@ -358,27 +468,62 @@ for (const vp of VIEWPORTS) {
     `原 ${f.pct}% → 遮上半 ${m.partial?.during}% → 拿掉 ${m.partial?.after}%`,
   )
 
-  /* ============ ⑤ 道具：手机上一件都不渲染，平板上四件都可见 ============ */
+  /* ============ ⑤ 道具：**装得下才显示**（判据是高度，不是宽度） ============
+     ⚠️ 原来这里写的是 `if (vp.props)` —— 把「平板就显示、手机就隐藏」**按视口写死**，
+     等于把 CSS 的断点抄了一遍。那样永远测不出「断点本身选错了」。
+     改成**等价断言**：显示与否必须 == 「这一档到底装不装得下」，
+     而「装得下」是**量出来的**（room 与 need 都来自 DOM）。 */
   const names = m.props.map((p) => p.name)
   check(
     '★ 四件道具都在 DOM 里（`barn` / `well` / `scarecrow` / `sign`）',
     EXPECT_PROPS.every((n) => names.includes(n)),
     names.join(' / '),
   )
-  if (vp.props) {
+
+  const room = m.room
+  /* 整件装饰要占的高度 = 道具 + 篱笆（它们是竖着摞的） */
+  const need = m.naturalPropH + f.box.h
+  const shown = m.props.some((p) => p.rendered)
+  const fits = room !== null && need > 0 && room >= need
+
+  check(
+    '★ 篱笆自己装得下（它是两档都要露出来的那一件）',
+    room !== null && room >= f.box.h,
+    `空隙 ${room}px vs 篱笆 ${f.box.h}px`,
+  )
+  check(
+    `★★ 道具**装不下就一定不显示**（空隙 ${room}px vs 需要 ${need}px）`,
+    !shown || fits,
+    !shown
+      ? `隐藏 ✓（空隙 ${room}px，需要 ${need}px = 道具 ${m.naturalPropH} + 篱笆 ${f.box.h}）`
+      : `显示，且空隙 ${room}px ≥ ${need}px ✓`,
+  )
+  /* ⚠️ 上面这条是**单向**的（「不显示」永远能过）——
+     所以还要在循环外配一条**活性**断言：至少有一档真的显示了道具。
+     只有单向断言的话，把 CSS 改成永远 `display:none` 也能全绿。 */
+  tally.push({ name: vp.name, room, need, shown, fits })
+
+  if (shown) {
     for (const p of m.props) {
-      check(`★★ 平板：道具 ${p.name} 渲染出来了且可见`, p.rendered && p.pct > 0, `${p.box?.w}×${p.box?.h} 可见 ${p.pct}%`)
-      check(`★★ 平板：道具 ${p.name} 没有被别的东西盖住`, p.pct === p.pctTop, `${p.pct}% vs ${p.pctTop}%`)
+      check(`★★ 道具 ${p.name} 渲染出来了且可见`, p.rendered && p.pct > 0, `${p.box?.w}×${p.box?.h} 可见 ${p.pct}%`)
+      check(`★★ 道具 ${p.name} 没有被别的东西盖住`, p.pct === p.pctTop, `${p.pct}% vs ${p.pctTop}%`)
     }
+    check(
+      '★★ 显示道具时，整件装饰**没有越界压到按钮上**',
+      m.decor.box.bottom <= m.withDecor.btn.top,
+      `装饰底 ${m.decor.box.bottom} · 按钮顶 ${m.withDecor.btn?.top}`,
+    )
   } else {
-    for (const p of m.props) {
-      check(
-        `★ 手机：道具 ${p.name} **不渲染**（那条带只有 ~23px，真的装不下）`,
-        !p.rendered,
-        `尺寸 ${p.box?.w}×${p.box?.h}`,
-      )
-    }
-    check('★ 手机：道具容器的 `display` 就是 `none`（隐藏发生在容器上，不在每一件上）', m.propsWrap.display === 'none', m.propsWrap.display)
+    check(
+      '★ 装不下时，道具容器的 `display` 就是 `none`（隐藏发生在容器上，不在每一件上）',
+      m.propsWrap.display === 'none',
+      m.propsWrap.display,
+    )
+    check(
+      '★ 装不下时，一件道具都不许渲染出来（不是「渲染了但看不见」）',
+      m.props.every((p) => !p.rendered),
+      m.props.map((p) => `${p.name}:${p.box?.w}×${p.box?.h}`).join(' '),
+    )
   }
 
   /* ============ ⑥ 版面安全：摘掉装饰，几何必须一模一样 ============ */
@@ -411,6 +556,28 @@ for (const vp of VIEWPORTS) {
   check('控制台无错误', consoleErrors.length === 0, consoleErrors.slice(0, 2).join(' | '))
   await browser.close()
 }
+
+/* ============ 跨档小结：活性 + 空隙表 ============ */
+console.log(`\n${'═'.repeat(52)}\n跨档小结（空隙 = 网格底 → 按钮顶；需要 = 道具 + 篱笆）\n`)
+console.log('  视口               空隙    需要   道具')
+for (const t of tally) {
+  console.log(
+    `  ${t.name.padEnd(18)} ${String(t.room).padStart(4)}px ${String(t.need).padStart(5)}px   ${
+      t.shown ? '显示' : '隐藏'
+    }${t.fits ? '' : '  ← 装不下'}`,
+  )
+}
+/* ⚠️ 活性：每档都「不显示」也能让上面那条单向断言全绿 —— 所以要证明它真的会显示。 */
+check(
+  '★★ 活性：至少有一档**真的显示了**道具（否则单向断言被「永远 display:none」骗过）',
+  tally.some((t) => t.shown),
+  tally.filter((t) => t.shown).map((t) => t.name).join(' / ') || '一档都没有',
+)
+check(
+  '★ 活性：也至少有一档**真的隐藏了**道具（否则「装不下」这条从没被行使过）',
+  tally.some((t) => !t.shown),
+  tally.filter((t) => !t.shown).map((t) => t.name).join(' / ') || '一档都没有',
+)
 
 console.log(`\n${'─'.repeat(52)}`)
 console.log(failed === 0 ? '全部通过 ✓' : `失败 ${failed} 项 ✗`)
