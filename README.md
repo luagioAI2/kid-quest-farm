@@ -9,12 +9,13 @@
 
 | 项 | 状态 |
 | --- | --- |
-| 安卓 APK | ✅ `dist-apk/kid-quest-farm-debug.apk`（5.5 MB，可直接安装） |
-| Web 产物 | ✅ `npm run build` → `dist/`（约 579 kB / 173 kB gzip） |
+| 安卓 APK | ⚠️ `dist-apk/kid-quest-farm-release.apk`（4.2 MB）**是 2026-10-13 的旧构建、不含娃娃机** —— 要发布得重跑 `npm run apk:release`（产物在**主工作区**，`dist-apk/` 已 gitignore，worktree 里没有） |
+| Web 产物 | ✅ `npm run build` → `dist/`：主包 **645.7 kB / 192.2 kB gzip**（CSS 63.5 / 11.4）。娃娃机是**懒加载的独立 chunk**：**558.9 kB / 142.4 kB gzip**，主 chunk 只被它带上 +8.3 kB |
 | 手机浏览器 | ✅ `npm run dev -- --host` 后同网段访问即可 |
 | 官网 | ✅ `site/`（纯静态：介绍 + 多平台下载 + 隐私政策/用户协议），`npm run site` 重建 |
-| 单元测试 | ✅ 345 项通过 / 16 个文件（状态 67 · 经济 46 · 结算 41 · 农场事件 31 · 市场 27 · 种子 26 · 兑换 18 · 汇率 13） |
-| 端到端测试 | ✅ 86 项（`e2e-check.mjs`）+ 玩法 / 升级 / 背包卖出 / 回归守卫 / 清空四支，控制台零报错 |
+| 单元测试 | ✅ **657 项通过 / 29 个文件**（2026-10-16 复跑确认） |
+| 端到端测试 | ✅ **265 项**：`e2e-check` 120 · `e2e-gameplay` 57 · `e2e-regressions` 35 · `e2e-bag-sell` 23 · `e2e-wipe` 18 · `e2e-upgrade` 12，控制台零报错 |
+| 游戏平台 | ✅ 农场 + **娃娃机**两款；家长栏「游戏」页可购买 / 切换（见 `docs/game-plugin-spec.md`） |
 
 ---
 
@@ -162,7 +163,13 @@
 - 漏填或填错了可以事后「补做」
 - 完成掉落道具（贴纸、奖章、宝石），进背包收藏
 
-### 二、游戏板块（农场）
+### 二、游戏板块（农场 + 娃娃机）
+
+**游戏是一个平台，不是写死的两块界面。** 注册表（`src/games/registry.ts`）声明有哪些游戏、
+卖多少钱；家长栏「游戏」页可以购买、切换「当前游戏」；游戏格与底部导航跟着当前游戏变。
+契约见 `docs/game-plugin-spec.md`，写新游戏看 `docs/game-authoring-guide.md`。
+
+#### 农场（首款，免费，默认拥有，离线可用）
 
 - **种地**：12 块地，前 4 块免费。**15 种作物**，生长周期从 3 分钟到 6 小时。
   草莓、玉米、棉花、菠萝等可**反复收获**；南瓜、西瓜一次性。
@@ -176,8 +183,9 @@
   田园犬 / 北极熊 / 长颈鹿。先养大成年，之后按间隔持续产出
   鸡蛋、羊毛、牛奶、松露、羽毛、小骨头、冰块、树叶。
 - **离线生长**：作物和动物按真实时间推进，关掉 App 也在长。回来一次性结算产出。
-- **交易**：产出物在市场上卖成**丰收币** —— 一张**独立账本，不能变回积分**
-  （见 `docs/farm-economy-design.md` §2）。每个标的**每一轮**最多卖回
+- **交易**：产出物在市场上卖成**点券** —— 一张**独立账本，不能变回积分**
+  （2026-10-16 前这个币叫「丰收币」，只改了显示名，键名仍是 `harvestLedger`；
+  见 `src/domain/currency.ts` 与 `docs/farm-economy-design.md` §2）。每个标的**每一轮**最多卖回
   「成本 × (1+r)」，卖满就停；种子随时能再买、地随时能再种。
 - **收成有波动**：每次收获 / 收下产出都会掷一次骰子，可能丰收也可能遇到虫灾。
   作物和**普通**动物共用同一套分布，所以两边的期望浮盈在同一档（约 +45%）。
@@ -190,6 +198,22 @@
   ⚠️ 这是对 2026-09-15「所有标的共用同一套分布」那条锁的**有意放宽**，
   边界写在 `src/domain/catalog.ts` 文件头第 4 条和 `types.ts` 的 `AnimalTrait` 上。
 - **道具**：神奇肥料让作物立刻长一半。
+
+#### 娃娃机（2026-10-16 上线，用商城币买）
+
+用 **three.js** 画的一台娃娃机。原参考代码里的邻柜和商场房间**没搬** —— 场景里只有一台柜子。
+
+- **投币**：**1 积分 = 1 枚娃娃机币**，投一枚抓一次。
+- **抓到换券**：抓到一只娃娃换成**点券**，每只换多少由**家长在设置里配**（家长栏 →「游戏」→ 娃娃机卡片，
+  卡片上实时显示期望值）。
+- **三条硬不变式**（改任何数值前先读 `HANDOFF-2026-10-16.md`）：
+  ① **每局期望产出 `E < 1`**（`E ≥ 1` 就是一台静默印钞机：不报错、账本每条都自洽）；
+  ② **随机必须幂等** —— 不许 `Math.random()`，种子是局号，只在结算成功后 +1，所以中途刷新结果不变；
+  ③ **结算必须原子 + 单发** —— 扣币 / 发券 / 局号 +1 在同一个事务里，且事务内比对局号。
+- **结果在投币那一刻定死**，动画只是配合它（不上物理引擎：物理会让期望值不可控、浮点不可复现）。
+  ⇒ **瞄准不影响结果**。
+- **体积**：three.js 落在**独立 chunk**（懒加载），首装包不含它。判据是字符串不是体积 ——
+  `grep -c WebGLRenderer dist/assets/index-*.js` 必须是 **0**。
 
 ### 三、数据
 
@@ -334,6 +358,9 @@ await __kqf__.syncSeedTasks()   // 把 seedTasks.ts 里新加的任务同步进�
 | `__kqf__.getState()` | 读整个 store 快照（排查用） |
 | `__kqf__.exportBackup()` / `importBackup(raw)` | 备份往返 |
 | `__kqf__.catalog.*` | 读**真实**数值：`cropSeedCost` / `animalCost` / `remainingCap` / `priceCeiling` / `cropsUnlockedAt(level)`（升到该级新解锁的作物名，升级播报靠它对账） |
+| `__kqf__.games()` | 列出注册表里的游戏（id / 名字 / 状态 / 售价 / 是否默认拥有） |
+| `__kqf__.claw.resolve(index, winRate?, exchangePerPrize?)` | 算**第 N 局**的结果（不走账、不扣币）。★ 走查脚本靠它「先问第几局会中、再精确走到那一局」—— 结果由局号算出来，不用碰运气 |
+| `__kqf__.claw.findRound(from, won, …)` | 从第 `from` 局起，第一个结果为 `won` 的局号（500 局内没有返回 `-1`） |
 
 ⚠️ **`unlockAll` 不发积分** —— 开地、塞种子、放动物都是**直接写库、不扣钱**，
 所以不需要先 `addPoints`。要钱得另外敲。
@@ -484,13 +511,20 @@ npm run splash:check          # 量 + 校验四处是否一致，不一致 exit 
 
 ```bash
 npm run preview &                        # 先起预览服务
-node scripts/e2e-check.mjs               # 86 项：新手引导 / 渲染 / 导航 / 溢出 / 顶栏 / 长期任务孩子端 / 音效开关 / 币种只在一处显示 / 现金对积分汇率 / 兑换分账 / 市场走势图 / 导出
-node scripts/e2e-gameplay.mjs            # 49 项：结算规则 / 账本 / 农场 / 签到 / 收获二选一 / 备份往返（含背包与结转额度）/ 脏数据
+node scripts/e2e-check.mjs               # 120 项：新手引导 / 渲染 / 导航 / 溢出 / 顶栏 / 长期任务孩子端 / 音效开关 / 币种只在一处显示 / 现金对积分汇率 / 兑换分账 / 市场走势图 / 导出
+node scripts/e2e-gameplay.mjs            # 57 项：结算规则 / 账本 / 农场 / 签到 / 收获二选一 / 备份往返（含背包与结转额度）/ 脏数据
 node scripts/e2e-upgrade.mjs             # 12 项：老库升级路径（不丢数据、不炸索引）
-node scripts/e2e-bag-sell.mjs            # 23 项：收进背包 → 市场卖出整条链（含丰收币到账、卖压、空背包空状态）
-node scripts/e2e-regressions.mjs         # 28 项：**回归守卫** —— 已经修过的具体 bug 别再改回去
+node scripts/e2e-bag-sell.mjs            # 23 项：收进背包 → 市场卖出整条链（含点券到账、卖压、空背包空状态）
+node scripts/e2e-regressions.mjs         # 35 项：**回归守卫** —— 已经修过的具体 bug 别再改回去
 node scripts/e2e-wipe.mjs                # 18 项：全量清空（内存 + IndexedDB 都要清干净，清完重新播种）
 ```
+
+> ⚠️ **别把预览服务起在默认的 4180。** 这台机器上 4180 / 4190 / 5190 常年被**别的项目**占着，
+> 而 `vite preview --strictPort` 绑不上时 **`curl` 照样返回 200** ⇒ 整套 e2e 会跑在**别人的 App** 上
+> （表现为「只渲染出 60 字符」「找不到底部导航」，看着像自己的代码炸了）。
+> 换到 **4390+ / 5390+**，先 `netstat -ano | grep ":<port> "` 确认空闲，然后
+> **先验「服务的到底是不是我的构建」**：`curl -s 127.0.0.1:<port>/ | grep -o 'assets/index-[A-Za-z0-9_-]*\.js'`
+> 必须和 `ls dist/assets/` 里那个 `index-*.js` **同名**。收工只 kill 自己的 PID。
 
 `e2e-gameplay.mjs` 会验证每一条结算规则在真实环境下的积分入账结果，
 以及「任务 → 积分 → 农场消费」整条链路的账本一致性。
@@ -532,8 +566,25 @@ node scripts/check-copy-emoji.mjs        # 退出码 0 = 干净；1 = 有尾随 
 ### 界面走查图集（只出图，不断言）
 
 ```bash
-node scripts/capture.mjs                 # → screenshots/redesign/，30 张
+node scripts/capture.mjs                 # 主图集 → screenshots/redesign/，30 张
 ```
+
+**但主图集盖不住「只在某个状态 / 某个视口下才存在」的界面。** 那些各有一份专用走查，
+**跑 `capture.mjs` 不能替代它们**：
+
+```bash
+node scripts/capture-claw.mjs            # 娃娃机（5 档视口 × 每档 17~32 条断言）
+node scripts/capture-horizon-decor.mjs   # ⑥ 建筑装饰（篱笆 / 谷仓 / 水井 / 稻草人 / 告示牌）
+node scripts/capture-levelup-fx.mjs      # ⑤ 升级特效
+node scripts/capture-harvest-fx.mjs      # 收获特效（逐帧采遮挡 + 探针自检）
+node scripts/capture-sky.mjs             # 昼夜天空（钉死 Date.now 才有确定性）
+node scripts/capture-animals.mjs         # 动物小屋
+node scripts/capture-games.mjs           # 游戏栏 / 购买 / 切换
+node scripts/capture-tablet-onboarding.mjs  # 平板上的新手导览（**所有其它脚本的盲区**）
+```
+
+> ⚠️ **新手引导（`onboarding/ChildTour.tsx`）是上述大部分脚本的盲区** ——
+> 它跟着锚点走、会盖住整个主界面，必须单独走 `capture-tablet-onboarding.mjs`。
 
 `capture.mjs` 只负责「好不好看」，和 `e2e-*.mjs` 的「对不对」分工不同，互不覆盖。
 
@@ -653,23 +704,40 @@ src/
     settlement.ts     结算引擎 ← 核心
     recurrence.ts     周期任务生成 / 签到阶梯 / 连击判定（isPeriodTask）
     farm.ts           作物与动物的时间推进
+    farmClock.ts      昼夜分档（顶栏时钟与天空共用同一次换算）
+    farmEvents.ts     收获 / 产出的随机掷骰（丰收 / 虫灾）
     catalog.ts        作物 / 动物 / 道具内容表
+    market.ts         市场卖价与「上限回收」闸门
+    economy.ts        农场经济不变量
+    redeem.ts         兑换商城分账（点券优先，1 点券 ≡ 1 积分）
+    cash.ts           现金对积分参考汇率
+    currency.ts       **三套币的显示口径唯一来源**（名字 / 图标）
+    clawEconomy.ts    **娃娃机经济唯一入口**（期望值上限 / 安全判定 / 幂等随机）
+    streakBonus.ts / tierRatio.ts  连击与阶梯倍率的取值入口
     seedTasks.ts      首次启动的示例任务
     avatars.ts        可选头像（设置页与引导向导共用，防两边漂移）
     time.ts           逻辑日、周期键、时长格式化
   db/db.ts          Dexie schema 与原子写操作
   store/useApp.ts   全局状态与所有业务动作
+  games/            游戏平台（宿主 ↔ 游戏边界）
+    ids.ts            游戏 id 常量
+    registry.ts       **纯数据**注册表（绝不能 import 页面组件，会成环）
+    pages.ts          id → 页面组件（只有 App.tsx 读）
+    plugin.ts / loader.ts / hostApi.ts / PluginGameHost.tsx   插件契约 v2 与下载来的游戏
   features/
     tasks/          任务板块
-    farm/           农场板块
-    settings/       家长设置 / 数据导入导出
-    onboarding/     新手引导（家长设置向导 + 功能导览：4 步给孩子 + 2 步给家长）
+    farm/           农场板块（内联 SVG 精灵 + 场景装饰）
+    claw/           娃娃机板块（three.js，**懒加载独立 chunk**）
+    redeem/         兑换商城
+    settings/       家长设置 / 数据导入导出 / 游戏栏
+    onboarding/     新手引导（家长设置向导 + 功能导览）
     parent/         家长确认与打分
+    splash/         入场页
   platform/files.ts 浏览器与 APK 的文件导出适配 / 合成音效
   components/       Portal（弹层挂 body）、ErrorBoundary 等通用组件
   styles/theme.css  设计令牌（颜色 / 圆角 / 阴影 / 动画）
 site/               官网：纯静态介绍页 + 下载 + 隐私政策/用户协议（见上）
-scripts/            构建与验证脚本（e2e-*.mjs / capture.mjs / check-site.mjs / build-site.mjs …）
+scripts/            构建与验证脚本（e2e-*.mjs / capture*.mjs / check-site.mjs / build-site.mjs / lib/）
 ```
 
 **分层原则**：`domain/` 不依赖任何框架或 IO，业务规则集中在这里并被测试覆盖；
@@ -682,7 +750,7 @@ scripts/            构建与验证脚本（e2e-*.mjs / capture.mjs / check-site
 - **低龄友好**：大按钮（最小 44px，主操作 56px+）、emoji 优先于文字、
   每个操作都有即时反馈（缩放 / 弹跳 / 飘分 / 音效 / 震动）
   —— 音效与震动挂在 toast 上，设置页可关（见上方「无图片资源」那段）
-- **同一个数只在一处显示**：积分 / 丰收币由全局顶栏（`App.tsx` 里那个 `sticky top-0`
+- **同一个数只在一处显示**：积分 / 点券由全局顶栏（`App.tsx` 里那个 `sticky top-0`
   的 header）统一承担，**页面正文里不再重复摆一遍** —— 农场卡、兑换页页头、
   积分页页头曾经各放了一份（还有兑换页正文那句「🪙 你有 N 分。」），
   同一屏里同一个数出现两次，孩子反而不知道该看哪个，已全部删掉

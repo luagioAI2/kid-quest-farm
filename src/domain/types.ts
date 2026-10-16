@@ -238,38 +238,44 @@ export interface LedgerEntry {
   createdAt: number
 }
 
-/* ---------------- 丰收币账本 ---------------- */
+/* ---------------- 点券账本 ---------------- */
 
 /**
- * 丰收币的来源。
+ * 点券的来源。
  *
  * **刻意比 `LedgerSource` 少** —— 这里不该出现 `task` / `checkin`，
- * 因为丰收币只能从农场产出里来，任务和签到只发积分。
+ * 因为点券只能从「玩出来的产出」里来，任务和签到只发积分。
+ *
+ * ⚠️ 2026-10-16 起多了一个 `claw_prize`：娃娃机抓到的娃娃也能换点券。
+ * 加它的同时**必须回头看那条不变量** —— 娃娃机每局的期望产出要 < 1
+ * （兑换商城里 1 点券 ≡ 1 积分，而一局只花 1 积分）。
+ * 判据与单测在 `domain/clawEconomy.ts`。
  */
 export type HarvestSource =
   | 'farm_harvest' // 作物收获
   | 'farm_market' // 市场卖出产出
-  | 'harvest_redeem' // 用丰收币兑换（负数）
+  | 'claw_prize' // 娃娃机抓到娃娃兑换（2026-10-16）
+  | 'harvest_redeem' // 用点券兑换（负数）
   | 'manual_adjust' // 家长手工调整
 
 /**
- * 丰收币账本条目。字段与 `LedgerEntry` 同形，但**存在另一张表里**。
+ * 点券账本条目。字段与 `LedgerEntry` 同形，但**存在另一张表里**。
  *
  * ## 两条不可逆约束（这是整个经济系统的地基）
  *
- * 1. **丰收币 ⇸ 积分** —— 丰收币永远不能换回积分。
- * 2. **丰收币 ⇸ 农场投入** —— 丰收币不能买种子 / 幼崽 / 地块。
+ * 1. **点券 ⇸ 积分** —— 点券永远不能换回积分。
+ * 2. **点券 ⇸ 农场投入** —— 点券不能买种子 / 幼崽 / 地块。
  *
  * ### 为什么用「另一张表」而不是「同一个表加 currency 字段」
  *
  * 因为要把约束做成**结构性**的，而不是**约定性**的。
  *
  * 同一张表加 `currency` 字段的话，`currentBalance()` 只要漏一个
- * `.filter(r => r.currency === 'points')`，丰收币就悄悄算进积分余额 ——
+ * `.filter(r => r.currency === 'points')`，点券就悄悄算进积分余额 ——
  * 而且**不报任何错**（本项目的 `ledgerTip` 注释里已经记过一次同类的静默事故）。
  *
  * 分成两张表之后，`currentBalance()` 只读 `db.ledger`，
- * 它**在物理上不可能**看到丰收币。约束由表结构保证，不靠写代码的人记得住。
+ * 它**在物理上不可能**看到点券。约束由表结构保证，不靠写代码的人记得住。
  *
  * ### 第 2 条为什么比第 1 条更要命
  *
@@ -300,7 +306,7 @@ export interface HarvestEntry {
  * 商城币的来源。
  *
  * **目前只有出口，没有入口。** 家长 2026-10-14 拍板：
- * > 「商城币 跟积分 和 丰收币都不一样。首款免费并且默认购买。」
+ * > 「商城币 跟积分 和 点券都不一样。首款免费并且默认购买。」
  * > 「（来源）以后支付购买。或者兑换码。」
  *
  * 所以这一轮**只建钱包**：账本、余额、购买扣费全都在，但没有任何发币入口，
@@ -326,7 +332,7 @@ export type MallSource =
  *
  * ## 三套币之间一条通路都没有
  *
- * 积分 ⇸ 丰收币、丰收币 ⇸ 积分、商城币 ⇸ 任何别的币，全都不存在。
+ * 积分 ⇸ 点券、点券 ⇸ 积分、商城币 ⇸ 任何别的币，全都不存在。
  * ⚠️ **任何两条币之间的双向通路都是印钞机**（`HarvestEntry` 的注释里
  * 算过一次：每轮 2 分钟，1 小时 ≈ 1300 万）。加通路之前先把那张账重算一遍。
  */
@@ -432,7 +438,7 @@ export interface Plot {
     /** 累计因事件损失的收成次数 */
     lossCount?: number
     /**
-     * **本轮已卖出的丰收币**。闸门 = `seedCost × (1 + r)`，卖满这一轮就结束。
+     * **本轮已卖出的点券**。闸门 = `seedCost × (1 + r)`，卖满这一轮就结束。
      *
      * 记在**地块**上而不是作物类型上：闸门是「一轮」的，不是「终身」的
      * （用户 2026-09-15：「种子肯定一直能买，一直能种哇」）。
@@ -574,7 +580,7 @@ export interface Animal {
    * 旧的「靠 lifespanMinutes 一直产」模型已废弃。
    */
   produceCount?: number
-  /** **本轮已卖出的丰收币**（闸门 = `cost × (1 + r)`） */
+  /** **本轮已卖出的点券**（闸门 = `cost × (1 + r)`） */
   earnedSoFar?: number
 
   /** 生病开始时间戳（生病期间不产出，喂食/照顾可治愈） */
@@ -708,7 +714,7 @@ export interface RedeemRecord {
   /** 总价 = harvestPaid + pointsPaid */
   cost: number
   /**
-   * 这次用丰收币付掉的部分（🌾）。
+   * 这次用点券付掉的部分（🎟️）。
    *
    * 可选：2026-09-30 之前的老记录没有这个字段 —— 那时候只能用积分付，
    * 所以「缺省」必须读成 **0**，而不是 `cost`。读取处请一律走
@@ -725,7 +731,7 @@ export interface RedeemRecord {
   pointsPaid?: number
   /** 兑换时的积分余额（快照，便于回溯） */
   balanceAfter: number
-  /** 兑换时的丰收币余额（快照）。老记录没有 */
+  /** 兑换时的点券余额（快照）。老记录没有 */
   harvestBalanceAfter?: number
   /** 家长是否已经"兑现"（比如真的给了零食） */
   fulfilled: boolean
@@ -946,6 +952,20 @@ export interface AppSettings {
   /** 农场时间流速设置 */
   farmClock: FarmClockSettings
 
+  /**
+   * 娃娃机：中奖率（0~1）与「每抓到一只兑换多少点券」。
+   *
+   * 两个都**可选** —— 老库里没有这两个字段，`loadSettings` 会和
+   * `DEFAULT_SETTINGS` 合并拿到默认值，所以**不需要数据迁移**。
+   *
+   * ⚠️ 这两个数是**乘在一起**的：`期望产出 = 中奖率 × 每只兑换数`，
+   * 而它必须 ≤ `CLAW_MAX_EXPECTED`（0.8）—— 因为兑换商城里
+   * `1 点券 ≡ 1 积分`，期望产出 ≥ 1 就等于「孩子坐着玩就能刷积分」。
+   * 判据与夹紧都在 `domain/clawEconomy.ts`，**别在设置界面里自己乘**。
+   */
+  clawWinRate?: number
+  clawExchangePerPrize?: number
+
   /** 家长锁 PIN（明文仅本地，4 位） */
   parentPin?: string
 }
@@ -960,7 +980,7 @@ export interface BackupFile {
     tasks: Task[]
     taskInstances: TaskInstance[]
     ledger: LedgerEntry[]
-    /** 丰收币账本。老备份里没有这个字段，导入时按空数组处理。 */
+    /** 点券账本。老备份里没有这个字段，导入时按空数组处理。 */
     harvestLedger?: HarvestEntry[]
     /** 商城币账本。同上，老备份里没有，导入时按空数组处理。 */
     mallLedger?: MallEntry[]

@@ -16,15 +16,34 @@
  * 前置：先 `npm run preview`（或任何在跑的静态服务）
  *
  * 负向验证（2026-09-17 做过）：把 `MarketSheet` 的 headerRight 改回
- * `balance` + 🪙，本脚本会在「弹层顶部结的是丰收币 🌾」和
+ * `balance` + 🪙，本脚本会在「弹层顶部结的是点券 🎟️」和
  * 「弹层顶部那颗数字跟着动了」两条上红，其余照旧 —— 即它不是空跑。
+ * （那次写的是「丰收币 🌾」；2026-10-16 这个币改叫「点券」、图标换成 🎟️，
+ *  本脚本的判据跟着 currency.ts 走，不再抄字面量。）
  */
 import puppeteer from 'puppeteer-core'
 import { existsSync } from 'node:fs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { makeProfileDir } from './lib/profile.mjs'
+// 币种显示名 / 图标从源码读，不在本脚本里再抄一份 —— 见 currency.mjs 文件头
+import { COUPON, POINTS } from './lib/currency.mjs'
 
-const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
+// ⚠️ 别把这个变量叫 `URL` —— 那个名字会遮住全局的 `URL` 构造器（本项目的老坑）。
+const TARGET = process.argv[2] ?? 'http://127.0.0.1:4180/'
+
+/**
+ * 从「🎟️ 8」这种「图标 + 数字」里取出数字。
+ *
+ * ⚠️ **不走 emoji 正则。** 实测 `/🌾/` 这类判据**时灵时不灵** ——
+ * 同一份脚本里，前一个 evaluate 用它找到了行、后一个找不到（e2e-check §8c 有记录）。
+ * `indexOf` + `slice` 两次都稳。
+ */
+function amountAfter(text, glyph) {
+  const i = (text ?? '').indexOf(glyph)
+  if (i < 0) return null
+  const m = text.slice(i + glyph.length).match(/^\s*(\d+)/)
+  return m ? Number(m[1]) : null
+}
 const CHROME = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
@@ -190,7 +209,7 @@ try {
   })
   page.on('pageerror', (e) => errors.push(`PAGEERROR: ${e.message}`))
 
-  await page.goto(URL, { waitUntil: 'networkidle2', timeout: 45000 })
+  await page.goto(TARGET, { waitUntil: 'networkidle2', timeout: 45000 })
 
   /* ⚠️ 先等入场页（splash）过去，再走引导。
      判据是「底部导航出现了」—— 导航只存在于主界面，入场页没有它，
@@ -255,7 +274,7 @@ try {
   const afterStore = await readState(page)
 
   check(
-    '收进背包：丰收币没动（钱不在这一步结）',
+    `收进背包：${COUPON.name}没动（钱不在这一步结）`,
     afterStore.harvest === before.harvest,
     `${before.harvest} → ${afterStore.harvest}`,
   )
@@ -285,10 +304,10 @@ try {
 
   const inMarket = await readState(page)
   check(
-    '市场弹层顶部结的是丰收币 🌾，且数字 = 真实余额',
-    inMarket.sheetHead.includes('🌾') &&
-      !inMarket.sheetHead.includes('🪙') &&
-      new RegExp(`🌾\\s*${inMarket.harvest}\\b`).test(inMarket.sheetHead),
+    `市场弹层顶部结的是${COUPON.name} ${COUPON.emoji}，且数字 = 真实余额`,
+    inMarket.sheetHead.includes(COUPON.emoji) &&
+      !inMarket.sheetHead.includes(POINTS.emoji) &&
+      amountAfter(inMarket.sheetHead, COUPON.emoji) === inMarket.harvest,
     `弹层头="${inMarket.sheetHead}" / 真实余额=${inMarket.harvest}`,
   )
 
@@ -308,7 +327,7 @@ try {
   const sellN = m ? Number(m[1]) : NaN
   const sellX = m ? Number(m[2]) : NaN
   check(
-    `「全卖」按钮上的「N ${UNIT} / +X 🌾」解析出来了`,
+    `「全卖」按钮上的「N ${UNIT} / +X ${COUPON.emoji}」解析出来了`,
     Number.isFinite(sellN) && Number.isFinite(sellX),
     allBtn?.text ?? '(没有全卖按钮)',
   )
@@ -324,7 +343,7 @@ try {
   const afterSell = await readState(page)
 
   check(
-    '卖出后丰收币增加，且增量 = 按钮上承诺的 X',
+    `卖出后${COUPON.name}增加，且增量 = 按钮上承诺的 X`,
     afterSell.harvest === afterStore.harvest + sellX,
     `${afterStore.harvest} + ${sellX} = ${afterStore.harvest + sellX}，实际 ${afterSell.harvest}`,
   )
@@ -344,13 +363,13 @@ try {
     `${inMarket.price} → ${afterSell.price}`,
   )
   check(
-    '弹层顶部那颗丰收币数字跟着动了（旧 bug 就是它不动）',
-    new RegExp(`🌾\\s*${afterSell.harvest}\\b`).test(afterSell.sheetHead),
+    `弹层顶部那颗${COUPON.name}数字跟着动了（旧 bug 就是它不动）`,
+    amountAfter(afterSell.sheetHead, COUPON.emoji) === afterSell.harvest,
     `弹层头="${afterSell.sheetHead}"`,
   )
   check(
-    '顶栏的丰收币也同步了',
-    new RegExp(`🌾\\s*${afterSell.harvest}\\b`).test(afterSell.topBar),
+    `顶栏的${COUPON.name}也同步了`,
+    amountAfter(afterSell.topBar, COUPON.emoji) === afterSell.harvest,
     `顶栏="${afterSell.topBar}"`,
   )
   check(

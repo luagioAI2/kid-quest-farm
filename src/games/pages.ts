@@ -1,6 +1,6 @@
-import type { ComponentType } from 'react'
+import { lazy, type ComponentType } from 'react'
 import FarmPage from '../features/farm/FarmPage'
-import { GAME_FARM } from './ids'
+import { GAME_CLAW, GAME_FARM } from './ids'
 import type { GameDef } from './registry'
 
 /**
@@ -10,6 +10,19 @@ import type { GameDef } from './registry'
  * 一旦注册表静态 import 了页面组件，就会形成
  * `useApp → registry → FarmPage → useApp` 的环，而 `useApp` 在模块顶层
  * 遍历 `GAMES` —— 环里谁先被 import 谁就炸。详见 `registry.ts` 的头注释。
+ *
+ * ## ⚠️ 娃娃机为什么是 `lazy` 而农场不是
+ *
+ * 娃娃机带 **three.js**（实测 tree-shaken 后 **135 KB gzip**）。静态 import
+ * 的话这 135 KB 会进主包，**每一个不玩娃娃机的孩子**都要先把它下下来 ——
+ * 而首装只有农场（家长 2026-10-14 拍板），娃娃机是家长后来花商城币买的。
+ *
+ * `React.lazy` + 动态 `import()` 让 three.js 落到**自己的 chunk**：
+ * 只有孩子真的切到娃娃机那一格，浏览器才去取。
+ * 农场保持静态 —— 它是首装里唯一的游戏，拆出去只会多一次往返。
+ *
+ * ⚠️ `lazy` 的组件**必须**被 `<Suspense>` 兜住（见 `App.tsx`），
+ * 否则切过去的第一帧会整棵树抛出去。
  *
  * ## 加一款新游戏
  *
@@ -23,6 +36,7 @@ import type { GameDef } from './registry'
  */
 export const GAME_PAGES: Record<string, ComponentType> = {
   [GAME_FARM]: FarmPage,
+  [GAME_CLAW]: lazy(() => import('../features/claw/ClawPage')),
 }
 
 /**

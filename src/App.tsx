@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { selectPendingCheckIns, selectPendingReview, useApp } from './store/useApp'
 import TaskPage from './features/tasks/TaskPage'
 import PointsPage from './features/tasks/PointsPage'
@@ -47,7 +47,7 @@ const SPLASH_MIN_MS = 1900
 export default function App() {
   const ready = useApp((s) => s.ready)
   const balance = useApp((s) => s.balance)
-  /** 丰收币：农场产出的结算币。和积分是两套账，见 store 里 postHarvest 的注释。 */
+  /** 点券：农场产出的结算币。和积分是两套账，见 store 里 postHarvest 的注释。 */
   const harvestBalance = useApp((s) => s.harvestBalance)
   const toasts = useApp((s) => s.toasts)
   const dismissToast = useApp((s) => s.dismissToast)
@@ -266,7 +266,7 @@ export default function App() {
               {/*
                 两个币种并排。**图标和底色必须能区分开**：
                   🪙 积分 = 奖励色（sun），能买种子/幼崽/地块，也能进兑换商城
-                  🌾 丰收币 = 草色（grass），只能进兑换商城的丰收档，买不了农场投入
+                  🎟️ 点券 = 草色（grass），只能进兑换商城的丰收档，买不了农场投入
                 用农场页同一个色（bg-grass-100 / text-grass-700），
                 孩子从农场切到任务页时不会觉得是两个东西。
               */}
@@ -280,7 +280,7 @@ export default function App() {
                 </span>
               </div>
               {/*
-                丰收币是**农场这一款游戏**的币，不是全局的 —— 每款游戏有自己的
+                点券是**农场这一款游戏**的币，不是全局的 —— 每款游戏有自己的
                 账本和自己的余额（见 `games/registry.ts`）。
                 所以只有当前游戏是农场时才渲染这枚币；否则会显示一枚跟眼前
                 这个游戏毫无关系的币，等于界面在说一件不成立的事。
@@ -290,9 +290,9 @@ export default function App() {
               {activeGameId === GAME_FARM && (
                 <div
                   className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
-                  aria-label={`丰收币 ${harvestBalance}`}
+                  aria-label={`点券 ${harvestBalance}`}
                 >
-                  <span className="text-base leading-none">🌾</span>
+                  <span className="text-base leading-none">🎟️</span>
                   <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">
                     {harvestBalance}
                   </span>
@@ -332,12 +332,30 @@ export default function App() {
           <main key={tab} className="flex flex-1 flex-col anim-fade-in">
             <ErrorBoundary resetKey={tab}>
               {tab === 'tasks' && <TaskPage />}
-              {tab === 'game' &&
-                (GamePage ? (
-                  <GamePage />
-                ) : activePlugin ? (
-                  <PluginGameHost gameId={activeGameId} />
-                ) : null)}
+              {/*
+                游戏那一格可能拿到 `React.lazy` 的页面（娃娃机带 three.js，
+                拆成了独立 chunk —— 见 `games/pages.ts` 的注释）。
+                `Suspense` 是**必须的**：lazy 组件在 chunk 到位之前会挂起，
+                没有它整棵树会抛出去。
+
+                fallback 是一句很轻的「在准备」而不是转圈动画 ——
+                这一格绝大多数时候是**瞬开**（农场是静态 import），
+                转圈反而会闪一下；只有第一次切到娃娃机时才看得到这句。
+              */}
+              <Suspense
+                fallback={
+                  <div className="flex flex-1 items-center justify-center p-6">
+                    <p className="text-sm text-ink-500">正在准备游戏…</p>
+                  </div>
+                }
+              >
+                {tab === 'game' &&
+                  (GamePage ? (
+                    <GamePage />
+                  ) : activePlugin ? (
+                    <PluginGameHost gameId={activeGameId} />
+                  ) : null)}
+              </Suspense>
               {tab === 'redeem' && <RedeemPage />}
               {tab === 'points' && <PointsPage />}
             </ErrorBoundary>

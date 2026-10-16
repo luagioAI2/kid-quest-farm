@@ -3,9 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 /**
  * 往注册表里**注入一款「已经能买」的测试游戏**。
  *
- * 真实注册表里一条都没有 —— 农场免费、另外两条是 `comingSoon`，
- * 所以「买成功」这条路在真实数据下走不到。不注入的话，这个文件里
- * 最关键的那条断言（付了钱 → 账本里多一笔 → 拥有关系跟着变）就只能靠嘴说。
+ * 真实注册表里农场免费、娃娃机卖 120 商城币 —— 都能买，但价格和 id 会跟着
+ * 版本变。注入一款自己的，断言就不用去猜「现在哪款是卖的」。
  *
  * `vi.mock` 的工厂会被提升到文件顶部，所以它**不能引用外部变量** ——
  * 测试游戏只能就地定义。
@@ -39,6 +38,18 @@ vi.mock('./registry', async (importOriginal) => {
 const { db, currentMallBalance, postMall } = await import('../db/db')
 const { useApp } = await import('../store/useApp')
 const { GAME_CLAW, GAME_FARM } = await import('./ids')
+const { GAMES, gameById } = await import('./registry')
+
+/**
+ * 「还没做好的那款游戏」——**从注册表里找**，不写死 id。
+ *
+ * ⚠️ 这个文件原来写死 `GAME_CLAW`。2026-10-16 娃娃机上线
+ * （`comingSoon` → `available`）之后，三条断言当场就红了 ——
+ * 而它们红的原因是「例子过期了」，不是「功能坏了」。
+ * 写死 id 就会这样：**上线一款游戏，就要来修一遍无关的测试**。
+ * 从注册表推导之后，将来钓鱼池上线也不用再动这里。
+ */
+const SOON = GAMES.find((g) => g.status === 'comingSoon')
 
 /* ============================================================
    买游戏 / 切当前 —— 插件骨架的经济闭环
@@ -66,8 +77,15 @@ describe('默认状态', () => {
     expect(useApp.getState().activeGameId).toBe(GAME_FARM)
   })
 
-  it('商城币从 0 开始（这一轮没有发币入口）', () => {
+  it('商城币从 0 开始（家长栏里那个「手动发放」不点就是 0）', () => {
     expect(useApp.getState().mallBalance).toBe(0)
+  })
+
+  it('★ 注册表里至少有一款「还没做好」的游戏 —— 下面几条断言的对照组', () => {
+    // 没有这一条的话，将来所有游戏都上线了，`SOON` 变成 undefined，
+    // 那几条「买不了 / 切不过去」就会**因为别的原因**通过（拿 undefined
+    // 去调 buyGame 当然失败），看着全绿，其实什么都没验。
+    expect(SOON, '注册表里一款 comingSoon 都没有了，这几条断言失去了意义').toBeTruthy()
   })
 })
 
@@ -105,9 +123,26 @@ describe('买游戏', () => {
 
   it('还没做好的游戏买不了（`comingSoon` 不给买）', async () => {
     await grantMall(9999)
-    const res = await useApp.getState().buyGame(GAME_CLAW)
+    const res = await useApp.getState().buyGame(SOON!.id)
     expect(res.ok).toBe(false)
     expect(useApp.getState().mallBalance).toBe(9999)
+  })
+
+  it('★ 娃娃机（真游戏）买得下来、能切成当前 —— 家长走的就是这条路', async () => {
+    // 这一条钉的是**家长 2026-10-16 那个需求**的闭环：
+    //   设置 → 游戏 → 花商城币买娃娃机 → 设为当前。
+    // 上面 `test-game` 那几条验的是机制，这一条验的是**真的那款游戏**接上了。
+    const price = gameById(GAME_CLAW)!.priceMall
+    await grantMall(price + 10)
+    const res = await useApp.getState().buyGame(GAME_CLAW)
+    expect(res.ok).toBe(true)
+    expect(useApp.getState().mallBalance).toBe(10)
+    expect(useApp.getState().ownedGameIds).toContain(GAME_CLAW)
+
+    await useApp.getState().setActiveGame(GAME_CLAW)
+    expect(useApp.getState().activeGameId).toBe(GAME_CLAW)
+    // 落进设置才算真的切了（重启后还在）
+    expect(useApp.getState().settings.activeGame).toBe(GAME_CLAW)
   })
 
   it('不存在的游戏买不了', async () => {
@@ -131,7 +166,7 @@ describe('切「当前游戏」', () => {
   })
 
   it('还没做好的切不过去', async () => {
-    await useApp.getState().setActiveGame(GAME_CLAW)
+    await useApp.getState().setActiveGame(SOON!.id)
     expect(useApp.getState().activeGameId).toBe(GAME_FARM)
   })
 
@@ -158,7 +193,7 @@ describe('存档里的当前游戏失效时兜底', () => {
   it('指向一款「还没做好的」游戏 → 回落到首款', async () => {
     // 家长栏里看到的「已购买」和底部导航必须是同一件事：
     // 存档被手改 / 导入了别的设备的备份，都不能让导航指向一个空白页。
-    await useApp.getState().updateSettings({ activeGame: GAME_CLAW })
+    await useApp.getState().updateSettings({ activeGame: SOON!.id })
     await useApp.getState().refresh()
     expect(useApp.getState().activeGameId).toBe(GAME_FARM)
   })

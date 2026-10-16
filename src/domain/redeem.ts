@@ -1,24 +1,24 @@
 /* ============================================================
-   兑换分账（丰收币优先）
+   兑换分账（点券优先）
    ------------------------------------------------------------
-   用户 2026-09-30：「兑换页面，优先用丰收币兑换。价值和积分等价的。
-   用完丰收币再用积分，可混合。」
+   用户 2026-09-30：「兑换页面，优先用点券兑换。价值和积分等价的。
+   用完点券再用积分，可混合。」
 
    规则：
-   1. 丰收币和积分 **1:1 等价** —— 1 枚丰收币顶 1 分。
-   2. **先花丰收币**，花光了再用积分。
-   3. 一件东西可以**两种币混着付**（丰收币 30 + 积分 20 换 50 分的东西）。
+   1. 点券和积分 **1:1 等价** —— 1 枚点券顶 1 分。
+   2. **先花点券**，花光了再用积分。
+   3. 一件东西可以**两种币混着付**（点券 30 + 积分 20 换 50 分的东西）。
 
-   为什么这条不违反「丰收币 ⇸ 积分」（见 types.ts 的 HarvestEntry 注释）：
-   那条约束禁的是「丰收币变回积分」这个**内部换算** ——
+   为什么这条不违反「点券 ⇸ 积分」（见 types.ts 的 HarvestEntry 注释）：
+   那条约束禁的是「点券变回积分」这个**内部换算** ——
    一旦能变，农场产出 → 积分 → 买种子就成了闭环印钞机。
    而兑换是**出口**（换来的是零食/出去玩，退出系统），
-   丰收币花在出口上不会回流成积分，所以安全。
+   点券花在出口上不会回流成积分，所以安全。
    `HarvestSource` 里那个从没被用过的 `harvest_redeem` 就是为这条留的。
    ============================================================ */
 
 export interface RedeemPayment {
-  /** 用丰收币付掉多少（🌾） */
+  /** 用点券付掉多少（🎟️） */
   harvestPaid: number
   /** 用积分付掉多少（🪙） */
   pointsPaid: number
@@ -47,8 +47,8 @@ export function planRedeemPayment(
   const harvest = Math.max(0, Math.round(harvestBalance))
   const points = Math.max(0, Math.round(pointsBalance))
 
-  // 先花丰收币。`min` 而不是「够就全用丰收币」——
-  // 丰收币比价格多的时候只能花掉价格那么多，剩下的留着下次用。
+  // 先花点券。`min` 而不是「够就全用点券」——
+  // 点券比价格多的时候只能花掉价格那么多，剩下的留着下次用。
   const harvestPaid = Math.min(harvest, price)
   const pointsPaid = price - harvestPaid
 
@@ -92,6 +92,6 @@ export function describeRedeemPayment(paid: {
 }): string {
   const { harvestPaid, pointsPaid } = paidOf(paid)
   if (harvestPaid <= 0) return `${pointsPaid} 积分`
-  if (pointsPaid <= 0) return `${harvestPaid} 丰收币`
-  return `${harvestPaid} 丰收币 + ${pointsPaid} 积分`
+  if (pointsPaid <= 0) return `${harvestPaid} 点券`
+  return `${harvestPaid} 点券 + ${pointsPaid} 积分`
 }

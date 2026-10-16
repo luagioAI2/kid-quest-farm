@@ -15,6 +15,9 @@ import puppeteer from 'puppeteer-core'
 import { existsSync, writeFileSync, mkdirSync } from 'node:fs'
 import { makeProfileDir } from './lib/profile.mjs'
 import { qualityLabelRegex, readQualityLabels } from './lib/quality.mjs'
+// 币种显示名 / 图标从源码读，不在本脚本里再抄一份 —— 见 currency.mjs 文件头
+// （2026-10-16「丰收币 🌾」→「点券 🎟️」就是抄了第二份的那次事故）
+import { COUPON, POINTS } from './lib/currency.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME_CANDIDATES = [
@@ -355,7 +358,7 @@ try {
   )
 
   /* ---------- 3b. 顶栏：两个币种都在，且塞得下长名字 ----------
-     顶栏现在有 头像 + 名字 + 🪙 + 🌾 + 两个按钮，是全局最挤的一行。
+     顶栏现在有 头像 + 名字 + 🪙 + 🎟️ + 两个按钮，是全局最挤的一行。
      名字那个 span 上的 `truncate` **必须配 `min-w-0` 才会真的收缩** ——
      flex 子项默认 `min-width: auto`，不会小于内容宽度，
      于是长名字把整行顶出去；而桌面浏览器会用横向滚动条兜住，
@@ -413,9 +416,9 @@ try {
     `短名字 ${headerProbe.short.h}px → 长名字 ${headerProbe.long.h}px`,
   )
   check(
-    '顶栏同时显示积分和丰收币',
-    headerProbe.labels.some((c) => c?.startsWith('积分')) &&
-      headerProbe.labels.some((c) => c?.startsWith('丰收币')),
+    `顶栏同时显示${POINTS.name}和${COUPON.name}`,
+    headerProbe.labels.some((c) => c?.startsWith(POINTS.name)) &&
+      headerProbe.labels.some((c) => c?.startsWith(COUPON.name)),
     headerProbe.labels.join(' / ') || '一个都没找到',
   )
   // 还原名字：后面几项会打印顶栏文字，改着名字会把输出搞乱
@@ -1088,48 +1091,53 @@ try {
   const farmText = await page.evaluate(() => document.body.innerText)
   check('农场页渲染', /种子|农场|地块|收获|🌱|🌾/.test(farmText), farmText.replace(/\s+/g, ' ').slice(0, 70))
 
-  /* 币种不重复：全局顶栏（sticky）已经常驻显示 🪙 / 🌾，**页面正文里不该再放一遍**。
+  /* 币种不重复：全局顶栏（sticky）已经常驻显示 🪙 / 🎟️，**页面正文里不该再放一遍**。
      ⚠️ 判据要按「**叶子节点、且整段文字就是一个图标**」来数，不能拿 innerText 数 ——
-     「40 🪙」（地块解锁价）、「+7 🪙」（结算飘字）、「还能卖 2.8 🌾」（收获弹层）
+     「40 🪙」（地块解锁价）、「+7 🪙」（结算飘字）、「还能卖 2.8 🎟️」（收获弹层）
      里也有图标，那些是**上下文**，不是重复。
      ⚠️ 必须**排除 `header` 和 `nav`**：
        · `header` 就是被比对的基准本身；
        · `nav` 是底部 TabBar，🪙 / 🌾 在那里是**导航图标**（积分 / 农场），
          不是币种展示 —— 探针实测：不排除的话会数出 2 个，误判成「还在重复」。
      可见性用 rect 而不是 offsetParent：顶栏是 sticky，别赌 offsetParent 的语义。 */
-  const glyphCount = await page.evaluate(() => {
-    const count = (g) =>
-      [...document.querySelectorAll('span')].filter((el) => {
-        const r = el.getBoundingClientRect()
-        return (
-          el.children.length === 0 &&
-          r.width > 0 &&
-          r.height > 0 &&
-          (el.textContent ?? '').trim() === g &&
-          !el.closest('header') &&
-          !el.closest('nav')
-        )
-      }).length
-    return { coin: count('🪙'), grain: count('🌾') }
-  })
-  check(
-    '农场页正文里没有 🪙（不再和全局顶栏重复）',
-    glyphCount.coin === 0,
-    `正文里 🪙 x${glyphCount.coin}`,
+  const glyphCount = await page.evaluate(
+    (glyphs) => {
+      const count = (g) =>
+        [...document.querySelectorAll('span')].filter((el) => {
+          const r = el.getBoundingClientRect()
+          return (
+            el.children.length === 0 &&
+            r.width > 0 &&
+            r.height > 0 &&
+            (el.textContent ?? '').trim() === g &&
+            !el.closest('header') &&
+            !el.closest('nav')
+          )
+        }).length
+      return { coin: count(glyphs.points), coupon: count(glyphs.coupon) }
+    },
+    { points: POINTS.emoji, coupon: COUPON.emoji },
   )
   check(
-    '农场页正文里没有 🌾（不再和全局顶栏重复）',
-    glyphCount.grain === 0,
-    `正文里 🌾 x${glyphCount.grain}`,
+    `农场页正文里没有 ${POINTS.emoji}（不再和全局顶栏重复）`,
+    glyphCount.coin === 0,
+    `正文里 ${POINTS.emoji} x${glyphCount.coin}`,
+  )
+  check(
+    `农场页正文里没有 ${COUPON.emoji}（不再和全局顶栏重复）`,
+    glyphCount.coupon === 0,
+    `正文里 ${COUPON.emoji} x${glyphCount.coupon}`,
   )
   // 反向保证：顶栏那两个确实还在（否则上面两条可以靠「把顶栏也删了」蒙过去）
-  const headerCurrencies = await page.evaluate(() =>
-    [...document.querySelectorAll('header [aria-label]')]
-      .map((el) => el.getAttribute('aria-label') ?? '')
-      .filter((l) => l.startsWith('积分') || l.startsWith('丰收币')),
+  const headerCurrencies = await page.evaluate(
+    (names) =>
+      [...document.querySelectorAll('header [aria-label]')]
+        .map((el) => el.getAttribute('aria-label') ?? '')
+        .filter((l) => names.some((n) => l.startsWith(n))),
+    [POINTS.name, COUPON.name],
   )
   check(
-    '全局顶栏仍然显示积分和丰收币（上面两条不是因为顶栏被删才通过的）',
+    `全局顶栏仍然显示${POINTS.name}和${COUPON.name}（上面两条不是因为顶栏被删才通过的）`,
     headerCurrencies.length === 2,
     headerCurrencies.join(' / ') || '顶栏里一个都没找到',
   )
@@ -1165,11 +1173,11 @@ try {
   )
   }
 
-  /* ---------- 5b. 市场弹层：结的是丰收币 🌾，不是积分 🪙 ----------
+  /* ---------- 5b. 市场弹层：结的是点券 🎟️，不是积分 🪙 ----------
      2026-09-16 修的两个「文案和机制对不上」：
 
      ① `MarketSheet` 顶部币种胶囊错传了 `balance`（积分），而 `sellProduce`
-        结的是 `harvestBalance`（丰收币）。孩子卖完东西，**眼前那个数字一动不动**，
+        结的是 `harvestBalance`（点券，2026-10-16 前叫丰收币）。孩子卖完东西，**眼前那个数字一动不动**，
         看起来就是「市场卖出坏了」。而且顶栏本来就已经有一颗 🪙 积分，
         弹层里再来一颗一模一样的，更容易看串。
 
@@ -1247,8 +1255,8 @@ try {
   })
   check('市场弹层已打开', marketRes.sheetOpen === true)
   check(
-    '市场弹层顶部的币种是丰收币 🌾（不是积分 🪙）',
-    marketRes.headGlyphs.includes('🌾') && !marketRes.headGlyphs.includes('🪙'),
+    `市场弹层顶部的币种是${COUPON.name} ${COUPON.emoji}（不是${POINTS.name} ${POINTS.emoji}）`,
+    marketRes.headGlyphs.includes(COUPON.emoji) && !marketRes.headGlyphs.includes(POINTS.emoji),
     `弹层头里的图标：${JSON.stringify(marketRes.headGlyphs)}`,
   )
   check(
@@ -1256,7 +1264,7 @@ try {
     marketRes.hasFalseHint === false,
   )
   check(
-    '市场弹层里的单价/总额都写 🌾，不写「分」',
+    `市场弹层里的单价/总额都写 ${COUPON.emoji}，不写「分」`,
     marketRes.saysFenPerUnit === false && marketRes.saysFenTotal === false,
     `分/个=${marketRes.saysFenPerUnit} 值…分=${marketRes.saysFenTotal}`,
   )
@@ -1351,7 +1359,7 @@ try {
     sellBtns.map((b) => b.text).join(' | ') || '(一个都没有)',
   )
   check(
-    '卖出按钮的文案都在一行里（币种 🌾 没被挤下去）',
+    `卖出按钮的文案都在一行里（币种 ${COUPON.emoji} 没被挤下去）`,
     sellBtns.length > 0 && sellBtns.every((b) => b.lines === 1),
     sellBtns.map((b) => `${b.text} → ${b.lines} 行 / ${b.w}px`).join('；'),
   )
@@ -1767,8 +1775,10 @@ try {
   // 否则"页面正文里没有余额牌"就成了"整屏都没有"，那是把功能删了而不是去重。
   const headerChip = await probeBalanceChips('任务')
   check(
-    '全局顶栏仍然显示积分和丰收币',
-    headerChip.headerChips >= 1 && /🪙/.test(headerChip.headerText) && /🌾/.test(headerChip.headerText),
+    `全局顶栏仍然显示${POINTS.name}和${COUPON.name}`,
+    headerChip.headerChips >= 1 &&
+      headerChip.headerText.includes(POINTS.emoji) &&
+      headerChip.headerText.includes(COUPON.emoji),
     headerChip.headerText,
   )
 
@@ -1900,7 +1910,7 @@ try {
       : `一条都没有（汇率=${cashOnRedeem.ratio}）`,
   )
   check(
-    '取代它的「付款：🌾 x + 🪙 y」还在（这是删 ≈¥ 的前提）',
+    `取代它的「付款：${COUPON.emoji} x + ${POINTS.emoji} y」还在（这是删 ≈¥ 的前提）`,
     cashOnRedeem.hasPayLine,
     cashOnRedeem.hasPayLine
       ? '在'
@@ -1919,12 +1929,13 @@ try {
     await sleep(700)
   })
 
-  /* ---------- 8c. 兑换付款：丰收币优先 + 可混合（2026-09-30） ----------
+  /* ---------- 8c. 兑换付款：点券优先 + 可混合（2026-09-30） ----------
      ------------------------------------------------------------
-     用户要求：「兑换页面，优先用丰收币兑换。价值和积分等价的。
+     用户要求（原话，当时这个币还叫「丰收币」）：
+     「兑换页面，优先用丰收币兑换。价值和积分等价的。
      用完丰收币再用积分，可混合。」
 
-     ⚠️ **这一段必须自己造丰收币余额。** e2e 跑的是全新 profile、没种过地 →
+     ⚠️ **这一段必须自己造点券余额。** e2e 跑的是全新 profile、没种过地 →
      `harvestBalance === 0` → 兑换页永远走「纯积分」那一支，
      `PaySplit` 里 `harvestPaid > 0` 的那一半**从来没被渲染过**。
      这正是 §11 说的「图集没盖住的分支 = 没验过的分支」，只不过发生在 e2e 上。
@@ -1934,12 +1945,14 @@ try {
      「驱动手段比真实路径更有权限」（形态 H）。
 
      判据锚在 **ASCII 的 `+`** 上，不锚 emoji：混合那一行是
-     「付款：🌾 250 + 🪙 10」，纯一种币的那几行没有 `+`。
-     （实测：拿 `/🌾/` 这种 emoji 正则当判据时灵时不灵 ——
+     「付款：🎟️ 250 + 🪙 10」，纯一种币的那几行没有 `+`。
+     （实测：拿 emoji 正则当判据时灵时不灵 ——
       同一份脚本里，前一个 evaluate 用它找到了行、后一个找不到。
-      ASCII 判据两次都稳。这类"锚在 emoji 上"的坑和形态 F 同源。）
+      ASCII 判据两次都稳。这类"锚在 emoji 上"的坑和形态 F 同源。
+      ⚠️ 2026-10-16 补：币种图标改成 `🎟️` 之后，**取数字也不再走正则** ——
+      见下面 `paidOf()`，用 `indexOf` + `slice`，彻底不碰 emoji 正则。）
 
-     跑完**故意不把丰收币还原成 0** —— 下面第 9 段的兑换页截图正好能
+     跑完**故意不把点券还原成 0** —— 下面第 9 段的兑换页截图正好能
      拍到混合付款那一支，图集才盖得住这个新分支。 */
   const MIX_SEED = 250
   await page.evaluate(async (seed) => {
@@ -1976,7 +1989,7 @@ try {
   })
   await new Promise((r) => setTimeout(r, 800))
 
-  const payProbe = await page.evaluate(() => {
+  const payProbe = await page.evaluate(({ couponGlyph, pointsGlyph }) => {
     /** Range 的行盒数：1 = 单行，≥2 = 被挤到换行了（§12.1） */
     const lineBoxes = (el) => {
       const r = document.createRange()
@@ -1994,13 +2007,23 @@ try {
       )
       return pill ? Number((pill.textContent ?? '').replace(/\D/g, '')) : null
     }
+    /**
+     * 从「付款：🎟️ 250 + 🪙 10」里取出某个币种后面跟着的数字。
+     * ⚠️ **不走 emoji 正则** —— 用 `indexOf` + `slice` 取，见上面那段注释。
+     */
+    const paidOf = (t, glyph) => {
+      const i = t.indexOf(glyph)
+      if (i < 0) return 0
+      const m = t.slice(i + glyph.length).match(/^\s*(\d+)/)
+      return m ? Number(m[1]) : 0
+    }
     const parse = (p) => {
       const t = p.innerText.replace(/\s+/g, ' ').trim()
       return {
         text: t,
         cost: costOf(p),
-        harvestPaid: Number(t.match(/🌾\s*(\d+)/)?.[1] ?? 0),
-        pointsPaid: Number(t.match(/🪙\s*(\d+)/)?.[1] ?? 0),
+        harvestPaid: paidOf(t, couponGlyph),
+        pointsPaid: paidOf(t, pointsGlyph),
         lines: lineBoxes(p),
       }
     }
@@ -2009,27 +2032,27 @@ try {
       points: state.balance,
       count: pays.length,
       pureHarvest: pays.filter(
-        (p) => /🌾/.test(p.innerText) && !p.innerText.includes('+'),
+        (p) => p.innerText.includes(couponGlyph) && !p.innerText.includes('+'),
       ).length,
       mixed: pays.filter((p) => p.innerText.includes('+')).map(parse),
       all: pays.map(parse),
       docOverflow:
         document.documentElement.scrollWidth - document.documentElement.clientWidth,
     }
-  })
+  }, { couponGlyph: COUPON.emoji, pointsGlyph: POINTS.emoji })
 
   check(
     '兑换页渲染出了「付款：」这一行',
     payProbe.count > 0,
-    `共 ${payProbe.count} 条 · 丰收币 ${payProbe.harvest} / 积分 ${payProbe.points}`,
+    `共 ${payProbe.count} 条 · ${COUPON.name} ${payProbe.harvest} / ${POINTS.name} ${payProbe.points}`,
   )
   check(
-    '丰收币够的商品走「纯丰收币」一支（不写 +0 积分）',
+    `${COUPON.name}够的商品走「纯${COUPON.name}」一支（不写 +0 ${POINTS.name}）`,
     payProbe.pureHarvest > 0,
-    `纯丰收币 ${payProbe.pureHarvest} 条`,
+    `纯${COUPON.name} ${payProbe.pureHarvest} 条`,
   )
   check(
-    '丰收币不够的商品走「混合」一支（🌾 + 🪙 同时出现）',
+    `${COUPON.name}不够的商品走「混合」一支（${COUPON.emoji} + ${POINTS.emoji} 同时出现）`,
     payProbe.mixed.length > 0,
     payProbe.mixed.length
       ? `抽样 ${JSON.stringify(payProbe.mixed.slice(0, 3).map((m) => m.text))}`
@@ -2043,7 +2066,7 @@ try {
       return r.harvestPaid !== expectHarvest || r.pointsPaid !== r.cost - expectHarvest
     })
     check(
-      '每条的「🌾 X + 🪙 Y」都等于「先花光丰收币、差额用积分」且 X+Y = 标价',
+      `每条的「${COUPON.emoji} X + ${POINTS.emoji} Y」都等于「先花光${COUPON.name}、差额用${POINTS.name}」且 X+Y = 标价`,
       wrong.length === 0,
       wrong.length
         ? `对不上 ${wrong.length} 条：${JSON.stringify(wrong.slice(0, 3))}`

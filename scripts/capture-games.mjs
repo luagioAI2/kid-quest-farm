@@ -17,8 +17,10 @@ import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { existsSync, mkdirSync } from 'node:fs'
+import { MALL } from './lib/currency.mjs'
 
-const URL = process.argv[2] ?? 'http://127.0.0.1:4396/'
+/* ⚠️ 变量名**别叫 `URL`** —— 那会遮住全局的 `URL` 构造器（本项目踩过）。 */
+const TARGET = process.argv[2] ?? 'http://127.0.0.1:4396/'
 const OUT = process.argv[3] ?? '.e2e-scratch/games'
 
 const CHROME_CANDIDATES = [
@@ -73,7 +75,7 @@ for (const vp of VIEWPORTS) {
   page.on('pageerror', (e) => consoleErrors.push(String(e)))
 
   await page.setViewport({ width: vp.width, height: vp.height, deviceScaleFactor: 2 })
-  await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 45000 })
+  await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 45000 })
   await page.waitForFunction(() => !!document.querySelector('nav button'), { timeout: 20000 })
   await dismissOnboarding(page)
   await page.waitForFunction(() => !!document.querySelector('nav button'), { timeout: 10000 })
@@ -141,7 +143,10 @@ for (const vp of VIEWPORTS) {
   check('输 0000 后进入游戏栏', unlocked)
   await wait(400)
 
-  /* ---- ④ 内容自检 ---- */
+  /* ---- ④ 内容自检 ----
+     ★ 期望条数**从注册表现状推导**，不写死（见下面几处的注释）。
+     2026-10-16 娃娃机上线之前，这里写死的是「占位 2 条」「一个购买按钮都没有」
+     —— 上线当天三条断言一起红，红的原因是**例子过期**，不是功能坏了。 */
   const info = await page.evaluate(() => {
     const txt = document.body.innerText
     const rows = [...document.querySelectorAll('li')].map((li) => (li.innerText ?? '').trim())
@@ -155,8 +160,18 @@ for (const vp of VIEWPORTS) {
       hasMallCard: txt.includes('商城币'),
       hasOwned: txt.includes('已购买'),
       hasSoon: txt.includes('敬请期待'),
+      games: window.__kqf__?.games?.() ?? [],
+      owned: window.__kqf__?.getState?.().ownedGameIds ?? [],
+      hasMint: document.querySelector('[data-mall-mint]') !== null,
+      mallBalanceText: document.querySelector('[data-mall-balance]')?.innerText ?? '',
     }
   })
+
+  const soonGames = info.games.filter((g) => g.status === 'comingSoon')
+  // 可买 = 做好的 × 有价的 × 还没买的（免费的首款不在「敬请期待」里）
+  const buyable = info.games.filter(
+    (g) => g.status === 'available' && g.priceMall > 0 && !info.owned.includes(g.id),
+  )
 
   check('有「商城币」一块', info.hasMallCard)
   check('有「已购买」一块', info.hasOwned)
@@ -167,20 +182,59 @@ for (const vp of VIEWPORTS) {
     info.rows.find((r) => r.includes('农场'))?.replace(/\n/g, ' / ') ?? '（没有农场的行）',
   )
   check(
-    '两条占位游戏在列表里，且都标「敬请期待」',
-    info.rows.filter((r) => r.includes('敬请期待')).length === 2,
+    `占位游戏在列表里，且都标「敬请期待」（注册表现状 ${soonGames.length} 条）`,
+    info.rows.filter((r) => r.includes('敬请期待')).length === soonGames.length,
     `占位行数 = ${info.rows.filter((r) => r.includes('敬请期待')).length}`,
   )
   // ★ 这一条才是重点：**没有任何东西可买**的时候，界面不许出现购买按钮。
   //   出现了就是「界面承诺了它做不到的事」。
-  const buyButtons = info.buttons.filter((b) => /^🎫\s*\d+$/.test(b))
+  /*
+    ⚠️ 图标**从 `domain/currency.ts` 派生**（走 `scripts/lib/currency.mjs`），
+      不在脚本里再抄一份。这里原来写死的是 `/^🎫\s*\d+$/` ——
+      2026-10-16 商城币的图标从 `🎫` 换成 `🛍️`，那种写法会**静默地一个都匹配不到**，
+      于是下面「个数 = N」这条会红在一个跟功能完全无关的地方（例子过期，不是坏了）。
+
+    ⚠️ 也别用 emoji 拼正则：只判「以这个图标开头」+「后面全是数字」。
+      取数字同理，用 `slice` 不用正则（`e2e-check.mjs` 那边也是这么改的）。
+  */
+  const isBuyLabel = (t) => {
+    const s = (t ?? '').trim()
+    if (!s.startsWith(MALL.emoji)) return false
+    return /^\d+$/.test(s.slice(MALL.emoji.length).trim())
+  }
+  const buyButtons = info.buttons.filter(isBuyLabel)
+  /*
+    ★ 这一条的原意是「**没做好的游戏**不许出现购买按钮」（界面不能承诺
+    它做不到的事）。原实现是「一个购买按钮都不许有」—— 那在「一款能买的
+    都没有」的年代恰好等价，但娃娃机上线之后就变成了一条**错误的**断言。
+
+    ➜ 改成直接表达原意：购买按钮的**个数**必须等于「做好的 × 有价的 × 没买的」，
+      而且**每一款 comingSoon 的行里都不许有**。这样以后钓鱼池上线也不用改。
+  */
   check(
-    '★ 没有可买的游戏时，一个购买按钮都不渲染',
-    buyButtons.length === 0,
-    buyButtons.length ? `出现了 ${JSON.stringify(buyButtons)}` : '0 个',
+    `★ 购买按钮的个数 = 做好的有价游戏里还没买的那些（应为 ${buyable.length}）`,
+    buyButtons.length === buyable.length,
+    `实际 ${buyButtons.length} 个：${JSON.stringify(buyButtons)}`,
   )
-  // 商城币余额必须是 0（这一轮没有发币入口）—— 写着别的数就是账本串了
-  check('商城币余额是 0（还没有发币入口）', /商城币[\s\S]{0,80}?\b0\b/.test(info.txt), '')
+  const soonRows = info.rows.filter((r) => r.includes('敬请期待'))
+  check(
+    '★ 每一款「敬请期待」的游戏行里都没有购买按钮',
+    soonRows.every((r) => !r.includes(MALL.emoji)),
+    soonRows.filter((r) => r.includes(MALL.emoji)).join(' / ') || '（都没有）',
+  )
+
+  /*
+    商城币卡片：2026-10-16 起**有**发币入口（手动发放），
+    因为娃娃机用商城币买 —— 没有入口的话那个购买按钮按下去必然失败。
+    所以原来那条「余额必须是 0 / 还没有发币入口」已经不成立了。
+    现在钉的是：入口在、余额显示的是账本算出来的数（新档是 0）。
+  */
+  check('★ 商城币卡片上有手动发放入口', info.hasMint, info.hasMint ? '' : '没找到 [data-mall-mint]')
+  check(
+    '新档的商城币余额是 0（手动发放是唯一的入口，这里没点过）',
+    info.mallBalanceText.replace(/\D/g, '') === '0',
+    `显示的是「${info.mallBalanceText.trim()}」`,
+  )
 
   await page.screenshot({ path: `${OUT}/${vp.name}-2-家长栏游戏.png`, fullPage: true })
   console.log(`  · 已存图 ${OUT}/${vp.name}-2-家长栏游戏.png`)

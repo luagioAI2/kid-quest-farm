@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie'
 import { createInitialFarm } from '../domain/farm'
 import { createInitialMarket } from '../domain/market'
 import { PRODUCE_BASE_PRICE } from '../domain/catalog'
+import { CLAW_DEFAULT_EXCHANGE, CLAW_DEFAULT_WIN_RATE } from '../domain/clawEconomy'
 import { DEFAULT_GAME_ID } from '../games/ids'
 import type {
   Animal,
@@ -55,7 +56,7 @@ class KidQuestFarmDB extends Dexie {
   tasks!: Table<Task, string>
   taskInstances!: Table<TaskInstance, string>
   ledger!: Table<LedgerEntry, string>
-  /** 丰收币账本。与 `ledger` 物理隔离，见 `HarvestEntry` 的注释。 */
+  /** 点券账本。与 `ledger` 物理隔离，见 `HarvestEntry` 的注释。 */
   harvestLedger!: Table<HarvestEntry, string>
   /** 商城币账本。第三套币，同样物理隔离，见 `MallEntry` 的注释。 */
   mallLedger!: Table<MallEntry, string>
@@ -113,18 +114,18 @@ class KidQuestFarmDB extends Dexie {
       taskInstances:
         'id, taskId, periodKey, date, status, [date+status], [status+submittedAt], &[taskId+periodKey+date]',
     })
-    // v5：丰收币独立账本。
+    // v5：点券独立账本。
     //
     // 为什么单开一张表，而不是给 ledger 加个 currency 字段 —— 见 `HarvestEntry` 的注释。
-    // 一句话：**要让「丰收币不算进积分」由表结构保证，而不是靠每个读余额的地方
+    // 一句话：**要让「点券不算进积分」由表结构保证，而不是靠每个读余额的地方
     // 都记得加过滤**。漏一个 filter 就静默算错，而且不报错。
     this.version(5).stores({
       harvestLedger: 'id, source, createdAt, refId',
     })
     // v6：商城币独立账本（第三套币，2026-10-14）。
     //
-    // 家长原话：「商城币 跟积分 和 丰收币都不一样。」同样是**单开一张表**
-    // 而不是给 ledger 加 currency 字段 —— 理由与 v5 的丰收币一字不差：
+    // 家长原话：「商城币 跟积分 和 点券都不一样。」同样是**单开一张表**
+    // 而不是给 ledger 加 currency 字段 —— 理由与 v5 的点券一字不差：
     // 让「商城币不算进任何别的余额」由表结构保证，而不是靠每个读余额的
     // 地方都记得加过滤（漏一个就静默算错，且不报错）。
     //
@@ -512,20 +513,147 @@ export async function spendPoints(
   })
 }
 
-/* ---------------- 丰收币账本 ---------------- */
+/* ---------------- 游戏币账本（住在 `gameKv` 的保留键里） ---------------- */
 
 /**
- * 丰收币余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
+ * 游戏币账本在 `gameKv` 里的保留键。
+ *
+ * ## 为什么不新开一张表
+ *
+ * Dexie 的表必须**编译期声明**（`this.version(N).stores`），
+ * 而游戏 —— 尤其是下载来的 —— 是**运行时**才出现的（见 `GameKvRow` 的注释）。
+ * 所以宿主给一张通用表 `gameKv`，游戏币也记在里面。
+ *
+ * ## ⚠️ 以 `__` 开头 = **宿主保留键**
+ *
+ * 插件通过 `HostApi.storage` 读写它会**直接抛**（`hostApi.ts` 的
+ * `assertNotReserved`）—— 不静默忽略，因为那是插件的 bug，必须让它看得见。
+ * 插件碰币的唯一两扇门是 `mintGameCoin()` / `gameCoinBalance()`。
+ */
+export const GAME_COIN_KEY = '__coin'
+
+export interface GameCoinEntry {
+  delta: number
+  memo: string
+  at: number
+}
+
+/** 读一款游戏的币账本。脏数据（不是数组 / 条目没有 delta）一律当空账 —— 不炸。 */
+export async function readGameCoinLedger(gameId: string): Promise<GameCoinEntry[]> {
+  const raw = await getGameKv<unknown>(gameId, GAME_COIN_KEY)
+  if (!Array.isArray(raw)) return []
+  return raw.filter(
+    (e): e is GameCoinEntry =>
+      !!e && typeof e === 'object' && typeof (e as GameCoinEntry).delta === 'number',
+  )
+}
+
+/**
+ * 币余额 = 账本 delta 之和。
+ *
+ * **算出来的，不是存出来的** —— 理由和宿主那三套币一字不差：
+ * 存一个 `balance` 字段就会出现「余额和流水对不上」，而且**不报错**。
+ */
+export async function gameCoinBalanceOf(gameId: string): Promise<number> {
+  const rows = await readGameCoinLedger(gameId)
+  return rows.reduce((sum, r) => sum + r.delta, 0)
+}
+
+/**
+ * 往某款游戏的币账本里追加一笔（`delta > 0`）。
+ *
+ * ## 「只进不出」这句话要说得准一点
+ *
+ * 准确的说法是：**币不能换回任何别的币**（spec §2.2）。而不是「账本里
+ * 永远不会出现负数」—— 玩一局本来就要扣一个币，那是 `spendGameCoin`。
+ *
+ * 这条 `delta <= 0` 的守卫是给**插件 API** 用的（`HostApi.mintGameCoin`）：
+ * 插件不该有「凭空销毁自己的币」这条能力。宿主自己的消费走 `spendGameCoin`，
+ * 那里有余额守卫，是另一回事。
+ */
+export async function addGameCoin(gameId: string, delta: number, memo: string): Promise<void> {
+  const n = Math.round(delta)
+  if (n <= 0) return
+  const rows = await readGameCoinLedger(gameId)
+  rows.push({ delta: n, memo, at: Date.now() })
+  await setGameKv(gameId, GAME_COIN_KEY, rows)
+}
+
+/**
+ * **花掉游戏币**（玩一局）。**守卫和扣款在同一个事务里** —— 余额不够返回
+ * `false`，一个币不扣。
+ *
+ * 为什么不「先读余额、再写一笔负数」：那是把守卫放到事务外面，
+ * 两次并发会各自读到同一个「够」，于是都扣 —— 超支，而且每条流水都自洽、
+ * **不报错**。`consumeItem` / `spendMall` 的注释里记过一模一样的事故。
+ *
+ * ⚠️ 这是**唯一**允许往游戏币账本写负数的入口。出口只有「玩」这一条 ——
+ * 没有「币 → 积分」的路（那会是一条双向通路，等于印钞机）。
+ */
+export async function spendGameCoin(
+  gameId: string,
+  amount: number,
+  memo: string,
+): Promise<boolean> {
+  const n = Math.round(amount)
+  if (n <= 0) return false
+  return db.transaction('rw', db.gameKv, async () => {
+    const rows = await readGameCoinLedger(gameId)
+    const bal = rows.reduce((sum, r) => sum + r.delta, 0)
+    if (bal < n) return false
+    rows.push({ delta: -n, memo, at: Date.now() })
+    await setGameKv(gameId, GAME_COIN_KEY, rows)
+    return true
+  })
+}
+
+/**
+ * **用积分买一个游戏币** —— 扣积分和记币在**同一个事务**里。
+ *
+ * ## 为什么不能「先 `spendPoints()`，再 `addGameCoin()`」
+ *
+ * 那是两个独立事务。中间崩一下（或者被别的写打断）就变成
+ * 「积分扣了、币没到」—— 孩子白丢一个积分，而且**没有任何报错**，
+ * 只会觉得「点了没反应」。本项目在 `consumeItem` 上吃过一模一样的事故。
+ *
+ * 这里用 **Dexie 的嵌套事务**：外层罩住 `[ledger, gameKv]`，
+ * 内层 `spendPoints()` 只声明 `[ledger]`（是外层的子集）⇒ Dexie
+ * **复用外层事务**，不新开。所以「扣分」和「记币」要么一起成功、要么一起回滚。
+ *
+ * 顺带一个好处：扣分的守卫（余额够不够）仍然只有 `spendPoints` 那一份实现，
+ * 不必在这里再抄一遍。
+ *
+ * 返回 `false` = 积分不够，**一分不扣、一个币不发**。
+ */
+export async function buyGameCoin(
+  gameId: string,
+  cost: number,
+  memo: string,
+): Promise<boolean> {
+  const c = Math.round(cost)
+  if (c <= 0) return false
+  return db.transaction('rw', db.ledger, db.gameKv, async () => {
+    const ok = await spendPoints(c, { source: 'game_spend', refId: gameId, memo })
+    if (!ok) return false
+    await addGameCoin(gameId, 1, memo)
+    return true
+  })
+}
+
+/* ---------------- 点券账本 ---------------- */
+
+/**
+ * 点券余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
  *
  * **只读 `db.harvestLedger`，永远不碰 `db.ledger`** ——
- * 这里就是「丰收币 ⇸ 积分」这条约束的落点。
+ * 这里就是「点券 ⇸ 积分」这条约束的落点。
  */
 export async function currentHarvestBalance(): Promise<number> {
   const rows = await db.harvestLedger.toArray()
   return rows.reduce((sum, r) => sum + r.delta, 0)
 }
 
-/** 取「下一笔丰收币账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
+/** 取「下一笔点券账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
 export async function harvestTip(): Promise<{ createdAt: number; balance: number }> {
   const rows = await db.harvestLedger.toArray()
   const maxAt = rows.reduce((m, r) => (r.createdAt > m ? r.createdAt : m), 0)
@@ -536,10 +664,10 @@ export async function harvestTip(): Promise<{ createdAt: number; balance: number
 }
 
 /**
- * 记一笔丰收币。**唯一**允许改动丰收币余额的入口。
+ * 记一笔点券。**唯一**允许改动点券余额的入口。
  *
  * 与 `postLedger` 完全对称，只是换了张表。
- * **刻意不提供「丰收币 → 积分」的反向函数** —— 没有这个函数，就没有那条路。
+ * **刻意不提供「点券 → 积分」的反向函数** —— 没有这个函数，就没有那条路。
  */
 export async function postHarvest(
   entry: Omit<HarvestEntry, 'id' | 'balanceAfter' | 'createdAt'> & {
@@ -569,7 +697,7 @@ export async function postHarvest(
 /**
  * 商城币余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
  *
- * **只读 `db.mallLedger`** —— 这就是「商城币不算进积分、也不算进丰收币」
+ * **只读 `db.mallLedger`** —— 这就是「商城币不算进积分、也不算进点券」
  * 这条约束的落点。
  */
 export async function currentMallBalance(): Promise<number> {
@@ -700,6 +828,19 @@ export const DEFAULT_SETTINGS: AppSettings = {
     timeScale: 1,
     showClock: true,
   },
+  /**
+   * 娃娃机的两个家长可调参数（2026-10-16）。
+   *
+   * 默认 1/3 中奖率 × 每只 2 点券 ⇒ 每局期望 **0.67 点券**。
+   * 上限是 0.8（`CLAW_MAX_EXPECTED`），所以默认档留了余量。
+   *
+   * ⚠️ 为什么默认就低于上限而不是贴着上限：兑换商城里 `1 点券 ≡ 1 积分`，
+   * 而一局只花 1 积分 ⇒ 期望产出只要 ≥ 1，娃娃机就变成一台
+   * 「坐着玩就能把积分刷上去」的机器。**0.67 是消费，1.0 是漏洞。**
+   * 口径与夹紧见 `domain/clawEconomy.ts`（有全参数空间单测钉着）。
+   */
+  clawWinRate: CLAW_DEFAULT_WIN_RATE,
+  clawExchangePerPrize: CLAW_DEFAULT_EXCHANGE,
   /** 默认家长密码：0000。首次打开即有密码保护，家长可在设置里改。 */
   parentPin: '0000',
 }

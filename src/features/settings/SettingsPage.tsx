@@ -420,7 +420,7 @@ export default function SettingsPage({
                   </div>
                   <p className="tnum mt-2 text-xs font-bold leading-snug text-ink-500">
                     当前：孩子每花 10 🪙 成本，最多能收回{' '}
-                    {(10 * (1 + (settings.profitRatio ?? DEFAULT_PROFIT_RATIO))).toFixed(0)} 🌾。
+                    {(10 * (1 + (settings.profitRatio ?? DEFAULT_PROFIT_RATIO))).toFixed(0)} 🎟️。
                     改这个会同时改变所有种子和动物的上限，已经种下的也按新上限算。
                   </p>
                 </Card>

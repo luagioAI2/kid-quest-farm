@@ -3,7 +3,7 @@
  *
  * ## 这里最重要的一条：插件的币也要「算出来」，不能「存出来」
  *
- * 宿主的三套币（积分 / 丰收币 / 商城币）都是「余额 = 账本 delta 之和」，
+ * 宿主的三套币（积分 / 点券 / 商城币）都是「余额 = 账本 delta 之和」，
  * 从来不存 `balance` 字段。插件的币**必须照这个模式**，否则会出现
  * 「余额和流水对不上」—— 而且**不报错**（本项目在 `Task`/`TaskInstance`
  * 上已经吃过一次「同一个事实存两份」的亏）。
@@ -18,12 +18,26 @@
  * 既不可能读到别的游戏的数据，也不可能因为自己拼错前缀而静默写到别处。
  */
 
-import { getGameKv, listGameKv, setGameKv, spendPoints } from '../db/db'
+import {
+  addGameCoin,
+  gameCoinBalanceOf,
+  getGameKv,
+  listGameKv,
+  setGameKv,
+  spendPoints,
+} from '../db/db'
 import { hapticLight, playTone } from '../platform/files'
 import type { HostApi } from './plugin'
 
-/** 插件币账本在 `gameKv` 里的保留键。**前缀由宿主加，插件看不到这个字符串。** */
-const COIN_KEY = '__coin'
+/*
+ * ⚠️ 币账本的读写**不在这里**，在 `db.ts`（`GAME_COIN_KEY` / `readGameCoinLedger`
+ * / `addGameCoin` / `gameCoinBalanceOf`）。理由：那是**存储**的事，`gameKv`
+ * 归 `db.ts` 管；这个文件是**适配器**，只负责把宿主能力包成 `HostApi` 的形状。
+ *
+ * 2026-10-16 挪过去的直接原因：娃娃机（内置游戏）也要买币、也要读币余额，
+ * 而买币必须和「扣积分」在同一个事务里 —— 那要求这些原语住在 `db.ts`，
+ * 否则 `db.ts` 反过来 import 适配器就成环了。
+ */
 
 /**
  * ★★ **宿主保留的键前缀：插件一律不许碰。**
@@ -54,22 +68,6 @@ function assertNotReserved(key: string): void {
         `币请走 host.gameCoinBalance() / host.mintGameCoin()`,
     )
   }
-}
-
-interface CoinEntry {
-  delta: number
-  memo: string
-  at: number
-}
-
-/** 读某款游戏的币账本。脏数据（不是数组）一律当空账 —— 不炸。 */
-async function readCoinLedger(gameId: string): Promise<CoinEntry[]> {
-  const raw = await getGameKv<unknown>(gameId, COIN_KEY)
-  if (!Array.isArray(raw)) return []
-  return raw.filter(
-    (e): e is CoinEntry =>
-      !!e && typeof e === 'object' && typeof (e as CoinEntry).delta === 'number',
-  )
 }
 
 /**
@@ -108,20 +106,12 @@ export function makeHostApi(deps: {
     },
 
     mintGameCoin: async (amount, memo) => {
-      const n = Math.round(amount)
-      // 负数 / 0 一律不写。插件不该有「销毁自己的币」这条能力 ——
-      // 币的出口**只有**兑换商城（spec §2.2 的两条不可逆约束）。
-      if (n <= 0) return
-      const ledger = await readCoinLedger(gameId)
-      ledger.push({ delta: n, memo, at: Date.now() })
-      await setGameKv(gameId, COIN_KEY, ledger)
-      await deps.refresh()
+      // 负数 / 0 一律不写（`addGameCoin` 里也是这个守卫 —— 币只进不出）。
+      await addGameCoin(gameId, amount, memo)
+      if (Math.round(amount) > 0) await deps.refresh()
     },
 
-    gameCoinBalance: async () => {
-      const ledger = await readCoinLedger(gameId)
-      return ledger.reduce((sum, e) => sum + e.delta, 0)
-    },
+    gameCoinBalance: () => gameCoinBalanceOf(gameId),
 
     storage: {
       /**

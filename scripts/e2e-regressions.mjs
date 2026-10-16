@@ -44,6 +44,8 @@ import puppeteer from 'puppeteer-core'
 import { existsSync } from 'node:fs'
 import { makeProfileDir } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
+// 币的显示名**从源码派生**，不在脚本里抄第二份（抄的那份过期时不会响）。
+import { COUPON } from './lib/currency.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME = [
@@ -351,7 +353,7 @@ try {
   check(
     '实卖个数 == 按钮承诺的个数',
     sold === promised,
-    `承诺 ${promised} 个，实卖 ${sold} 个，到手 ${after.balance} 丰收币`,
+    `承诺 ${promised} 个，实卖 ${sold} 个，到手 ${after.balance} ${COUPON.name}`,
   )
 
   /* ============ 2. 道具掉落开关 ============

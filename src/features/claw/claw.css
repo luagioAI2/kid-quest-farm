@@ -1,0 +1,61 @@
+/* 娃娃机页面专用 —— 只放这一页要用的东西，不动 `styles/theme.css`（和 farm.css 一个规矩）。 */
+
+/*
+  3D 画布的容器。
+
+  ⚠️ `touch-action: none` **必须有** —— 没有它，手机上「按住拖动瞄准」会被
+  浏览器的滚动接管：孩子的手指一动，页面跟着滚，爪子纹丝不动。
+  这是 canvas 游戏在 WebView 里最常见的一条「代码全对但就是不能用」。
+
+  ⚠️ 背景色**逐字等于** `clawScene.ts` 里 `scene.background = 0xe9e6f2`。
+  不一样的话，WebGL 起来之前那几帧（或者取景留白处）会闪一下白，
+  看着像页面闪了一下。
+*/
+.kqf-claw-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 15rem;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  background: #e9e6f2;
+  touch-action: none;
+  cursor: grab;
+}
+
+.kqf-claw-stage:active {
+  cursor: grabbing;
+}
+
+/*
+  canvas 的尺寸由 `renderer.setSize(w, h, false)` 控制 —— 第三个参数
+  `updateStyle=false` 是**必须的**（见 `clawScene.ts` 的注释）：让 three 别写内联样式，
+  宽高由这里给，跟着 `.page-col` 走。
+  `display: block` 去掉 inline 元素底部那条基线缝。
+*/
+.kqf-claw-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 结果文字的入场 —— 只做一次轻微放大，不弹跳（结果已经发生了，不需要再强调） */
+@keyframes kqf-claw-result {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.kqf-claw-result {
+  animation: kqf-claw-result 0.22s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kqf-claw-result {
+    animation: none;
+  }
+}

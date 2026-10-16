@@ -52,7 +52,7 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
   const canSell = remaining > 0
 
   /**
-   * 丰收币显示口径 —— 跟商店、价格标签一致。
+   * 点券显示口径 —— 跟商店、价格标签一致。
    *
    * 2026-09-19（B1）之后额度与到手**全是整数**，`toFixed(1)` 只是保险。
    * ⚠️ 别改成 `Math.round`：这条守的是「并排出现的三个数要凑得上账」
@@ -80,10 +80,10 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
         {/* 这一轮的额度 —— 把「闸门」讲给孩子听 */}
         <div className="rounded-2xl bg-grass-100/70 p-3">
           <p className="tnum font-display text-sm font-extrabold text-grass-700">
-            这一轮还能卖 {fmt(remaining)} 🌾
+            这一轮还能卖 {fmt(remaining)} 🎟️
           </p>
           <p className="mt-1 text-xs text-ink-500">
-            这棵已经收回 {fmt(earned)} 🌾，最多能收回 {fmt(cap)} 🌾。
+            这棵已经收回 {fmt(earned)} 🎟️，最多能收回 {fmt(cap)} 🎟️。
             卖满了就换点别的种 —— 种子随时都能再买。
           </p>
         </div>
@@ -123,7 +123,7 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
             )}
           >
             <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-sun-200 text-2xl" aria-hidden>
-              🌾
+              🎟️
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-display text-base font-extrabold text-ink-900">
@@ -131,7 +131,7 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
               </span>
               <span className="mt-0.5 block text-xs text-ink-600">
                 {canSell
-                  ? `按今天的市价结算，大约 +${roughGain} 丰收币（看收成）`
+                  ? `按今天的市价结算，大约 +${roughGain} 点券（看收成）`
                   : '这一轮已经卖满啦，先收进背包吧'}
               </span>
             </span>

@@ -478,7 +478,7 @@ export const SEED_REDEEM_ITEMS: SeedRedeem[] = [
   },
   {
     name: '一次「免做一项家务」',
-    emoji: '🎫',
+    emoji: '🧹',
     category: 'privilege',
     cost: 150,
     note: '任何一项家务都可以，用掉就没了',

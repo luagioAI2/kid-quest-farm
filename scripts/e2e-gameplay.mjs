@@ -10,6 +10,8 @@ import puppeteer from 'puppeteer-core'
 import { existsSync } from 'node:fs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { makeProfileDir } from './lib/profile.mjs'
+// 币的显示名**从源码派生**，不在脚本里抄第二份（抄的那份过期时不会响）。
+import { COUPON } from './lib/currency.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME_CANDIDATES = [
@@ -641,9 +643,9 @@ try {
     return { before, after: st().harvestBalance }
   })
   check(
-    '「当场卖掉」立刻结算丰收币',
+    `「当场卖掉」立刻结算${COUPON.name}`,
     sellRes.after > sellRes.before,
-    `丰收币 ${sellRes.before} → ${sellRes.after}`,
+    `${COUPON.name} ${sellRes.before} → ${sellRes.after}`,
   )
   await closeSheet()
 
@@ -676,7 +678,7 @@ try {
   check(
     '「收进背包」不发钱',
     storeRes.after === storeRes.before,
-    `丰收币 ${storeRes.before} → ${storeRes.after}`,
+    `${COUPON.name} ${storeRes.before} → ${storeRes.after}`,
   )
   check('「收进背包」产出进了背包', storeRes.gained > 0, `+${storeRes.gained} 个胡萝卜`)
 

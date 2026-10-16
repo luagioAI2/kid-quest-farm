@@ -22,6 +22,8 @@ import puppeteer from 'puppeteer-core'
 import { existsSync } from 'node:fs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { makeProfileDir } from './lib/profile.mjs'
+// 币的显示名**从源码派生**，不在脚本里抄第二份（抄的那份过期时不会响）。
+import { COUPON } from './lib/currency.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME = [
@@ -239,7 +241,7 @@ try {
     after.balance === fresh.balance,
     `${after.balance} vs 基线 ${fresh.balance}`,
   )
-  check('丰收币归零', after.harvestBalance === 0, `harvestBalance=${after.harvestBalance}`)
+  check(`${COUPON.name}归零`, after.harvestBalance === 0, `harvestBalance=${after.harvestBalance}`)
   check('任务数回到播种基线', after.taskCount === fresh.taskCount, `${after.taskCount} vs ${fresh.taskCount}`)
   check(
     'onboardingDone 被复位成 false',

@@ -85,7 +85,7 @@ export function SeedShop({
           🌰 买种子
         </TabButton>
         <TabButton active={tab === 'sell'} onClick={() => setTab('sell')}>
-          🌾 卖东西
+          🎟️ 卖东西
           {produceUnits > 0 ? (
             <span className="tnum ml-1 rounded-full bg-berry-400 px-1.5 text-xs text-white">
               {produceUnits}
@@ -244,9 +244,9 @@ function SeedRow({
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-            {/* 种子价是积分 🪙，卖出收入是丰收币 🌾 —— 两个币种不能混用图标 */}
+            {/* 种子价是积分 🪙，卖出收入是点券 🎟️ —— 两个币种不能混用图标 */}
             <CoinPill amount={crop.seedCost} tone={affordable ? 'sun' : 'danger'} />
-            <span className="tnum font-bold text-grass-600">→ 每次收 {crop.harvestPoints} 🌾</span>
+            <span className="tnum font-bold text-grass-600">→ 每次收 {crop.harvestPoints} 🎟️</span>
             {perennial && crop.regrowMinutes ? (
               <span className="text-xs text-ink-500">
                 之后每 {humanizeMinutes(crop.regrowMinutes)} 再收一次
@@ -257,10 +257,10 @@ function SeedRow({
           </div>
 
           <p className="tnum mt-1 text-[11px] font-bold text-ink-500">
-            {/* ⚠️ 单位是丰收币 🌾，不是积分 🪙 —— 卖产出结的是丰收币 */}
+            {/* ⚠️ 单位是点券 🎟️，不是积分 🪙 —— 卖产出结的是点券 */}
             {/* ⚠️ 走 `capFor`（满产 × 整数单价），不是 `roundCap(成本)` ——
                 B1 之后闸门是整数，两个数在默认档下相等，家长调档后才有差别 */}
-            这一轮最多能收回 {capFor(crop.produceItemId)} 🌾
+            这一轮最多能收回 {capFor(crop.produceItemId)} 🎟️
           </p>
         </div>
 

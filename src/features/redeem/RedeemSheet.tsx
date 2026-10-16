@@ -26,8 +26,8 @@ import { BottomSheet, CoinPill } from '../farm/farmUi'
    170~270，而兑换定价没动 —— 攒大件的时间翻倍，见 seedTasks.ts。
 
    ## 付款规则（2026-09-30 用户要求）
-   「优先用丰收币兑换。价值和积分等价的。用完丰收币再用积分，可混合。」
-   标价只有一个数（比如 50），但这个 50 可以**一半丰收币一半积分**地付。
+   「优先用点券兑换。价值和积分等价的。用完点券再用积分，可混合。」
+   标价只有一个数（比如 50），但这个 50 可以**一半点券一半积分**地付。
    规则本身在 `domain/redeem.ts` 的 `planRedeemPayment()` 里，
    和 store 扣款用的是**同一个函数** —— 界面预览和真实扣款不会算出两个结果。
    ============================================================ */
@@ -69,7 +69,7 @@ export function RedeemSheet({ open, onClose }: { open: boolean; onClose: () => v
  * 弹层头部的两个钱包。
  *
  * 以前只挂积分 —— 但兑换现在**两种币都能付**，只报积分会让孩子以为
- * 「我只有 12 分，换不了」，而他兜里其实还有 80 枚丰收币。
+ * 「我只有 12 分，换不了」，而他兜里其实还有 80 枚点券。
  *
  * ⚠️ 图标一律走 `CoinPill`（它的图标带 `aria-hidden`）。
  * e2e-check §8 靠「不带 aria-hidden 的 🪙 叶子节点 + 同级有个数字 == 余额」
@@ -80,7 +80,7 @@ function WalletPills() {
   const harvestBalance = useApp((s) => s.harvestBalance)
   return (
     <div className="flex items-center gap-1.5">
-      <CoinPill amount={harvestBalance} icon="🌾" tone="grass" />
+      <CoinPill amount={harvestBalance} icon="🎟️" tone="grass" />
       <CoinPill amount={balance} />
     </div>
   )
@@ -159,7 +159,7 @@ export function RedeemBody() {
               <p className="rounded-2xl bg-sun-50 px-3 py-2 text-xs font-bold text-ink-700">
                 换完就扣币，想清楚再点哦～
                 <span className="mt-1 block text-[11px] font-normal leading-snug text-ink-500">
-                  🌾 丰收币先花，不够再用 🪙 积分 —— 两种币 1 比 1 等价，可以一起付。
+                  🎟️ 点券先花，不够再用 🪙 积分 —— 两种币 1 比 1 等价，可以一起付。
                 </span>
               </p>
               {grouped.map((g) => (
@@ -190,7 +190,7 @@ export function RedeemBody() {
             <div className="surface flex flex-col items-center gap-2 px-6 py-10 text-center">
               <span className="text-5xl">📜</span>
               <p className="font-display font-extrabold text-ink-900">还没有兑换过</p>
-              <p className="text-sm text-ink-500">做任务攒积分、种地攒丰收币，都能来这里换</p>
+              <p className="text-sm text-ink-500">做任务攒积分、种地攒点券，都能来这里换</p>
             </div>
           ) : (
             redeemRecords.map((r) => (
@@ -235,7 +235,7 @@ export function RedeemBody() {
 /* ---------------- 孩子视角：一键兑换 ---------------- */
 
 /**
- * 付款拆分：`🌾 30 + 🪙 20`。只出一种币时不显示另一种的 0。
+ * 付款拆分：`🎟️ 30 + 🪙 20`。只出一种币时不显示另一种的 0。
  *
  * ⚠️ 不把 🪙 渲染成**独占一个叶子节点**（`<span>🪙</span>`）——
  * e2e-check §8 靠「textContent 恰好等于 🪙 的叶子」来定位余额牌，
@@ -245,7 +245,7 @@ function PaySplit({ plan }: { plan: RedeemPayment }) {
   return (
     <span className="tnum">
       {plan.harvestPaid > 0 ? (
-        <span className="font-extrabold text-grass-700">🌾 {plan.harvestPaid}</span>
+        <span className="font-extrabold text-grass-700">🎟️ {plan.harvestPaid}</span>
       ) : null}
       {plan.harvestPaid > 0 && plan.pointsPaid > 0 ? (
         <span className="font-normal text-ink-400"> + </span>
@@ -264,7 +264,7 @@ function RedeemRow({
 }: {
   item: RedeemItem
   balance: number
-  /** 丰收币余额。兑换**优先花它**，见 domain/redeem.ts */
+  /** 点券余额。兑换**优先花它**，见 domain/redeem.ts */
   harvestBalance: number
 }) {
   const redeem = useApp((s) => s.redeem)
@@ -274,7 +274,7 @@ function RedeemRow({
 
   /**
    * 分账。**和 store 扣款调的是同一个函数** —— 所以按钮上写的
-   * 「🌾 30 + 🪙 20」跟实际扣的一定是同一组数，不会各算各的。
+   * 「🎟️ 30 + 🪙 20」跟实际扣的一定是同一组数，不会各算各的。
    */
   const plan = planRedeemPayment(item.cost, harvestBalance, balance)
   const affordable = plan.affordable
@@ -308,7 +308,7 @@ function RedeemRow({
             {/* ⚠️ 这里原来还有一句「≈ ¥12」的现金参考（2026-09-21 加的）。
                 2026-09-30 用户要求去掉，原话：
                   「🪙120 ≈¥12 兑换页 这种感觉不用显示。有付款了。」
-                理由成立：下面那行「付款：🌾 x + 🪙 y」已经把「这件东西
+                理由成立：下面那行「付款：🎟️ x + 🪙 y」已经把「这件东西
                 怎么付」说清楚了，再标一个人民币数字只是卡片上的噪音 ——
                 而且孩子要理解的是「我攒的币够不够」，不是「值几块钱」。
                 ⚠️ 家长端（RedeemEditor）的定价参照**保留** —— 那是家长
@@ -322,7 +322,7 @@ function RedeemRow({
             <span className="text-[11px] text-ink-400">{meta.emoji}</span>
           </div>
 
-          {/* 这一件**具体怎么付**。规则：丰收币优先、1:1、可混合。 */}
+          {/* 这一件**具体怎么付**。规则：点券优先、1:1、可混合。 */}
           <p className="mt-1 text-[11px] font-bold text-ink-500">
             付款：<PaySplit plan={plan} />
           </p>
@@ -342,7 +342,7 @@ function RedeemRow({
             <span className="text-xs font-normal text-ink-500">
               付款：{describeRedeemPayment({ cost: item.cost, ...plan })}
               <br />
-              换完还剩 🌾 {harvestBalance - plan.harvestPaid} · 🪙 {balance - plan.pointsPaid}
+              换完还剩 🎟️ {harvestBalance - plan.harvestPaid} · 🪙 {balance - plan.pointsPaid}
             </span>
           </p>
           <div className="flex gap-2">
@@ -391,8 +391,12 @@ function RedeemRow({
 /* ---------------- 家长视角：管理 ---------------- */
 
 const EMOJI_CHOICES = [
+  // ⚠️ 这里**故意不放货币图标**（`🪙` 积分 / `🎟️` 点券 / `🛍️` 商城币 / `🕹️` 娃娃机币，
+  //    见 `domain/currency.ts` 与 `domain/clawEconomy.ts`）。理由：奖励卡和付款行
+  //    （「付款：🎟️ 250 + 🪙 10」）在**同一个列表**里，奖励图标要是长成一张票，
+  //    孩子就分不出哪个是钱。2026-10-16 之前这里放的是 `🎫`，已换成 `🧹`（家务）。
   '🍪','🧃','🍕','🍦','🍫','🎂','📱','📺','🎮','🎬','🧸','🎁',
-  '🎡','🏊','🚲','🏃','🌙','⭐','🎫','💛','🧩','🛴','⚽','🎨',
+  '🎡','🏊','🚲','🏃','🌙','⭐','🧹','💛','🧩','🛴','⚽','🎨',
 ]
 
 function ManagePanel() {
@@ -705,7 +709,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
           </div>
         </Field>
 
-        <Field label="需要多少（丰收币和积分 1 比 1，都能付）">
+        <Field label="需要多少（点券和积分 1 比 1，都能付）">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -748,8 +752,8 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
             参考：孩子一天大约能赚 170~270 分。30~60 分是"每天都能换"，
             150~300 分要攒一两天，600 分要攒三四天，1500 分要攒一两周。
             <br />
-            ⚠️ 孩子手里还有 <b className="text-ink-700">丰收币</b>（种地赚的）。
-            兑换时<b className="text-ink-700">先花丰收币</b>，
+            ⚠️ 孩子手里还有 <b className="text-ink-700">点券</b>（种地赚的）。
+            兑换时<b className="text-ink-700">先花点券</b>，
             花光了才动积分 —— 所以实际能换的东西比上面这个"攒几天"要早。
             <br />
             按现在的汇率（1 元 ≈ {ratio} 分），{cost} 分 ≈{' '}

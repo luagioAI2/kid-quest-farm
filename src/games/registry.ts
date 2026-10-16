@@ -29,8 +29,8 @@ import { GAME_CLAW, GAME_FARM, GAME_FISHING } from './ids'
  *
  * ## 这一轮做到哪
  *
- * 只有**农场**是真游戏（`status: 'available'`）。另外两条是**占位**：
- * 它们会出现在家长栏的「游戏」列表里，但标「敬请期待」、**不渲染购买按钮、
+ * **农场**和**娃娃机**是真游戏（`status: 'available'`）。钓鱼池还是**占位**：
+ * 它会出现在家长栏的「游戏」列表里，但标「敬请期待」、**不渲染购买按钮、
  * 也不显示价格** —— 因为买了也没得玩，那正是「界面承诺了它做不到的事」。
  */
 
@@ -56,7 +56,7 @@ export const GAMES: GameDef[] = [
     id: GAME_FARM,
     name: '农场',
     emoji: '🌾',
-    tagline: '买种子种地、养动物、看行情。收成能换成丰收币。',
+    tagline: '买种子种地、养动物、看行情。收成能换成点券。',
     status: 'available',
     // 首款免费并且默认已拥有 —— 家长 2026-10-14 拍板。
     priceMall: 0,
@@ -65,11 +65,16 @@ export const GAMES: GameDef[] = [
   {
     id: GAME_CLAW,
     name: '娃娃机',
-    emoji: '🎟️',
-    tagline: '投币抓娃娃。',
-    status: 'comingSoon',
-    // ⚠️ 这两条的价格现在**不会显示**（`status: 'comingSoon'` 的条目
-    // 连购买按钮都不渲染）。留着是为了将来上线时有个起点。
+    emoji: '🕹️',
+    tagline: '花积分换币投币，抓到的娃娃换成点券。',
+    // 2026-10-16 上线：页面挂在 `pages.ts` 里，走 `React.lazy`
+    // —— three.js 只在这款游戏被切到时才下载（见那边的注释）。
+    status: 'available',
+    // 家长 2026-10-16 定：**用商城币买**。
+    // ⚠️ 商城币的余额是**从账本算出来的**，而这一轮之前**没有任何发币入口**
+    //    ⇒ 余额恒为 0 ⇒ 这个购买按钮按下去一定失败。
+    //    所以家长栏里同时加了「手动发放商城币」（`mintMall`），
+    //    否则就是「界面摆了一个必然失败的按钮」。
     priceMall: 120,
     defaultOwned: false,
   },

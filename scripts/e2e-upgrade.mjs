@@ -37,6 +37,8 @@
 import puppeteer from 'puppeteer-core'
 import { existsSync, readFileSync } from 'node:fs'
 import { makeProfileDir } from './lib/profile.mjs'
+// 币的显示名**从源码派生**，不在脚本里抄第二份（抄的那份过期时不会响）。
+import { COUPON } from './lib/currency.mjs'
 
 /* ⚠️ 局部变量**不能叫 `URL`** —— 会遮住全局的 `URL` 构造器，
    下面 `new URL('../src/db/db.ts', import.meta.url)` 就变成
@@ -287,7 +289,7 @@ const state = await page.evaluate(async () => {
   return null
 })
 check('升级后余额 = 三条流水之和 74', state?.balance === 74, `实际 ${state?.balance}`)
-check('升级后丰收币余额 = 0', state?.harvest === 0, `实际 ${state?.harvest}`)
+check(`升级后${COUPON.name}余额 = 0`, state?.harvest === 0, `实际 ${state?.harvest}`)
 
 /* ---------- 4. 升级没报错 ---------- */
 const realErrors = pageErrors.filter(

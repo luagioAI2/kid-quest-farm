@@ -238,7 +238,7 @@ export default function FarmPage() {
                 🏪
               </span>
               市场
-              {/* 背包里有能卖的东西就提示一下，否则孩子不知道这里能换丰收币 */}
+              {/* 背包里有能卖的东西就提示一下，否则孩子不知道这里能换点券 */}
               {sellableUnits > 0 && (
                 <span className="tnum anim-pop absolute -right-1.5 -top-1.5 grid min-w-[22px] place-items-center rounded-full border border-white bg-berry-500 px-1 text-[11px] font-extrabold text-white">
                   {sellableUnits}
@@ -325,7 +325,7 @@ function TopBar({
   return (
     <div className="surface mt-2 p-2.5">
       {/*
-        ⚠️ 这里**不再显示 🪙 / 🌾**。
+        ⚠️ 这里**不再显示 🪙 / 🎟️**。
         全局顶栏（`App.tsx` 的 `header`，`sticky top-0`）已经常驻显示这两个币种，
         农场卡再放一遍，就是**同一屏里同一件事出现两次**。
         本卡只留「农场自己的状态」：等级 / 进度、动物数、日志入口。
@@ -744,7 +744,7 @@ function PlotTile({
           <>
             <span className="font-display text-[11px] font-extrabold text-sun-700">可以收啦!</span>
             {/* ⚠️ 这里不能写 🪙 —— 收获**不发积分**，产出物进背包，
-                钱要等卖出才结算（而且是 🌾 不是 🪙）。显示产出物才对。
+                钱要等卖出才结算（而且是 🎟️ 不是 🪙）。显示产出物才对。
 
                 ⚠️ 也**不要写 `≈`**（2026-09-20 去掉的）。那个符号是从「积分时代」
                 遗留下来的：最早的标签是 `≈{harvestPoints} 🪙`，而当时的收获积分
