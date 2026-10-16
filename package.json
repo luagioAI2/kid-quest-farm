@@ -21,7 +21,10 @@
     "site": "node scripts/build-site.mjs",
     "site:check": "node scripts/check-site.mjs",
     "release:github": "python scripts/release-github.py",
-    "build:games": "vite build --config games-src/vite.config.ts"
+    "build:games": "vite build --config games-src/vite.config.ts",
+    "catalog:keygen": "node scripts/sign-catalog.mjs keygen",
+    "catalog:sign": "node scripts/sign-catalog.mjs sign",
+    "catalog:check": "bash scripts/check-catalog-signing.sh"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",

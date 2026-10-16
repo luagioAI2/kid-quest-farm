@@ -1507,6 +1507,44 @@ mod.default.mount(container, hostApi)                     // 见 12.5
 > 不做 2 / 3 = **谁拿下那台静态服务器，谁就能在孩子的手机里跑任意代码**。
 > 这不是「以后再加」的项，是 P2 的准入条件。
 
+#### 落地（2026-10-17）
+
+| 件 | 位置 |
+| --- | --- |
+| 字节类型别名（见下「TS 5.7 的坑」） | `src/games/bytes.ts` |
+| 烧进 APK 的 Ed25519 公钥（**当前故意为空** = 下载功能 fail closed） | `src/games/catalogKey.ts` |
+| 校验核心：SHA-256 + Ed25519 + catalog 解析 + 取包验哈希 | `src/games/verify.ts` |
+| 校验核心的判据（51 条，含「验签必须在解析之前」的顺序钉子） | `src/games/verify.test.ts` |
+| 签名工具：`keygen` / `sha` / `sign` / `verify` | `scripts/sign-catalog.mjs` |
+| 签名工具的验收（11 步，含「弄坏 → 变红 → 修好 → 变绿」自证） | `scripts/check-catalog-signing.sh` |
+
+**流程**（见 `scripts/sign-catalog.mjs` 文件头）：
+
+    node scripts/sign-catalog.mjs keygen        # 私钥落 catalog-keys/（已 gitignore）
+    node scripts/sign-catalog.mjs sha <包>       # 算 SHA-256，填进 catalog.json
+    node scripts/sign-catalog.mjs sign catalog.json
+    # 把 catalog.json 和 catalog.json.sig **一起**传上去
+
+四条**不许让步**的实现细节：
+
+- **私钥永不入库**，且 `keygen` 发现私钥已存在就**拒绝覆盖** —— 覆盖 = 永久丢掉
+  签名身份，已经装出去的 App 再也验不了新包，**不可逆**。
+- **公钥空着就是不可用**（fail closed）。`catalogPublicKeyRaw()` 抛异常，
+  **没有**「没配公钥就跳过验签」的分支 —— 那个分支等于把「谁拿下静态服务器谁就能
+  跑任意代码」变成默认行为。`verify.test.ts` 里专门用空公钥 / 全零公钥撞它。
+- **哈希与签名一律吃「原始字节」**（`arrayBuffer()`），不吃 `text()` →
+  `JSON.parse` → 重新序列化的结果。后者会让字节变（BOM / 换行 / 键序），
+  于是「签名对的包」验不过，或者更糟：**验的和你跑的不是同一串字节**。
+- **「验不过」和「我们配错了」分开报**：签名不匹配返回 `false`（包被换过），
+  公钥长度不对 / 环境没有 WebCrypto 则**抛**。混在一起的话，
+  一个坏掉的公钥会伪装成「签名无效」，排查跑偏。
+
+> ⚠️ **TS 5.7+ 的坑**：`Uint8Array` 对缓冲区类型泛型化了，裸写 `Uint8Array`
+> 等于 `Uint8Array<ArrayBufferLike>`，**不满足** `crypto.subtle` 要的 `BufferSource`
+> —— 每个 `subtle.*` 调用点都会报「SharedArrayBuffer 不能赋给 ArrayBuffer」。
+> 本项目统一用 `src/games/bytes.ts` 的 `Bytes = Uint8Array<ArrayBuffer>`。
+> （这个错 `vitest` 不会报 —— 它只做转译不做类型检查，只有 `npm run lint` 才看得见。）
+
 #### Play 政策：为什么这条路**在 Play 上是合规的**（2026-10-15 查证）
 
 家长 2026-10-15 拍板「**上 Play**」，所以这一条必须查清楚再动手。
@@ -1631,6 +1669,13 @@ interface HostApi {
 | **P0** | 拍板：游戏包放哪 / 上不上 Play / 隔离模型（A 还是 B） | — |
 | **P1** | 让「游戏」**真的可插拔**：独立构建产物 + `mount()` 契约 + 通用存储 + 导出钩子。**先不做下载** | ✅ 能（本地路径先当「已安装」）· **✅ 2026-10-15 完成**，见 §12.5.1 |
 | **P2** | 下载与安装：catalog + 哈希/签名校验 + Filesystem + 从存储加载 + 设置页（商店 / 已安装 / 可更新 / 卸载） | 部分（浏览器用 fetch 模拟） |
+
+> **P2 进度（2026-10-17）**：**安全核心已完成**（`verify.ts` + `catalogKey.ts` +
+> `sign-catalog.mjs` + 两套验收，见 §12.4 落地表）。**还没做**的是管道本身：
+> 设置页的「商店 / 可更新 / 卸载」、Filesystem 落盘、从存储加载。
+> ⚠️ 管道开工前必须先定**托管商** —— 它得发 `Access-Control-Allow-Origin`，
+> 否则 `fetch` 只抛一句 `TypeError: Failed to fetch`，看不出是跨域（见 §12.3 末）。
+> 安全核心**不需要**等这个决定，所以先做了。
 | **P3** | 更新与回滚：原子安装（临时目录 → 校验 → 替换）、加载失败回滚、`minHostApi` 门 | 部分 |
 | **P4** | **发币入口**：付费 / 兑换码 | ✅ 能 · ⏳ **仍没做** |
 | **P4a** | 家长端**手动发放**（`mintMall`）—— 让「购买」先点得通 | ✅ **2026-10-16 完成**（娃娃机催出来的，见 §2.1） |

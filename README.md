@@ -13,9 +13,10 @@
 | Web 产物 | ✅ `npm run build` → `dist/`：主包 **645.7 kB / 192.2 kB gzip**（CSS 63.5 / 11.4）。娃娃机是**懒加载的独立 chunk**：**558.9 kB / 142.4 kB gzip**，主 chunk 只被它带上 +8.3 kB |
 | 手机浏览器 | ✅ `npm run dev -- --host` 后同网段访问即可 |
 | 官网 | ✅ `site/`（纯静态：介绍 + 多平台下载 + 隐私政策/用户协议），`npm run site` 重建 |
-| 单元测试 | ✅ **657 项通过 / 29 个文件**（2026-10-16 复跑确认） |
+| 单元测试 | ✅ **708 项通过 / 30 个文件**（2026-10-17 复跑确认） |
 | 端到端测试 | ✅ **265 项**：`e2e-check` 120 · `e2e-gameplay` 57 · `e2e-regressions` 35 · `e2e-bag-sell` 23 · `e2e-wipe` 18 · `e2e-upgrade` 12，控制台零报错 |
 | 游戏平台 | ✅ 农场 + **娃娃机**两款；家长栏「游戏」页可购买 / 切换（见 `docs/game-plugin-spec.md`） |
+| 插件下载（P2） | 🚧 **安全核心已完成**：Ed25519 签名 + SHA-256 校验（`src/games/verify.ts`）+ 签名工具 `scripts/sign-catalog.mjs`。**公钥故意留空** ⇒ 下载功能 fail closed。管道（商店 / 卸载 / 落盘）与**托管商（须发 CORS 头）**未定 |
 
 ---
 
@@ -333,6 +334,8 @@ npm run preview      # 预览生产构建 http://localhost:4180
 
 npm test             # 跑单元测试（结算引擎等）
 npm run lint         # 类型检查
+
+npm run catalog:check  # 验收 catalog 签名工具（11 步：会故意弄坏、确认变红、再修好）
 ```
 
 ### 手机上打开

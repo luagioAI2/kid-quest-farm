@@ -13,6 +13,12 @@ dist-ssr/
 # 不该被打进 APK（那正是「独立下载」要解决的问题，见 spec §12）。
 games-dist/
 
+# ★ catalog 的**签名私钥**（`scripts/sign-catalog.mjs keygen` 产出）。
+# 私钥 = 「我是这个 App 的作者」这个身份；它进了仓库，任何拿到仓库的人
+# 都能签一个「官方」包，而客户端只认签名。公钥是另一回事 ——
+# 公钥**必须**入库（烧在 src/games/catalogKey.ts 里）。
+catalog-keys/
+
 # 编辑器
 .vscode/*
 !.vscode/extensions.json
