@@ -77,6 +77,8 @@ import {
 import { GAMES, gameById, ownedByDefault, purchasedIdsFrom } from '../games/registry'
 import { makeHostApi } from '../games/hostApi'
 import { importBundle, mountBundle } from '../games/loader'
+import { catalogPublicKeyRaw } from '../games/catalogKey'
+import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
 import { HOST_API } from '../games/plugin'
 import type { GameBundle, GameManifestV2, HostApi } from '../games/plugin'
 import { hapticLight, playTone, type ToneKind } from '../platform/files'
@@ -278,11 +280,23 @@ interface AppState {
 
   /* ---- 插件游戏（spec §12） ---- */
   /**
-   * 从 URL 拉一个游戏包 → 校验 → 装进本地。
+   * ★ **生产路径**：从**已签名的游戏目录**装一款游戏（spec §12.4）。
    *
-   * ⚠️ P1 里这就是「下载」，但它**没有**做完整性校验（哈希 / 签名）——
-   * 那必须在 P2 补上，且必须发生在**执行代码之前**（spec §12.4）。
-   * 现在它的用途是「证明装配管道通」，来源是开发者自己的静态目录。
+   * 整条链是「验签目录 → 解析 → 找条目 → 取包 → 验 SHA-256 → 才执行代码」，
+   * 全部在 `src/games/install.ts` 里（拆出去是为了让顺序**能被单测断言**）。
+   * 这里只负责最后三步：跑代码、拦内置 id、落库。
+   *
+   * ⚠️ 公钥来自 `catalogKey.ts`（烧进 APK）。**没配公钥 ⇒ 直接抛 ⇒ 装不了**，
+   * 这是**故意的**（fail closed）—— 见那个文件的注释。
+   */
+  installFromCatalog: (
+    catalogUrl: string,
+    gameId: string,
+  ) => Promise<{ ok: boolean; message: string }>
+  /**
+   * ⚠️ **没有完整性校验**的安装路径，只给本地走查用（`capture-game-bundle.mjs`
+   * 起一个静态目录证明装配管道通）。**不是给用户用的**，也**不许**接进设置页。
+   * 真正的安装入口是上面的 `installFromCatalog`。
    */
   installGameFromUrl: (url: string) => Promise<{ ok: boolean; message: string }>
   /** 卸载一款插件游戏：**连包带状态一起删**（不然重装会捡到上一次的存档）。 */
@@ -2952,6 +2966,51 @@ export const useApp = create<AppState>((set, get) => ({
 
   /* ---- 插件游戏：装配（spec §12.5） ---- */
 
+  installFromCatalog: async (catalogUrl, gameId) => {
+    // ① 先把整条校验链跑完（验签 → 解析 → 取包 → 验哈希）。
+    //    它会把**任何没验过的东西**拒掉；公钥没配也会在这里抛。
+    let resolved: ResolvedGame
+    try {
+      resolved = await fetchVerifiedGame({
+        catalogUrl,
+        gameId,
+        publicKeyRaw: catalogPublicKeyRaw(),
+      })
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+
+    // ② 到这里代码才是「签名认过 + 哈希对过」的，可以执行了。
+    let bundle: GameBundle
+    try {
+      bundle = await importBundle(resolved.code)
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+
+    // ③ 目录说它是 id X，包自己写的是 id Y ⇒ 发布方那边就不一致。
+    //    装下去会让「已安装列表」和真正跑的东西对不上，所以拒绝。
+    if (bundle.manifest.id !== resolved.game.id) {
+      return {
+        ok: false,
+        message: `目录里这款是「${resolved.game.id}」，但包里写的是「${bundle.manifest.id}」—— 拒绝安装`,
+      }
+    }
+
+    // ④ 下载来的包不许占用内置游戏的 id（否则 = 劫持，理由见下面 installGameFromUrl）。
+    if (gameById(bundle.manifest.id)) {
+      return { ok: false, message: `安装包用了内置游戏的 id「${bundle.manifest.id}」，已拒绝` }
+    }
+
+    await setGameKv(bundle.manifest.id, BUNDLE_KEY, resolved.code)
+    await get().refresh()
+    return {
+      ok: true,
+      // 名字用**目录**里的（它才是已验签的显示来源），不用包自己说的
+      message: `已安装「${resolved.game.name}」v${resolved.game.version}`,
+    }
+  },
+
   installGameFromUrl: async (url) => {
     let code: string
     try {
@@ -3618,7 +3677,12 @@ declare global {
         hostApiVersion: number
         /** 已安装的清单（id → manifest），从 `gameKv` 派生 */
         installed: () => Record<string, GameManifestV2>
-        /** 从 URL 下载并安装（P2 会在这里插哈希 / 验签） */
+        /** ★ 生产路径：从**已签名目录**安装（验签 + 验哈希都在里面，见 `games/install.ts`） */
+        installFromCatalog: (
+          catalogUrl: string,
+          gameId: string,
+        ) => Promise<{ ok: boolean; message: string }>
+        /** ⚠️ **无校验**的安装路径，只给本地走查用。别拿它当功能入口。 */
         installFromUrl: (url: string) => Promise<{ ok: boolean; message: string }>
         uninstall: (gameId: string) => Promise<void>
         /**
@@ -3776,6 +3840,8 @@ if (typeof window !== 'undefined') {
     plugin: {
       hostApiVersion: HOST_API,
       installed: () => useApp.getState().installedGames,
+      installFromCatalog: (catalogUrl, gameId) =>
+        useApp.getState().installFromCatalog(catalogUrl, gameId),
       installFromUrl: (url) => useApp.getState().installGameFromUrl(url),
       uninstall: (gameId) => useApp.getState().uninstallGame(gameId),
       mountInto: async (gameId, selector) => {

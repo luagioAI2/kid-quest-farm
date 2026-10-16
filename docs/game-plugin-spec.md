@@ -1515,6 +1515,9 @@ mod.default.mount(container, hostApi)                     // 见 12.5
 | 烧进 APK 的 Ed25519 公钥（**当前故意为空** = 下载功能 fail closed） | `src/games/catalogKey.ts` |
 | 校验核心：SHA-256 + Ed25519 + catalog 解析 + 取包验哈希 | `src/games/verify.ts` |
 | 校验核心的判据（51 条，含「验签必须在解析之前」的顺序钉子） | `src/games/verify.test.ts` |
+| **安装链编排**：验签目录 → 解析 → 找条目 → 取包 → 验哈希 → 交出代码 | `src/games/install.ts` |
+| 安装链的判据（18 条，含「签名没过时**一个包都不去取**」） | `src/games/install.test.ts` |
+| store 接线：跑代码 → 拦内置 id → 落 `gameKv`（8 条，含 fail closed） | `src/games/installStore.test.ts` |
 | 签名工具：`keygen` / `sha` / `sign` / `verify` | `scripts/sign-catalog.mjs` |
 | 签名工具的验收（11 步，含「弄坏 → 变红 → 修好 → 变绿」自证） | `scripts/check-catalog-signing.sh` |
 
@@ -1524,6 +1527,16 @@ mod.default.mount(container, hostApi)                     // 见 12.5
     node scripts/sign-catalog.mjs sha <包>       # 算 SHA-256，填进 catalog.json
     node scripts/sign-catalog.mjs sign catalog.json
     # 把 catalog.json 和 catalog.json.sig **一起**传上去
+
+**App 侧只有一个安装入口**：`useApp.installFromCatalog(catalogUrl, gameId)`
+（debug 句柄 `__kqf__.plugin.installFromCatalog`）。链子全在 `src/games/install.ts`：
+
+    catalog.json + catalog.json.sig ──► 验签 ──► 解析 ──► 找条目 ──► 取包 ──► 验 SHA-256 ──► 代码
+
+⚠️ 还有一个 `installGameFromUrl`（**无任何校验**）—— 它只给本地走查
+（`scripts/capture-game-bundle.mjs` 起静态目录证明装配管道通）用，
+**不是给用户的**，也**不许**接进设置页。设置页要接的是 `installFromCatalog`。
+（把本地走查也迁到目录路径之后，它就该删掉。）
 
 四条**不许让步**的实现细节：
 
