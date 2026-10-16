@@ -336,6 +336,7 @@ npm test             # 跑单元测试（结算引擎等）
 npm run lint         # 类型检查
 
 npm run catalog:check  # 验收 catalog 签名工具（11 步：会故意弄坏、确认变红、再修好）
+npm run catalog:demo   # ★ 本地演示「从已签名目录安装」（起一个带 CORS 头的目录服务）
 ```
 
 ### 手机上打开

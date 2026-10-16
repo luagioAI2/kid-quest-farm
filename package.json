@@ -24,7 +24,9 @@
     "build:games": "vite build --config games-src/vite.config.ts",
     "catalog:keygen": "node scripts/sign-catalog.mjs keygen",
     "catalog:sign": "node scripts/sign-catalog.mjs sign",
-    "catalog:check": "bash scripts/check-catalog-signing.sh"
+    "catalog:check": "bash scripts/check-catalog-signing.sh",
+    "catalog:demo": "node scripts/demo-catalog.mjs",
+    "catalog:verify": "node scripts/capture-catalog-install.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
