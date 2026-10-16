@@ -27,6 +27,7 @@ import { HarvestSheet } from './HarvestSheet'
 import { FarmLog } from './FarmLog'
 import { GrowthBar, countdownText } from './farmUi'
 import { CropSprite, FarmSpriteDefs, PlotBed, PlotDead } from './cropSprites'
+import { HorizonDecor, SceneDecorDefs } from './sceneDecor'
 import { CelestialIcon, SkyBand, skyRowClass, skySceneFilter } from './Sky'
 import { useFarmTick } from './useFarmTick'
 import './farm.css'
@@ -97,6 +98,8 @@ export default function FarmPage() {
       {/* 地块 / 作物的 SVG 精灵表：0×0，挂在页面根节点下渲染一次。
           ⚠️ 别挪进 `<button>` —— symbol 定义会被地块的 overflow:hidden 裁掉。 */}
       <FarmSpriteDefs />
+      {/* 地平线装饰的 symbol 定义（篱笆 / 水井 / 稻草人 / 告示牌），同样渲染一次 */}
+      <SceneDecorDefs />
 
       {/* ------- 天空（只有色调和云） ------- */}
       <SkyBand tone={tone} />
@@ -174,7 +177,11 @@ export default function FarmPage() {
             外面这层 `my-auto` 是给**横屏平板**用的：竖屏手机上内容本来就占满，
             auto 边距解析成 0，间距仍由里层的 mt-3 给（12px），观感不变；
             横屏平板上 1024px 高只放得下两行地块，不居中就会在下方留一大块空地。 */}
-        <div className="my-auto">
+        {/* `relative` 是给地平线装饰用的：它锚在**网格下沿**（`top:100%`），
+            所以两档视口都落在真正露着的那条带上（见 `sceneDecor.tsx` 头注释）。
+            它自己是 `absolute` + `pointer-events:none`，**不参与布局** ——
+            手机上的余量只有约 8px，参与布局就会把页面撑溢出。 */}
+        <div className="relative my-auto">
           <div className="mt-3 grid grid-cols-3 gap-2.5 md:grid-cols-4 xl:grid-cols-6">
             {plots.map((plot) => (
               <PlotTile
@@ -187,6 +194,7 @@ export default function FarmPage() {
               />
             ))}
           </div>
+          <HorizonDecor />
         </div>
 
         {/* 底部操作区 */}

@@ -190,6 +190,78 @@
 }
 
 /* ============================================================
+   地平线装饰（`sceneDecor.tsx` 的 `HorizonDecor`）—— ⑥ 建筑装饰
+   ------------------------------------------------------------
+   锚在**地块网格的下沿**（`top: 100%`，挂在地块包裹层里），
+   所以两档视口都落在真正露着的那条带上：
+
+     手机 390×844   网格底边 y686 → 可见带 687–709（≈23px）
+     平板 834×1112  网格底边 y765 → 可见带 765–937（≈172px）
+
+   ⚠️ 为什么不锚在场景层里一个固定的 y：换一档视口，那条带的位置就变了
+   （它由顶栏 / 网格 / 按钮三段的高度差决定），锚死了就会跑到内容底下。
+   两档都成立是**量出来的**，见 `scripts/measure-farm-scene.mjs`。
+
+   ⚠️ 全程 `position:absolute` + `pointer-events:none`：
+   ① 手机上的布局余量只有约 **8px**，任何参与布局的东西都会把页面撑溢出
+      （农场根节点是 `overflow-hidden`，溢出就是被裁掉）；
+   ② 命中测试必须仍然落在按钮 / 地块上。
+   ============================================================ */
+.kqf-decor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+/* 道具坐在篱笆上。**手机不显示** —— 那 23px 装不下，不是「藏起来」，
+   是量出来真没地方（见头注释那张表）。 */
+.kqf-decor__props {
+  display: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding-inline: 4%;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+@media (min-width: 768px) {
+  .kqf-decor__props {
+    display: flex;
+  }
+}
+
+/* 道具尺寸：地面线在各自 symbol 的 y=78，这里只给高度 */
+.kqf-decor__item {
+  display: block;
+  pointer-events: none;
+}
+.kqf-decor__item--barn {
+  width: 122px;
+  height: 122px;
+}
+.kqf-decor__item--well {
+  width: 96px;
+  height: 96px;
+}
+.kqf-decor__item--scarecrow {
+  width: 104px;
+  height: 104px;
+}
+.kqf-decor__item--sign {
+  width: 84px;
+  height: 84px;
+}
+
+.kqf-decor__fence {
+  display: block;
+  width: 100%;
+}
+
+/* ============================================================
    升级特效：等级跳一级时的庆祝横幅（`FarmPage.tsx` 的 `LevelUpBurst`）
    ------------------------------------------------------------
    触发**不靠调用点**，靠比较 `selectFarmLevel(...).level`（见 `useLevelUpBurst`）。
