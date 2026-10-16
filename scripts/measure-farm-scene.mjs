@@ -31,6 +31,7 @@
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
+import { PAINT_HELPERS } from './lib/paint.mjs'
 import { existsSync, mkdirSync } from 'node:fs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4180/'
@@ -70,6 +71,9 @@ await new Promise((r) => setTimeout(r, 1200))
 mkdirSync(OUT, { recursive: true })
 await page.screenshot({ path: `${OUT}/${VW}x${VH}.png` })
 
+/* 注入共用的「肉眼看到的是哪个元素」判据（见 `lib/paint.mjs`） */
+await page.evaluate(PAINT_HELPERS)
+
 const m = await page.evaluate(() => {
   const box = (el) => {
     if (!el) return null
@@ -86,22 +90,22 @@ const m = await page.evaluate(() => {
   const scene = document.querySelector('[data-sky-scene]')
   const grass = scene?.querySelector('div.bg-grass-300')
 
-  /* 坑 ①：让场景层能被命中测试看见（只影响量，不改版面） */
-  const prevPE = scene.style.pointerEvents
-  scene.style.pointerEvents = 'auto'
+  /* 坑 ①：让**所有 `pointer-events:none` 的东西**都能被命中测试看见。
+     ⚠️ 这是同一个坑的第三次：场景层、升级横幅、地平线装饰**都是**
+     `pointer-events:none`（它们不该接收点击）—— 而命中测试 API
+     **会跳过**这类元素，于是「画在屏幕上了」却量出「这里什么都没有」。
+     只影响命中测试，不改版面；量完还原。 */
+  const decor = document.querySelector('[data-farm-decor]')
+  const flip = [scene, decor].filter(Boolean)
+  const prevPE = flip.map((el) => el.style.pointerEvents)
+  flip.forEach((el) => (el.style.pointerEvents = 'auto'))
 
-  /* 坑 ②：这一点上肉眼**真正看到**的是哪个元素？（第一个不透明背景的） */
-  const seenAt = (x, y) => {
-    for (const el of document.elementsFromPoint(x, y)) {
-      const cs = getComputedStyle(el)
-      const bg = cs.backgroundColor || ''
-      const opaqueBg =
-        bg && bg !== 'transparent' && !/rgba?\(\s*[\d.]+,\s*[\d.]+,\s*[\d.]+,\s*0\s*\)/.test(bg)
-      const img = cs.backgroundImage && cs.backgroundImage !== 'none'
-      if (opaqueBg || img) return el
-    }
-    return null
-  }
+  /* 坑 ②：这一点上肉眼**真正看到**的是哪个元素？
+     ⚠️ 判据在 `lib/paint.mjs`（共用一份）—— 它必须同时认识
+     HTML 的 `background-color` **和 SVG 的 `fill`**。
+     只查前者的话，篱笆这种 SVG 装饰会被当成透明，
+     「画在屏幕上了」却报「这里什么都没有」（2026-10-16 踩过）。 */
+  const seenAt = (x, y) => window.__paintAt(x, y)
 
   const STEP = 4
   const rows = []
@@ -129,7 +133,7 @@ const m = await page.evaluate(() => {
     }
   }
 
-  scene.style.pointerEvents = prevPE
+  flip.forEach((el, i) => (el.style.pointerEvents = prevPE[i]))
 
   /* 把连续的「露着的行」并成**带** —— 装饰只能画在带里，逐行看没意义 */
   const bands = []
