@@ -4,6 +4,7 @@ import {
   ANIMAL_BY_ID,
   capFor,
   CROPS,
+  cropsUnlockedAt,
   DEFAULT_PROFIT_RATIO,
   MAX_PROFIT_RATIO,
   MIN_PROFIT_RATIO,
@@ -891,6 +892,83 @@ describe('种子解锁：新农场必须能开局', () => {
       let h = 0
       while (farmLevel(h).level < need && h < 5000) h++
       expect(h, `${c.name} 需要 ${need} 级农场，但 5000 次收获都升不到`).toBeLessThan(5000)
+    }
+  })
+})
+
+/* ============================================================
+   E. 升级时「这一次新解锁了什么」（2026-10-15 升级特效）
+   ------------------------------------------------------------
+   ⚠️ 这一节守的是 `cropsUnlockedAt` 和上面 D 节的**区别**：
+
+     商店   ：`unlockLevel <= 农场等级`  → 「现在能买哪些」
+     升级播报：`unlockLevel === 新等级`  → 「**这一次**多出哪些」
+
+   两者只差一个符号，但把 `===` 写成 `<=` 的后果是
+   「升到 3 级，把 2 级已经解锁过的种子再报一遍」——
+   **不报错**，只是对着孩子说了一件不成立的事。
+   （「界面不能承诺它做不到的事」的同一个毛病，见 REFERENCE.md。）
+   ============================================================ */
+
+describe('cropsUnlockedAt —— 升级时报「这一次多出哪些」', () => {
+  it('★ 判据是 `===` 不是 `<=`：相邻两级的结果不重叠', () => {
+    // 写成 `<=` 的话，2 级那三种会**同时**出现在 3 级的结果里。
+    const lv2 = new Set(cropsUnlockedAt(2).map((c) => c.id))
+    const lv3 = cropsUnlockedAt(3)
+    expect(lv3.length, '3 级总得解锁点什么，否则这条用例是空的').toBeGreaterThan(0)
+    for (const c of lv3) {
+      expect(lv2.has(c.id), `${c.name} 在 2 级就解锁了，不该在 3 级再报一次`).toBe(false)
+    }
+  })
+
+  it('返回的每一种，`unlockLevel` 都**正好等于**这一级', () => {
+    for (let lv = 1; lv <= 6; lv++) {
+      for (const c of cropsUnlockedAt(lv)) {
+        expect(c.unlockLevel, `${c.name}（查 ${lv} 级）`).toBe(lv)
+      }
+    }
+  })
+
+  it('★ 1~6 级的结果拼起来正好是全部作物（不重不漏）', () => {
+    // 「漏」= 某种作物永远不会出现在升级播报里；
+    // 「重」= 同一种作物会被报两次。两者都是孩子能看出来的错。
+    const union: string[] = []
+    for (let lv = 1; lv <= 6; lv++) union.push(...cropsUnlockedAt(lv).map((c) => c.id))
+    expect(union.length, '有作物被漏掉了（或某个 unlockLevel 超出了一直查的范围）').toBe(
+      CROPS.length,
+    )
+    expect(new Set(union).size, '有作物被报了两遍').toBe(union.length)
+    for (const c of CROPS) {
+      // `unlockLevel` 在类型里是**可选**的，但漏写的那一种会静默地永不播报 ——
+      // 所以这里要求每一种都显式写了。
+      expect(c.unlockLevel, `${c.name} 没写 unlockLevel`).toBeTypeOf('number')
+    }
+  })
+
+  it('★ 第一次升级（1 → 2）必须报出东西来', () => {
+    // 1 级是开局等级，`useLevelUpBurst` 只在**变大**时触发，
+    // 所以孩子这辈子看到的第一次升级播报就是 1 → 2 这一次。
+    // 它要是空的，这个特效在最该有意义的那一刻就是个空壳。
+    expect(cropsUnlockedAt(2).length).toBeGreaterThan(0)
+  })
+
+  it('★ 1 级的那几种是「开局就有」，不是「升到 1 级解锁的」', () => {
+    // 这条钉的是 `useLevelUpBurst` 里「首次渲染不触发」那条规则的必要性：
+    // 如果哪天有人在挂载时也播报一次，孩子会看到「解锁 3 种新种子」——
+    // 而那三种他开局就能买，等于凭空报了一次假的解锁。
+    expect(cropsUnlockedAt(1).length).toBeGreaterThan(0)
+  })
+
+  it('高级别没有新作物时返回空数组（调用方要整行不渲染）', () => {
+    expect(cropsUnlockedAt(7)).toEqual([])
+    expect(cropsUnlockedAt(99)).toEqual([])
+  })
+
+  it('播报用的名字都不为空 —— 否则会拼出「解锁 2 种新种子：、」', () => {
+    for (let lv = 1; lv <= 6; lv++) {
+      for (const c of cropsUnlockedAt(lv)) {
+        expect(c.name.trim().length, `${c.id} 的名字是空的`).toBeGreaterThan(0)
+      }
     }
   })
 })
