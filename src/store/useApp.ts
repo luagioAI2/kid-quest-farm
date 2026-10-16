@@ -112,6 +112,7 @@ import {
   CROP_BY_ID,
   CROPS,
   DEFAULT_PROFIT_RATIO,
+  cropsUnlockedAt,
   ITEM_BY_ID,
   MARKET_GOODS,
   PRODUCE_BASE_PRICE,
@@ -3405,6 +3406,14 @@ declare global {
          * 是唯一能钉住这类「UI 接线错、领域函数没错」的办法。
          */
         priceCeiling: (itemId: string) => number
+        /**
+         * 升到某级时**新解锁**的作物名（`domain/catalog.ts` 的 `cropsUnlockedAt` 转出）。
+         *
+         * 升级播报要断言「界面上写的那串名字 == 领域函数算出来的」——
+         * 这是唯一能钉住「UI 接线错、领域函数没错」的办法（同 `priceCeiling`）。
+         * 注意它**只证明接线**：函数本身对不对由 `economy.test.ts` E 节钉。
+         */
+        cropsUnlockedAt: (level: number) => string[]
       }
       /**
        * 测试专用：给当前账号加积分。
@@ -3497,6 +3506,7 @@ if (typeof window !== 'undefined') {
           itemId,
           useApp.getState().settings.profitRatio ?? DEFAULT_PROFIT_RATIO,
         ),
+      cropsUnlockedAt: (level) => cropsUnlockedAt(level).map((c) => c.name),
     },
     addPoints: async (delta) => {
       await postLedger({

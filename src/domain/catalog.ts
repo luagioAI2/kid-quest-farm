@@ -596,6 +596,18 @@ export const SHOP_SEEDS = CROPS.map((c) => c.id)
 /** 可购买的动物幼崽 */
 export const SHOP_ANIMALS = ANIMALS.map((a) => a.id)
 
+/**
+ * 升到 `level` 这一级时**新解锁**的作物。
+ *
+ * ⚠️ 判据是 `unlockLevel === level`，**不是** `<=`。
+ * 升级特效要报的是「这一次多出了什么」；写成 `<=` 的话，
+ * 升到 3 级会把 2 级解锁的那几种**再报一遍**，而孩子上一级已经看到了。
+ * 返回空数组是合法的（第 6 级以上不再解锁新作物）—— 调用方要处理这种情况。
+ */
+export function cropsUnlockedAt(level: number): CropDef[] {
+  return CROPS.filter((c) => c.unlockLevel === level)
+}
+
 /* ============================================================
    经济口径
    ============================================================ */

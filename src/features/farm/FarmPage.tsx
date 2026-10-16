@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useShallow } from 'zustand/react/shallow'
 import { useApp, selectFarmLevel } from '@/store/useApp'
-import { CROP_BY_ID, ITEM_BY_ID, produceUnitOf } from '@/domain/catalog'
+import { CROP_BY_ID, ITEM_BY_ID, cropsUnlockedAt, produceUnitOf } from '@/domain/catalog'
 import {
   cropDefOf,
   cropProgress,
@@ -46,6 +46,8 @@ export default function FarmPage() {
   // 用 useShallow 包装：selectFarmLevel 每次返回新对象，
   // 直接传给 zustand v5 会导致无限重渲染（React error #185）
   const level = useApp(useShallow((s) => selectFarmLevel(s)))
+  /* 升级特效 —— 由等级自己推导（见 `useLevelUpBurst`） */
+  const levelUp = useLevelUpBurst(level.level)
   const settleFlash = useApp((s) => s.settleFlash)
   const clearSettleFlash = useApp((s) => s.clearSettleFlash)
   const inventory = useApp((s) => s.inventory)
@@ -239,6 +241,9 @@ export default function FarmPage() {
         </div>
       </div>
 
+      {/* ------- 升级庆祝（在结算飘字**下面**，两者常同时发生） ------- */}
+      {levelUp ? <LevelUpBurst key={levelUp.n} burst={levelUp} /> : null}
+
       {/* ------- 飘字 ------- */}
       {settleFlash ? (
         <div className="pointer-events-none absolute inset-x-0 top-[34%] z-30 flex justify-center">
@@ -323,10 +328,16 @@ function TopBar({
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="whitespace-nowrap font-display text-sm font-extrabold text-grass-600">
+            {/* ⚠️ `data-farm-level` / `data-farm-level-progress` 是走查脚本的锚
+                （`scripts/capture-levelup-fx.mjs` 靠它算「还差几次收获升级」）——
+                别改成靠文本正则找，改了文案脚本就**静默**找不到。 */}
+            <span
+              className="whitespace-nowrap font-display text-sm font-extrabold text-grass-600"
+              data-farm-level
+            >
               🏅 {level.level} 级农场
             </span>
-            <span className="tnum shrink-0 text-xs text-ink-500">
+            <span className="tnum shrink-0 text-xs text-ink-500" data-farm-level-progress>
               {level.into}/{level.need}
             </span>
           </div>
@@ -446,6 +457,81 @@ function PlotBurst({ burst }: { burst: { n: number; emoji: string } }) {
       <span className="anim-sparkle absolute -left-1.5 top-0 text-xs">✨</span>
       <span className="anim-sparkle anim-delay-1 absolute -right-1.5 top-1 text-xs">✨</span>
     </span>
+  )
+}
+
+/* ---------------- 升级特效 ---------------- */
+
+/**
+ * 「农场升级」那一刻的庆祝横幅。
+ *
+ * 触发**不靠调用点**，和 `usePlotBurst` 同一个理由：`farmLevel` 由
+ * `farmTotals.harvests` 推导，而「收了」有三条路（点地块 / 收进背包 / 当场卖），
+ * 回调只能覆盖其中一条。这里比较**等级本身** —— 谁都绕不过它。
+ *
+ * ⚠️ 只在**升级**（变大）时触发；首次渲染记下当前等级但不触发，
+ * 否则一进农场就会庆祝一次（老账号等级本来就高，那不是「刚升级」）。
+ */
+function useLevelUpBurst(level: number): { n: number; level: number } | null {
+  const prev = useRef<number | null>(null)
+  const seq = useRef(0)
+  const [burst, setBurst] = useState<{ n: number; level: number } | null>(null)
+
+  useEffect(() => {
+    const before = prev.current
+    prev.current = level
+    if (before === null) return // 首次渲染没有「之前」可比
+    if (level <= before) return // 只庆祝升级，不庆祝不变 / 回退
+    seq.current += 1
+    setBurst({ n: seq.current, level })
+  }, [level])
+
+  // 动画 1800ms，这里也 1800ms —— 两个数字是一对，改一个就得改另一个
+  useEffect(() => {
+    if (!burst) return
+    const t = setTimeout(() => setBurst(null), 1800)
+    return () => clearTimeout(t)
+  }, [burst])
+
+  return burst
+}
+
+/**
+ * 升级横幅。**纯装饰**：`pointer-events:none` + `aria-hidden`，
+ * 所以它压在地块上时**不挡点击** —— 升级那一瞬间孩子很可能正在连点下一块地。
+ *
+ * ⚠️ `data-farm-fx="levelup"` 是走查脚本的锚（`scripts/capture-levelup-fx.mjs`）——
+ * 别改成靠类名找，类名一改脚本就**静默**找不到（本项目踩过）。
+ *
+ * 位置：**竖直居中**。结算飘字固定在 `top-[34%]`，而升级几乎总和结算同时发生
+ * （第 5 次收获既是结算也是升级）—— 放 34% 会正好叠在一起。
+ */
+function LevelUpBurst({ burst }: { burst: { n: number; level: number } }) {
+  const unlocked = cropsUnlockedAt(burst.level)
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-1/2 z-40 flex -translate-y-1/2 justify-center px-4"
+      aria-hidden
+      data-farm-fx="levelup"
+    >
+      <div className="kqf-levelup relative flex flex-col items-center gap-1 rounded-3xl border border-grass-500/30 bg-white/95 px-7 py-5 shadow-float">
+        <span className="anim-sparkle absolute -left-2 -top-2 text-lg">✨</span>
+        <span className="anim-sparkle anim-delay-1 absolute -right-2 -top-1 text-lg">✨</span>
+        <span className="anim-sparkle anim-delay-3 absolute -bottom-1 -left-1 text-sm">✨</span>
+        <span className="text-3xl leading-none">🏅</span>
+        <span className="font-display text-lg font-extrabold text-grass-600">升级啦！</span>
+        <span className="tnum font-display text-2xl font-extrabold text-ink-900" data-fx-level>
+          {burst.level} 级农场
+        </span>
+        {/* 第 6 级以上不再解锁新作物，`unlocked` 会是空数组 —— 那一行整个不渲染，
+            不留一个「解锁 0 种新种子」的空壳。 */}
+        {unlocked.length > 0 && (
+          <span className="mt-0.5 text-center text-xs font-bold text-ink-500" data-fx-unlock>
+            解锁 {unlocked.length} 种新种子：{unlocked.map((c) => c.name).join('、')}
+          </span>
+        )}
+      </div>
+    </div>
   )
 }
 

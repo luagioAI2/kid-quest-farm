@@ -333,7 +333,7 @@ await __kqf__.syncSeedTasks()   // 把 seedTasks.ts 里新加的任务同步进�
 | `__kqf__.syncSeedTasks()` | 同步新增的种子任务（按标题去重），末尾 reload |
 | `__kqf__.getState()` | 读整个 store 快照（排查用） |
 | `__kqf__.exportBackup()` / `importBackup(raw)` | 备份往返 |
-| `__kqf__.catalog.*` | 读**真实**数值：`cropSeedCost` / `animalCost` / `remainingCap` / `priceCeiling` |
+| `__kqf__.catalog.*` | 读**真实**数值：`cropSeedCost` / `animalCost` / `remainingCap` / `priceCeiling` / `cropsUnlockedAt(level)`（升到该级新解锁的作物名，升级播报靠它对账） |
 
 ⚠️ **`unlockAll` 不发积分** —— 开地、塞种子、放动物都是**直接写库、不扣钱**，
 所以不需要先 `addPoints`。要钱得另外敲。

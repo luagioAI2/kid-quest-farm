@@ -189,6 +189,43 @@
   animation: kqf-harvest-pop 900ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
 
+/* ============================================================
+   升级特效：等级跳一级时的庆祝横幅（`FarmPage.tsx` 的 `LevelUpBurst`）
+   ------------------------------------------------------------
+   触发**不靠调用点**，靠比较 `selectFarmLevel(...).level`（见 `useLevelUpBurst`）。
+
+   ⚠️ 时长 1800ms 和 `useLevelUpBurst` 里那个 `setTimeout(1800)` 是一对 ——
+   改一个就得改另一个，否则要么动画没播完就卸载、要么播完了还杵在屏幕上。
+   ============================================================ */
+@keyframes kqf-levelup-in {
+  0% {
+    transform: scale(0.6) translateY(10px);
+    opacity: 0;
+  }
+  12% {
+    transform: scale(1.06) translateY(0);
+    opacity: 1;
+  }
+  20% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  /* 中间这段是「停住让人看清楚」—— 直接淡出的话，
+     孩子还没读到「几级」就已经没了 */
+  80% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.kqf-levelup {
+  animation: kqf-levelup-in 1800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kqf-cloud {
     animation: none;
@@ -203,5 +240,12 @@
   /* 收获特效：去掉位移，但**保留**产出图案本身 —— 减少动效不等于删掉反馈 */
   .kqf-burst__item {
     animation: none;
+  }
+  /* 升级横幅：同上 —— 停掉缩放/淡入淡出，但整块**照常显示**。
+     两颗 ✨ 也要停（`kqf-sparkle` 是 opacity 0.25↔1 的无限闪），
+     停掉后它停在自然透明度 1 上，仍然看得见、只是不闪。 */
+  .kqf-levelup,
+  .kqf-levelup .anim-sparkle {
+    animation: none !important;
   }
 }
