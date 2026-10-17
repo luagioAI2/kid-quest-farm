@@ -1535,10 +1535,21 @@ mod.default.mount(container, hostApi)                     // 见 12.5
 
     catalog.json + catalog.json.sig ──► 验签 ──► 解析 ──► 找条目 ──► 取包 ──► 验 SHA-256 ──► 代码
 
-⚠️ 还有一个 `installGameFromUrl`（**无任何校验**）—— 它只给本地走查
-（`scripts/capture-game-bundle.mjs` 起静态目录证明装配管道通）用，
-**不是给用户的**，也**不许**接进设置页。设置页要接的是 `installFromCatalog`。
-（把本地走查也迁到目录路径之后，它就该删掉。）
+⚠️ 还有一个 `installGameFromUrl`（**无任何校验**：`fetch` → 直接 `importBundle`）——
+它只给本地走查用，**不是给用户的**，也**不许**接进设置页。
+设置页接的是 `installFromCatalog`（判据在 `PluginStoreCard` 的文件头）。
+
+**现状（2026-10-18 核过）**：界面上**没有任何入口**。唯一入口是调试句柄
+`__kqf__.plugin.installFromUrl`，而 `__kqf__` **故意没有 `import.meta.env.DEV` 守卫**
+（走查脚本打的就是 `dist`）⇒ 这个「取任意地址并执行」的原语**确实在 APK 里**，
+只是孩子和家长都够不到（WebView 里打不开控制台）。它仍然是**该删的**。
+
+**为什么不能「顺手删掉」**：`scripts/capture-game-bundle.mjs` 里有 **6 次安装**
+（4 个坏包 + 1 个真包 + 1 个窥探包），其中 **5 次用的是 `data:` URL 的合成包**。
+迁到目录路径不是改个调用 —— **每个合成包都要有自己的一条目录条目 + 签名**，
+于是那个脚本得自己造钥匙、再把公钥烧进构建（也就是 `demo-catalog.mjs` 那套
+「换常量 → 构建 → `finally` 还原 + `cmp` 复核」的机器）。
+➜ **先迁脚本，再删函数。** 顺序反了就是「删了才发现验收脚本跑不了」。
 
 四条**不许让步**的实现细节：
 

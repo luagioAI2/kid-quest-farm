@@ -300,6 +300,10 @@ interface AppState {
    * ⚠️ **没有完整性校验**的安装路径，只给本地走查用（`capture-game-bundle.mjs`
    * 起一个静态目录证明装配管道通）。**不是给用户用的**，也**不许**接进设置页。
    * 真正的安装入口是上面的 `installFromCatalog`。
+   *
+   * ★ 这是**待删除**的（spec §12.4 末）：界面上没有入口，但 `__kqf__` 没有
+   * DEV 守卫 ⇒ 它确实在 APK 里。删之前得先把那个走查脚本迁到目录路径 ——
+   * 它有 5 个 `data:` 合成包，每个都要有自己的目录条目和签名。
    */
   installGameFromUrl: (url: string) => Promise<{ ok: boolean; message: string }>
   /** 卸载一款插件游戏：**连包带状态一起删**（不然重装会捡到上一次的存档）。 */

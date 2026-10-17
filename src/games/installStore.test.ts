@@ -54,6 +54,14 @@ const CATALOG_URL = 'https://cdn.example.com/games/catalog.json'
 const SIG_URL = `${CATALOG_URL}.sig`
 const PKG_URL = 'https://cdn.example.com/games/pkg.js'
 
+/**
+ * 假托管站被取过哪些地址。
+ *
+ * ★ 用来断言「某个请求**根本没发生**」—— 这类顺序错误只看「抛了哪个错」
+ *   是分不出来的（先取包再验签，最后也会抛「签名不对」）。
+ */
+let fetched: string[] = []
+
 async function boot() {
   await db.delete()
   await db.open()
@@ -105,8 +113,15 @@ async function stubHost(opts: {
   signWith?: CryptoKeyPair
   /** 目录里那一款的 sha256 覆盖（造「哈希不对」） */
   sha256?: string
+  /**
+   * 直接用这段原文当包，造「验签和哈希都过，但它**不是一个合法的包**」。
+   * 哈希仍然按这段原文算 —— 所以这不是「被换过」，是「发布方发了个坏包」。
+   */
+  rawCode?: string
+  /** 让某个地址返回 HTTP 错误（造「托管站挂了」）。键是**完整地址** */
+  broken?: Record<string, number>
 }) {
-  const code = fakeBundleCode(opts.codeId)
+  const code = opts.rawCode ?? fakeBundleCode(opts.codeId)
   const bytes = new TextEncoder().encode(code)
   const catalogBytes = new TextEncoder().encode(
     JSON.stringify({
@@ -130,7 +145,11 @@ async function stubHost(opts: {
     [PKG_URL]: bytes,
   }
   vi.stubGlobal('fetch', async (input: string | URL) => {
-    const b = files[String(input)]
+    const key = String(input)
+    fetched.push(key)
+    const st = opts.broken?.[key]
+    if (st) return { ok: false, status: st, arrayBuffer: async () => new ArrayBuffer(0) }
+    const b = files[key]
     if (!b) return { ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) }
     const raw = b.slice()
     return {
@@ -145,6 +164,7 @@ async function stubHost(opts: {
 beforeEach(async () => {
   vi.unstubAllGlobals()
   keySlot.raw = null
+  fetched = []
   await boot()
 })
 
@@ -243,5 +263,33 @@ describe('installFromCatalog —— 生产路径', () => {
     expect(res.ok).toBe(false)
     expect(res.message).toContain('claw')
     expect(res.message).toContain('demo')
+  })
+
+  it('★★ 验签和哈希都过了，但包本身不是合法的包 → 拒绝，且**一个字节都不写**', async () => {
+    // 签名管的是「这串字节是发布方发的」，**不管**「它是不是一个能跑的包」。
+    // 所以过了校验之后 `importBundle` 仍然可能抛（发布方发了个坏包 / 构建产物截断了）。
+    // 那一刻不能已经写了一半 —— 半个包留在 `gameKv` 里的症状是「装了个空的」，
+    // 而且它会被 `installedGames` 当成「已安装」，界面上看不出任何异常。
+    const kp = await makeKeypair()
+    await stubHost({ kp, catalogId: 'demo', codeId: 'demo', rawCode: '这不是 JSON' })
+
+    const res = await useApp.getState().installFromCatalog(CATALOG_URL, 'demo')
+    expect(res.ok).toBe(false)
+    expect(await db.gameKv.count()).toBe(0)
+    expect(useApp.getState().installedGames.demo).toBeUndefined()
+  })
+
+  it('★ 托管站挂了（目录 500）→ 报错里带状态码，而且**没去取包**', async () => {
+    // ★ 判「顺序」不能只看抛了哪个错：先取包再验签，最后同样会抛。
+    //   必须断言**副作用没发生** —— 这里就是「包的地址一次都没被请求」。
+    const kp = await makeKeypair()
+    await stubHost({ kp, catalogId: 'demo', codeId: 'demo', broken: { [CATALOG_URL]: 500 } })
+
+    const res = await useApp.getState().installFromCatalog(CATALOG_URL, 'demo')
+    expect(res.ok).toBe(false)
+    expect(res.message).toContain('500')
+    expect(await db.gameKv.count()).toBe(0)
+    expect(fetched, '目录都没取到，就不该去取包').not.toContain(PKG_URL)
+    expect(fetched).toEqual([CATALOG_URL])
   })
 })
