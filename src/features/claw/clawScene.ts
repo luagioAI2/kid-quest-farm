@@ -12,7 +12,8 @@
  *
  * | 丢掉 | 为什么 |
  * | --- | --- |
- * | 邻居柜子 + 商场房间 | 家长 2026-10-16：「娃娃机 只用显示一台」 |
+ * | 邻居柜子 | 家长 2026-10-16：「娃娃机 只用显示一台」 —— **别加回来**（连排第二台机器是这句话直接禁止的东西） |
+ * | 商场房间 | 同上那句话只禁「第二台机器」，房间是 2026-10-17 **加回来的**：横屏两侧会空出 200~330px 的纯色，见下面「商场房间」那段 |
  * | OrbitControls / 多机位 | 家长 2026-10-17：「只保留一个（机位）」；而且自由旋转会把柜子转出画面 |
  * | 自带音效 / 浮层 / 全屏 / 手柄 | 宿主都有（`playTone` / `pushToast` / 触控），自己再造一份就是两套事实 |
  *
@@ -62,6 +63,7 @@ import {
   PlaneGeometry,
   PMREMGenerator,
   PointLight,
+  RepeatWrapping,
   Scene,
   SphereGeometry,
   SRGBColorSpace,
@@ -260,6 +262,85 @@ function makeSignTexture(text: string, bg: string, fg: string): CanvasTexture {
   return t
 }
 
+/**
+ * 商场地面贴图 —— 淡紫灰地砖。
+ *
+ * ★ 为什么要地砖而不是一整块纯色：柜子两侧在横屏下会露出 200~330px 的空白
+ *   （实测：phone-landscape 左右各 218px、desktop 各 332px）。纯色读起来像
+ *   「3D 没加载完」；有透视收敛的地砖线，那块空白立刻变成「站在商场里」。
+ *   参考实现用的就是 tile 贴图（`floorTiles()`），同一个理由。
+ *
+ * ⚠️ 颜色是**量出来的，不是调出来的**。第一版取 `#d7d1e2`（"只比背景深一点"），
+ *   截图取样一看：墙 L=198 / 地板 L=195 / 柜身 L=200 —— 三个数挤在 5 级以内，
+ *   等于没有分层，整个画面糊成一团奶白。现在这组让地板比柜身低 25~40 级，
+ *   白柜子才立得住。
+ *   ➜ 以后改这三个颜色，改完**取像素比一下**，别只看截图"感觉还行"
+ *     （`.e2e-scratch/sample-px.mjs` 就是干这个的）。
+ */
+function makeRoomFloorTexture(): CanvasTexture {
+  const c = document.createElement('canvas')
+  c.width = 256
+  c.height = 256
+  const g = c.getContext('2d')
+  if (g) {
+    g.fillStyle = '#9a93ab'
+    g.fillRect(0, 0, c.width, c.height)
+    // 砖缝
+    g.strokeStyle = '#837c96'
+    g.lineWidth = 2
+    for (let i = 0; i <= c.width; i += 64) {
+      g.beginPath()
+      g.moveTo(i, 0)
+      g.lineTo(i, c.height)
+      g.stroke()
+      g.beginPath()
+      g.moveTo(0, i)
+      g.lineTo(c.width, i)
+      g.stroke()
+    }
+    // 每块砖里一点极淡的斑驳，免得 16 块砖看着像复制粘贴
+    g.fillStyle = 'rgba(255,255,255,.14)'
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        if ((row * 4 + col) % 3 !== 0) continue
+        g.fillRect(col * 64 + 10, row * 64 + 10, 44, 44)
+      }
+    }
+  }
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  t.wrapS = RepeatWrapping
+  t.wrapT = RepeatWrapping
+  return t
+}
+
+/**
+ * 商场后墙 —— 竖向渐变 + 一条踢脚线。
+ *
+ * ⚠️ 墙**必须比地板亮**，而且上下要有渐变。纯色墙 + 纯色地板在截图里会糊成
+ *   一整片，看不出「这是两面墙」，反而比原来的纯背景更糊。
+ */
+function makeRoomWallTexture(): CanvasTexture {
+  const c = document.createElement('canvas')
+  c.width = 4
+  c.height = 256
+  const g = c.getContext('2d')
+  if (g) {
+    // ⚠️ canvas 的 y 轴向下，而 plane 的 uv 是向上 —— 所以「顶部亮」要画在 y=0
+    const grad = g.createLinearGradient(0, 0, 0, c.height)
+    grad.addColorStop(0, '#c2bcd1')
+    grad.addColorStop(1, '#a79fb9')
+    g.fillStyle = grad
+    g.fillRect(0, 0, c.width, c.height)
+    // 踢脚线（贴地的最后 6%）
+    g.fillStyle = '#8b8499'
+    g.fillRect(0, c.height - 15, c.width, 15)
+  }
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  return t
+}
+
 /** 一只娃娃：身体 + 两只耳朵 + 眼睛 + 鼻子。用基本体拼，够认出来就行。 */
 function makePlush(color: number, body: number, ear: number, seed: number): Group {
   const g = new Group()
@@ -409,6 +490,8 @@ export interface ClawStage {
     cabinet: { left: number; top: number; right: number; bottom: number }
     canvas: { w: number; h: number }
     dpr: number
+    /** 商场房间（地板 + 后墙）这一档开没开 —— 只在两侧有空白时开，见 `resize()` */
+    roomVisible: boolean
   }
   /** 走查脚本用：娃娃数量 */
   prizeCount(): number
@@ -815,6 +898,58 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     add(tube)
   }
 
+  /* ---------------- 商场房间（地板 + 后墙） ----------------
+     2026-10-17 加回来的一半（另一半「邻居柜子」仍然不做，理由见文件头表格）。
+
+     ★ 加它的**理由是可量化的**：横屏时柜子是按高度取景的，两侧会剩下
+       一大片空白 —— 实测 phone-landscape 左右各 **218px**、tablet-landscape 各 **257px**、
+       desktop 各 **332px**（画布 1000px 宽，柜子只占中间三分之一）。
+       那片空白以前是 `scene.background` 的一整块纯色，读起来像「3D 没加载完」。
+       地板 + 后墙一放，同样那块地方就变成「站在商场里，机器立在脚边」。
+
+     ⚠️ 只画地板和墙，**不画第二台机器**：家长 2026-10-16 明确说「只用显示一台」。
+     ⚠️ 竖屏时柜子横向铺满（phone 左右各只剩 7px），房间**整个藏起来**
+        （`resize` 末尾按「两侧空白」开关 `room.visible`），一分钱都不花。
+  */
+  const room = new Group()
+  scene.add(room)
+  {
+    const floorTex = track(makeRoomFloorTexture())
+    // 16 单位铺 8 遍 ⇒ 一张贴图管 2 单位，贴图里是 4×4 块砖 ⇒ 一块砖 ≈ 0.5 单位
+    floorTex.repeat.set(8, 8)
+    const roomFloor = new Mesh(
+      track(new PlaneGeometry(16, 16)),
+      track(new MeshStandardMaterial({ map: floorTex, roughness: 0.5, metalness: 0.03 })),
+    )
+    roomFloor.rotation.x = -Math.PI / 2
+    // 和柜体底面同一高度：高一点柜子会「陷进地里」，低一点会「浮在空中」
+    roomFloor.position.y = -BODY_H
+    /*
+      ⚠️ 不接阴影。主光的阴影相机只裹住柜子（±1.35 / ±1.7），
+      地板一旦 `receiveShadow`，影子会在那个方框边缘**凭空断掉**，
+      露出来的那截比没有影子更假。
+    */
+    room.add(roomFloor)
+
+    const wall = new Mesh(
+      track(new PlaneGeometry(16, 8)),
+      track(new MeshStandardMaterial({ map: track(makeRoomWallTexture()), roughness: 0.95 })),
+    )
+    // 墙底 = 地板面（`-BODY_H`），再往上 8 个单位 ⇒ 中心在 `-BODY_H + 4`
+    wall.position.set(0, -BODY_H + 4, -1.6)
+    room.add(wall)
+
+    /*
+      ⚠️ 这里**故意没有**「柜脚接触阴影」那张贴片。写过一版，删掉了：
+      取景是「站在机器前面」，五档视口下柜身底边**全都落在画布外**
+      （实测 phone -35 / tablet -65 / desktop -40 px）——
+      没有「柜脚」可压，贴片永远在画外。想让它露出来就得把地板整个抬起来，
+      那又会让柜子浮空。等哪天取景改成「看得到底座」再加回来。
+    */
+  }
+  // 默认关掉，由 `resize()` 末尾按「两侧还有没有空白」决定开不开
+  room.visible = false
+
   /* ---------------- 天车（横梁 + 小车 + 缆绳） ---------------- */
   const beam = new Group()
   root.add(beam)
@@ -1120,6 +1255,21 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     }
     placeCamera(dist)
     cameraDist = dist // 存给 render 的「呼吸」微动当基准
+
+    /*
+      商场房间开不开：看**柜身两侧在画布上还剩多少像素**。
+
+      ★★ 一开始想用公式估（`dist * tan(fov/2) * aspect > HX + 0.14`），**估错了**：
+        那个式子算的是「目标平面（z=0）」上的可视半宽，而取景框的约束角点在
+        `z = +0.55`（离相机更近），同一条光线在那儿只有 71% 的宽度。
+        结果 phone 档（左右实际只剩 **7px**）被判成「有地方」，房间白开着。
+
+      ➜ 所以直接量：把 `BOX_CORNERS` 投出来，和 `debugFrame()` / 走查脚本
+        **用同一套投影**。这样「判据量到的空白」和「开关依据的空白」不可能走散 ——
+        同一个事实存两份就一定会走散，这条在这台机器上已经踩过太多次。
+    */
+    const cb = projectRect(BOX_CORNERS, w, h)
+    room.visible = Math.min(cb.left, w - cb.right) > 24
   }
 
   /*
@@ -1462,6 +1612,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       cabinet,
       canvas: { w, h },
       dpr,
+      roomVisible: room.visible,
     }
   }
 

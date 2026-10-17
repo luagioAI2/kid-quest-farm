@@ -11,13 +11,16 @@
  * 是同一类补盲区脚本。
  *
  * ------------------------------------------------------------
- * ★★ 这一份最重要的判据：**玻璃区完整、且铺满限制方向**
+ * ★★ 这一份最重要的判据：**玻璃区完整、取景框铺满限制方向**
  *
- * ⚠️ 2026-10-17 这条判据**换过一次**，别照抄旧结论：
+ * ⚠️ 2026-10-17 这条判据**改过两次**，别照抄旧结论：
  *    · 旧判据 = 「整台机器（`cabinet`）完整在画布内」。那是**远距离全柜取景**，
  *      和原版差很多 —— 原版是**站在机器前面**看，底座是被裁掉的。
- *    · 新判据 = 「**玻璃区**（`glass`）完整在画布内」+「铺满限制方向」。
- *      `cabinet` 现在**故意**溢出画布，所以它不再是判据。
+ *    · 第二次 = 「玻璃区（`glass`）完整」+「**玻璃区**铺满限制方向」。
+ *      后半句**量错了对象**：相机 fit 的是取景框（高 2.14），玻璃只占 1.2，
+ *      所以玻璃天生只有框高的 56% —— 按高度取景的 4 档全红，画面却是好的。
+ *    · 现在 = 「玻璃区完整」+「**取景框**铺满限制方向」+「玻璃在框里占比 ≥50%」。
+ *      `cabinet` 仍然**故意**溢出画布，所以它不再是判据。
  *    换判据时如果只改数字不改断言，脚本会继续「通过」，而画面已经变成另一个样子。
  *
  * 为什么仍然必须量数字：取景对不对，肉眼**看不出来** —— 多裁 30px 的玻璃边
@@ -268,16 +271,32 @@ for (const vp of SELECTED) {
   )
 
   /*
-    「不是缩成一小坨」：玻璃区必须**铺满限制方向**。
-    竖屏限制方向是宽（玻璃横向铺满），横屏/桌面限制方向是高。
-    用 max 而不是只看宽 —— 只看宽的话，桌面档（宽屏）会误判。
+    「不是缩成一小坨」：**取景框**必须铺满限制方向。
+
+    ⚠️ 2026-10-17 换了测量对象（门槛没动）：原来量的是**玻璃区**，量错了。
+      取景框是 `FRAME`（`minY=-0.72` → `maxY=1.42`，高 **2.14**），玻璃只占其中
+      1.2 —— 玻璃**天生**只有框高的 56%。所以「玻璃要占满 80%」这条在**任何**
+      按高度取景的档位（横屏 / 平板 / 桌面）都不可能成立：实测 4 档全红，
+      只剩 phone 一档绿，而画面其实是好的。
+      ➜ 相机 fit 的是**框**，就该量框。量对了自然过（实测 5 档 92%~97%，
+        因为 `FIT_MARGIN` 只留 3% 白）。
+    ⚠️ 另外留一条「玻璃不许太小」的下限，防止将来框被撑大到玻璃只剩一条缝。
   */
-  const fillW = (gl.right - gl.left) / cv.w
-  const fillH = (gl.bottom - gl.top) / cv.h
+  const fillW = (fr.right - fr.left) / cv.w
+  const fillH = (fr.bottom - fr.top) / cv.h
   check(
-    '★★ 玻璃区铺满了限制方向（不是缩成一小坨）',
+    '★★ 取景框铺满了限制方向（相机真的怼上去了）',
     Math.max(fillW, fillH) >= 0.8,
-    `宽 ${(fillW * 100).toFixed(0)}% / 高 ${(fillH * 100).toFixed(0)}%`,
+    `框 宽 ${(fillW * 100).toFixed(0)}% / 高 ${(fillH * 100).toFixed(0)}%`,
+  )
+  const glassShare = Math.max(
+    (gl.right - gl.left) / (fr.right - fr.left),
+    (gl.bottom - gl.top) / (fr.bottom - fr.top),
+  )
+  check(
+    '★ 玻璃区在取景框里占比正常（不是框撑大了、玻璃缩成一条缝）',
+    glassShare >= 0.5,
+    `玻璃/框 ${(glassShare * 100).toFixed(0)}%`,
   )
 
   // 反向证据：整柜**应当**溢出 —— 没溢出说明又退回「远距离全柜取景」了
@@ -287,6 +306,27 @@ for (const vp of SELECTED) {
     cabOverflow,
     `整柜 ${cb.left.toFixed(1)},${cb.top.toFixed(1)} → ${cb.right.toFixed(1)},${cb.bottom.toFixed(1)}`,
   )
+
+  /*
+    商场房间（地板 + 后墙）：**两侧有没有空白**决定开不开。
+
+    ★ 只断言「关系」，**不抄** `resize()` 里那个 24px 的门槛 ——
+      抄一遍就是同一个事实存两份，以后改门槛这条会**绿着说谎**。
+      所以两头都取离门槛很远的判据：
+        · 空白 ≥ 100px ⇒ 必须开着（否则就是「房间永远关着」）
+        · 空白 ≤ 10px  ⇒ 必须关着（否则就是「竖屏白画两次」）
+      中间的档（实测 tablet 54px）不断言 —— 开或关都说得过去。
+    ⚠️ 这条只证明「开关对了」，不证明「画出来了」。
+      「画出来了」的证据是同一轮落盘的截图（`.e2e-scratch/claw/*-1-娃娃机.png`）。
+  */
+  const sideGap = Math.min(cb.left, cv.w - cb.right)
+  if (sideGap >= 100) {
+    check('★ 两侧有空白 ⇒ 商场房间开着', geo.frame.roomVisible, `空白 ${sideGap.toFixed(0)}px`)
+  } else if (sideGap <= 10) {
+    check('★ 两侧没空白 ⇒ 商场房间关着（不白画两次）', !geo.frame.roomVisible, `空白 ${sideGap.toFixed(0)}px`)
+  } else {
+    console.log(`  · 两侧空白 ${sideGap.toFixed(0)}px（中间档，开/关都合理，不断言）`)
+  }
 
   check(
     '容器没有被裁掉内容（`overflow` 祖先的 `scrollHeight === clientHeight`）',
@@ -363,7 +403,19 @@ for (const vp of SELECTED) {
 
     // 真点击（走命中测试）—— 顺带证明按钮没被盖住 / 没跑到视口外
     await page.click('[data-claw-buy]')
-    await wait(500)
+    /*
+      ★ 等**状态变了**，不要等固定毫秒。原来是 `wait(500)`，实测 tablet 档
+        （834×1112，画布 648×822，物理 chunk 同时在加载）那一笔 Dexie 事务
+        要 600ms 以上才落 —— 500ms 一到就读，读到的是「还没变」，
+        于是「币 +1 / 积分 −1 / 下爪 −1 / 中奖文案」四条**连环**报红。
+        ⚠️ 报的是「功能坏了」，真因是**脚本等得不够**。这种红最难查：
+        单独跑一次又绿了。
+    */
+    const buyLanded = await page
+      .waitForFunction((n) => window.__kqf__.getState().clawCoins > n, { timeout: 8000 }, before.coins)
+      .then(() => true, () => false)
+    const coinsNow = await page.evaluate(() => window.__kqf__.getState().clawCoins)
+    check('买一个币：状态真的变了（不是等 500ms 就下结论）', buyLanded, `${before.coins} → ${coinsNow}`)
     const afterBuy = await page.evaluate(() => {
       const s = window.__kqf__.getState()
       return { coins: s.clawCoins, points: s.balance }
