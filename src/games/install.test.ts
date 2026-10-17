@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Bytes } from './bytes'
-import { decodeSignature, fetchVerifiedGame, signatureUrlFor } from './install'
+import { decodeSignature, fetchVerifiedCatalog, fetchVerifiedGame, signatureUrlFor } from './install'
 import { sha256Hex } from './verify'
 
 /* ============================================================
@@ -372,5 +372,88 @@ describe('fetchVerifiedGame —— 返回的是「验过哈希的那串字节」
     // BOM 会被 TextDecoder 吃掉（这是它该做的），但**哈希是按带 BOM 的原始字节验的**
     // —— 若实现走 `text()` 往返，上面的 `fetchVerifiedGame` 早就抛 SHA-256 了。
     expect(got.code).toBe('console.log(1)\n')
+  })
+})
+
+/* ============================================================
+   fetchVerifiedCatalog —— 设置页「看一眼有什么」走的就是这条。
+
+   它比 `fetchVerifiedGame` 短，但有一条**独有的**判据：
+   **一个包都不许取**。家长只是打开列表，任何代码都不该下到手机里。
+   ============================================================ */
+
+describe('fetchVerifiedCatalog —— 只列目录，不碰包', () => {
+  it('正常：拿到条目（名字 / 版本 / 体积）', async () => {
+    const { pubRaw, files } = await makeHost({})
+    const catalog = await fetchVerifiedCatalog({
+      catalogUrl: CATALOG_URL,
+      publicKeyRaw: pubRaw,
+      fetchImpl: tableFetch(files),
+    })
+    expect(catalog.games).toHaveLength(1)
+    expect(catalog.games[0].id).toBe('demo')
+    expect(catalog.games[0].name).toBe('许愿池')
+    expect(catalog.games[0].version).toBe('1.0.0')
+    expect(catalog.games[0].size).toBeGreaterThan(0)
+  })
+
+  it('★★ 只取了目录和签名，**一个包都没取**（列表不该下载代码）', async () => {
+    const { pubRaw, files } = await makeHost({})
+    const seen: string[] = []
+    await fetchVerifiedCatalog({
+      catalogUrl: CATALOG_URL,
+      publicKeyRaw: pubRaw,
+      fetchImpl: tableFetch(files, seen),
+    })
+    expect(seen, '列表阶段不该碰包地址').not.toContain(PKG_URL)
+    expect(seen.sort()).toEqual([CATALOG_URL, SIG_URL].sort())
+  })
+
+  it('签名对不上 → 抛（不是返回空列表，也不是「公钥没配」）', async () => {
+    const { files } = await makeHost({})
+    const other = await makeKeypair()
+    const e = await catchError(
+      fetchVerifiedCatalog({
+        catalogUrl: CATALOG_URL,
+        publicKeyRaw: other.pubRaw,
+        fetchImpl: tableFetch(files),
+      }),
+    )
+    expect(e.message).toMatch(/签名/)
+    expect(e.message).not.toMatch(/公钥还没配/)
+  })
+
+  it('★ 公钥长度不对 → 抛「我们配错了」，和「签名无效」分开报', async () => {
+    const { files } = await makeHost({})
+    const e = await catchError(
+      fetchVerifiedCatalog({
+        catalogUrl: CATALOG_URL,
+        publicKeyRaw: new Uint8Array([1, 2, 3]),
+        fetchImpl: tableFetch(files),
+      }),
+    )
+    expect(e.message).toMatch(/32 字节/)
+  })
+
+  it('http（非 localhost）→ 在取任何东西之前就被挡下', async () => {
+    const { pubRaw } = await makeHost({})
+    const seen: string[] = []
+    const e = await catchError(
+      fetchVerifiedCatalog({
+        catalogUrl: 'http://cdn.example.com/games/catalog.json',
+        publicKeyRaw: pubRaw,
+        fetchImpl: tableFetch({}, seen),
+      }),
+    )
+    expect(e.message).toMatch(/https/i)
+    expect(seen, '地址不合规时一个请求都不该发').toHaveLength(0)
+  })
+
+  it('签名文件 404 → 抛，且说的是「目录签名」而不是「目录」', async () => {
+    const { pubRaw, files } = await makeHost({ skipSignature: true })
+    const e = await catchError(
+      fetchVerifiedCatalog({ catalogUrl: CATALOG_URL, publicKeyRaw: pubRaw, fetchImpl: tableFetch(files) }),
+    )
+    expect(e.message).toMatch(/目录签名/)
   })
 })

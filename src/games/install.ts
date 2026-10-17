@@ -26,6 +26,7 @@ import {
   assertAllowedPackageUrl,
   fetchVerifiedPackage,
   loadVerifiedCatalog,
+  type Catalog,
   type CatalogGame,
 } from './verify'
 
@@ -73,6 +74,39 @@ async function fetchBytes(url: string, fetchImpl: typeof fetch, label: string): 
 }
 
 /**
+ * 只走到「目录验签 + 解析」为止，**不取任何包**。
+ *
+ * 设置页要「先给家长看一眼有什么」，那时候连一个字节的代码都不该下来 ——
+ * 所以列表走这条，点「安装」才走 `fetchVerifiedGame`。
+ *
+ * ★ 抽出来而不是在 UI 里再写一遍 fetch + 验签：**「先验签、后 `JSON.parse`」
+ *   这个顺序只允许存在一处**。抄一份到页面里，早晚会有人把两行调个顺序，
+ *   而那种错在测试里是绿的（包能装上，只是验的和你跑的不是同一串字节）。
+ */
+export async function fetchVerifiedCatalog(opts: {
+  /** 目录地址。必须是 https（localhost 例外，给本地演示用）。 */
+  catalogUrl: string
+  /** 烧进 APK 的公钥（原始 32 字节）。生产路径传 `catalogPublicKeyRaw()`。 */
+  publicKeyRaw: Bytes
+  fetchImpl?: typeof fetch
+}): Promise<Catalog> {
+  const fetchImpl = opts.fetchImpl ?? fetch
+
+  // ① 目录地址本身也走 https 检查 —— 它是**写死在 App 里**的，
+  //    绝不能来自 Intent / 用户输入（spec §12.4 的 Play 政策那一节）。
+  const catalogUrl = assertAllowedPackageUrl(opts.catalogUrl, null)
+
+  // ② 目录与签名**都要按原始字节取**（`verify.ts` 文件头 ①）。
+  const catalogBytes = await fetchBytes(catalogUrl, fetchImpl, '游戏目录')
+  const signature = decodeSignature(
+    new TextDecoder().decode(await fetchBytes(signatureUrlFor(catalogUrl), fetchImpl, '目录签名')),
+  )
+
+  // ③ 验签 → 解析。base 传 catalogUrl，这样目录里的相对包地址能解析成绝对地址。
+  return loadVerifiedCatalog(catalogBytes, signature, opts.publicKeyRaw, catalogUrl)
+}
+
+/**
  * 走完整条链，返回「可以交给 `importBundle` 的代码文本」。
  *
  * ★ 顺序不可换：**先验签、再解析、再取包、再验哈希、最后才把代码交出去**。
@@ -87,21 +121,11 @@ export async function fetchVerifiedGame(opts: {
   publicKeyRaw: Bytes
   fetchImpl?: typeof fetch
 }): Promise<ResolvedGame> {
-  const { gameId, publicKeyRaw } = opts
+  const { gameId } = opts
   const fetchImpl = opts.fetchImpl ?? fetch
 
-  // ① 目录地址本身也走 https 检查 —— 它是**写死在 App 里**的，
-  //    绝不能来自 Intent / 用户输入（spec §12.4 的 Play 政策那一节）。
-  const catalogUrl = assertAllowedPackageUrl(opts.catalogUrl, null)
-
-  // ② 目录与签名**都要按原始字节取**（`verify.ts` 文件头 ①）。
-  const catalogBytes = await fetchBytes(catalogUrl, fetchImpl, '游戏目录')
-  const signature = decodeSignature(
-    new TextDecoder().decode(await fetchBytes(signatureUrlFor(catalogUrl), fetchImpl, '目录签名')),
-  )
-
-  // ③ 验签 → 解析。base 传 catalogUrl，这样目录里的相对包地址能解析成绝对地址。
-  const catalog = await loadVerifiedCatalog(catalogBytes, signature, publicKeyRaw, catalogUrl)
+  // ①②③ 验签 + 解析（和设置页列目录走的是**同一条**路）
+  const catalog = await fetchVerifiedCatalog({ catalogUrl: opts.catalogUrl, publicKeyRaw: opts.publicKeyRaw, fetchImpl })
 
   // ④ 找到那一款。找不到要说清「目录里有什么」，否则排查的人不知道是 id 写错了还是没发版。
   const game = catalog.games.find((g) => g.id === gameId)

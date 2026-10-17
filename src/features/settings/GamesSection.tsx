@@ -4,15 +4,17 @@ import { GAMES } from '../../games/registry'
 import { GAME_CLAW } from '../../games/ids'
 import { Card } from './ui'
 import { ClawEconomyCard } from './ClawEconomyCard'
+import { PluginStoreCard } from './PluginStoreCard'
 import { CURRENCY } from '../../domain/currency'
 
 /**
  * 家长栏 → 「游戏」。
  *
- * 五块，各回答一个问题：
+ * 六块，各回答一个问题：
  *   ① **钻石** —— 有多少、从哪来（含手动发放）；
  *   ② **已购买** —— 内置游戏里我有哪些、现在玩的是哪一个（可切换）；
  *   ②′ **娃娃机** —— 买了才显示：中奖率 / 每只换多少商城币（`ClawEconomyCard`）；
+ *   ②″ **游戏商店** —— 从已签名目录装第三方游戏（`PluginStoreCard`，没配地址时只有一句说明）；
  *   ③ **已下载** —— 运行时装进来的游戏（装了才显示，见那边的注释）；
  *   ④ **敬请期待** —— 还没做的。
  *
@@ -202,6 +204,16 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
         参数本身的说明（为什么有不安全组合、期望值怎么算）在 `ClawEconomyCard` 里。
       */}
       {clawOwned && <ClawEconomyCard gateOpen={gateOpen} />}
+
+      {/*
+        ②″ 游戏商店 —— 从**已签名目录**里装游戏（spec §12.4 / P2）。
+
+        放在 ③「已下载」**上面**：先「去哪装」，再「装了什么」。
+        没配托管地址时它只显示一句说明、**不摆按钮**（判据在 `PluginStoreCard`
+        的文件头）。⚠️ 这里接的是 `installFromCatalog`，**不是**
+        `installGameFromUrl`（后者无任何校验，只给本地走查用）。
+      */}
+      <PluginStoreCard gateOpen={gateOpen} />
 
       {/*
         ③ 已下载 —— **运行时装进来的游戏**（spec §12）。

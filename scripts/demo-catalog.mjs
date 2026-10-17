@@ -10,8 +10,8 @@
  * 1. 生成一把**演示用**的 Ed25519 钥匙（`.e2e-scratch/demo-catalog/`，已 gitignore）；
  * 2. 把 `games-dist/demo.js`（`npm run build:games` 的真实产物）当作要下发的包，
  *    算它的 SHA-256，写进 `catalog.json`，再用演示私钥**签名**；
- * 3. **临时**把演示公钥写进 `src/games/catalogKey.ts`，`npm run build`，
- *    然后**立刻还原**（还原后 `cmp` 逐字节确认）；
+ * 3. **临时**把演示公钥写进 `src/games/catalogKey.ts`、把本地目录地址写进
+ *    `src/games/catalogUrl.ts`，`npm run build`，然后**立刻还原**（还原后逐字节 `cmp`）；
  * 4. 起一个静态服务，**发 CORS 头**，同时托管三套东西：
  *
  *      /catalog.json          正常的一份   → 应该装得上
@@ -48,6 +48,7 @@ const WORK = join(ROOT, '.e2e-scratch/demo-catalog')
 const KEY_PATH = join(WORK, 'demo-private.pem')
 const FORGED_KEY_PATH = join(WORK, 'forged-private.pem')
 const CATALOG_KEY_TS = join(ROOT, 'src/games/catalogKey.ts')
+const CATALOG_URL_TS = join(ROOT, 'src/games/catalogUrl.ts')
 const GAME_BUNDLE = join(ROOT, 'games-dist/demo.js')
 
 const PORT = Number(process.env.DEMO_PORT ?? 4391)
@@ -188,19 +189,39 @@ async function buildAll({ demo, forged }) {
 }
 
 /* ------------------------------------------------------------------ *
- * ③ 临时换公钥 → 构建 → 立刻还原
+ * ③ 临时换公钥 + 目录地址 → 构建 → 立刻还原
  * ------------------------------------------------------------------ */
 
+/**
+ * 把演示钥匙和本地目录地址**临时**写进源码，构建，然后还原。
+ *
+ * ⚠️ 两个常量都要改：只换公钥、不写 `CATALOG_URL` 的话，设置页那一栏会停在
+ *    「这个版本没有配置游戏商店」—— 因为 `CATALOG_URL` 空着就是**没配**。
+ *    （这正是 fail closed 该有的样子，不是 bug。）
+ */
 function buildWithDemoKey(publicB64) {
-  const original = readFileSync(CATALOG_KEY_TS)
-  const before = original.toString()
-  const ANCHOR = "export const CATALOG_PUBLIC_KEY_B64 = ''"
-  if (before.split(ANCHOR).length - 1 !== 1) {
-    throw new Error(`锚点不唯一，拒绝改：${ANCHOR}`)
+  const keyOriginal = readFileSync(CATALOG_KEY_TS)
+  const urlOriginal = readFileSync(CATALOG_URL_TS)
+  const keyBefore = keyOriginal.toString()
+  const urlBefore = urlOriginal.toString()
+
+  const KEY_ANCHOR = "export const CATALOG_PUBLIC_KEY_B64 = ''"
+  const URL_ANCHOR = "export const CATALOG_URL = ''"
+  // 锚点必须**唯一**：多一处就说明有人复制了常量，那样替换会改错地方
+  for (const [anchor, text] of [
+    [KEY_ANCHOR, keyBefore],
+    [URL_ANCHOR, urlBefore],
+  ]) {
+    if (text.split(anchor).length - 1 !== 1) {
+      throw new Error(`锚点不唯一，拒绝改：${anchor}`)
+    }
   }
+
+  const demoCatalogUrl = `http://127.0.0.1:${PORT}/catalog.json`
   try {
-    writeFileSync(CATALOG_KEY_TS, before.replace(ANCHOR, `export const CATALOG_PUBLIC_KEY_B64 = '${publicB64}'`))
-    log('   · 临时写入演示公钥，开始构建…')
+    writeFileSync(CATALOG_KEY_TS, keyBefore.replace(KEY_ANCHOR, `export const CATALOG_PUBLIC_KEY_B64 = '${publicB64}'`))
+    writeFileSync(CATALOG_URL_TS, urlBefore.replace(URL_ANCHOR, `export const CATALOG_URL = '${demoCatalogUrl}'`))
+    log(`   · 临时写入演示公钥 + 目录地址（${demoCatalogUrl}），开始构建…`)
     execFileSync('npm', ['run', 'build'], {
       cwd: ROOT,
       stdio: 'inherit',
@@ -208,10 +229,15 @@ function buildWithDemoKey(publicB64) {
       env: { ...process.env, CODEBUDDY_SAFE_DELETE_ENABLED: '0' },
     })
   } finally {
-    writeFileSync(CATALOG_KEY_TS, original)
-    const after = readFileSync(CATALOG_KEY_TS).toString()
-    if (after !== before) throw new Error('还原失败！catalogKey.ts 内容和改之前不一致')
-    log('   · 已还原 catalogKey.ts（逐字节确认一致）')
+    writeFileSync(CATALOG_KEY_TS, keyOriginal)
+    writeFileSync(CATALOG_URL_TS, urlOriginal)
+    if (readFileSync(CATALOG_KEY_TS).toString() !== keyBefore) {
+      throw new Error('还原失败！catalogKey.ts 内容和改之前不一致')
+    }
+    if (readFileSync(CATALOG_URL_TS).toString() !== urlBefore) {
+      throw new Error('还原失败！catalogUrl.ts 内容和改之前不一致')
+    }
+    log('   · 已还原 catalogKey.ts / catalogUrl.ts（逐字节确认一致）')
   }
 }
 
