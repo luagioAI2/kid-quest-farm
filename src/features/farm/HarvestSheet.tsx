@@ -52,7 +52,7 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
   const canSell = remaining > 0
 
   /**
-   * 点券显示口径 —— 跟商店、价格标签一致。
+   * 商城币显示口径 —— 跟商店、价格标签一致。
    *
    * 2026-09-19（B1）之后额度与到手**全是整数**，`toFixed(1)` 只是保险。
    * ⚠️ 别改成 `Math.round`：这条守的是「并排出现的三个数要凑得上账」
@@ -131,7 +131,7 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
               </span>
               <span className="mt-0.5 block text-xs text-ink-600">
                 {canSell
-                  ? `按今天的市价结算，大约 +${roughGain} 点券（看收成）`
+                  ? `按今天的市价结算，大约 +${roughGain} 商城币（看收成）`
                   : '这一轮已经卖满啦，先收进背包吧'}
               </span>
             </span>

@@ -157,13 +157,15 @@ for (const vp of VIEWPORTS) {
       txt,
       rows,
       buttons,
-      hasMallCard: txt.includes('商城币'),
+      hasMallCard: txt.includes('钻石'),
       hasOwned: txt.includes('已购买'),
       hasSoon: txt.includes('敬请期待'),
       games: window.__kqf__?.games?.() ?? [],
       owned: window.__kqf__?.getState?.().ownedGameIds ?? [],
       hasMint: document.querySelector('[data-mall-mint]') !== null,
       mallBalanceText: document.querySelector('[data-mall-balance]')?.innerText ?? '',
+      // 账本派生出来的真实余额 —— 用来验「卡片上显示的数 = 派生值」，不写死 0
+      mallBalance: window.__kqf__?.getState?.().mallBalance ?? -1,
     }
   })
 
@@ -173,7 +175,7 @@ for (const vp of VIEWPORTS) {
     (g) => g.status === 'available' && g.priceMall > 0 && !info.owned.includes(g.id),
   )
 
-  check('有「商城币」一块', info.hasMallCard)
+  check('有「钻石」一块', info.hasMallCard)
   check('有「已购买」一块', info.hasOwned)
   check('有「敬请期待」一块', info.hasSoon)
   check(
@@ -191,7 +193,7 @@ for (const vp of VIEWPORTS) {
   /*
     ⚠️ 图标**从 `domain/currency.ts` 派生**（走 `scripts/lib/currency.mjs`），
       不在脚本里再抄一份。这里原来写死的是 `/^🎫\s*\d+$/` ——
-      2026-10-16 商城币的图标从 `🎫` 换成 `🛍️`，那种写法会**静默地一个都匹配不到**，
+      2026-10-16 钻石的图标从 `🎫` 换成 `🛍️`，那种写法会**静默地一个都匹配不到**，
       于是下面「个数 = N」这条会红在一个跟功能完全无关的地方（例子过期，不是坏了）。
 
     ⚠️ 也别用 emoji 拼正则：只判「以这个图标开头」+「后面全是数字」。
@@ -224,16 +226,17 @@ for (const vp of VIEWPORTS) {
   )
 
   /*
-    商城币卡片：2026-10-16 起**有**发币入口（手动发放），
-    因为娃娃机用商城币买 —— 没有入口的话那个购买按钮按下去必然失败。
-    所以原来那条「余额必须是 0 / 还没有发币入口」已经不成立了。
-    现在钉的是：入口在、余额显示的是账本算出来的数（新档是 0）。
+    钻石卡片：2026-10-16 起**有**发币入口（手动发放），
+    因为娃娃机用钻石买 —— 没有入口的话那个购买按钮按下去必然失败。
+    2026-10-17 起**新档会送 500 钻石**（`doSeedIfEmpty` 的欢迎种子），
+    所以「新档余额必须是 0」已经不成立了。
+    现在钉的是：入口在、**卡片上显示的数 = 账本派生出来的数**（不写死 0 / 500）。
   */
-  check('★ 商城币卡片上有手动发放入口', info.hasMint, info.hasMint ? '' : '没找到 [data-mall-mint]')
+  check('★ 钻石卡片上有手动发放入口', info.hasMint, info.hasMint ? '' : '没找到 [data-mall-mint]')
   check(
-    '新档的商城币余额是 0（手动发放是唯一的入口，这里没点过）',
-    info.mallBalanceText.replace(/\D/g, '') === '0',
-    `显示的是「${info.mallBalanceText.trim()}」`,
+    '★ 钻石卡片显示的数 = 账本派生出来的余额',
+    info.mallBalance >= 0 && info.mallBalanceText.replace(/\D/g, '') === String(info.mallBalance),
+    `显示「${info.mallBalanceText.trim()}」/ 派生 ${info.mallBalance}`,
   )
 
   await page.screenshot({ path: `${OUT}/${vp.name}-2-家长栏游戏.png`, fullPage: true })

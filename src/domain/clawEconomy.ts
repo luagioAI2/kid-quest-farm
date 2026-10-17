@@ -5,13 +5,13 @@
  * ★★ 唯一一条不能破的不变量：**每局的期望产出必须 < 1**
  * ---------------------------------------------------------------------------
  *
- * 兑换商城的付款口写着 `1 点券 ≡ 1 积分`（`redeem.ts` 的 `planRedeemPayment`：
- * 先用光点券，差额用积分补）。而娃娃机是 **1 积分买 1 个币、1 个币玩 1 局**。
+ * 兑换商城的付款口写着 `1 商城币 ≡ 1 积分`（`redeem.ts` 的 `planRedeemPayment`：
+ * 先用光商城币，差额用积分补）。而娃娃机是 **1 积分买 1 个币、1 个币玩 1 局**。
  *
  * 把这两件事接起来看：
  *
  * ```
- *   花掉 1 积分  →  期望拿回 E 点券  →  在兑换口 E 点券 ≡ E 积分
+ *   花掉 1 积分  →  期望拿回 E 商城币  →  在兑换口 E 商城币 ≡ E 积分
  *   ⇒ 净收益 = E − 1（积分当量）
  * ```
  *
@@ -62,7 +62,7 @@ export const CLAW_POINTS_PER_COIN = 1
  * 而且**不报错**（本项目在 `Card` 上吃过这个亏，见 `settings/ui.tsx` 的注释）。
  *
  * ⚠️ emoji **故意不是** 🪙 / 🎟️ / 🛍️ 里的任何一个 —— 那三个分别是
- * 积分 / 点券 / 商城币（`domain/currency.ts`）。游戏币是**第四种东西**，
+ * 积分 / 商城币 / 钻石（`domain/currency.ts`）。游戏币是**第四种东西**，
  * 借用其中任何一个，都会在同一屏上和真正的那个币长得一模一样。
  */
 export const CLAW_COIN_NAME = '娃娃机币'
@@ -71,11 +71,11 @@ export const CLAW_COIN_EMOJI = '🕹️'
 /** 默认中奖率（约 1/3）。手感上「不算难，但也不白给」。 */
 export const CLAW_DEFAULT_WIN_RATE = 1 / 3
 
-/** 默认：每抓到一只娃娃兑换 2 点券。 */
+/** 默认：每抓到一只娃娃兑换 2 商城币。 */
 export const CLAW_DEFAULT_EXCHANGE = 2
 
 /**
- * 每局期望产出的**硬上限**（点券）。
+ * 每局期望产出的**硬上限**（商城币）。
  *
  * 0.8 而不是 1：留 20% 的安全边际。理由见文件头 ——
  * 「不大于 1」这一侧是悬崖，边际必须留在悬崖**里面**。
@@ -93,7 +93,7 @@ export const CLAW_WIN_RATE_CHOICES = [
   { value: 1 / 5, label: '1/5' },
 ] as const
 
-/** 家长能选的**每只兑换多少点券**。 */
+/** 家长能选的**每只兑换多少商城币**。 */
 export const CLAW_EXCHANGE_CHOICES = [1, 2, 3, 5] as const
 
 /**
@@ -109,12 +109,12 @@ export const CLAW_PLAYS_KEY = 'plays'
 export interface ClawEconomy {
   /** 中奖率，0~1 */
   winRate: number
-  /** 每抓到一只娃娃兑换多少点券 */
+  /** 每抓到一只娃娃兑换多少商城币 */
   exchangePerPrize: number
 }
 
 /**
- * 一局的期望产出（点券）。
+ * 一局的期望产出（商城币）。
  *
  * ```
  *   E = 中奖率 × 每只兑换数
@@ -138,13 +138,13 @@ export function clawEconomyProblem(e: ClawEconomy): string | null {
     return '参数不是有效数字'
   }
   if (e.winRate <= 0 || e.winRate > 1) return '中奖率要在 0 和 1 之间'
-  if (e.exchangePerPrize < 1) return '每只至少兑换 1 点券'
+  if (e.exchangePerPrize < 1) return '每只至少兑换 1 商城币'
   if (clawEconomyIsSafe(e)) return null
   const pct = Math.round(e.winRate * 100)
   const e2 = clawExpectedCoupons(e)
   return (
-    `中奖率 ${pct}% × 每只 ${e.exchangePerPrize} 点券 = 平均每局 ${e2.toFixed(2)} 点券，` +
-    `超过了上限 ${CLAW_MAX_EXPECTED}。再高的话，孩子坐着玩就能把点券刷上去，` +
+    `中奖率 ${pct}% × 每只 ${e.exchangePerPrize} 商城币 = 平均每局 ${e2.toFixed(2)} 商城币，` +
+    `超过了上限 ${CLAW_MAX_EXPECTED}。再高的话，孩子坐着玩就能把商城币刷上去，` +
     `做任务反而成了最慢的路。`
   )
 }
@@ -156,7 +156,7 @@ export function clawEconomyProblem(e: ClawEconomy): string | null {
  * 而且**只夹一个是不够的**：
  *
  *   中奖率 = 1 时，`0.8 ÷ 1 = 0`，兑换数向下取整就是 0。
- *   但「兑换 0 点券」等于赢了也白赢（`exchangePerPrize >= 1` 是硬下限），
+ *   但「兑换 0 商城币」等于赢了也白赢（`exchangePerPrize >= 1` 是硬下限），
  *   于是一路 `Math.max(1, …)` 兜回来 ⇒ 兑换数 1 ⇒ **E = 1，不安全**。
  *
  * 这是单测真的抓出来的（`clamp({winRate: 1, exchangePerPrize: 99})` 返回了
@@ -210,7 +210,7 @@ export interface ClawRound {
   index: number
   /** 抓到了没有 */
   won: boolean
-  /** 抓到的话兑换多少点券，没抓到是 0 */
+  /** 抓到的话兑换多少商城币，没抓到是 0 */
   coupons: number
   /** 这次判定用的 seed（走查脚本 / 排查用，别塞进界面） */
   seed: number

@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { Portal } from '@/components/Portal'
 import type { TaskCategory, TaskCycle } from '@/domain/types'
 import type { GlobalSettleParams } from '@/domain/settlement'
+import { runningMs } from '@/domain/time'
 
 /* ============================================================
    小任务农场 · 任务模块内部 UI 基元
@@ -358,16 +359,39 @@ export const MANUAL_FILL_ENABLED: boolean = false
 
 /* ---------------- 实时计时 ---------------- */
 
-/** 基于 startedAt 时间戳派生的实时秒数 —— 不把计数器当真相源，切页不丢 */
-export function useLiveSeconds(startedAt?: number, active = true): number {
+/**
+ * 基于 `startedAt` 派生的实时秒数 —— 不把计数器当真相源，切页不丢。
+ *
+ * ⚠️ **暂停时必须冻住**（客户反馈的暂停功能）：
+ *   · 暂停中（`pausedAt` 有值）→ 用 `pausedAt` 当参照点，秒数**不再增长**；
+ *   · 同时**不挂 interval** —— 画面本来就该静止，白跑一个 1 秒的定时器
+ *     只会让整棵树每秒重渲染一次。
+ *
+ * 扣减逻辑一律走 `runningMs()`，不要在这里再写一遍减法
+ * （曾经四处各写一份 `now - startedAt`，暂停一加就会漏掉几处）。
+ */
+export function useLiveSeconds(
+  startedAt?: number,
+  active = true,
+  pausedAt?: number,
+  pausedTotalMs?: number,
+): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    if (!startedAt || !active) return
+    if (!startedAt || !active || pausedAt) return
+    /**
+     * ⚠️ 这一行不能省。暂停期间 effect 提前 return，`now` 就**冻在最后一次
+     * 心跳**上（最多 1 秒前的值）；恢复的那一刻如果不对表，`runningMs`
+     * 会拿这个陈旧参照点去减刚累加进来的 `pausedTotalMs`，
+     * 秒表会**往回跳**（实测：暂停时 `00:03` → 恢复后第一帧 `00:00`）。
+     * 孩子看到的是"我的时间被清零了"。
+     */
+    setNow(Date.now())
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [startedAt, active])
+  }, [startedAt, active, pausedAt])
   if (!startedAt) return 0
-  return Math.max(0, Math.floor((now - startedAt) / 1000))
+  return Math.floor(runningMs({ startedAt, pausedAt, pausedTotalMs }, now) / 1000)
 }
 
 /** 计时色态：绿=计划内，黄=已超时，红=超过一倍 */

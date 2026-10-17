@@ -13,10 +13,15 @@
  * | 丢掉 | 为什么 |
  * | --- | --- |
  * | 邻居柜子 + 商场房间 | 家长 2026-10-16：「娃娃机 只用显示一台」 |
- * | Rapier3D 物理引擎 | 实测 **+1.65 MB gzip**；而且物理驱动的抓取**期望值不可控** —— 见 `domain/clawEconomy.ts` 头注释 |
- * | OrbitControls / 多机位 | 宿主容器很小，而且自由旋转会把柜子转出画面 |
- * | EffectComposer 后处理 | 手机上太贵；而且它要额外的 render target |
+ * | OrbitControls / 多机位 | 家长 2026-10-17：「只保留一个（机位）」；而且自由旋转会把柜子转出画面 |
  * | 自带音效 / 浮层 / 全屏 / 手柄 | 宿主都有（`playTone` / `pushToast` / 触控），自己再造一份就是两套事实 |
+ *
+ * 曾经也丢过、**2026-10-17 又加回来**的两条（家长要求「原版功能都保留」）：
+ *
+ * | 加回来 | 代价 / 注意 |
+ * | --- | --- |
+ * | Rapier3D 物理 | 单独 chunk（gzip ≈755 KB，动态 import，没加载完照样能玩）。★ **它只演不算** —— 见 `clawPhysics.ts` 头注释 |
+ * | EffectComposer 后处理 | 只在 `hardwareConcurrency > 4` 时开，而且**不是 bloom**（见下面「后处理」那段） |
  *
  * ---------------------------------------------------------------------------
  * ★★ 三条硬约束（本项目踩过坑，见 `docs/game-authoring-guide.md` §0.4）
@@ -46,13 +51,16 @@ import {
   CylinderGeometry,
   DirectionalLight,
   Group,
+  HalfFloatType,
   HemisphereLight,
   MathUtils,
   Mesh,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
+  PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
+  PMREMGenerator,
   PointLight,
   Scene,
   SphereGeometry,
@@ -60,8 +68,15 @@ import {
   TorusGeometry,
   Vector3,
   WebGLRenderer,
+  WebGLRenderTarget,
 } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { createClawPhysics, type ClawPhysics } from './clawPhysics'
 
 /* ============================ 尺寸与配色 ============================ */
 
@@ -92,24 +107,62 @@ const BOX = {
   minZ: -(HZ + 0.04),
   maxZ: HZ + 0.04,
 }
-const BOX_W = BOX.maxX - BOX.minX
-const BOX_H = BOX.maxY - BOX.minY
 
-const FOV = 26
 /**
- * 相机看的高度 = **柜子的垂直中心**。
+ * 相机 FOV。**和参考实现同一个数（45）**。
  *
- * 和 `BOX` 绑在一起而不是写死一个数：柜子加高一点（比如换个灯箱），
- * 取景会自己跟着走，不用回来重新对。
+ * ★ 曾经是 26 —— 那是「把整个柜子装进画面」的思路，结果透视极弱、画面像
+ *   正交投影，而且相机离得很远，柜子只占画面宽度的 66%，四周一圈灰底。
+ *   孩子看到的是一张「柜子的照片」，不是「站在柜子前面」。
+ *   45 度才有那种往里看的纵深感。
  */
-const LOOK_Y = (BOX.minY + BOX.maxY) / 2
-
-/** 取景迭代的起点（`resize` 会按真实外框再收紧，见那边的注释）。 */
-const DESIGN_W = BOX_W
-const DESIGN_H = BOX_H
+const FOV = 45
 
 /**
- * 取景留白：柜子最多占画面的 `1 / FIT_MARGIN`（约 97%）。
+ * 相机看哪里。**不是**柜子的几何中心。
+ *
+ * 取 `0.34`（玻璃区偏下）：玻璃是 0…1.2，看中心（0.6）的话池子和爪子会被
+ * 推到画面下半，柜顶灯箱占掉太多。看 0.34 时池子落在画面下三分之一、
+ * 爪子在中间偏上 —— 和参考实现一致（它的 `target.y` 在竖屏下是 0.35）。
+ */
+const LOOK_Y = 0.34
+
+/**
+ * 相机的极角（从 +Y 量，弧度）= 俯视多少。参考实现竖屏用 **1.28**。
+ *
+ * 1.28 rad ≈ 73°，也就是相机比视线高约 **17°**。这一点很关键：
+ * 平视（`pol = π/2`）时池底几乎是一条线，娃娃看起来是**贴**在背景上；
+ * 俯 17° 才能看见池底那块梯形，堆起来的娃娃才有「堆」的体积感。
+ */
+const CAM_POL = 1.28
+
+/**
+ * **取景框**：必须完整落在画面里的那块区域。
+ *
+ * ★★ 注意它**不是** `BOX`。原版是「站在柜子前」，画面里柜子**是满的、而且是被裁的** ——
+ * 顶上的灯箱切掉一点、底下的机身切掉大半。我们之前用 `BOX`（含 1.0 高的底座）
+ * 做 contain，为了把底座也装进去，相机被推得很远，玻璃区只剩画面宽度的 66%。
+ *
+ * 取景框 = 玻璃区 + 一点灯箱 + 一点机身（露出取物口）：
+ *   · 上边界 `GLASS_H + 0.22` —— 灯箱露一条边，不切标题
+ *   · 下边界 `-0.72` —— 露出取物口，机身下半截允许被裁
+ *
+ * `resize` 会把这个框**完整装进画面**，然后相机按 `CAM_POL` 俯视。
+ * 因为框是「宽度主导」的，玻璃区会横向铺满 —— 这就是原版那种「贴着柜子站」的观感。
+ */
+const FRAME = {
+  minX: -(HX + 0.05),
+  maxX: HX + 0.05,
+  minY: -0.72,
+  maxY: GLASS_H + 0.22,
+  minZ: -(HZ + 0.05),
+  maxZ: HZ + 0.05,
+}
+const FRAME_W = FRAME.maxX - FRAME.minX
+const FRAME_H = FRAME.maxY - FRAME.minY
+
+/**
+ * 取景留白：框最多占画面的 `1 / FIT_MARGIN`（约 97%）。
  *
  * 不设的话迭代会停在「刚好贴边」上 —— 实测底边离画布只剩 4px，
  * 换个 DPR 或者柜子高一点点就越界。
@@ -118,12 +171,17 @@ const FIT_MARGIN = 1.03
 
 /** 三档主题色。和参考实现一样给 3 个，默认第一个（粉）。 */
 export const CLAW_THEMES = [
-  { accent: 0xf47aa8, led: 0xff7ab0 },
-  { accent: 0xf5c52a, led: 0xffd23a },
-  { accent: 0x3ec8d8, led: 0x4fd8e8 },
+  { accent: 0xf47aa8, led: 0xff7ab0, name: '粉' },
+  { accent: 0xf5c52a, led: 0xffd23a, name: '黄' },
+  { accent: 0x3ec8d8, led: 0x4fd8e8, name: '青' },
 ] as const
 
 /* ============================ 小工具 ============================ */
+
+/** `0xf47aa8` → `'#f47aa8'`。给 canvas 画贴图用（`fillStyle` 只吃字符串）。 */
+function hexOf(n: number): string {
+  return `#${(n >>> 0).toString(16).padStart(6, '0')}`
+}
 
 /**
  * 把 canvas 画成贴图。**唯一一张贴图** —— 灯箱上的字。
@@ -314,6 +372,13 @@ export interface ClawVisual {
   hubY: number
   /** 合爪程度：0 = 完全张开，1 = 完全合上 */
   close: number
+  /**
+   * 张开程度：`0.35` = 待命（微张），`1` = 下爪时张到最大。
+   *
+   * ⚠️ 不能只用 `close` 表达：`close` 在「待命」和「下爪」时都是 0，
+   * 而这两种状态要的姿势不一样（待命微张 / 下爪全张）。
+   */
+  spread: number
   /** 正被爪子夹着的那只娃娃的下标；没有就是 null */
   held: number | null
   /** 取物口灯闪烁（抓到那一刻） */
@@ -336,12 +401,26 @@ export interface ClawStage {
    * 靠肉眼截图看「好像没被裁」不算证据 —— 这里给的是可断言的数字。
    */
   debugFrame(): {
+    /** ★ 判据：玻璃区必须**完整**在画布内，而且横向要铺满 */
+    glass: { left: number; top: number; right: number; bottom: number }
+    /** 取景框（必须完整可见的那块） */
+    frame: { left: number; top: number; right: number; bottom: number }
+    /** 整台机器 —— **允许越界**（原版就是裁掉底座的） */
     cabinet: { left: number; top: number; right: number; bottom: number }
     canvas: { w: number; h: number }
     dpr: number
   }
   /** 走查脚本用：娃娃数量 */
   prizeCount(): number
+  /**
+   * 指头**实际**摆到的角度（弧度，`prongInners[0].rotation.z`）。
+   *
+   * ★ 为什么单独给一个：`debugVisual()` 报的是页面**传进来**的 `close` ——
+   *   那是**意图**，不是画面。`applyProngs()` 里还有「夹着娃娃就合到 0.86
+   *   为止」这种换算，光看 `close` 分不出「指头真的转了」和「参数变了但没画」。
+   *   只有这个数能证明指头**真的扫过那 70°**。
+   */
+  debugProng(): number
   /**
    * 离 `(x, z)` 最近的娃娃下标，一个都没有就是 `-1`。
    *
@@ -361,6 +440,14 @@ export interface ClawStage {
    */
   prizeAt(index: number): { x: number; z: number } | null
   /**
+   * `(x, z)` 正下方最高的那个面（娃娃顶 / 池底）的高度。
+   *
+   * 页面用它算「这一局爪子下到多深」—— 原版是探出来的（`probeSurface()`），
+   * 不是写死一个高度。写死的话，对着空地按下去爪子会**悬在半空合爪**，
+   * 那正是「下钩差很多」里最显眼的一条。
+   */
+  surfaceAt(x: number, z: number): number
+  /**
    * 屏幕坐标（`clientX/clientY`）→ 池子里的世界坐标。
    *
    * 给「拖着爪子瞄准」用。超出池子会被**夹在池子边缘**（不能把爪子拖到玻璃外面）。
@@ -370,6 +457,61 @@ export interface ClawStage {
    * 换成 raycaster 会更准，但要多引一个模块，不值得。
    */
   fieldFromScreen(clientX: number, clientY: number): { x: number; z: number }
+  /**
+   * 换配色（`0..CLAW_THEMES.length-1`）。越界会取模，调用方不用自己夹。
+   *
+   * ★ 换的不只是柜身的 `accent`，还包括 **LED 灯带 / 灯箱 / 背板** ——
+   * 后两个是画在 canvas 上的贴图，只改材质色不会跟着变。
+   */
+  setTheme(index: number): void
+  /** 当前配色下标。走查脚本用它断言「换色真的生效了」，不靠看截图。 */
+  themeIndex(): number
+  /**
+   * 走查脚本用：**这一帧到底开了哪些效果**。
+   *
+   * ★ 为什么需要它：「代码里写了 `shadowMap.enabled = true`」和
+   * 「运行时真的开着」是两件事 —— 后者才决定孩子看到什么。
+   * 有了它就能断言，而不用去比截图（截图逐字节比对本来就不稳）。
+   */
+  debugEffects(): {
+    /** 阴影渲染开没开 */
+    shadows: boolean
+    /** 有多少个 mesh 真的在投影（= 0 说明遍历没生效） */
+    shadowCasters: number
+    /** 环境贴图挂上了没 */
+    envMap: boolean
+    /** 后处理链在不在（低端机会退化成直接 render） */
+    post: boolean
+    /** 当前配色下标 */
+    theme: number
+  }
+  /**
+   * 走查脚本用：**最后一帧收到的视觉状态**。
+   *
+   * 断言「摇杆 / 键盘真的把爪子挪了」只能靠它 —— `ClawVisual` 是页面算完
+   * 传进来的，DOM 里读不到，而截图只能证明「看起来动了一点」。
+   */
+  debugVisual(): ClawVisual | null
+  /**
+   * 走查脚本用：**物理层到底在不在跑**。
+   *
+   * ★ 必须能区分三种状态，否则「物理没起来」会被看成「物理没问题」：
+   *   · `loading` —— 还在下载 755 KB 的 chunk（正常，前 1 秒）
+   *   · `failed`  —— 起不来，已经退回静态摆放（**能玩，但没有物理**）
+   *   · `ready`   —— 真的在跑，`bodies` / `awake` 才有意义
+   */
+  debugPhysics(): {
+    state: 'loading' | 'ready' | 'failed' | 'off'
+    bodies: number
+    /** 手里有没有东西（球铰建起来没有） */
+    held: boolean
+    /** 还醒着的刚体数 —— 全睡了说明模拟真的停了 */
+    awake: number
+    /** 掉进通道、被放回池子的次数 */
+    recycled: number
+    steps: number
+    error: string
+  }
 }
 
 /**
@@ -400,22 +542,91 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   renderer.toneMapping = ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.0
 
+  /*
+    阴影 —— 2026-10-17 补上。
+
+    ★ 这一条是「看着不 3D」的最大单一原因：没有接触阴影时，娃娃之间、
+      娃娃和底板之间全是悬空的，大脑会把「没有落地感」读成「像贴纸」。
+      之前只有直射光造成的明暗，没有投影。
+
+    ⚠️ 用 `PCFSoftShadowMap` 不是 `PCFShadowMap`：后者边缘是硬锯齿，
+      在这么小的柜子里（1.16 × 1.0 世界单位）尤其明显。
+    ⚠️ 阴影贴图**只有一张**（key light），别给每个灯都开 —— 手机上每多一张
+      就是一次完整的额外渲染。
+  */
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = PCFSoftShadowMap
+
   const scene = new Scene()
   scene.background = new Color(0xe9e6f2)
+
+  /*
+    环境贴图 —— 2026-10-17 补上。
+
+    ★ 为什么这条比「加更多灯」有用：`MeshPhysicalMaterial` 的 `clearcoat`
+      和玻璃的反射**需要一个环境去反射**。没有 `scene.environment` 时，
+      clearcoat 的高光只能来自直射光 ⇒ 整片糊成一块死白。
+      这正是旧代码里那句注释的根因：「clearcoat 从 1 降到 0.4：整面玻璃上
+      那层清漆高光会糊成一大片白」—— 当时是**压参数掩盖症状**，现在治根。
+
+    `RoomEnvironment` 是程序生成的（无外部贴图、离线可用），
+    经 `PMREMGenerator` 预卷积成 mipmap 链。只生成一次，之后零成本。
+  */
+  const pmrem = new PMREMGenerator(renderer)
+  const roomEnv = new RoomEnvironment()
+  const envRT = pmrem.fromScene(roomEnv, 0.04)
+  scene.environment = envRT.texture
+  // 0.55：够让白柜子和玻璃有层次，又不至于把暖色灯光冲淡
+  scene.environmentIntensity = 0.55
 
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 40)
   camera.position.set(0, LOOK_Y, 4)
 
+  // 取景距离：resize 算完 contain-fit 后存到这里，render 的「呼吸」微动要拿它当基准
+  let cameraDist = 4
+  // 中奖特写的缓动值（host 给的 `winFlash` 是二值的，这里自己缓动一下，避免中奖瞬间硬切）
+  let winZoom = 0
+
   /* ---------------- 灯光：暖顶光 + 柜内冷白 ---------------- */
-  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 1.5))
-  const key = new DirectionalLight(0xfff8f2, 2.1)
-  key.position.set(0.6, 3.4, 2.6)
+  /*
+    光照按参考实现的量级重调过（2026-10-17）。
+
+    ★ 之前环境光是 **1.5**，参考实现是 **0.55**。环境光不是「越亮越清楚」——
+      它会把所有阴影**填平**，柜子就没有体积感了，看着发灰。
+      加了阴影之后这一点尤其明显：环境光一高，影子淡到看不见。
+  */
+  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 0.6))
+  const key = new DirectionalLight(0xfff8f2, 1.6)
+  /*
+    ★ 主光放**正上方**（参考实现是 0.05, 3.2, 0.35），不是斜前方。
+    影子垂直落在娃娃正下方 ⇒ 看得出「一层层堆起来」；
+    侧光会把影子拉成长条，堆叠关系反而糊。
+  */
+  key.position.set(0.05, 3.2, 0.35)
   scene.add(key)
-  const fill = new DirectionalLight(0xffe8f0, 0.8)
-  fill.position.set(-2.2, 1.6, 1.8)
+
+  /*
+    只让主光投影。正交阴影相机要**刚好裹住柜子**：
+    范围给大了 → 同样的 1024² 摊到更大面积，影子边缘发虚；
+    范围给小了 → 柜子边缘的影子被裁掉，表现为「影子到一半没了」。
+    柜子外框约 1.24 × 1.3 × 1.08（见 `BOX`），留一点余量。
+  */
+  key.castShadow = true
+  key.shadow.mapSize.set(1024, 1024)
+  key.shadow.camera.near = 0.5
+  key.shadow.camera.far = 12
+  key.shadow.camera.left = -1.35
+  key.shadow.camera.right = 1.35
+  key.shadow.camera.top = 1.7
+  key.shadow.camera.bottom = -1.7
+  // bias 处理自阴影（acne）；normalBias 处理薄面（灯带 / 玻璃框）上的漏光
+  key.shadow.bias = -0.0006
+  key.shadow.normalBias = 0.022
+  const fill = new DirectionalLight(0xffe8f0, 0.9)
+  fill.position.set(-0.8, 2.6, 3.2)
   scene.add(fill)
   /** 柜内顶灯（让娃娃有明暗层次，不然一团糊） */
-  const inner = new PointLight(0xfff5fa, 2.4, 3.2, 2)
+  const inner = new PointLight(0xfff5fa, 1.7, 3.2, 2)
   inner.position.set(0, GLASS_H - 0.06, 0.1)
   scene.add(inner)
 
@@ -551,13 +762,15 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
 
   /* ---------------- 柜内背板 ----------------
      没有它的话柜子内部就是场景背景色 —— 一个惨白的空盒子（见
-     `makeBackdropTexture` 的注释）。挂在玻璃**里面**（z = -HZ + 0.02）。 */
+     `makeBackdropTexture` 的注释）。挂在玻璃**里面**（z = -HZ + 0.02）。
+
+     ⚠️ 材质单独留一个引用：换色时要**重画贴图**（`setTheme` 用）。
+     背板的花纹是画在 CanvasTexture 上的，改 `material.color` 对它没用。 */
+  let backdropMat: MeshStandardMaterial
   {
     const tex = track(makeBackdropTexture(CLAW_THEMES[0].accent))
-    const back = new Mesh(
-      track(new PlaneGeometry(HX * 2 - 0.02, GLASS_H - 0.02)),
-      track(new MeshStandardMaterial({ map: tex, roughness: 0.95 })),
-    )
+    backdropMat = track(new MeshStandardMaterial({ map: tex, roughness: 0.95 }))
+    const back = new Mesh(track(new PlaneGeometry(HX * 2 - 0.02, GLASS_H - 0.02)), backdropMat)
     back.position.set(0, GLASS_H / 2, -HZ + 0.02)
     add(back)
   }
@@ -581,15 +794,17 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   }
 
   /* ---------------- 灯箱 ---------------- */
+  /** 灯箱材质 —— 换色时 `map` 和 `emissiveMap` 都要换（`setTheme` 用） */
+  let signMat: MeshStandardMaterial
   {
     const head = new Mesh(track(new RoundedBoxGeometry(HX * 2, 0.32, HZ * 2 - 0.04, 3, 0.02)), M.body)
     head.position.set(0, GLASS_H + 0.16, 0)
     add(head)
-    const signTex = track(makeSignTexture('爪爪乐', '#f47aa8', '#ffffff'))
-    const sign = new Mesh(
-      track(new PlaneGeometry(1.06, 0.24)),
-      track(new MeshStandardMaterial({ map: signTex, emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 0.95, roughness: 0.3 })),
+    const signTex = track(makeSignTexture('爪爪乐', hexOf(CLAW_THEMES[0].accent), '#ffffff'))
+    signMat = track(
+      new MeshStandardMaterial({ map: signTex, emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 0.95, roughness: 0.3 }),
     )
+    const sign = new Mesh(track(new PlaneGeometry(1.06, 0.24)), signMat)
     sign.position.set(0, GLASS_H + 0.17, HZ - 0.014)
     add(sign)
     // 柜内顶上的日光灯管
@@ -626,22 +841,34 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   /* ---------------- 爪子 ---------------- */
   const hub = new Group()
   root.add(hub)
-  const prongGroups: Group[] = []
+  /**
+   * 三个指头的**内层** Group —— 开合旋转就在这一层上。
+   *
+   * 物理层要拿它的世界矩阵去摆 kinematic 碰撞体（见 `clawPhysics.ts`），
+   * 这样「张开多少」只有 `applyProngs()` 一个事实源，物理那边不重算角度。
+   */
+  const prongInners: Group[] = []
   {
-    const HUB_R = 0.052
-    const HUB_HH = 0.028
+    const HUB_R = 0.056
+    const HUB_HH = 0.03
     const h1 = new Mesh(track(new CylinderGeometry(HUB_R, HUB_R * 0.94, HUB_HH * 2, 24)), M.chrome)
     hub.add(h1)
-    const h2 = new Mesh(track(new CylinderGeometry(0.014, HUB_R * 0.95, 0.034, 20)), M.blackPlastic)
-    h2.position.y = HUB_HH + 0.017
+    const h2 = new Mesh(track(new CylinderGeometry(0.016, HUB_R * 0.95, 0.038, 20)), M.blackPlastic)
+    h2.position.y = HUB_HH + 0.019
     hub.add(h2)
     const band = new Mesh(track(new CylinderGeometry(HUB_R * 1.03, HUB_R * 1.03, HUB_HH * 0.7, 24)), M.steel)
     band.position.y = -HUB_HH * 0.15
     hub.add(band)
 
-    // 三个爪子，间隔 120°。每只自己一组，靠 rotation.x 张开/合上。
-    const prongGeo = track(new CapsuleGeometry(0.0095, 0.085, 4, 8))
-    const tipGeo = track(new CapsuleGeometry(0.013, 0.018, 4, 8))
+    /*
+      三个爪子，间隔 120°。每只自己一组，靠 `inner.rotation.z` 张开 / 合上。
+
+      ★★ 2026-10-17 把指头**加长加粗**了（原来 0.085，现在 0.105）：
+        取景拉近之后，原来那套爪子只有柜子宽度的 12%，看着像个小玩具夹子；
+        参考实现里爪子约占柜宽的 20%。加长之后张开时才「撑得开」。
+    */
+    const prongGeo = track(new CapsuleGeometry(0.0105, 0.105, 4, 8))
+    const tipGeo = track(new CapsuleGeometry(0.0145, 0.022, 4, 8))
     const tipMat = track(new MeshStandardMaterial({ color: 0x8a2a24, roughness: 0.7 }))
     for (let i = 0; i < 3; i++) {
       const g = new Group()
@@ -650,25 +877,50 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       g.add(inner)
       // 上臂
       const arm = new Mesh(prongGeo, M.chrome)
-      arm.position.set(0.036, -0.05, 0)
+      arm.position.set(0.04, -0.062, 0)
       arm.rotation.z = 0.42
       inner.add(arm)
       // 爪尖
       const tip = new Mesh(tipGeo, tipMat)
-      tip.position.set(0.068, -0.095, 0)
+      tip.position.set(0.082, -0.118, 0)
       tip.rotation.z = -0.5
       inner.add(tip)
       hub.add(g)
-      prongGroups.push(g)
+      prongInners.push(inner)
     }
   }
-  /** 爪子的开合：0 = 张开，1 = 合上。绕 z 轴转（越合越往里收）。 */
-  const applyClose = (close: number) => {
-    const k = MathUtils.clamp(close, 0, 1)
-    for (const g of prongGroups) {
-      const inner = g.children[0] as Group
-      inner.rotation.z = -0.28 * k
-      inner.scale.setScalar(1 - 0.08 * k)
+
+  /**
+   * 指头的两个极限角度（绕 hub 的 z 轴，弧度）。
+   *
+   * ★★ 原来的张开角度是 **0**，合上是 −0.28 —— 整个动作只扫 16°，
+   *   远看几乎是**不动**的。参考实现是 `ANG_OPEN 0.95 → ANG_CLOSED −0.32`，
+   *   扫 **73°**。这就是「下钩抓的过程差很多」的主要来源：爪子得**张开**才像爪子。
+   */
+  const PRONG_OPEN = 0.62
+  const PRONG_CLOSED = -0.3
+
+  /**
+   * 爪子的开合。
+   *
+   * `close`：0 = 张开，1 = 合上（时间线给的）。
+   * `spread`：0.35 = **待命**姿势（微张，像原版 idle），1 = 下爪时张到最大。
+   * `holding`：手里有娃娃 —— 合到 0.86 就停，指头**夹在娃娃外面**。
+   *
+   * ⚠️ 为什么需要 `spread` 这个额外参数：`close` 在「待命」和「下爪」时**都是 0**，
+   *    光看它分不出这两种状态。待命就张到最大会像个蜘蛛；下爪不张到最大又不像在下爪。
+   *
+   * ⚠️ 为什么需要 `holding`：夹着娃娃还合到底，指头会穿进娃娃身体里。
+   *    原版是靠「抓力上限」自然卡住的（`setProngs(ANG_CLOSED, grip)`，娃娃顶住就合不动）。
+   *    我们这里是 kinematic 直接摆角度，所以得显式留出那点缝。
+   */
+  const applyProngs = (close: number, spread: number, holding: boolean) => {
+    const cap = holding ? 0.86 : 1
+    const k = MathUtils.clamp(close, 0, cap)
+    const open = PRONG_OPEN * MathUtils.clamp(spread, 0, 1)
+    for (const inner of prongInners) {
+      inner.rotation.z = PRONG_CLOSED + (open - PRONG_CLOSED) * (1 - k)
+      inner.scale.setScalar(1 - 0.06 * k)
     }
   }
 
@@ -680,6 +932,8 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       const kind = PLUSH_KINDS[p.kind]
       const g = makePlush(kind.fur, kind.belly, kind.fur, p.seed)
       g.position.set(p.x, p.y, p.z)
+      // 记下「原始大小」：撞击挤压是**乘法**叠在这个基准上，不能把它覆盖掉
+      g.userData.baseScale = g.scale.x
       // 娃娃自己带的那几个材质也要能 dispose
       g.traverse((o) => {
         const m = o as Mesh
@@ -696,23 +950,76 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     }
   }
 
+  /* ---------------- 阴影开关：等所有东西都进 root 之后再统一开 ----------------
+     ⚠️ 必须放在**娃娃之后** —— 娃娃也是 `root` 的子节点，先开就会漏掉它们，
+     而「娃娃没有影子」正是这次要修的那个「像贴纸」的观感。
+
+     排除三类：透明玻璃（投出来是一块实心黑）、自发光灯带（它自己是光源）、
+     洞口黑面（平贴在柜门上，投影只会打架）。 */
+  {
+    const noShadow = new Set<unknown>([M.glass, M.led, M.lamp, M.tube, M.dark])
+    root.traverse((o) => {
+      const m = o as Mesh
+      if (!m.isMesh) return
+      const mat = m.material as unknown
+      if (noShadow.has(mat)) {
+        m.castShadow = false
+        m.receiveShadow = false
+        return
+      }
+      m.receiveShadow = true
+      // 地板只接收：它是水平面，投影只会和自己打架（acne）
+      m.castShadow = mat !== M.felt
+    })
+  }
+
   /* ============================ 取景（contain） ============================ */
 
   let dpr = 1
 
-  /** 柜子 8 个角（只算一次）—— 取景迭代和 `debugFrame` 共用。 */
+  /** 柜子 8 个角（只算一次）—— 走查用，整机允许被裁。 */
   const BOX_CORNERS: [number, number, number][] = []
   for (const x of [BOX.minX, BOX.maxX]) {
     for (const y of [BOX.minY, BOX.maxY]) {
       for (const z of [BOX.minZ, BOX.maxZ]) BOX_CORNERS.push([x, y, z])
     }
   }
+  /**
+   * 取景框**正面**的 4 个角 —— 取景迭代用它。
+   *
+   * ★★ 为什么只取 `z = maxZ` 这一面、而不是 8 个角：
+   *   相机是**斜着俯视**的，柜子前脸（z=+0.55）离相机近得多，同样 x 的角点
+   *   投出来**宽**很多。拿 8 个角去拟合，决定距离的是**前脸**那几个点 ——
+   *   等于「把前脸装进画面」，后面的角自然更小。
+   *
+   *   但用 8 个角会让迭代**多收几轮**：它会先按后脸估一个距离、发现前脸越界、
+   *   再放大…… 收敛得慢，而且中途的估计值没有意义。
+   *   直接拟合前脸，一步到位。
+   */
+  const FRAME_CORNERS: [number, number, number][] = []
+  for (const x of [FRAME.minX, FRAME.maxX]) {
+    for (const y of [FRAME.minY, FRAME.maxY]) FRAME_CORNERS.push([x, y, FRAME.maxZ])
+  }
+  /** 玻璃区 8 个角 —— 走查断言「柜子内部完整可见」用它。 */
+  const GLASS_CORNERS: [number, number, number][] = []
+  for (const x of [-HX, HX]) {
+    for (const y of [0, GLASS_H]) {
+      for (const z of [-HZ, HZ]) GLASS_CORNERS.push([x, y, z])
+    }
+  }
 
   const _p = new Vector3()
 
+  /**
+   * 相机摆位：**绕 `LOOK_Y` 按 `CAM_POL` 俯视**，不是平视。
+   *
+   * 球坐标：水平距离 `dist·sin(pol)`、高度 `LOOK_Y + dist·cos(pol)`。
+   * 这样「俯角」是相机自己的属性，跟距离无关 —— 换个画布尺寸不会突然变平视。
+   */
   function placeCamera(dist: number): void {
-    // 稍微偏一点、高一点，柜子才有立体感（偏移量按 dist 走，各宽高比下观感一致）
-    camera.position.set(dist * 0.09, LOOK_Y + dist * 0.075, dist)
+    const sp = Math.sin(CAM_POL)
+    const cp = Math.cos(CAM_POL)
+    camera.position.set(0, LOOK_Y + dist * cp, dist * sp)
     camera.lookAt(0, LOOK_Y, 0)
     camera.updateProjectionMatrix()
     // ★ `project()` 读的是 `matrixWorldInverse`，而它由 `updateMatrixWorld()` 更新。
@@ -720,15 +1027,33 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     camera.updateMatrixWorld()
   }
 
+  /** 把一组世界坐标角点投影成画布矩形。 */
+  function projectRect(corners: [number, number, number][], w: number, h: number) {
+    let left = Infinity
+    let top = Infinity
+    let right = -Infinity
+    let bottom = -Infinity
+    for (const [x, y, z] of corners) {
+      const p = _p.set(x, y, z).project(camera)
+      const sx = ((p.x + 1) / 2) * w
+      const sy = ((1 - p.y) / 2) * h
+      left = Math.min(left, sx)
+      right = Math.max(right, sx)
+      top = Math.min(top, sy)
+      bottom = Math.max(bottom, sy)
+    }
+    return { left, top, right, bottom }
+  }
+
   /**
-   * 柜子 8 个角里最「越界」的那个，以 NDC 为单位。**≤ 1 = 整个柜子都在画面里。**
+   * 取景框 8 个角里最「越界」的那个，以 NDC 为单位。**≤ 1 = 整个框都在画面里。**
    *
    * 投影是「距离越远、画面越小」，比例大致是 1/dist，所以这个数直接就是
    * 「距离还要再乘几倍」的估计值（迭代几次收敛）。
    */
-  function boxOverflow(): number {
+  function frameOverflow(): number {
     let m = 0
-    for (const [x, y, z] of BOX_CORNERS) {
+    for (const [x, y, z] of FRAME_CORNERS) {
       _p.set(x, y, z).project(camera)
       const a = Math.abs(_p.x)
       const b = Math.abs(_p.y)
@@ -738,6 +1063,14 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     return m
   }
 
+  /**
+   * 后处理链。`null` = 不启用（低端机 / WebGL 起不来），直接 `renderer.render`。
+   *
+   * ⚠️ 必须是 `let` 且在 `resize` 之前声明 —— `resize` 里要按新尺寸调
+   * `composer.setSize`，而 composer 本身要在拿到尺寸后才建。
+   */
+  let composer: EffectComposer | null = null
+
   function resize(): void {
     const w = Math.max(1, container.clientWidth)
     const h = Math.max(1, container.clientHeight)
@@ -746,6 +1079,9 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     renderer.setPixelRatio(dpr)
     // ★ 第三个参数必须是 false，否则 three 会写行内 style，和宿主的响应式列打架
     renderer.setSize(w, h, false)
+    // composer 有自己的 render target，尺寸要单独跟
+    composer?.setPixelRatio(dpr)
+    composer?.setSize(w, h)
 
     const aspect = w / h
     camera.aspect = aspect
@@ -763,32 +1099,161 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
         迭代几次就收敛；而且**以后改柜子的尺寸也不用回来重新调参数**。
     */
     const vt = Math.tan(MathUtils.degToRad(FOV / 2))
-    let dist = Math.max(DESIGN_H / 2 / vt, DESIGN_W / 2 / (vt * aspect))
-    for (let i = 0; i < 8; i++) {
+    let dist = Math.max(FRAME_H / 2 / vt, FRAME_W / 2 / (vt * aspect))
+    /*
+      ★ 迭代到 `over ≈ 1`，**不是**「`over ≤ 1` 就收工」。
+
+      只判「装得下」会**严重欠收**：起点距离是按「取景框在目标平面上」估的，
+      可前脸比目标平面近 0.8 个单位，一测就超了 ⇒ `dist *= over` 一步放大 1.5 倍
+      ⇒ 再测就变成 0.86（装得下）⇒ 停。
+      结果柜子只占画面宽度的 **86%**，四周还留一圈空 —— 看着就是「没怼上去」。
+      实测就是这么来的（玻璃区只占 76%）。
+
+      `dist` 和 `over` 是单调的，所以反复乘会收敛（几步就到 1.00）。
+    */
+    for (let i = 0; i < 12; i++) {
       placeCamera(dist)
-      // ×FIT_MARGIN：要求柜子最多占到画面的 1/1.03 ≈ 97%，
-      // 别让它正好贴在边上（浮点一动就又越界，走查会红）
-      const over = boxOverflow() * FIT_MARGIN
-      if (over <= 1) break
+      // ×FIT_MARGIN：框最多占画面的 1/1.03 ≈ 97%，别正好贴边（浮点一动就走查红）
+      const over = frameOverflow() * FIT_MARGIN
+      if (Math.abs(over - 1) < 0.005) break
       dist *= over
     }
     placeCamera(dist)
+    cameraDist = dist // 存给 render 的「呼吸」微动当基准
+  }
+
+  /*
+    后处理：**暗角 + 胶片颗粒**，和参考实现同一套（它也是 `RenderPass → OutputPass → 颗粒`）。
+
+    ★★ 这里踩过一个坑，别再犯：一开始加的是 `UnrealBloomPass`（辉光），
+      实测**整个画面过曝成一片白**，柜子只剩一个幽灵轮廓。
+      原因是 bloom 跑在**线性 HDR** 空间（色调映射在 `OutputPass` 才做），
+      而白柜子在线性空间本来就 > 1 —— 阈值 0.86 把整块柜体都算成「过曝」，
+      于是每一处都在晕开，叠起来就是全白。
+      **参考实现根本没用 bloom**：它的电影感来自暗角 + 颗粒。
+      ➜ 想让灯带发光，该调的是 `emissiveIntensity`，不是加 bloom。
+
+    ⚠️ 走 composer 就**必须自己开 MSAA**：`WebGLRenderer({ antialias: true })`
+      只作用于默认帧缓冲；渲染到 render target 时它不生效，
+      柜子的立柱和灯带边缘会出锯齿。`samples: 2` 在手机上够用且便宜。
+    ⚠️ `OutputPass` 负责色调映射 + sRGB 转换，**必须在颗粒之前** ——
+      颗粒要在显示空间里叠（线性空间里叠噪点会偏色）。
+    ⚠️ 按 CPU 核数挡一道：4 核及以下直接退回 `renderer.render`，
+      少一个全屏 pass 和一个多采样 RT。
+  */
+  let grain: ShaderPass | null = null
+  {
+    const cores = navigator.hardwareConcurrency ?? 8
+    if (cores > 4) {
+      const w = Math.max(1, container.clientWidth)
+      const h = Math.max(1, container.clientHeight)
+      const d = Math.min(window.devicePixelRatio || 1, 2)
+      const rt = new WebGLRenderTarget(w * d, h * d, { type: HalfFloatType, samples: 2 })
+      const c = new EffectComposer(renderer, rt)
+      c.addPass(new RenderPass(scene, camera))
+      c.addPass(new OutputPass())
+      grain = new ShaderPass({
+        uniforms: {
+          tDiffuse: { value: null },
+          uT: { value: 0 },
+          // 0.018：看得出是「照片」而不是「塑料模型」，又不至于像电视雪花
+          uAmt: { value: 0.018 },
+        },
+        vertexShader: /* glsl */ `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          uniform sampler2D tDiffuse;
+          uniform float uT;
+          uniform float uAmt;
+          varying vec2 vUv;
+          float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(12.9898, 78.233)) + uT) * 43758.5453);
+          }
+          void main() {
+            vec4 c = texture2D(tDiffuse, vUv);
+            // 暗角：越靠边越暗（0.30 是强度，别调太大，孩子会以为屏幕脏了）
+            vec2 q = vUv - 0.5;
+            c.rgb *= 1.0 - dot(q, q) * 0.30;
+            c.rgb += (hash(gl_FragCoord.xy) - 0.5) * uAmt;
+            gl_FragColor = vec4(c.rgb, 1.0);
+          }
+        `,
+      })
+      c.addPass(grain)
+      composer = c
+    }
   }
 
   resize()
   const ro = new ResizeObserver(() => resize())
   ro.observe(container)
 
+  /* ============================ 物理 ============================ */
+
+  /**
+   * Rapier3D 那一层。`null` = 还没加载好 / 加载失败 / 已经 dispose。
+   *
+   * ★ 它**只演不算**：输赢在投币那一刻由 `settleClawRound()` 定死，
+   *   物理只决定娃娃怎么堆、怎么被推开、松手后怎么掉。见 `clawPhysics.ts` 头注释。
+   *
+   * ★ 动态 import：Rapier 是 gzip 755 KB 的单独 chunk。它没到之前，
+   *   下面那条「手写摆放 + 插值回位」的老路照常跑 —— 场景**不等它**。
+   */
+  let phys: ClawPhysics | null = null
+  /** 走查脚本要能区分「没加载好」和「加载失败了」 */
+  let physState: 'loading' | 'ready' | 'failed' | 'off' = 'off'
+  let physError = ''
+  /** 上一帧的 `t`（秒）—— `render()` 只收到绝对时间，dt 要自己算 */
+  let lastPhysT = 0
+  let disposed = false
+
+  function startPhysics(): void {
+    physState = 'loading'
+    void createClawPhysics({
+      cabinet: { hx: HX, hz: HZ, glassH: GLASS_H, hole: HOLE },
+      prizes: prizeGroups,
+      hub,
+      prongs: prongInners,
+    })
+      .then((p) => {
+        // 加载期间页面可能已经切走了 —— 那样必须立刻回收，不然漏一整个物理世界
+        if (disposed) {
+          p.dispose()
+          return
+        }
+        phys = p
+        physState = 'ready'
+      })
+      .catch((e: unknown) => {
+        physState = 'failed'
+        physError = e instanceof Error ? e.message : String(e)
+        // 降级，不报错弹窗：孩子不该看到「物理引擎加载失败」
+        console.warn('[claw] 物理没起来，退回静态摆放：', physError)
+      })
+  }
+
+  // 不 await —— 场景先画出来，物理到了再接管（`render()` 里按 `phys` 分支）
+  startPhysics()
+
   /* ============================ 渲染 ============================ */
 
   const tmp = new Vector3()
 
+  /** 最后一帧收到的视觉状态（`debugVisual` 用）。 */
+  let lastVisual: ClawVisual | null = null
+
   function render(t: number, v: ClawVisual, reducedMotion: boolean): void {
+    lastVisual = v
     // ---- 天车 / 缆绳 / 爪子 ----
     beam.position.z = v.clawZ
     carriage.position.set(v.clawX, 0, v.clawZ)
     hub.position.set(v.clawX, v.hubY, v.clawZ)
-    applyClose(v.close)
+    applyProngs(v.close, v.spread, v.held !== null)
 
     // 缆绳从小车底面拉到 hub 顶面
     const top = tmp.set(v.clawX, RAIL_Y - 0.02, v.clawZ)
@@ -800,20 +1265,42 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     cable.quaternion.setFromUnitVectors(new Vector3(0, -1, 0), new Vector3(dx, dy, dz).normalize())
     cable.scale.set(1, len, 1)
 
-    // ---- 娃娃：被夹住的那只跟着爪子走 ----
+    // ---- 娃娃 ----
+    if (phys) {
+      /*
+        ★ 物理接管之前必须先把 three 的矩阵刷出来：`clawPhysics` 读的是
+          `prongInners[i].matrixWorld`（指头的世界位姿），而 `matrixWorld`
+          只在 `updateMatrixWorld()` 里更新。不调的话它拿到的是**上一帧**
+          的指头位置 —— 合爪时会看到碰撞体比爪子慢半拍。
+      */
+      hub.updateMatrixWorld(true)
+      const dt = lastPhysT ? Math.min(0.1, t - lastPhysT) : 1 / 60
+      lastPhysT = t
+      phys.step(dt, { clawX: v.clawX, clawZ: v.clawZ, hubY: v.hubY, close: v.close, held: v.held })
+    } else {
+      // 降级路径：被夹住的那只跟着爪子，其余插值回原位
+      for (let i = 0; i < prizeGroups.length; i++) {
+        const g = prizeGroups[i]
+        if (i === v.held) {
+          g.position.set(v.clawX, v.hubY - 0.16, v.clawZ)
+          g.rotation.z = Math.sin(t * 6) * 0.12 // 被提着晃
+        } else if (g.visible) {
+          const r = prizeRest[i]
+          g.position.x += (r.x - g.position.x) * 0.12
+          g.position.y += (r.y - g.position.y) * 0.12
+          g.position.z += (r.z - g.position.z) * 0.12
+          g.rotation.z *= 0.9
+        }
+      }
+    }
+
+    // ---- 软体手感：撞击压扁 + 回弹（纯视觉；碰撞体不动，所以探面 / 输赢都不受影响）----
     for (let i = 0; i < prizeGroups.length; i++) {
       const g = prizeGroups[i]
-      if (i === v.held) {
-        g.position.set(v.clawX, v.hubY - 0.16, v.clawZ)
-        g.rotation.z = Math.sin(t * 6) * 0.12 // 被提着晃
-      } else if (g.visible) {
-        // 没被夹住的回到原位（简化：不做物理沉降）
-        const r = prizeRest[i]
-        g.position.x += (r.x - g.position.x) * 0.12
-        g.position.y += (r.y - g.position.y) * 0.12
-        g.position.z += (r.z - g.position.z) * 0.12
-        g.rotation.z *= 0.9
-      }
+      const s = phys ? phys.squashOf(i) : 0
+      const base = (g.userData.baseScale as number | undefined) ?? 1
+      // s > 0 = 压扁（矮一点、胖一点）；s < 0 = 回弹拉长
+      g.scale.set(base * (1 + s * 0.5), base * (1 - s), base * (1 + s * 0.5))
     }
 
     // ---- 灯：呼吸 + 中奖闪烁 ----
@@ -823,12 +1310,95 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     M.lamp.emissiveIntensity = (0.4 + 0.2 * Math.sin(t * 2.2)) * (v.winFlash > 0 ? 4 : 1)
     M.tube.emissiveIntensity = reducedMotion ? 2.6 : 2.6 + Math.sin(t * 13.1) * 0.03
 
-    renderer.render(scene, camera)
+    // 颗粒每帧换一次种子（静态颗粒像屏幕脏了，动起来才像胶片）
+    if (grain) grain.uniforms.uT.value = t
+
+    // ---- 相机：待机「呼吸」微动（参考实现的氛围来源；纯视觉，不动经济/物理不变式）----
+    // ★ 只在非 reducedMotion 下动相机；reducedMotion 时相机停在 resize 算好的静态位
+    if (!reducedMotion) {
+      // flash 是二值的（中奖后 1500ms 内 = 1），自己缓动一下，避免中奖瞬间硬切
+      const zoomTarget = v.winFlash > 0 ? 1 : 0
+      winZoom += (zoomTarget - winZoom) * 0.08
+      if (winZoom < 0.001) winZoom = 0
+
+      const az = Math.sin(t * 0.19) * 0.1              // 水平微摆（±~5.7°），比参考小，卡在卡片里不会裁边
+      const pol = CAM_POL + Math.sin(t * 0.27) * 0.018 // 俯角微浮（±~1°）
+      const sp = Math.sin(pol)
+      const cp = Math.cos(pol)
+      let d = cameraDist
+      let lookY = LOOK_Y
+      // 中奖特写：极轻地拉近 + 视线略往下压到取物口（缩到 5% 以内，不会冲出 contain-fit）
+      if (winZoom > 0) {
+        d *= 1 - 0.05 * winZoom
+        lookY -= 0.1 * winZoom
+      }
+      const hx = d * sp * Math.sin(az)
+      const hz = d * sp * Math.cos(az)
+      const hy = lookY + d * cp
+      // 轻微手持晃动（中奖特写期间关掉，免得晃）
+      const sway = winZoom > 0 ? 0 : 1
+      const sx = (Math.sin(t * 0.71) + Math.sin(t * 1.37 + 1) * 0.5) * 0.008 * sway
+      const sy = (Math.sin(t * 0.53 + 2) + Math.sin(t * 1.13) * 0.4) * 0.006 * sway
+      camera.position.set(hx + sx, hy + sy, hz)
+      camera.lookAt(0, lookY, 0)
+      // ★ 项目铁律：动完相机必须刷世界矩阵（resize 里的 placeCamera 也这么干）
+      camera.updateMatrixWorld(true)
+    }
+
+    if (composer) composer.render()
+    else renderer.render(scene, camera)
+  }
+
+  /* ============================ 换色 ============================ */
+
+  let themeIdx = 0
+
+  /**
+   * 换配色。
+   *
+   * ★ 必须同时换**两张画出来的贴图**（灯箱、背板）—— 它们是 `CanvasTexture`，
+   * 改 `material.color` 对它们没有任何作用。只换材质色的话，孩子会看到
+   * 「柜身变青了，灯箱还是粉的、背板还是粉的」，比不换更奇怪。
+   *
+   * ⚠️ 旧贴图**必须 dispose**：换色可以来回点，不释放就是每点一次漏一张
+   * 1024×256 / 512×512 的贴图，而且没有任何报错。
+   */
+  function setTheme(index: number): void {
+    const n = CLAW_THEMES.length
+    const idx = ((Math.round(index) % n) + n) % n
+    themeIdx = idx
+    const th = CLAW_THEMES[idx]
+
+    // 柜身的强调色（控制台 / 摇杆球 / 取物口高亮边都共用这一个材质）
+    M.accent.color.setHex(th.accent)
+    // LED 灯带 + 取物口圆环
+    M.led.emissive.setHex(th.led)
+    M.lamp.emissive.setHex(th.led)
+
+    // 灯箱：`map` 和 `emissiveMap` 指向同一张，两个都要换
+    const oldSign = signMat.map
+    const signTex = makeSignTexture('爪爪乐', hexOf(th.accent), '#ffffff')
+    signMat.map = signTex
+    signMat.emissiveMap = signTex
+    signMat.needsUpdate = true
+    oldSign?.dispose()
+
+    // 背板
+    const oldBack = backdropMat.map
+    const backTex = makeBackdropTexture(th.accent)
+    backdropMat.map = backTex
+    backdropMat.needsUpdate = true
+    oldBack?.dispose()
   }
 
   /* ============================ 收尾 ============================ */
 
   function dispose(): void {
+    disposed = true
+    // 物理世界是 WASM 里的一块内存，`renderer.dispose()` 管不到它
+    phys?.dispose()
+    phys = null
+    physState = 'off'
     ro.disconnect()
     for (const d of disposables) {
       try {
@@ -838,6 +1408,18 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       }
     }
     disposables.length = 0
+    // 后处理链有自己的 render target，`renderer.dispose()` 不管它
+    composer?.dispose()
+    composer = null
+    // 环境贴图这条链上的三个对象都要单独放：PMREM 的中间 render target
+    // 不释放就是一块常驻显存（而且切走再进来会再分配一块）
+    scene.environment = null
+    envRT.dispose()
+    roomEnv.dispose()
+    pmrem.dispose()
+    // 换色会替换这两张贴图；当前这一张不在 `disposables` 里（换过之后是新 new 的）
+    signMat.map?.dispose()
+    backdropMat.map?.dispose()
     renderer.dispose()
     canvas.remove()
   }
@@ -846,23 +1428,59 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   function debugFrame() {
     const w = Math.max(1, container.clientWidth)
     const h = Math.max(1, container.clientHeight)
-    let left = Infinity
-    let top = Infinity
-    let right = -Infinity
-    let bottom = -Infinity
-    for (const [x, y, z] of BOX_CORNERS) {
-      const p = _p.set(x, y, z).project(camera)
-      const sx = ((p.x + 1) / 2) * w
-      const sy = ((1 - p.y) / 2) * h
-      left = Math.min(left, sx)
-      right = Math.max(right, sx)
-      top = Math.min(top, sy)
-      bottom = Math.max(bottom, sy)
-    }
+    /*
+      ★ 几何判据必须是**静态取景**下的数字，不能被 `render()` 里的「呼吸」微动带偏
+        （呼吸只改 `camera.position` + `lookAt`，不改这里）。所以投影前先临时把相机
+        摆回 `resize` 算好的静态位，量完再还原呼吸位姿 —— 下一帧 render 也会重设，
+        但立刻还原更稳（截图脚本可能量完不等下一帧就截）。
+    */
+    const savedPos = camera.position.clone()
+    const savedQuat = camera.quaternion.clone()
+    placeCamera(cameraDist)
+    camera.updateMatrixWorld(true)
+    const glass = projectRect(GLASS_CORNERS, w, h)
+    const frame = projectRect(FRAME_CORNERS, w, h)
+    const cabinet = projectRect(BOX_CORNERS, w, h)
+    camera.position.copy(savedPos)
+    camera.quaternion.copy(savedQuat)
+    camera.updateMatrixWorld(true)
     return {
-      cabinet: { left, top, right, bottom },
+      /**
+       * ★ 判据换成**玻璃区**了。
+       *
+       * 之前断言的是「整个柜子（含 1.0 高的底座）完整在画面里」，那是
+       * 「contain 装下整台机器」的思路 —— 为了装下底座，相机被推到很远，
+       * 玻璃区只剩画面宽度的 66%，看着像一张柜子的照片。
+       *
+       * 现在按原版取景：**玻璃区必须完整、而且要横向铺满**；
+       * 底座允许被裁（`cabinet` 会超出画面，这是**预期**，不是 bug）。
+       */
+      glass,
+      /** 取景框（必须完整可见的那块） */
+      frame,
+      /** 整台机器 —— 允许越界 */
+      cabinet,
       canvas: { w, h },
       dpr,
+    }
+  }
+
+  /**
+   * 「写了」和「开着」是两件事 —— 这个函数回答后者。
+   * 走查脚本拿它断言，别去比截图（抖动 3~252 B，逐字节比对本来就不稳）。
+   */
+  function debugEffects() {
+    let casters = 0
+    root.traverse((o) => {
+      const m = o as Mesh
+      if (m.isMesh && m.castShadow) casters++
+    })
+    return {
+      shadows: renderer.shadowMap.enabled,
+      shadowCasters: casters,
+      envMap: !!scene.environment,
+      post: !!composer,
+      theme: themeIdx,
     }
   }
 
@@ -871,8 +1489,15 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     resize,
     dispose,
     debugFrame,
+    debugEffects,
+    debugVisual: () => lastVisual,
+    setTheme,
+    themeIndex: () => themeIdx,
     prizeCount: () => prizeGroups.length,
+    debugProng: () => prongInners[0]?.rotation.z ?? 0,
     nearestPrize: (x: number, z: number) => {
+      // 物理在跑的时候问**活的**位置：娃娃会被爪子推、会滚，静止坐标早就过期了
+      if (phys) return phys.nearest(x, z)
       let best = -1
       let bestD = Infinity
       for (let i = 0; i < prizeRest.length; i++) {
@@ -885,8 +1510,43 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       return { index: best, dist: bestD }
     },
     prizeAt: (index: number) => {
+      if (phys) {
+        const p = phys.positionOf(index)
+        return p ? { x: p.x, z: p.z } : null
+      }
       const p = prizeRest[index]
       return p ? { x: p.x, z: p.z } : null
+    },
+    surfaceAt: (x: number, z: number) => {
+      // 物理在跑：射线探，地板和娃娃都算（和原版同一条路）
+      if (phys) return phys.surfaceAt(x, z)
+      /*
+        物理没起来（还在加载 / 加载失败）：用 three 里那几只的当前位置估一个顶面。
+        娃娃顶 ≈ 中心 + 0.16（耳朵 `y=0.128` + 半径 0.028，见 `PRIZE_PARTS`），
+        水平方向只认「爪子正下方」那一圈，别把隔壁那只算进来。
+      */
+      let best = 0
+      for (const g of prizeGroups) {
+        if (!g.visible) continue
+        const dx = g.position.x - x
+        const dz = g.position.z - z
+        if (dx * dx + dz * dz > 0.1 * 0.1) continue
+        best = Math.max(best, g.position.y + 0.16)
+      }
+      return best
+    },
+    debugPhysics: () => {
+      const d = phys?.debug()
+      return {
+        state: physState,
+        bodies: d?.bodies ?? 0,
+        held: d?.held ?? false,
+        awake: d?.awake ?? 0,
+        recycled: d?.recycled ?? 0,
+        steps: d?.steps ?? 0,
+        maxSquash: d?.maxSquash ?? 0,
+        error: physError,
+      }
     },
     fieldFromScreen: (clientX: number, clientY: number) => {
       const r = container.getBoundingClientRect()

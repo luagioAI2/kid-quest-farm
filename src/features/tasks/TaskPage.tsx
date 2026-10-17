@@ -408,6 +408,8 @@ function TaskCard({
   onEdit: (task: Task) => void
 }) {
   const startTimer = useApp((s) => s.startTimer)
+  const pauseTimer = useApp((s) => s.pauseTimer)
+  const resumeTimer = useApp((s) => s.resumeTimer)
   const tasks = useApp((s) => s.tasks)
   // 掉落预览要和结算处同一个判据（见 settleNow）—— 开关关着时不画掉落图标
   const itemDropsEnabled = useApp((s) => s.settings.itemDropsEnabled)
@@ -424,7 +426,10 @@ function TaskCard({
    *     `startedAt` 必然是历史遗留值，不能当「正在计」用。
    */
   const running = TIMER_ENABLED && inst.status === 'pending' && !!inst.startedAt
-  const seconds = useLiveSeconds(inst.startedAt, running)
+  /** 暂停中。挂在 `running` 之下 —— 非 pending 上的 `pausedAt` 是历史遗留值 */
+  const paused = running && !!inst.pausedAt
+  // 秒数走 `useLiveSeconds`（内部调 `runningMs` 扣掉暂停时长）
+  const seconds = useLiveSeconds(inst.startedAt, running, inst.pausedAt, inst.pausedTotalMs)
 
   const done = inst.status === 'completed' || inst.status === 'failed'
   const submitted = inst.status === 'submitted'
@@ -523,11 +528,27 @@ function TaskCard({
                         : timerTone(seconds / 60, inst.plannedMinutes) === 'tangerine'
                           ? 'border-tangerine-300 bg-tangerine-100'
                           : 'border-berry-300 bg-berry-100',
+                      // 暂停时把秒表调灰，和"在走"一眼区分开
+                      paused && 'opacity-50',
                     )}
                   >
                     {String(Math.floor(seconds / 60)).padStart(2, '0')}:
                     {String(seconds % 60).padStart(2, '0')}
                   </span>
+                  {/* 暂停 / 继续。卡片上放在秒表和「我做完啦」中间 ——
+                      孩子中途去吃饭时不用点进详情页就能冻住时间。
+                      ⚠️ 暂停中**不禁用「我做完啦」**：暂停只是冻时长，不是锁提交。 */}
+                  <button
+                    type="button"
+                    data-testid="card-timer-toggle"
+                    aria-label={paused ? '继续计时' : '暂停计时'}
+                    onClick={() => {
+                      void (paused ? resumeTimer(inst.id) : pauseTimer(inst.id))
+                    }}
+                    className="btn active:btn-press grid size-11 shrink-0 place-items-center rounded-2xl border border-ink-200 bg-white text-lg"
+                  >
+                    {paused ? '▶️' : '⏸️'}
+                  </button>
                   <Btn tone="grass" size="md" onClick={onOpen}>
                     ✅ 我做完啦！
                   </Btn>

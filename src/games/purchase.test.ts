@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 /**
  * 往注册表里**注入一款「已经能买」的测试游戏**。
  *
- * 真实注册表里农场免费、娃娃机卖 120 商城币 —— 都能买，但价格和 id 会跟着
+ * 真实注册表里农场免费、娃娃机卖 120 钻石 —— 都能买，但价格和 id 会跟着
  * 版本变。注入一款自己的，断言就不用去猜「现在哪款是卖的」。
  *
  * `vi.mock` 的工厂会被提升到文件顶部，所以它**不能引用外部变量** ——
@@ -61,7 +61,7 @@ async function boot() {
   await useApp.getState().boot()
 }
 
-/** 给钱包塞点商城币（真实 App 里还没有这个入口，见 MallSource 的注释） */
+/** 给钱包塞点钻石（真实 App 里还没有这个入口，见 MallSource 的注释） */
 async function grantMall(amount: number) {
   await postMall({ delta: amount, source: 'manual_adjust', memo: '测试充值' })
   await useApp.getState().refresh()
@@ -69,6 +69,10 @@ async function grantMall(amount: number) {
 
 beforeEach(async () => {
   await boot()
+  // 抹平首装赠送的 500 钻石，让本文件所有用例的「钻石基线」回到 0。
+  // 首装种子的专门断言在 useApp.test.ts 的「首装赠送 500 钻石」里。
+  await db.mallLedger.clear()
+  await useApp.getState().refresh()
 })
 
 describe('默认状态', () => {
@@ -77,7 +81,7 @@ describe('默认状态', () => {
     expect(useApp.getState().activeGameId).toBe(GAME_FARM)
   })
 
-  it('商城币从 0 开始（家长栏里那个「手动发放」不点就是 0）', () => {
+  it('钻石从 0 开始（家长栏里那个「手动发放」不点就是 0）', () => {
     expect(useApp.getState().mallBalance).toBe(0)
   })
 
@@ -90,7 +94,7 @@ describe('默认状态', () => {
 })
 
 describe('买游戏', () => {
-  it('商城币不够就买不了，而且**一笔账都不写**', async () => {
+  it('钻石不够就买不了，而且**一笔账都不写**', async () => {
     const res = await useApp.getState().buyGame('test-game')
     expect(res.ok).toBe(false)
     expect(await db.mallLedger.count()).toBe(0)
@@ -130,7 +134,7 @@ describe('买游戏', () => {
 
   it('★ 娃娃机（真游戏）买得下来、能切成当前 —— 家长走的就是这条路', async () => {
     // 这一条钉的是**家长 2026-10-16 那个需求**的闭环：
-    //   设置 → 游戏 → 花商城币买娃娃机 → 设为当前。
+    //   设置 → 游戏 → 花钻石买娃娃机 → 设为当前。
     // 上面 `test-game` 那几条验的是机制，这一条验的是**真的那款游戏**接上了。
     const price = gameById(GAME_CLAW)!.priceMall
     await grantMall(price + 10)

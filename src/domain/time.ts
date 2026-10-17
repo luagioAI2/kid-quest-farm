@@ -141,6 +141,56 @@ export function formatClock(totalSeconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
 }
 
+/* ---------------- 计时器（含暂停） ---------------- */
+
+/**
+ * 计时器的三个字段。**故意用结构类型、不 import `TaskInstance`** ——
+ * 这样 `time.ts` 不会反向依赖 `types.ts` 里的业务模型，
+ * 而且任何「长得像计时器」的对象都能直接传进来。
+ */
+export interface TimerLike {
+  startedAt?: number
+  pausedAt?: number
+  pausedTotalMs?: number
+}
+
+/**
+ * ★★ **「这个任务实际跑了多久」的唯一算法。**
+ *
+ * 客户反馈：孩子做作业中途去吃饭 / 被叫走，这段不该算进用时，
+ * 否则会被判超时白扣分。所以暂停期间的时长要**从 `startedAt` 里扣掉**。
+ *
+ * ```
+ * 实际用时 = now - startedAt - 累计暂停 - (暂停中 ? now - pausedAt : 0)
+ * ```
+ *
+ * ⚠️ **所有算用时的地方都必须调这个函数**，不许各写各的减法。
+ * 一共四处，漏掉任何一处都会得到「暂停了但某条路仍按没暂停算」：
+ *   ① `tick()` 跨逻辑日的自动收尾
+ *   ② `submitInstance()` 没传用时时的兜底
+ *   ③ 详情页 / 卡片的走动秒表
+ *   ④ 详情页「预填用时」
+ * 这四处以前是四份逐字相同的 `(now - startedAt) / 60000`。
+ */
+export function runningMs(t: TimerLike, now = Date.now()): number {
+  if (!t.startedAt) return 0
+  // ⚠️ `Math.max(0, …)` 不能省：`now` 不一定就是"此刻" ——
+  // 跨逻辑日自动收尾传的是 `min(now, 当日 0 点)`，可能**早于** `pausedAt`。
+  // 不夹的话 `now - pausedAt` 是负数，会把暂停时长**加回**用时里。
+  const pausedNow = t.pausedAt ? Math.max(0, now - t.pausedAt) : 0
+  return Math.max(0, now - t.startedAt - (t.pausedTotalMs ?? 0) - pausedNow)
+}
+
+/** `runningMs` 的分钟版（结算 / 提交用） */
+export function runningMinutes(t: TimerLike, now = Date.now()): number {
+  return runningMs(t, now) / 60_000
+}
+
+/** 当前是否处在暂停中（有 `pausedAt` 就是） */
+export function isPaused(t: TimerLike): boolean {
+  return !!t.pausedAt
+}
+
 /** 「今天 14:30 前完成」这类提示 */
 export function humanizeDeadline(ts: number, now = Date.now()): string {
   const today = appDayKey(now)

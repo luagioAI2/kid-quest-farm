@@ -26,7 +26,7 @@ import { BottomSheet, CoinPill } from './farmUi'
 
    ⚠️ **三个坑，改之前先读：**
 
-   ① **这一页结的是点券 🎟️，不是积分 🪙。**
+   ① **这一页结的是商城币 🎟️，不是积分 🪙。**
    卖出走 `sellProduce` → `postHarvest`，进的是 `harvestBalance`。
    所以顶部那颗币种胶囊必须是 `harvestBalance` + `tone="grass"` + 🎟️。
    2026-09-16 修过一次：原来错传了 `balance`（积分），孩子卖完东西
@@ -42,9 +42,9 @@ import { BottomSheet, CoinPill } from './farmUi'
    要真做"分批更划算"，得先让 `sellQuote` 按 `SELL_IMPACT_PER_UNIT`
    对整笔卖出做衰减积分 —— 那是改经济数值，见 `docs/farm-economy-design.md` §6.4。
 
-   ③ **闸门按点券计价，货却是整颗的 —— 按钮必须报「真能卖几个」。**
+   ③ **闸门按商城币计价，货却是整颗的 —— 按钮必须报「真能卖几个」。**
    家长 2026-09-18 报「小萝卜收进背包后不能全部卖掉」。不是小数 bug：
-   小萝卜种子 2 分 → 一轮上限 `2 × 1.6 = 3.2` 点券；报的那天现价 0.9，
+   小萝卜种子 2 分 → 一轮上限 `2 × 1.6 = 3.2` 商城币；报的那天现价 0.9，
    4 个值 `4 × 0.9 = 3.6 > 3.2`，于是只卖得动 3 个，剩下 1 个 + 0.2 额度卡住。
    根子是：**基准价是按「上限 ÷ 总产量」反推的，它恰好就是「刚好卖得完」那个价**，
    所以旧口径下现价一旦高于基准价（0.8），就必然有整颗卖不掉。
@@ -63,7 +63,7 @@ import { BottomSheet, CoinPill } from './farmUi'
 export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const market = useApp((s) => s.market)
   const inventory = useApp((s) => s.inventory)
-  // ⚠️ 点券，不是积分 —— 这一页卖出结的就是它，见文件头注释 ①
+  // ⚠️ 商城币，不是积分 —— 这一页卖出结的就是它，见文件头注释 ①
   const harvestBalance = useApp((s) => s.harvestBalance)
   const sellProduce = useApp((s) => s.sellProduce)
   const plots = useApp((s) => s.plots)
@@ -84,7 +84,7 @@ export function MarketSheet({ open, onClose }: { open: boolean; onClose: () => v
             count: inv?.count ?? 0,
             name: item?.name ?? q.itemId,
             emoji: item?.emoji ?? '📦',
-            // 这一轮还能卖多少点券。和 `sellProduce` 用的是同一个领域函数，
+            // 这一轮还能卖多少商城币。和 `sellProduce` 用的是同一个领域函数，
             // 所以按钮上算出来的「实际能卖几个」和结算时**必然一致**。
             remaining: remainingCapFor(q.itemId, plots, animals, r, quotaCarry[q.itemId] ?? 0),
           }
@@ -201,7 +201,7 @@ function MarketRow({
   name: string
   emoji: string
   count: number
-  /** 这一轮还能卖多少点券（闸门余额） */
+  /** 这一轮还能卖多少商城币（闸门余额） */
   remaining: number
   expanded: boolean
   onToggle: () => void
@@ -230,11 +230,11 @@ function MarketRow({
     ------------------------------------------------------------
     家长 2026-09-18 报：「买了萝卜种子，收成后收进背包，去市场卖不能全部卖掉」。
 
-    查下来不是小数 bug，是**闸门按点券计价、而货是整颗的**：
-      小萝卜 种子 2 分 → 一轮上限 `2 × (1+0.6) = 3.2` 点券
+    查下来不是小数 bug，是**闸门按商城币计价、而货是整颗的**：
+      小萝卜 种子 2 分 → 一轮上限 `2 × (1+0.6) = 3.2` 商城币
       基准价 0.8 / 个；报的那天现价 0.9（**旧硬顶**下才够得到的价）
       4 个值 `4 × 0.9 = 3.6 > 3.2` → 只卖得动 3 个
-    剩下的 1 个 + 0.2 点券额度就卡在背包里了（额度不够买 1 个整颗）。
+    剩下的 1 个 + 0.2 商城币额度就卡在背包里了（额度不够买 1 个整颗）。
     （现价区间现在是基准价的 0.72~1.00 倍，单轮满产卖不光已经不可能 —— 见文件头 ③）
 
     原来这里写的是 `全卖 {count} 个 +{quoteFor(itemId, count)}` ——

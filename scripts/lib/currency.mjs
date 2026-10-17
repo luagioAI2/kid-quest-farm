@@ -4,13 +4,14 @@
  * 为什么要有这个文件：
  *
  * 2026-10-16 把「丰收币」改名成「点券」，顺带把图标从 `🌾` 换成了 `🎟️`。
+ * 2026-10-17 又**链式改名**：「点券」→「商城币」、「商城币」→「钻石」。
  * 改的是 `src/domain/currency.ts`（那里是唯一事实源），但**验收脚本没跟着改** ——
  * 于是 `e2e-check.mjs` 掉了 6 条、`e2e-bag-sell.mjs` 掉了 3 条，
  * 而**应用本身完全是对的**（弹层头写着 `🎟️ 8`，真实余额就是 8）。
  *
  * 这是本项目的老毛病，`scripts/lib/quality.mjs` 的文件头写过一模一样的版本：
  * **在验收脚本里抄第二份名字列表，抄的那份过期时不会响。**
- * 五档那次是「不错」→「良好」，这次是「丰收币 🌾」→「点券 🎟️」。
+ * 五档那次是「不错」→「良好」，货币这次是「丰收币 🌾」→「点券 🎟️」→「商城币」。
  *
  * ## ⚠️ 为什么不能全局替换 `🌾`
  *
@@ -39,7 +40,7 @@ const EXPECTED_CURRENCIES = 3
 
 /**
  * 读出三套币的显示口径，例如
- * `{ points: {name:'积分', emoji:'🪙'}, coupon: {name:'点券', emoji:'🎟️'}, mall: {name:'商城币', emoji:'🛍️'} }`
+ * `{ points: {name:'积分', emoji:'🪙'}, coupon: {name:'商城币', emoji:'🎟️'}, mall: {name:'钻石', emoji:'💎'} }`
  * @returns {Record<string, {name: string, emoji: string}>}
  */
 export function readCurrencies() {
@@ -81,11 +82,11 @@ export function currency(id) {
   return c
 }
 
-/** 点券（2026-10-16 前叫「丰收币」）。⚠️ 只改显示名，`harvest*` 键名一律不改。 */
+/** 商城币（2026-10-17 前叫「点券」，再以前叫「丰收币」）。⚠️ 只改显示名，`harvest*` 键名一律不改。 */
 export const COUPON = currency('coupon')
 /** 积分。 */
 export const POINTS = currency('points')
-/** 商城币。 */
+/** 钻石（2026-10-17 前叫「商城币」）。 */
 export const MALL = currency('mall')
 
 /**

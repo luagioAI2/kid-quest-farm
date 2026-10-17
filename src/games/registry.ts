@@ -45,7 +45,7 @@ export interface GameDef {
   /** 给家长看的一句话：这游戏是干什么的。陈述句，别写广告词。 */
   tagline: string
   status: GameStatus
-  /** 商城币售价。`0` = 免费 */
+  /** 钻石售价。`0` = 免费 */
   priceMall: number
   /** 免费且默认已拥有。**只应该有一条**（首款） */
   defaultOwned: boolean
@@ -56,7 +56,7 @@ export const GAMES: GameDef[] = [
     id: GAME_FARM,
     name: '农场',
     emoji: '🌾',
-    tagline: '买种子种地、养动物、看行情。收成能换成点券。',
+    tagline: '买种子种地、养动物、看行情。收成能换成商城币。',
     status: 'available',
     // 首款免费并且默认已拥有 —— 家长 2026-10-14 拍板。
     priceMall: 0,
@@ -66,14 +66,14 @@ export const GAMES: GameDef[] = [
     id: GAME_CLAW,
     name: '娃娃机',
     emoji: '🕹️',
-    tagline: '花积分换币投币，抓到的娃娃换成点券。',
+    tagline: '花积分换币投币，抓到的娃娃换成商城币。',
     // 2026-10-16 上线：页面挂在 `pages.ts` 里，走 `React.lazy`
     // —— three.js 只在这款游戏被切到时才下载（见那边的注释）。
     status: 'available',
-    // 家长 2026-10-16 定：**用商城币买**。
-    // ⚠️ 商城币的余额是**从账本算出来的**，而这一轮之前**没有任何发币入口**
+    // 家长 2026-10-16 定：**用钻石买**。
+    // ⚠️ 钻石的余额是**从账本算出来的**，而这一轮之前**没有任何发币入口**
     //    ⇒ 余额恒为 0 ⇒ 这个购买按钮按下去一定失败。
-    //    所以家长栏里同时加了「手动发放商城币」（`mintMall`），
+    //    所以家长栏里同时加了「手动发放钻石」（`mintMall`），
     //    否则就是「界面摆了一个必然失败的按钮」。
     priceMall: 120,
     defaultOwned: false,

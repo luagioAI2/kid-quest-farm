@@ -36,13 +36,19 @@ interface PhaseSpan {
  * 一局的时段表。改这里就等于改动画节奏 ——
  * 但**别改总时长**：走查脚本会用它算「什么时候该截图」，
  * 而且 `CLAW_TOTAL` 是「这一局结束」的唯一判据。
+ *
+ * ★★ 2026-10-17：`close` 从 **0.40 改成 0.75**。这是「抓的过程差很多」的
+ *    第二个来源 —— 0.40 秒合爪只有 24 帧，看着像**开关**，不像机器在使劲。
+ *    参考实现是 **0.9 秒**（`stateT > 0.9` 才切 `lift`），而且它在合爪前
+ *    还有 0.15 秒的停顿（`stateT > 0.15` 才开始收指头）。
+ *    这里没有单独的停顿段，靠 `smoothstep` 的起步慢来代替。
  */
 export const CLAW_SPANS: readonly PhaseSpan[] = [
-  { phase: 'drop', seconds: 1.15 },
-  { phase: 'close', seconds: 0.40 },
-  { phase: 'lift', seconds: 1.05 },
-  { phase: 'move', seconds: 1.25 },
-  { phase: 'release', seconds: 0.35 },
+  { phase: 'drop', seconds: 1.10 },
+  { phase: 'close', seconds: 0.75 },
+  { phase: 'lift', seconds: 1.00 },
+  { phase: 'move', seconds: 1.15 },
+  { phase: 'release', seconds: 0.50 },
 ]
 
 /** 一局的总秒数（不含 `idle` 和 `done`）。 */

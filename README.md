@@ -352,6 +352,7 @@ F12 → Console 直接敲（Chrome 支持顶层 `await`）：
 await __kqf__.unlockAll()       // ★ 一键全解锁（见下表），末尾自动 reload
 await __kqf__.addPoints(5000)   // 加积分（不 reload，只刷新内存快照）
 await __kqf__.syncSeedTasks()   // 把 seedTasks.ts 里新加的任务同步进当前账号
+await __kqf__.unlockClaw()      // ★ 想试娃娃机就敲这一句（买下 + 切过去 + 发币）
 ```
 
 | 命令 | 作用 |
@@ -359,6 +360,7 @@ await __kqf__.syncSeedTasks()   // 把 seedTasks.ts 里新加的任务同步进�
 | `__kqf__.unlockAll()` | 12 块地全开 · 每种种子 ×99 · 8 种动物全部入园 · 收获/种植/剪毛次数写成 500（足以解锁全部作物）· 末尾 `location.reload()` |
 | `__kqf__.addPoints(delta)` | 加积分，写一条 `manual_adjust` 流水 |
 | `__kqf__.syncSeedTasks()` | 同步新增的种子任务（按标题去重），末尾 reload |
+| `__kqf__.unlockClaw()` | **一键让娃娃机能玩**：补足商城币 → 买下 → 切成当前游戏 → 发 500 积分 + 20 个娃娃机币。已有则跳过，可反复执行。⚠️ 会**新增**积分/币，不是「重置」 |
 | `__kqf__.getState()` | 读整个 store 快照（排查用） |
 | `__kqf__.exportBackup()` / `importBackup(raw)` | 备份往返 |
 | `__kqf__.catalog.*` | 读**真实**数值：`cropSeedCost` / `animalCost` / `remainingCap` / `priceCeiling` / `cropsUnlockedAt(level)`（升到该级新解锁的作物名，升级播报靠它对账） |
@@ -371,6 +373,25 @@ await __kqf__.syncSeedTasks()   // 把 seedTasks.ts 里新加的任务同步进�
 
 ⚠️ 这一组在**生产构建 / APK 里也在**（没有 `import.meta.env.DEV` 守卫），
 装到手机上可以用 `chrome://inspect` 远程调试。
+
+### 娃娃机场景的探针
+
+娃娃机页面另外挂了一个 `window.__kqfClawStage`（**只有进娃娃机页才有**），
+给走查脚本读「画布里面到底在发生什么」——DOM 里只有一个 `<canvas>`，
+`querySelector` 什么都看不见：
+
+| 方法 | 作用 |
+| --- | --- |
+| `debugEffects()` | 阴影 / 环境贴图 / 后处理 / 当前配色。**「代码里写了」和「运行时开着」是两件事** |
+| `debugVisual()` | 这一帧真正传进渲染的爪子状态（`clawX` / `clawZ` / `hubY` / `close` / `held`） |
+| `debugPhysics()` | 物理层：`state`（`loading` / `ready` / `failed`）· `bodies` · `held` · `awake` · `recycled` · `steps` |
+| `debugFrame()` | 柜子包围盒投影到画布坐标 —— `contain` 取景的判据 |
+| `nearestPrize(x,z)` · `prizeAt(i)` | 池子里娃娃的**活的**位置（物理在跑时就是物理位置，不是初始摆放） |
+
+★ **物理只演，不判**。娃娃掉进洞口**不是**中奖条件 —— 中不中在投币那一刻由
+`settleClawRound()` 定死（见 `src/features/claw/clawPhysics.ts` 头注释）。
+所以 `debugPhysics().recycled`（掉进通道的娃娃数）**必须等于**中奖次数，
+走查脚本 `scripts/e2e-claw-physics.mjs` 就是钉这一条的。
 
 ⚠️ 定义在 `src/store/useApp.ts` 文件末尾的「调试句柄」块里 —— 加命令时
 **同步更新这张表**，否则下次又想不起来怎么用。

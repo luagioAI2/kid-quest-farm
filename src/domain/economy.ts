@@ -18,7 +18,7 @@ import {
      下一轮重新买种子、重新算上限。种子永远买得到、地永远能再种。
 
    ⚠️ **本文件里所有额度一律走 `capFor(itemId, r)`，不要再退回
-   `roundCap(成本, r)`。** 后者是连续小数，孩子到手的点券是整枚，
+   `roundCap(成本, r)`。** 后者是连续小数，孩子到手的商城币是整枚，
    两者对不齐就会剩货 —— 2026-09-19 修的那个「背包里的萝卜卖不掉」
    正是这么来的，详见 docs/farm-economy-design.md §6.1.3。
 
@@ -110,7 +110,7 @@ export function capTargetsFor(
   return out
 }
 
-/** 该产出物当前总共还能卖出多少点券（= 所有未结清对象剩余额度之和 + 结转过来的） */
+/** 该产出物当前总共还能卖出多少商城币（= 所有未结清对象剩余额度之和 + 结转过来的） */
 export function remainingCapFor(
   itemId: string,
   plots: Plot[],

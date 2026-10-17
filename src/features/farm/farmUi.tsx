@@ -60,7 +60,7 @@ export function CoinPill({
   amount: number
   className?: string
   tone?: 'sun' | 'grass' | 'danger'
-  /** 图标。积分是 🪙，点券是 🎟️ —— 两个币种不能长得一样。 */
+  /** 图标。积分是 🪙，商城币是 🎟️ —— 两个币种不能长得一样。 */
   icon?: string
 }) {
   const skin =

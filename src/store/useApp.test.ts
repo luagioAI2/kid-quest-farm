@@ -21,7 +21,7 @@ import {
 } from './useApp'
 import { checkInPayout, currentDayKey } from '../domain/recurrence'
 import { MAX_TIER_RATIO, MIN_TIER_RATIO } from '../domain/tierRatio'
-import { periodKeyFor } from '../domain/time'
+import { periodKeyFor, runningMinutes } from '../domain/time'
 import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
 import { REDEEM_PRICE_MIGRATIONS, SEED_REDEEM_ITEMS, SEED_TASKS } from '../domain/seedTasks'
 
@@ -1281,10 +1281,10 @@ describe('任务隐藏', () => {
 })
 
 /* ============================================================
-   兑换分账：点券优先 + 可混合（用户 2026-09-30）
+   兑换分账：商城币优先 + 可混合（用户 2026-09-30）
    ------------------------------------------------------------
-   用户要求：「兑换页面，优先用点券兑换。价值和积分等价的。
-   用完点券再用积分，可混合。」
+   用户要求：「兑换页面，优先用商城币兑换。价值和积分等价的。
+   用完商城币再用积分，可混合。」
 
    规则本身在 `domain/redeem.test.ts` 里逐条钉过（纯函数）。这一层要证的是
    **它真的落到了账本上**：该扣哪张表、扣多少、记录里留没留痕、
@@ -1295,7 +1295,7 @@ describe('任务隐藏', () => {
    多写一笔积分账，就是**多扣**。纯函数测试看不见这两件事。
    ============================================================ */
 
-describe('兑换：点券优先，可混合', () => {
+describe('兑换：商城币优先，可混合', () => {
   /** 取一个种子兑换品并改价，返回改完之后的它 */
   async function itemAtCost(cost: number) {
     await useApp.getState().updateSettings({ redeemEnabled: true })
@@ -1308,7 +1308,7 @@ describe('兑换：点券优先，可混合', () => {
   async function setHarvestTo(target: number) {
     const cur = await currentHarvestBalance()
     if (cur !== target) {
-      await postHarvest({ delta: target - cur, source: 'manual_adjust', memo: '测试校准点券' })
+      await postHarvest({ delta: target - cur, source: 'manual_adjust', memo: '测试校准商城币' })
     }
     await useApp.getState().refresh()
   }
@@ -1326,28 +1326,28 @@ describe('兑换：点券优先，可混合', () => {
   const pointSpendRows = async () =>
     (await db.ledger.toArray()).filter((r) => r.source === 'redeem')
 
-  it('点券够 —— 全用点券，积分一分不动', async () => {
+  it('商城币够 —— 全用商城币，积分一分不动', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(80)
     await setPointsTo(300)
 
     await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
 
-    expect(useApp.getState().harvestBalance, '点券扣 50').toBe(30)
+    expect(useApp.getState().harvestBalance, '商城币扣 50').toBe(30)
     expect(useApp.getState().balance, '积分一分都不该动').toBe(300)
 
     const rec = useApp.getState().redeemRecords[0]
     expect(rec).toMatchObject({ cost: 50, harvestPaid: 50, pointsPaid: 0, harvestBalanceAfter: 30 })
   })
 
-  it('点券不够 —— 差额用积分补（这就是「可混合」）', async () => {
+  it('商城币不够 —— 差额用积分补（这就是「可混合」）', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(20)
     await setPointsTo(300)
 
     await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
 
-    expect(useApp.getState().harvestBalance, '点券花光').toBe(0)
+    expect(useApp.getState().harvestBalance, '商城币花光').toBe(0)
     expect(useApp.getState().balance, '只补差额 30').toBe(270)
 
     const rec = useApp.getState().redeemRecords[0]
@@ -1355,7 +1355,7 @@ describe('兑换：点券优先，可混合', () => {
     expect(rec.harvestBalanceAfter).toBe(0)
   })
 
-  it('没有点券 —— 退回纯积分，跟改动前的行为一模一样', async () => {
+  it('没有商城币 —— 退回纯积分，跟改动前的行为一模一样', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(0)
     await setPointsTo(300)
@@ -1387,14 +1387,14 @@ describe('兑换：点券优先，可混合', () => {
 
     await expect(useApp.getState().redeem(item.id)).resolves.toBe(false)
 
-    expect(useApp.getState().harvestBalance, '点券不能被扣').toBe(20)
+    expect(useApp.getState().harvestBalance, '商城币不能被扣').toBe(20)
     expect(useApp.getState().balance, '积分不能被扣').toBe(29)
     expect(useApp.getState().redeemRecords, '不该留下记录').toHaveLength(0)
     expect(await harvestSpendRows()).toHaveLength(0)
     expect(await pointSpendRows()).toHaveLength(0)
   })
 
-  it('点券那笔走 harvest_redeem —— 这个 source 定义了半个月，终于用上了', async () => {
+  it('商城币那笔走 harvest_redeem —— 这个 source 定义了半个月，终于用上了', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(80)
     await setPointsTo(300)
@@ -1407,7 +1407,7 @@ describe('兑换：点券优先，可混合', () => {
     expect(rows[0].balanceAfter).toBe(30)
   })
 
-  it('纯点券付账时**不写**积分流水（不能凭空多一条「兑换 0 分」）', async () => {
+  it('纯商城币付账时**不写**积分流水（不能凭空多一条「兑换 0 分」）', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(80)
     await setPointsTo(300)
@@ -1456,7 +1456,7 @@ describe('兑换：点券优先，可混合', () => {
     }
   })
 
-  it('点券够但今天换满了 —— 还是换不了（次数闸门不受分账影响）', async () => {
+  it('商城币够但今天换满了 —— 还是换不了（次数闸门不受分账影响）', async () => {
     await useApp.getState().updateSettings({ redeemEnabled: true })
     const seed = useApp.getState().allRedeemItems[0]
     await useApp.getState().updateRedeemItem(seed.id, { cost: 50, limitPerDay: 1 })
@@ -1902,9 +1902,9 @@ describe('编辑任务：改动要落到还没结算的实例上', () => {
 })
 
 /* ============================================================
-   点券：不可逆约束 + 每轮闸门
+   商城币：不可逆约束 + 每轮闸门
    ------------------------------------------------------------
-   ① 地基是「农场产出只能变成点券，点券再也回不去」。
+   ① 地基是「农场产出只能变成商城币，商城币再也回不去」。
       哪天有人把 postHarvest 改回 postLedger，或者写了
       `balance + harvestBalance` 去买种子，积分经济立刻变成闭环印钞机：
       10 → 16 → 26 → 41 → 66 …（每轮 2 分钟，1 小时能滚出上千万）。
@@ -1917,7 +1917,7 @@ describe('编辑任务：改动要落到还没结算的实例上', () => {
    这组用例把这两件事一起钉住。
    ============================================================ */
 
-describe('点券：不可逆约束 + 每轮闸门', () => {
+describe('商城币：不可逆约束 + 每轮闸门', () => {
   /**
    * 把积分余额校准到指定值（测试专用）。
    *
@@ -1947,7 +1947,7 @@ describe('点券：不可逆约束 + 每轮闸门', () => {
     await useApp.getState().refresh()
   }
 
-  it('① 点券不进积分余额 —— 两张表物理隔离', async () => {
+  it('① 商城币不进积分余额 —— 两张表物理隔离', async () => {
     const pointsBefore = await currentBalance()
 
     await postHarvest({ delta: 500, source: 'farm_harvest', memo: '测试注入' })
@@ -1959,7 +1959,7 @@ describe('点券：不可逆约束 + 每轮闸门', () => {
     expect(useApp.getState().harvestBalance).toBe(500)
   })
 
-  it('① 点券流水不会混进积分流水', async () => {
+  it('① 商城币流水不会混进积分流水', async () => {
     const pointsRowsBefore = useApp.getState().ledger.length
 
     await postHarvest({ delta: 30, source: 'farm_market', memo: '测试注入' })
@@ -1969,7 +1969,7 @@ describe('点券：不可逆约束 + 每轮闸门', () => {
     expect(useApp.getState().harvestLedger).toHaveLength(1)
   })
 
-  it('② 积分 0 时，点券再多也种不了地', async () => {
+  it('② 积分 0 时，商城币再多也种不了地', async () => {
     await setBalanceTo(0)
     await postHarvest({ delta: 9999, source: 'farm_harvest', memo: '测试注入' })
     await useApp.getState().refresh()
@@ -1979,7 +1979,7 @@ describe('点券：不可逆约束 + 每轮闸门', () => {
     const ok = await useApp.getState().plant(0, 'radish')
 
     expect(ok).toBe(false)
-    // 一个点券都不许花出去
+    // 一个商城币都不许花出去
     expect(await currentHarvestBalance()).toBe(9999)
     expect(useApp.getState().plots.find((p) => p.index === 0)?.crop).toBeUndefined()
   })
@@ -2010,7 +2010,7 @@ describe('点券：不可逆约束 + 每轮闸门', () => {
     expect(await currentHarvestBalance()).toBe(9999)
   })
 
-  it('③ 收获默认「存进背包」—— 不发积分，也不立刻结算点券', async () => {
+  it('③ 收获默认「存进背包」—— 不发积分，也不立刻结算商城币', async () => {
     // 关掉随机事件：否则「绝收」分支会让这条用例偶尔变红
     await useApp.getState().updateSettings({ farmEventsEnabled: false })
     await setBalanceTo(50)
@@ -2026,14 +2026,14 @@ describe('点券：不可逆约束 + 每轮闸门', () => {
     expect(useApp.getState().balance, '收获不该发积分').toBe(
       50 - CROP_BY_ID.get('radish')!.seedCost,
     )
-    expect(useApp.getState().harvestBalance, '还没卖，点券不该动').toBe(0)
+    expect(useApp.getState().harvestBalance, '还没卖，商城币不该动').toBe(0)
     expect(
       useApp.getState().inventory.find((s) => s.itemId === 'produce-radish')?.count ?? 0,
       '产出应该进了背包',
     ).toBeGreaterThan(0)
   })
 
-  it('③ 「直接卖」当场结算点券 —— 和存背包走同一个闸门', async () => {
+  it('③ 「直接卖」当场结算商城币 —— 和存背包走同一个闸门', async () => {
     await useApp.getState().updateSettings({ farmEventsEnabled: false })
     await setBalanceTo(50)
 
@@ -2047,7 +2047,7 @@ describe('点券：不可逆约束 + 每轮闸门', () => {
     expect(useApp.getState().harvestBalance).toBe(earned)
   })
 
-  it('③ 市场卖出结的是点券，不是积分', async () => {
+  it('③ 市场卖出结的是商城币，不是积分', async () => {
     // 闸门挂在「标的」上，所以必须真的种着东西才卖得出去
     await setBalanceTo(50)
     await plantAndMature('radish', 0)
@@ -2363,7 +2363,7 @@ describe('点券：不可逆约束 + 每轮闸门', () => {
       '卖得比额度允许的还少 = 提前收手了（报价是线性的，所以这是个下界）',
     ).toBeGreaterThanOrEqual(Math.floor(cap / price))
     // 钱和「少掉的个数」要对得上：不能扣了货不给钱，也不能给了钱不扣货。
-    // ⚠️ 点券是**整数** —— `postHarvest` 里写着 `Math.round(entry.delta)`，
+    // ⚠️ 商城币是**整数** —— `postHarvest` 里写着 `Math.round(entry.delta)`，
     //    所以上界必须留 0.5 的四舍五入余量（实测 2 个 × 1.285 = 2.57 → 记账 3）。
     //    下界的 6% 余量留着 —— 报价是线性的（现价 × 个数），本来就不该少，
     //    余量只是防将来给 `sellQuote` 加卖压衰减时这条断言变假失败。
@@ -2873,5 +2873,185 @@ describe('种子任务：老设备补任务（只增不改）', () => {
     const same = useApp.getState().allTasks.filter((t) => t.title === SEED_TASKS[0].title)
     expect(same, '不该被重复加一条').toHaveLength(1)
     expect(same[0].archived, '补任务不该把它「复活」').toBe(true)
+  })
+})
+
+/* ============================================================
+   任务计时：暂停 / 恢复（客户反馈）
+   ------------------------------------------------------------
+   场景：孩子做作业中途去吃饭 / 被叫走，这段不该算进「实际用时」，
+   否则会被判超时白扣分。
+
+   实现上暂停**不改 `startedAt`**，只是额外记 `pausedAt` / `pausedTotalMs`，
+   用时统一由 `runningMinutes()` 算（见 domain/time.ts）。
+
+   ⚠️ 这里最值钱的一条断言是「**提交时拿到的用时**」而不是「字段写对了没有」——
+   字段写对、但结算那条路还在用 `Date.now() - startedAt` 的话，
+   孩子照样会被判超时，而且**不会报错**。
+   ============================================================ */
+describe('任务计时：暂停与恢复', () => {
+  /** 拿一张「待完成」的今日每日任务卡 */
+  function pendingInstance() {
+    const inst = useApp
+      .getState()
+      .instances.find((i) => i.status === 'pending' && i.cycle === 'daily')
+    if (!inst) throw new Error('应该有今天的每日任务实例')
+    return inst
+  }
+
+  /** 把系统时钟拨到当天的某个时刻（同一天内，不跨逻辑日） */
+  function at(h: number, m: number) {
+    vi.setSystemTime(new Date(2026, 9, 17, h, m, 0))
+  }
+
+  it('暂停 30 分钟再继续 → 只算真正在跑的两段（20 + 10 = 30 分）', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    at(9, 0)
+    await boot()
+
+    const inst = pendingInstance()
+    await useApp.getState().startTimer(inst.id)
+
+    at(9, 20) // 干了 20 分钟
+    await useApp.getState().pauseTimer(inst.id)
+
+    at(9, 50) // 休息 30 分钟（不该算）
+    await useApp.getState().resumeTimer(inst.id)
+
+    at(10, 0) // 又干了 10 分钟
+
+    const after = useApp.getState().instances.find((i) => i.id === inst.id)!
+    expect(after.pausedAt, '恢复之后不该还挂着 pausedAt').toBeUndefined()
+    expect(after.pausedTotalMs, '暂停的 30 分钟要记下来').toBe(30 * 60_000)
+    expect(runningMinutes(after), '用时 = 20 + 10，不含休息的 30 分').toBe(30)
+  })
+
+  it('★ 暂停中提交 → 用时冻在「暂停那一刻」，休息时长不算', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    at(9, 0)
+    await boot()
+
+    const inst = pendingInstance()
+    await useApp.getState().startTimer(inst.id)
+
+    at(9, 20)
+    await useApp.getState().pauseTimer(inst.id)
+
+    // 孩子暂停之后直接点了「我做完啦」（没点继续）
+    at(9, 50)
+    await useApp.getState().submitInstance(inst.id, undefined, undefined)
+
+    const after = useApp.getState().instances.find((i) => i.id === inst.id)!
+    expect(after.status, '默认开启家长审核 → 进待审核').toBe('submitted')
+    // 老实现这里是 50（9:50 - 9:00）—— 休息的 30 分钟被当成做作业了
+    expect(after.actualMinutes, '暂停之后交，只该算 20 分钟').toBe(20)
+  })
+
+  it('幂等：连点两次「暂停」不会把第一次的暂停时长吃掉', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    at(9, 0)
+    await boot()
+
+    const inst = pendingInstance()
+    await useApp.getState().startTimer(inst.id)
+
+    at(9, 10)
+    await useApp.getState().pauseTimer(inst.id)
+    const first = useApp.getState().instances.find((i) => i.id === inst.id)!.pausedAt
+
+    at(9, 30) // 孩子以为没点上，又点了一次
+    await useApp.getState().pauseTimer(inst.id)
+    const second = useApp.getState().instances.find((i) => i.id === inst.id)!.pausedAt
+
+    expect(second, '重复暂停必须是无操作（否则 9:10~9:30 那 20 分钟会凭空多算）').toBe(first)
+  })
+
+  it('没点过「开始」的实例：暂停 / 继续都是无操作', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    at(9, 0)
+    await boot()
+
+    const inst = pendingInstance()
+    expect(inst.startedAt, '前提：这张卡还没开始计时').toBeUndefined()
+
+    await useApp.getState().pauseTimer(inst.id)
+    let after = useApp.getState().instances.find((i) => i.id === inst.id)!
+    expect(after.pausedAt, '没开始计时就不该被标成暂停').toBeUndefined()
+
+    await useApp.getState().resumeTimer(inst.id)
+    after = useApp.getState().instances.find((i) => i.id === inst.id)!
+    expect(after.pausedTotalMs, '没暂停过就不该有累计暂停时长').toBeUndefined()
+  })
+
+  it('重复「继续」不会重复累加暂停时长', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    at(9, 0)
+    await boot()
+
+    const inst = pendingInstance()
+    await useApp.getState().startTimer(inst.id)
+
+    at(9, 10)
+    await useApp.getState().pauseTimer(inst.id)
+    at(9, 20)
+    await useApp.getState().resumeTimer(inst.id)
+    at(9, 25)
+    await useApp.getState().resumeTimer(inst.id) // 再点一次
+
+    const after = useApp.getState().instances.find((i) => i.id === inst.id)!
+    expect(after.pausedTotalMs, '第二次继续该是无操作').toBe(10 * 60_000)
+  })
+
+  it('暂停跨逻辑日：自动收尾也不能把休息时间算进去', async () => {
+    /*
+      tick() 会把「昨天开着、今天还没关」的计时收尾，
+      结束时间取 `min(now, 当日 0 点)`。
+
+      ⚠️ 这条是唯一会走到「参照点**早于** pausedAt」的路径。
+      如果 `runningMs` 忘了把 `now - pausedAt` 夹到 0，
+      负数会被减掉 ⇒ 用时反而变大 ⇒ 判超时。见 time.test.ts 同名用例。
+    */
+    vi.useFakeTimers({ toFake: ['Date'] })
+    // ⚠️ 逻辑日的切点在 `dayStartHour`（默认 **4 点**），不是 0 点。
+    // 所以「跨日」必须让时刻真正越过凌晨 4 点 —— 23:00 → 次日 01:00
+    // 仍然算**同一个逻辑日**（这正是家长设 4 点切日的用意：熬夜写作业算昨天）。
+    vi.setSystemTime(new Date(2026, 9, 16, 22, 0, 0))
+    await boot()
+
+    const inst = pendingInstance()
+    await useApp.getState().startTimer(inst.id)
+
+    // 22:10 暂停，孩子去睡了；次日 5 点才被 tick 收尾
+    vi.setSystemTime(new Date(2026, 9, 16, 22, 10, 0))
+    await useApp.getState().pauseTimer(inst.id)
+
+    vi.setSystemTime(new Date(2026, 9, 17, 5, 0, 0))
+    await useApp.getState().tick()
+
+    const after = useApp.getState().instances.find((i) => i.id === inst.id)!
+    expect(after.status, '跨日自动收尾 → 交上去等家长看').toBe('submitted')
+    expect(after.actualMinutes, '只该算 22:00~22:10 这 10 分钟').toBe(10)
+  })
+})
+
+describe('首装赠送 500 钻石（2026-10-17）', () => {
+  // 本文件的顶层 beforeEach 已经 boot() 过一次（删库→重开→doSeedIfEmpty），
+  // 所以这里拿到的是「首装后」的真实状态，不用再 boot。
+  it('全新用户启动后：钻石余额 = 500', () => {
+    expect(useApp.getState().mallBalance, '首装应赠送 500 钻石').toBe(500)
+  })
+
+  it('这 500 是一笔写进账本的手动调整，不是凭空冒出来的', async () => {
+    const entries = await db.mallLedger.toArray()
+    expect(entries.length, '首装只该有一笔钻石发放').toBe(1)
+    expect(entries[0].delta).toBe(500)
+    expect(entries[0].source).toBe('manual_adjust')
+    expect(entries[0].memo ?? '').toContain('钻石')
+  })
+
+  it('把这笔抹掉后余额回到 0（证明余额是派生出来的，不是写死的）', async () => {
+    await db.mallLedger.clear()
+    await useApp.getState().refresh()
+    expect(useApp.getState().mallBalance).toBe(0)
   })
 })

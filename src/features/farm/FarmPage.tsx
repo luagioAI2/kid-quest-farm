@@ -238,7 +238,7 @@ export default function FarmPage() {
                 🏪
               </span>
               市场
-              {/* 背包里有能卖的东西就提示一下，否则孩子不知道这里能换点券 */}
+              {/* 背包里有能卖的东西就提示一下，否则孩子不知道这里能换商城币 */}
               {sellableUnits > 0 && (
                 <span className="tnum anim-pop absolute -right-1.5 -top-1.5 grid min-w-[22px] place-items-center rounded-full border border-white bg-berry-500 px-1 text-[11px] font-extrabold text-white">
                   {sellableUnits}

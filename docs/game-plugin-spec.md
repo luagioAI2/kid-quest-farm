@@ -272,7 +272,7 @@ const needsPin = !!settings.parentPin && settings.protectParentActions !== false
 ### 3.6 调试句柄
 
 ```ts
-window.__kqf__ = { getState, addPoints, unlockAll, syncSeedTasks, exportBackup, importBackup, catalog }
+window.__kqf__ = { getState, addPoints, unlockAll, syncSeedTasks, unlockClaw, exportBackup, importBackup, catalog }
 ```
 
 - 给 e2e / 走查脚本用，**不是给孩子用的**。
@@ -280,6 +280,8 @@ window.__kqf__ = { getState, addPoints, unlockAll, syncSeedTasks, exportBackup, 
   任何脚本 `await` 它都会撞上 `Execution context was destroyed`。
   正确姿势：发出去不管，然后等 `performance.timeOrigin` 变了（见
   `.e2e-scratch/shot-farm2d.mjs` 的写法）。
+- ⚠️ `unlockClaw()` **不 reload**（它只改库 + 刷新内存快照），所以可以 `await`。
+  但**切「当前游戏」要刷新页面才生效** —— 底部导航是 boot 时按 `activeGameId` 建的。
 - 你的游戏如果也需要「一键给资源」的调试口，**照这个形状加**，
   并且**结尾也 reload**（保证所有组件读到新状态）。
 

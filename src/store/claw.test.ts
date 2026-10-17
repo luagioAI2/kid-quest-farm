@@ -24,9 +24,9 @@ import { GAME_CLAW } from '../games/ids'
    这里验的是**接上数据库之后**还成不成立：
 
      · 买币：1 积分 → 1 个币，积分不够时**一笔账都不写**；
-     · 结算：扣币 / 发点券 / 局数 +1 是**一件事**；
+     · 结算：扣币 / 发商城币 / 局数 +1 是**一件事**；
      · ★ 同一局结算两次**不会**扣两个币（否则孩子狂点按钮就能刷）；
-     · ★ 玩很多局之后，发出去的点券**一定少于**花掉的积分 ——
+     · ★ 玩很多局之后，发出去的商城币**一定少于**花掉的积分 ——
        这是那条不能破的不变量的**实测版**（推导见 clawEconomy.ts 头注释）。
    ============================================================ */
 
@@ -44,6 +44,10 @@ async function grantPoints(n: number) {
 
 beforeEach(async () => {
   await boot()
+  // 抹平首装赠送的 500 钻石，让本文件所有用例的「钻石基线」回到 0。
+  // 首装种子的专门断言在 useApp.test.ts 的「首装赠送 500 钻石」里。
+  await db.mallLedger.clear()
+  await useApp.getState().refresh()
 })
 
 describe('买币', () => {
@@ -123,9 +127,9 @@ describe('结算一局', () => {
     expect(useApp.getState().clawCoins).toBe(1)
   })
 
-  it('中了就发点券，没中一个都不发（没有「参与奖」）', async () => {
+  it('中了就发商城币，没中一个都不发（没有「参与奖」）', async () => {
     /*
-      一局一局地比：`settleClawRound` 实际发出来的点券，必须**等于**
+      一局一局地比：`settleClawRound` 实际发出来的商城币，必须**等于**
       `clawResolveRound` 那一局算出来的数。差一分就说明
       「结算读的设置」和「纯函数读的设置」不是同一份 —— 那种错
       表现成「偶尔多发一点」，很难从总数上看出来。
@@ -155,10 +159,10 @@ describe('结算一局', () => {
       const r = await useApp.getState().settleClawRound(i)
       const after = await currentHarvestBalance()
       const expectRound = clawResolveRound(i, econ)
-      expect(r.coupons, `第 ${i + 1} 局发的点券不对`).toBe(
+      expect(r.coupons, `第 ${i + 1} 局发的商城币不对`).toBe(
         expectRound.won ? CLAW_DEFAULT_EXCHANGE : 0,
       )
-      // 点券余额的变化量必须**正好**是这一局该发的数
+      // 商城币余额的变化量必须**正好**是这一局该发的数
       expect(after - before).toBe(r.coupons)
       if (r.won) wins++
       else losses++
@@ -182,11 +186,11 @@ describe('★★ 不变量：玩娃娃机是净消费，不是刷分', () => {
     N 从 120 降到 60：不变量是**定性**的（净亏），60 局足够看出来，
     而且确定性哈希下这个数不会抖。
   */
-  it('连玩 60 局：发出去的点券 < 花掉的积分', { timeout: 30_000 }, async () => {
+  it('连玩 60 局：发出去的商城币 < 花掉的积分', { timeout: 30_000 }, async () => {
     /*
       这是 `clawEconomy.ts` 头注释那条推导的**实测版**：
 
-        花 1 积分 → 期望拿回 E 点券 → 兑换口 1 点券 ≡ 1 积分
+        花 1 积分 → 期望拿回 E 商城币 → 兑换口 1 商城币 ≡ 1 积分
         ⇒ 净收益 = E − 1
 
       只要 E < 1，孩子坐在这儿玩一天也刷不出积分来。
@@ -228,7 +232,7 @@ describe('★★ 不变量：玩娃娃机是净消费，不是刷分', () => {
   })
 })
 
-describe('家长手动发放商城币', () => {
+describe('家长手动发放钻石', () => {
   it('发放 / 扣回都写账本，余额跟着变', async () => {
     expect(useApp.getState().mallBalance).toBe(0)
     const r1 = await useApp.getState().mintMall(120)
@@ -246,8 +250,8 @@ describe('家长手动发放商城币', () => {
     expect(useApp.getState().mallBalance).toBe(0)
   })
 
-  it('★ 发了商城币就能买下娃娃机 —— 这条闭环是家长那条路的全部', async () => {
-    // 没有发币入口的话，商城币恒为 0 ⇒ 购买按钮按下去必然失败。
+  it('★ 发了钻石就能买下娃娃机 —— 这条闭环是家长那条路的全部', async () => {
+    // 没有发币入口的话，钻石恒为 0 ⇒ 购买按钮按下去必然失败。
     // 所以「手动发放」和「买得下来」必须一起验。
     const { gameById } = await import('../games/registry')
     const price = gameById(GAME_CLAW)!.priceMall

@@ -9,7 +9,15 @@ import {
   CLAW_PLAY_COST,
   clampClawEconomy,
 } from '@/domain/clawEconomy'
-import { CLAW_HOLE_CENTER, CLAW_RAIL_Y, createClawStage, type ClawStage } from './clawScene'
+import {
+  CLAW_HOLE_CENTER,
+  CLAW_HX,
+  CLAW_HZ,
+  CLAW_RAIL_Y,
+  CLAW_THEMES,
+  createClawStage,
+  type ClawStage,
+} from './clawScene'
 import {
   clawCloseAt,
   clawHoldingAt,
@@ -55,17 +63,25 @@ import './claw.css'
 const HUB_TOP = CLAW_RAIL_Y - 0.02
 
 /**
- * 抓取高度：爪子刚好罩住**最上面那层**娃娃的耳朵。
+ * 爪子下爪时，hub 停在**探测到的面**上方多少。
  *
- * 池子是三层堆起来的（见 `clawScene` 的 `initialPrizeLayout`），最上面那层
- * 在 y = 0.225、娃娃顶大约再高 0.16（耳朵 `position.y = 0.13` + 半径 0.03，
- * 见 `makePlush`）⇒ 0.42 就是「爪子压在顶层娃娃头上」。
+ * 原版是 `stopAt = max(PIVOT_MIN_Y, surf + 0.012)`，其中 `stopAt` 是**爪子底部**
+ * 的高度；换成 hub 中心就是 `surf + 0.012 + HUB_HH(0.03) = surf + 0.042`。
  *
- * ⚠️ 这个数**跟着那三层走**：改堆的高度就要回来改它，否则爪子会穿进娃娃里
- * （或者悬在半空夹空气）。而被夹住的那只是摆在 `hubY − 0.16` 的，
- * 所以 0.42 时娃娃被提到略高于原位，看着就是「被提起来了」。
+ * ⚠️ 这个值**不是**「爪子不碰到娃娃」的间隙 —— 恰恰相反，指头会压进娃娃 9 cm
+ * （指头总长 ≈ 0.13，hub 中心只比娃娃顶高 0.042）。原版就是这样：爪子**扎进**池子
+ * 里合爪，而不是悬在娃娃头顶上夹空气。想让它「不穿模」而调大这个数，
+ * 反而会回到「悬在半空」那个毛病。
  */
-const HUB_BOTTOM = 0.42
+const CLAW_STOP_GAP = 0.042
+
+/**
+ * hub 中心最低能到哪（`PIVOT_MIN_Y` + `HUB_HH`）。
+ *
+ * 池底是 y=0，但爪子不能真的贴到 0.042 —— 那是指头会插进地板。
+ * 原版的 `PIVOT_MIN_Y = 0.13` 就是「爪子底部离地 0.13」，换成 hub 中心 = 0.16。
+ */
+const HUB_MIN_Y = 0.16
 
 /**
  * 「爪子底下有娃娃」的判定半径。
@@ -79,6 +95,48 @@ const HUB_BOTTOM = 0.42
  */
 const GRAB_RANGE = 0.12
 
+/**
+ * 摇杆 / 键盘 / 手柄的移动速度（世界单位 / 秒）。
+ *
+ * 池子宽 `2 × CLAW_HX = 1.16`、深 `2 × CLAW_HZ = 1.0`。
+ * 0.52 ⇒ 横穿一次约 2.2 秒：够快（不用等），又够细
+ * （60 帧下每帧只走 0.0087，能停在两只娃娃之间）。
+ *
+ * ⚠️ 这个值**只影响手感**，不影响中奖率 —— 瞄准哪里都不改变结果
+ * （见 `clawTimeline.ts` 头注释）。
+ */
+const AIM_SPEED = 0.52
+
+/**
+ * 爪子离玻璃的边缘留白。
+ * ⚠️ **必须和 `clawScene.fieldFromScreen` 里的 `pad` 一致** —— 不一致的话，
+ * 拖到边缘停下的位置和摇杆推到边缘停下的位置会差一截，同一个池子两种边界。
+ */
+const AIM_PAD = 0.09
+
+/** 夹到区间里。`MathUtils.clamp` 要 import three，这里不值得为一行拉进来。 */
+const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v)
+
+/** 移动用的键：WASD + 方向键（和参考实现一致）。 */
+const MOVE_KEYS = new Set([
+  'KeyW', 'KeyA', 'KeyS', 'KeyD',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+])
+
+/**
+ * 虚拟摇杆的四个方向。
+ *
+ * ⚠️ `z` 的符号和屏幕是**反的**：`fieldFromScreen` 里屏幕往下 = 世界 z 变大，
+ * 所以「上」是 `z: -1`。写成 +1 的话上下会颠倒，而拖动瞄准又是对的 ——
+ * 这种「两种输入方向相反」的 bug 只有真按一次才发现。
+ */
+const DPAD = [
+  { x: 0, z: -1, label: '上', glyph: '▲', cls: 'col-start-2 row-start-1' },
+  { x: -1, z: 0, label: '左', glyph: '◀', cls: 'col-start-1 row-start-2' },
+  { x: 1, z: 0, label: '右', glyph: '▶', cls: 'col-start-3 row-start-2' },
+  { x: 0, z: 1, label: '下', glyph: '▼', cls: 'col-start-2 row-start-3' },
+] as const
+
 /** 一局的完整状态。`startedAt` 是 `performance.now()`。 */
 interface Round {
   won: boolean
@@ -90,6 +148,14 @@ interface Round {
   /** 爪子从哪儿下去（瞄准点；中了但没对准时会被挪到最近那只娃娃头上） */
   fromX: number
   fromZ: number
+  /**
+   * 这一局 hub 下到的最低高度 —— 投币那一刻按 `(fromX, fromZ)` 探出来的。
+   *
+   * ★ 只在开局算**一次**，不是每帧算：下爪过程中爪子会把娃娃推开，
+   *   每帧重探的话目标高度会一路往下爬，看着像爪子「陷进」池子里。
+   *   开局定死 = 这一局的下爪深度是确定的，同一局重放也一样。
+   */
+  bottomY: number
   startedAt: number
 }
 
@@ -126,9 +192,54 @@ export default function ClawPage() {
   /** 关了动效就不播动画（`prefers-reduced-motion`）。循环里每帧读，所以放 ref。 */
   const rmRef = useRef(false)
 
+  /**
+   * 键盘当前按下的键（`KeyboardEvent.code`）。
+   *
+   * ★ 三个输入源（键盘 / 虚拟摇杆 / 手柄）在每帧循环里**合成一个**方向，
+   * 不各自改 `aim.current`。各自改的话「按住 D + 推摇杆」会每帧互相覆盖，
+   * 松手时还会留下一个没清掉的方向。
+   */
+  const keysRef = useRef(new Set<string>())
+  /** 手柄按钮的上一帧状态 —— 做「按下沿」检测，按住不能连发投币 */
+  const padPrevRef = useRef<boolean[]>([])
+  /** 上一帧的时间戳（算 dt 用；不用固定步长，掉帧时移动才不会变慢） */
+  const lastFrameRef = useRef(0)
+  /** 摇杆是否正被按住（按住才移动；抬起立刻停） */
+  const joyRef = useRef({ x: 0, z: 0, active: false })
+  /**
+   * 键盘「按了一下」的**锁存**：`keydown` 里置位，每帧循环消费一次。
+   *
+   * ★ 为什么不是「循环里读 `keysRef` 判断按下沿」：
+   *   一次很快的按键（`keydown` + `keyup` 落在同一帧之间）在循环里**完全看不到** ——
+   *   这一帧读到的是「没按」，下一帧已经是「松开」，于是空格什么都不做。
+   *   实测就是这么丢的：`keyboard.press('Space')` 默认零间隔，连续几局都没开始，
+   *   而 `debugVisual` 里爪子一动不动 —— 看着像「键盘坏了」。
+   *
+   *   锁存之后，哪怕按下和抬起在同一毫秒，动作也一定会被执行一次。
+   *   `keydown` 的自动重复不会重复置位（`keysRef` 里已经有了这个 code）。
+   */
+  const tapRef = useRef({ play: false, buy: false })
+  /**
+   * 下爪 / 换币的**最新实现**。
+   * 循环 effect 在 `play` / `buy` 之前定义（源码顺序），闭包里拿不到它们 ⇒
+   * 用 ref 过渡。直接写 `playRef.current = play` 会捕获第一次渲染的版本，
+   * 所以赋值处包一层箭头函数（每次渲染都指向最新的那个 `play`）。
+   */
+  const playRef = useRef<() => void>(() => {})
+  const buyRef = useRef<() => void>(() => {})
+
   const [busy, setBusy] = useState(false)
   const [noWebgl, setNoWebgl] = useState(false)
   const [result, setResult] = useState<{ text: string; won: boolean } | null>(null)
+
+  /**
+   * 配色：**唯一事实源是 store**（`settings.clawTheme`），不在页面里另存一份 state。
+   * 存两份的话，「设置页改了配色」和「这页刚换的」就会走散。
+   */
+  const themeIdx = useApp((s) => s.settings.clawTheme ?? 0)
+  /** 建场景的 effect 依赖是 `[]`，闭包里读不到最新的 `themeIdx` ⇒ 用 ref 过渡 */
+  const themeRef = useRef(themeIdx)
+  themeRef.current = themeIdx
 
   /* ---------------- 动效偏好 ---------------- */
 
@@ -170,7 +281,7 @@ export default function ClawPage() {
       kind: r.won ? 'success' : 'info',
       title: text,
       detail: r.won
-        ? `换到 ${r.coupons} 点券`
+        ? `换到 ${r.coupons} 商城币`
         : r.hadPrize
           ? '夹住了又滑掉了，再试一次'
           : '爪子底下没有娃娃',
@@ -192,6 +303,8 @@ export default function ClawPage() {
       return
     }
     stage.current = s
+    // 建场景时用的是默认（粉），先把存档里选的配色补上
+    s.setTheme(themeRef.current)
 
     /*
       走查脚本的钩子。
@@ -202,12 +315,34 @@ export default function ClawPage() {
     */
     ;(window as unknown as { __kqfClawStage?: ClawStage }).__kqfClawStage = s
 
+    /*
+      ★ 瞄准点的**测试**写入口（只有走查脚本用）。
+
+      为什么需要它：默认瞄准点是池子正中 `(0, 0)`，而三层摆放的正中间
+      恰好是**空隙**（见 `clawScene.initialPrizeLayout`）—— 那是一个合法的
+      「对着空地按下去」场景，但走查还想证明「对着娃娃按下去会停在娃娃顶上」。
+      没有这个入口，就只能靠按住方向键几百毫秒去凑位置，而那个时长在软件渲染下
+      不可复现（同一份脚本两次跑到的落点不一样）。
+
+      它和拖动 / 方向键走的是**同一个** `aim.current`，不绕过任何逻辑。
+    */
+    ;(window as unknown as { __kqfClawAim?: (x: number, z: number) => void }).__kqfClawAim = (
+      x: number,
+      z: number,
+    ) => {
+      aim.current = {
+        x: clamp(x, -CLAW_HX + AIM_PAD, CLAW_HX - AIM_PAD),
+        z: clamp(z, -CLAW_HZ + AIM_PAD, CLAW_HZ - AIM_PAD),
+      }
+    }
+
     // 先画一帧静态的，别让容器空着（不然要等到第一次 rAF 才有画面）
     s.render(0, {
       clawX: aim.current.x,
       clawZ: aim.current.z,
       hubY: HUB_TOP,
       close: 0,
+      spread: 0.35,
       held: null,
       winFlash: 0,
       busy: false,
@@ -215,8 +350,61 @@ export default function ClawPage() {
 
     return () => {
       delete (window as unknown as { __kqfClawStage?: ClawStage }).__kqfClawStage
+      delete (window as unknown as { __kqfClawAim?: (x: number, z: number) => void }).__kqfClawAim
       s.dispose()
       stage.current = null
+    }
+  }, [])
+
+  /* ---------------- 换配色 ---------------- */
+
+  // store 里的配色变了就同步进场景（换色按钮走这一条，页面不另存 state）
+  useEffect(() => {
+    stage.current?.setTheme(themeIdx)
+  }, [themeIdx])
+
+  /* ---------------- 键盘 ---------------- */
+
+  /**
+   * 键盘只**记录按下状态**，真正移动在每帧循环里做（要乘 dt 才不随帧率变快慢）。
+   *
+   * ⚠️ 只在挂载期间监听，卸载就摘掉 —— 否则切到农场后按空格还会去下爪。
+   * ⚠️ `preventDefault` 只对方向键和空格：别的键照常让浏览器处理，
+   * 否则会破坏 Tab 焦点和页面滚动，那是无障碍问题，不只是手感。
+   * ⚠️ 窗口失焦要**清空**：不然「按住 D 切走再回来」会一直往右走。
+   */
+  useEffect(() => {
+    const isTyping = (t: EventTarget | null): boolean => {
+      const el = t as HTMLElement | null
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+    }
+    const down = (e: KeyboardEvent) => {
+      if (isTyping(e.target)) return
+      // 新按下（不是自动重复）→ 锁存一次动作键
+      if (!keysRef.current.has(e.code)) {
+        if (e.code === 'Space') tapRef.current.play = true
+        if (e.code === 'Enter') tapRef.current.buy = true
+      }
+      keysRef.current.add(e.code)
+      if (MOVE_KEYS.has(e.code) || e.code === 'Space') e.preventDefault()
+    }
+    const up = (e: KeyboardEvent) => {
+      keysRef.current.delete(e.code)
+    }
+    const blur = () => {
+      keysRef.current.clear()
+      tapRef.current.play = false
+      tapRef.current.buy = false
+    }
+
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', blur)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', blur)
+      keysRef.current.clear()
     }
   }, [])
 
@@ -224,6 +412,24 @@ export default function ClawPage() {
 
   useEffect(() => {
     let raf = 0
+
+    /*
+      输入合成：键盘 / 虚拟摇杆 / 手柄 → **一个**方向。
+
+      ★ 为什么三路都要走这里而不是各自改 `aim.current`：
+        各自改的话，「推着摇杆同时按 D」会每帧互相覆盖，结果取决于执行顺序；
+        松手时还会留下一个没清掉的方向。合成成一个 `(dx, dz)` 就没有这个问题。
+      ★ 优先级：虚拟摇杆 > 手柄 > 键盘。摇杆是触屏上最直接的意图，
+        手柄摇杆是模拟量（比键盘的 ±1 细腻），键盘是离散的。
+    */
+    /** 手柄按钮的「按下沿」 */
+    const padEdge = (pads: (Gamepad | null)[], idx: number): boolean => {
+      const pressed = !!pads[0]?.buttons[idx]?.pressed
+      const prev = padPrevRef.current[idx] ?? false
+      padPrevRef.current[idx] = pressed
+      return pressed && !prev
+    }
+
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
       const s = stage.current
@@ -232,6 +438,56 @@ export default function ClawPage() {
       const flash = flashRef.current > now ? 1 : 0
       const r = roundRef.current
 
+      /* ---------------- ① 合成输入 ---------------- */
+      const k = keysRef.current
+      let dx = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0)
+      let dz = (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0) - (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0)
+
+      const pads = navigator.getGamepads?.() ?? []
+      const gp = pads[0]
+      if (gp) {
+        const ax = gp.axes[0] ?? 0
+        const ay = gp.axes[1] ?? 0
+        // 0.18 的死区：手柄摇杆回中时会有零点几的漂移，不去掉会自己慢慢走
+        if (Math.hypot(ax, ay) > 0.18) {
+          dx = ax
+          dz = ay
+        }
+      }
+      if (joyRef.current.active) {
+        dx = joyRef.current.x
+        dz = joyRef.current.z
+      }
+      // 斜着推不能比直着推快
+      const mag = Math.hypot(dx, dz)
+      if (mag > 1) {
+        dx /= mag
+        dz /= mag
+      }
+
+      /* ---------------- ② 移动瞄准点 ---------------- */
+      // dt 用真实间隔（掉帧时移动不会变慢）；封顶 0.1s 防止切回标签页时瞬移
+      const dt = lastFrameRef.current ? Math.min(0.1, (now - lastFrameRef.current) / 1000) : 0
+      lastFrameRef.current = now
+      // 一局演完之前不给动 —— 和拖动瞄准同一条规矩（`aimAt` 里也是这么判的）
+      if (!busyRef.current && (dx !== 0 || dz !== 0)) {
+        aim.current = {
+          x: clamp(aim.current.x + dx * AIM_SPEED * dt, -CLAW_HX + AIM_PAD, CLAW_HX - AIM_PAD),
+          z: clamp(aim.current.z + dz * AIM_SPEED * dt, -CLAW_HZ + AIM_PAD, CLAW_HZ - AIM_PAD),
+        }
+      }
+
+      /* ---------------- ③ 按钮 ---------------- */
+      // 空格 / 手柄 A = 下爪；回车 / 手柄 X = 换币
+      // 键盘走**锁存**（见 `tapRef` 的注释），手柄走按下沿
+      const tapPlay = tapRef.current.play
+      const tapBuy = tapRef.current.buy
+      tapRef.current.play = false
+      tapRef.current.buy = false
+      if (tapPlay || padEdge(pads, 0)) playRef.current()
+      if (tapBuy || padEdge(pads, 2)) buyRef.current()
+
+      /* ---------------- ④ 渲染 ---------------- */
       if (!r) {
         // 空闲：爪子停在瞄准位；刚演完那一局先停在取物口一会儿
         const at = holdRef.current > now ? CLAW_HOLE_CENTER : aim.current
@@ -240,6 +496,8 @@ export default function ClawPage() {
           clawZ: at.z,
           hubY: HUB_TOP,
           close: 0,
+          // 待命：微张。张到最大会像个蜘蛛趴在轨道上
+          spread: 0.35,
           held: null,
           winFlash: flash,
           busy: false,
@@ -251,11 +509,23 @@ export default function ClawPage() {
       const pos = clawPositionAt(m, { x: r.fromX, z: r.fromZ }, CLAW_HOLE_CENTER)
       // `held` 只在「这一刻手里真有东西」时才传 —— 滑掉之后娃娃就回池子了
       const holding = r.held !== null && clawHoldingAt(m, r.won)
+      /*
+        张开程度（见 `clawScene` 的 `ClawVisual.spread`）。
+
+        ★ 下爪 / 合爪 / 松手这三段**必须张到最大**：
+          · 下爪：不张开就只是个「垂直移动的铁疙瘩」，看不出要抓；
+          · 合爪：`close` 从 0 走到 1，起点得是最大张角，才有 73° 的合拢行程；
+          · 松手：`close` 从 1 回到 0，不张到最大就成了「慢慢松开一条缝」。
+        其余（提起 / 平移）已经合上了，用待命角度即可。
+      */
+      const spread =
+        m.phase === 'drop' || m.phase === 'close' || m.phase === 'release' ? 1 : 0.35
       s.render(now / 1000, {
         clawX: pos.x,
         clawZ: pos.z,
-        hubY: clawHubYAt(m, HUB_TOP, HUB_BOTTOM),
+        hubY: clawHubYAt(m, HUB_TOP, r.bottomY),
         close: clawCloseAt(m),
+        spread,
         held: holding ? r.held : null,
         winFlash: flash,
         busy: m.phase !== 'idle' && m.phase !== 'done',
@@ -264,7 +534,10 @@ export default function ClawPage() {
       if (m.phase === 'done') finish(r)
     }
     raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      lastFrameRef.current = 0
+    }
   }, [finish])
 
   /* ---------------- 买币 ---------------- */
@@ -327,7 +600,19 @@ export default function ClawPage() {
     const near = s ? s.nearestPrize(aim0.x, aim0.z) : { index: -1, dist: Infinity }
     // 这句文案问的是「**孩子瞄的地方**底下有没有娃娃」，所以用原始瞄准点算
     const hadPrize = near.dist <= GRAB_RANGE
-    const held = res.won && near.index >= 0 ? near.index : null
+    /*
+      「手里夹着哪一只」。
+
+      ★ 中奖：**一定**夹最近那只（下面会把下爪点挪过去），所以不管瞄得准不准。
+      ★ 没中：只有**爪子底下真有娃娃**时才夹 —— 那才是「夹住了又滑掉」。
+        底下是空地就不该凭空抓一只（`clawOutcomeText` 会说「差一点」）。
+
+      ⚠️ 以前这里写的是 `res.won && ...`，也就是**没中就永远不夹**。
+        结果是 `clawTimeline.clawHoldingAt()` 里那条「没中 → 提到 SLIP_AT 松手」
+        的分支**从来没被执行过** —— 孩子看到的是「对着娃娃夹了个空」，
+        而 toast 上写着「夹住了又滑掉了」。两套说法，物理一接手就更明显了。
+    */
+    const held = near.index < 0 ? null : res.won || hadPrize ? near.index : null
 
     /*
       中了、但孩子瞄的是空地：把下爪点挪到最近那只娃娃头上。
@@ -352,6 +637,9 @@ export default function ClawPage() {
       hadPrize,
       fromX: from.x,
       fromZ: from.z,
+      bottomY: s
+        ? Math.max(HUB_MIN_Y, s.surfaceAt(from.x, from.z) + CLAW_STOP_GAP)
+        : HUB_MIN_Y,
       startedAt: performance.now(),
     }
 
@@ -363,6 +651,10 @@ export default function ClawPage() {
     roundRef.current = round
   }, [finish])
 
+  // 循环里的「空格 / 手柄 A」要能调到**最新**的 play / buy（见 playRef 的注释）
+  playRef.current = () => void play()
+  buyRef.current = () => void buy()
+
   /* ---------------- 拖动瞄准 ---------------- */
 
   const aimAt = useCallback((clientX: number, clientY: number) => {
@@ -370,6 +662,18 @@ export default function ClawPage() {
     if (!s || busyRef.current) return
     // `fieldFromScreen` 自己会把越界点夹在池子边缘（拖不到玻璃外面）
     aim.current = s.fieldFromScreen(clientX, clientY)
+  }, [])
+
+  /* ---------------- 换色 ---------------- */
+
+  /**
+   * 换配色。**只写 store**，场景由 `[themeIdx]` 那个 effect 同步。
+   * 不在这里直接调 `stage.setTheme` —— 那样「设置页改配色」这条路就漏了，
+   * 同一个状态两条写入路径，迟早走散。
+   */
+  const pickTheme = useCallback((i: number) => {
+    void useApp.getState().updateSettings({ clawTheme: i })
+    void hapticLight(useApp.getState().settings.hapticsEnabled)
   }, [])
 
   /* ---------------- 界面 ---------------- */
@@ -403,7 +707,7 @@ export default function ClawPage() {
           🪙 {CLAW_PLAY_COST} 换 1 个
         </button>
         <span className="ml-auto hidden shrink-0 text-xs font-bold text-ink-500 md:block">
-          抓到一只 = {econ.exchangePerPrize} 点券
+          抓到一只 = {econ.exchangePerPrize} 商城币
         </span>
       </div>
 
@@ -418,22 +722,98 @@ export default function ClawPage() {
           </p>
         </div>
       ) : (
-        <div
-          ref={stageRef}
-          data-claw-stage
-          role="img"
-          aria-label="娃娃机：拖动可以移动爪子"
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId)
-            aimAt(e.clientX, e.clientY)
-          }}
-          onPointerMove={(e) => {
-            // 只认「按着拖」；`pointercapture` 之后移出容器也能继续跟
-            if (e.buttons === 0) return
-            aimAt(e.clientX, e.clientY)
-          }}
-          className="kqf-claw-stage"
-        />
+        /*
+          ⚠️ 画布外面包一层 `relative`，摇杆和色块是它的**兄弟节点**，
+          不是画布的子节点。原因：画布带 `role="img"`，里面塞按钮是无效的
+          ARIA（读屏软件会把按钮当成图片的一部分读掉）。
+          包一层之后，按钮既在视觉上叠在画面上，语义上又是独立的控件。
+        */
+        <div className="relative flex flex-1 flex-col">
+          <div
+            ref={stageRef}
+            data-claw-stage
+            role="img"
+            aria-label="娃娃机：拖动可以移动爪子，也可以用右下角的方向键"
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId)
+              aimAt(e.clientX, e.clientY)
+            }}
+            onPointerMove={(e) => {
+              // 只认「按着拖」；`pointercapture` 之后移出容器也能继续跟
+              if (e.buttons === 0) return
+              aimAt(e.clientX, e.clientY)
+            }}
+            className="kqf-claw-stage"
+          />
+
+          {/* 换配色：三颗色块，点一下就换（柜身 / 灯带 / 灯箱 / 背板一起换） */}
+          <div
+            data-claw-themes
+            className="absolute right-2 top-2 flex gap-1.5"
+            role="group"
+            aria-label="娃娃机配色"
+          >
+            {CLAW_THEMES.map((th, i) => (
+              <button
+                key={th.name}
+                type="button"
+                onClick={() => pickTheme(i)}
+                aria-label={`换成${th.name}色`}
+                aria-pressed={i === themeIdx}
+                data-claw-theme={i}
+                className={
+                  'size-7 rounded-full border-2 shadow-flat transition-transform active:scale-90 ' +
+                  (i === themeIdx ? 'border-ink-900' : 'border-white/80')
+                }
+                style={{ background: `#${th.accent.toString(16).padStart(6, '0')}` }}
+              />
+            ))}
+          </div>
+
+          {/* 虚拟摇杆：触屏上的「移动爪子」，和拖动瞄准写同一个 `aim`。
+              ⚠️ 放**右下**不是左下：左下正好压着取物口（那个黑色圆洞），
+              白按钮压在黑洞上既难看，又把「奖品从这里出来」这件事遮掉了。 */}
+          <div
+            data-claw-dpad
+            className="absolute bottom-2 right-2 grid grid-cols-3 grid-rows-3 gap-0.5"
+            role="group"
+            aria-label="移动爪子"
+          >
+            {DPAD.map((d) => (
+              <button
+                key={d.label}
+                type="button"
+                aria-label={`把爪子往${d.label}移`}
+                data-claw-dir={d.label}
+                // ⚠️ 按下沿开始移动、抬起/取消/丢捕获都要停。
+                //   少一个就会「松手了还在走」——而那是孩子最常遇到的手势
+                //   （手指滑出按钮范围）。
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                  joyRef.current = { x: d.x, z: d.z, active: true }
+                }}
+                onPointerUp={() => {
+                  joyRef.current = { x: 0, z: 0, active: false }
+                }}
+                onPointerCancel={() => {
+                  joyRef.current = { x: 0, z: 0, active: false }
+                }}
+                onLostPointerCapture={() => {
+                  joyRef.current = { x: 0, z: 0, active: false }
+                }}
+                className={
+                  'grid size-9 place-items-center rounded-xl border border-white/70 ' +
+                  'bg-white/75 text-xs font-extrabold text-ink-700 shadow-flat ' +
+                  'active:bg-white ' +
+                  d.cls
+                }
+              >
+                {d.glyph}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* 结果 + 下爪 */}
@@ -453,7 +833,7 @@ export default function ClawPage() {
               {result.text}
               {result.won ? (
                 <span className="ml-1 text-sm font-bold text-ink-700">
-                  +{econ.exchangePerPrize} 点券
+                  +{econ.exchangePerPrize} 商城币
                 </span>
               ) : null}
             </span>

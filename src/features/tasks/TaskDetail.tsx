@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { previewPoints } from '@/domain/settlement'
-import { humanizeMinutes, formatClock } from '@/domain/time'
+import { humanizeMinutes, formatClock, runningMinutes } from '@/domain/time'
 import type { QualityGrade, TaskInstance } from '@/domain/types'
 import { useApp } from '@/store/useApp'
 import {
@@ -38,6 +38,8 @@ export function TaskDetail({
   const settings = useApp((s) => s.settings)
   const submitInstance = useApp((s) => s.submitInstance)
   const giveUpInstance = useApp((s) => s.giveUpInstance)
+  const pauseTimer = useApp((s) => s.pauseTimer)
+  const resumeTimer = useApp((s) => s.resumeTimer)
 
   const [minutes, setMinutes] = useState(0)
   const [quality, setQuality] = useState<QualityGrade | undefined>(undefined)
@@ -56,8 +58,13 @@ export function TaskDetail({
    * 非 pending 一律走「手填」，并用 `actualMinutes` 预填（见下面的 `useEffect`）。
    */
   const running = TIMER_ENABLED && inst?.status === 'pending' && !!inst?.startedAt
-  // 计时是真相源：秒数由 startedAt 派生，切页不丢
-  const liveSeconds = useLiveSeconds(inst?.startedAt, running && !result)
+  /**
+   * 暂停中。**必须挂在 `running` 之下** —— 非 pending 的实例上
+   * `pausedAt` 是历史遗留值（和 `startedAt` 一样），不能当「正暂停」用。
+   */
+  const paused = running && !!inst?.pausedAt
+  // 计时是真相源：秒数由 startedAt 派生（扣除暂停），切页不丢
+  const liveSeconds = useLiveSeconds(inst?.startedAt, running && !result, inst?.pausedAt, inst?.pausedTotalMs)
   const liveMinutes = liveSeconds / 60
 
   // 打开新实例时重置本地状态
@@ -85,9 +92,9 @@ export function TaskDetail({
      * 真正的闸门是 👀 家长确认 —— 家长看得到报上来的分钟数。
      * 所以「孩子随手填 1 分钟」这种仍然存在，要堵得靠改计分，那是另一回事。
      */
-    const elapsed = inst.startedAt
-      ? Math.max(0, Math.round((Date.now() - inst.startedAt) / 60000))
-      : 0
+    // ⚠️ 走 `runningMinutes`（含暂停扣减），别再写 `Date.now() - startedAt` ——
+    // 暂停过的任务按老写法会把休息时间也算成做作业时间。
+    const elapsed = inst.startedAt ? Math.max(0, Math.round(runningMinutes(inst))) : 0
     setMinutes(inst.actualMinutes ?? (elapsed || inst.plannedMinutes))
   }, [inst?.id])
 
@@ -166,13 +173,41 @@ export function TaskDetail({
               <div className="flex items-end justify-between">
                 <div>
                   <p className="text-xs font-bold text-ink-500">
-                    {running ? '正在计时中…' : '实际用了多少分钟？'}
+                    {paused ? '已暂停，时间不走了' : running ? '正在计时中…' : '实际用了多少分钟？'}
                   </p>
-                  <p className={clsx('tnum font-display text-4xl font-extrabold', TONE_TEXT[tone])}>
+                  <p
+                    className={clsx(
+                      'tnum font-display text-4xl font-extrabold',
+                      TONE_TEXT[tone],
+                      // 暂停时把秒表调灰一点，和"在走"一眼区分开
+                      paused && 'opacity-50',
+                    )}
+                  >
                     {running && !result
                       ? formatClock(liveSeconds)
                       : `${Math.round(minutes)} 分钟`}
                   </p>
+                  {/* 暂停 / 继续。只在"正在计时"时出现 —— 没开始计时的话
+                      没有东西可暂停，摆个按钮只会让孩子困惑。
+                      ⚠️ 暂停中**不禁用「我做完啦」**：孩子可能就是想现在交，
+                      暂停只是为了冻住时长，不是把提交锁住。 */}
+                  {running && !result && (
+                    <button
+                      type="button"
+                      data-testid="timer-toggle"
+                      onClick={() => {
+                        if (busy) return
+                        setBusy(true)
+                        void (paused ? resumeTimer(inst.id) : pauseTimer(inst.id)).finally(() =>
+                          setBusy(false),
+                        )
+                      }}
+                      disabled={busy}
+                      className="btn active:btn-press mt-1.5 min-h-[36px] rounded-pill border border-ink-200 bg-white/80 px-3 text-xs font-extrabold text-ink-700 disabled:opacity-40"
+                    >
+                      {paused ? '▶️ 继续计时' : '⏸️ 暂停一下'}
+                    </button>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-[11px] font-bold text-ink-500">计划</p>

@@ -56,9 +56,9 @@ class KidQuestFarmDB extends Dexie {
   tasks!: Table<Task, string>
   taskInstances!: Table<TaskInstance, string>
   ledger!: Table<LedgerEntry, string>
-  /** 点券账本。与 `ledger` 物理隔离，见 `HarvestEntry` 的注释。 */
+  /** 商城币账本。与 `ledger` 物理隔离，见 `HarvestEntry` 的注释。 */
   harvestLedger!: Table<HarvestEntry, string>
-  /** 商城币账本。第三套币，同样物理隔离，见 `MallEntry` 的注释。 */
+  /** 钻石账本。第三套币，同样物理隔离，见 `MallEntry` 的注释。 */
   mallLedger!: Table<MallEntry, string>
   inventory!: Table<InventorySlot, string>
   animals!: Table<Animal, string>
@@ -114,19 +114,19 @@ class KidQuestFarmDB extends Dexie {
       taskInstances:
         'id, taskId, periodKey, date, status, [date+status], [status+submittedAt], &[taskId+periodKey+date]',
     })
-    // v5：点券独立账本。
+    // v5：商城币独立账本。
     //
     // 为什么单开一张表，而不是给 ledger 加个 currency 字段 —— 见 `HarvestEntry` 的注释。
-    // 一句话：**要让「点券不算进积分」由表结构保证，而不是靠每个读余额的地方
+    // 一句话：**要让「商城币不算进积分」由表结构保证，而不是靠每个读余额的地方
     // 都记得加过滤**。漏一个 filter 就静默算错，而且不报错。
     this.version(5).stores({
       harvestLedger: 'id, source, createdAt, refId',
     })
-    // v6：商城币独立账本（第三套币，2026-10-14）。
+    // v6：钻石独立账本（第三套币，2026-10-14）。
     //
-    // 家长原话：「商城币 跟积分 和 点券都不一样。」同样是**单开一张表**
-    // 而不是给 ledger 加 currency 字段 —— 理由与 v5 的点券一字不差：
-    // 让「商城币不算进任何别的余额」由表结构保证，而不是靠每个读余额的
+    // 家长原话：「钻石 跟积分 和 商城币都不一样。」同样是**单开一张表**
+    // 而不是给 ledger 加 currency 字段 —— 理由与 v5 的商城币一字不差：
+    // 让「钻石不算进任何别的余额」由表结构保证，而不是靠每个读余额的
     // 地方都记得加过滤（漏一个就静默算错，且不报错）。
     //
     // 这一轮**只建钱包，没有发币入口**（来源将来是付费或兑换码），
@@ -640,20 +640,20 @@ export async function buyGameCoin(
   })
 }
 
-/* ---------------- 点券账本 ---------------- */
+/* ---------------- 商城币账本 ---------------- */
 
 /**
- * 点券余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
+ * 商城币余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
  *
  * **只读 `db.harvestLedger`，永远不碰 `db.ledger`** ——
- * 这里就是「点券 ⇸ 积分」这条约束的落点。
+ * 这里就是「商城币 ⇸ 积分」这条约束的落点。
  */
 export async function currentHarvestBalance(): Promise<number> {
   const rows = await db.harvestLedger.toArray()
   return rows.reduce((sum, r) => sum + r.delta, 0)
 }
 
-/** 取「下一笔点券账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
+/** 取「下一笔商城币账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
 export async function harvestTip(): Promise<{ createdAt: number; balance: number }> {
   const rows = await db.harvestLedger.toArray()
   const maxAt = rows.reduce((m, r) => (r.createdAt > m ? r.createdAt : m), 0)
@@ -664,10 +664,10 @@ export async function harvestTip(): Promise<{ createdAt: number; balance: number
 }
 
 /**
- * 记一笔点券。**唯一**允许改动点券余额的入口。
+ * 记一笔商城币。**唯一**允许改动商城币余额的入口。
  *
  * 与 `postLedger` 完全对称，只是换了张表。
- * **刻意不提供「点券 → 积分」的反向函数** —— 没有这个函数，就没有那条路。
+ * **刻意不提供「商城币 → 积分」的反向函数** —— 没有这个函数，就没有那条路。
  */
 export async function postHarvest(
   entry: Omit<HarvestEntry, 'id' | 'balanceAfter' | 'createdAt'> & {
@@ -692,12 +692,12 @@ export async function postHarvest(
   })
 }
 
-/* ---------------- 商城币账本 ---------------- */
+/* ---------------- 钻石账本 ---------------- */
 
 /**
- * 商城币余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
+ * 钻石余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
  *
- * **只读 `db.mallLedger`** —— 这就是「商城币不算进积分、也不算进点券」
+ * **只读 `db.mallLedger`** —— 这就是「钻石不算进积分、也不算进商城币」
  * 这条约束的落点。
  */
 export async function currentMallBalance(): Promise<number> {
@@ -705,7 +705,7 @@ export async function currentMallBalance(): Promise<number> {
   return rows.reduce((sum, r) => sum + r.delta, 0)
 }
 
-/** 取「下一笔商城币账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
+/** 取「下一笔钻石账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
 export async function mallTip(): Promise<{ createdAt: number; balance: number }> {
   const rows = await db.mallLedger.toArray()
   const maxAt = rows.reduce((m, r) => (r.createdAt > m ? r.createdAt : m), 0)
@@ -715,7 +715,7 @@ export async function mallTip(): Promise<{ createdAt: number; balance: number }>
   }
 }
 
-/** 商城币账本行的**唯一**构造处 —— `postMall` 和 `spendMall` 都走它，别各写一份。 */
+/** 钻石账本行的**唯一**构造处 —— `postMall` 和 `spendMall` 都走它，别各写一份。 */
 function mallRow(
   tip: { createdAt: number; balance: number },
   entry: {
@@ -740,7 +740,7 @@ function mallRow(
 }
 
 /**
- * 记一笔商城币。**唯一**允许改动商城币余额的入口。
+ * 记一笔钻石。**唯一**允许改动钻石余额的入口。
  *
  * 与 `postHarvest` 完全对称，只是换了张表。
  */
@@ -758,7 +758,7 @@ export async function postMall(
 }
 
 /**
- * 扣一笔商城币，**在同一个事务里先验余额**。余额不够返回 `false`，一分不扣。
+ * 扣一笔钻石，**在同一个事务里先验余额**。余额不够返回 `false`，一分不扣。
  *
  * ## 为什么不「先 `currentMallBalance()` 判断，再 `postMall()`」
  *
@@ -831,16 +831,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   /**
    * 娃娃机的两个家长可调参数（2026-10-16）。
    *
-   * 默认 1/3 中奖率 × 每只 2 点券 ⇒ 每局期望 **0.67 点券**。
+   * 默认 1/3 中奖率 × 每只 2 商城币 ⇒ 每局期望 **0.67 商城币**。
    * 上限是 0.8（`CLAW_MAX_EXPECTED`），所以默认档留了余量。
    *
-   * ⚠️ 为什么默认就低于上限而不是贴着上限：兑换商城里 `1 点券 ≡ 1 积分`，
+   * ⚠️ 为什么默认就低于上限而不是贴着上限：兑换商城里 `1 商城币 ≡ 1 积分`，
    * 而一局只花 1 积分 ⇒ 期望产出只要 ≥ 1，娃娃机就变成一台
    * 「坐着玩就能把积分刷上去」的机器。**0.67 是消费，1.0 是漏洞。**
    * 口径与夹紧见 `domain/clawEconomy.ts`（有全参数空间单测钉着）。
    */
   clawWinRate: CLAW_DEFAULT_WIN_RATE,
   clawExchangePerPrize: CLAW_DEFAULT_EXCHANGE,
+  /** 娃娃机默认配色：0 = 粉（和参考实现的默认一致） */
+  clawTheme: 0,
   /** 默认家长密码：0000。首次打开即有密码保护，家长可在设置里改。 */
   parentPin: '0000',
 }

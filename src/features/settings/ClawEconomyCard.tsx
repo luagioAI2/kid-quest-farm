@@ -59,7 +59,7 @@ export function ClawEconomyCard({ gateOpen }: { gateOpen: boolean }) {
       pushToast({
         kind: 'info',
         title: '兑换数也一起调了',
-        detail: `这一档中奖率下，每只最多换 ${c.exchangePerPrize} 点券`,
+        detail: `这一档中奖率下，每只最多换 ${c.exchangePerPrize} 商城币`,
         emoji: 'ℹ️',
       })
     }
@@ -76,8 +76,8 @@ export function ClawEconomyCard({ gateOpen }: { gateOpen: boolean }) {
     <Card title="娃娃机" emoji="🕹️">
       <p className="text-sm leading-relaxed text-ink-500">
         孩子玩一局要花 {CLAW_PLAY_COST} 个积分换 1 个币。抓到一只娃娃，
-        按下面的数换点券。点券和积分在兑换口是 <b>1 比 1</b>，
-        所以「平均每局换回多少点券」就等于「平均每局拿回多少积分」。
+        按下面的数换商城币。商城币和积分在兑换口是 <b>1 比 1</b>，
+        所以「平均每局换回多少商城币」就等于「平均每局拿回多少积分」。
       </p>
 
       {/* ---- 中奖率 ---- */}
@@ -110,9 +110,9 @@ export function ClawEconomyCard({ gateOpen }: { gateOpen: boolean }) {
         </div>
       </div>
 
-      {/* ---- 每只换多少点券 ---- */}
+      {/* ---- 每只换多少商城币 ---- */}
       <div className="mt-3">
-        <span className="text-sm font-extrabold text-ink-900">抓到一只换多少点券</span>
+        <span className="text-sm font-extrabold text-ink-900">抓到一只换多少商城币</span>
         <div className="mt-2 flex flex-wrap gap-2" data-claw-exchange>
           {CLAW_EXCHANGE_CHOICES.map((v) => {
             const on = v === exchange
@@ -144,7 +144,7 @@ export function ClawEconomyCard({ gateOpen }: { gateOpen: boolean }) {
       {/* ---- 实际算出来的期望值 ---- */}
       <div className="mt-3 rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-3 py-2.5">
         <p className="text-sm font-extrabold text-ink-900" data-claw-expected>
-          平均每玩一局：花掉 {CLAW_PLAY_COST} 积分，换回 {expected.toFixed(2)} 点券
+          平均每玩一局：花掉 {CLAW_PLAY_COST} 积分，换回 {expected.toFixed(2)} 商城币
         </p>
         <p className="mt-1 text-xs leading-snug text-ink-500">
           净花 {(CLAW_PLAY_COST - expected).toFixed(2)} 积分。娃娃机是花积分玩的地方，
