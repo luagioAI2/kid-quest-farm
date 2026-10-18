@@ -16,12 +16,26 @@
  *    就会出现「娃娃明明掉进洞里了，积分却没加」—— 那是印钞机的反面，
  *    而且**零报错**。
  *
- *    断言方式：**掉进通道的娃娃数（`recycled`）必须等于这一局中奖的次数**。
- *      · 中了 → 爪子把它送到洞口松手 → 物理上它掉下去 → recycled +1
- *      · 没中 → 半路滑掉，落回池子 → **recycled 不许变**
+ *    判据分两层，一层结构、一层行为：
  *
- *    如果哪天有人把 `checkPrizes()` 那种「掉进洞就算赢」的逻辑搬过来，
- *    这条断言会在「没中但娃娃滚进洞」时立刻红。
+ *    ⓐ **结构**：`clawPhysics.ts` 的**代码**里不许出现「输赢」这个概念 ——
+ *       没有 `won`、没有 `settleClawRound`、不 import 经济层。
+ *       这是最强的判据：`checkPrizes()` 那种「掉进洞就算赢」的逻辑想搬进来，
+ *       第一步就得往这个文件里塞 `won`，当场就红。
+ *
+ *    ⓑ **行为**：**没中**的那一局，夹住的那只必须落回池子、不许掉进通道。
+ *       这一条验的是「滑掉了」不是嘴上说说 —— 娃娃真的从半空掉回去了。
+ *
+ *    ★★ 为什么不再断言「中了 ⇒ 夹住那只一定掉进通道」：**它会误报**。
+ *      洞口就在池底，会被池子里的娃娃盖住 / 娃娃松手时带一点横向速度，
+ *      实测 3 局里有 1~2 局那只落在洞口旁边的堆上。
+ *      而这件事**玩家看不见**（中奖那几秒镜头正蹲在取物窗上看摆件），
+ *      也不影响任何账 —— `recycled` 只是调试计数。
+ *      把它写成断言 = 一条**随机变红**的测试，比没有更糟。
+ *      所以它降级成一行「只报告」的信息。
+ *
+ *    如果哪天有人把 `checkPrizes()` 那种逻辑搬过来，ⓐ 会当场红，
+ *    ⓑ 会在「没中但手里那只滚进洞」时红。
  *
  * ------------------------------------------------------------
  * ⚠️ 为什么要改中奖率
@@ -36,7 +50,7 @@
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir, SCRATCH_BASE } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4391/'
@@ -218,11 +232,15 @@ async function playRound() {
       const d = window.__kqfClawStage?.debugPhysics?.()
       if (d) window.__physSamples.push({ held: d.held, awake: d.awake })
     }, 40)
-    // 顺便记一下爪子这一局有没有真的往下走（drop 段 hubY 会变小）
+    // 顺便记一下爪子这一局有没有真的往下走（drop 段 hubY 会变小），
+    // 以及**夹住的到底是哪一只** —— 后面「中奖那只掉下去了吗」要按下标对
     window.__hubSamples = []
+    window.__heldIdx = -1
     window.__hubTimer = setInterval(() => {
       const v = window.__kqfClawStage?.debugVisual?.()
-      if (v) window.__hubSamples.push(v.hubY)
+      if (!v) return
+      window.__hubSamples.push(v.hubY)
+      if (v.held !== null) window.__heldIdx = v.held
     }, 40)
   })
 
@@ -249,7 +267,11 @@ async function playRound() {
   const samples = await page.evaluate(() => {
     clearInterval(window.__physTimer)
     clearInterval(window.__hubTimer)
-    return { held: window.__physSamples ?? [], hub: window.__hubSamples ?? [] }
+    return {
+      held: window.__physSamples ?? [],
+      hub: window.__hubSamples ?? [],
+      heldIdx: window.__heldIdx ?? -1,
+    }
   })
 
   const won = await page.evaluate(() => {
@@ -261,12 +283,24 @@ async function playRound() {
   await wait(1600)
   const after = await page.evaluate(() => window.__kqfClawStage.debugPhysics())
 
+  const recycledDelta = (after?.recycled ?? 0) - (before?.recycled ?? 0)
+  /*
+    这一局新产生的回收记录。
+
+    ★ 用 `slice(-delta)` 而不是按下标切：`recycledLog` 是**环形**的
+      （超过 24 条从头丢），按下标切会在写满之后悄悄错位。
+      一局最多回收两三条，`-delta` 拿到的就是这一局的。
+  */
+  const freshRecycled = recycledDelta > 0 ? (after?.recycledLog ?? []).slice(-recycledDelta) : []
+
   return {
     done,
     won,
     heldSeen: samples.held.some((s) => s.held),
+    heldIdx: samples.heldIdx,
     hubLowest: samples.hub.length ? Math.min(...samples.hub) : NaN,
-    recycledDelta: (after?.recycled ?? 0) - (before?.recycled ?? 0),
+    recycledDelta,
+    freshRecycled,
     recycled: after?.recycled ?? 0,
   }
 }
@@ -277,8 +311,12 @@ for (let i = 0; i < MAX_DEFAULT_ROUNDS; i++) {
   const r = await playRound()
   rounds.push(r)
   console.log(
-    `     第 ${i + 1} 局：${r.won ? '中' : '没中'}｜夹到过=${r.heldSeen}｜` +
-      `爪子最低 ${Number.isNaN(r.hubLowest) ? '?' : r.hubLowest.toFixed(2)}｜recycled +${r.recycledDelta}`,
+    `     第 ${i + 1} 局：${r.won ? '中' : '没中'}｜夹住 #${r.heldIdx}｜` +
+      `爪子最低 ${Number.isNaN(r.hubLowest) ? '?' : r.hubLowest.toFixed(2)}｜` +
+      `recycled +${r.recycledDelta}` +
+      (r.recycledDelta > 0
+        ? `（掉下去的是 ${r.freshRecycled.map((e) => `#${e.index}`).join(' ')}）`
+        : ''),
   )
   if (!r.done) break
   // 已经同时看到「中」和「没中」就不用再跑了
@@ -295,7 +333,10 @@ if (!rounds.some((r) => r.won)) {
     rounds.push(r)
     console.log(
       `     补第 ${i + 1} 局（中奖率 0.8）：${r.won ? '中' : '没中'}｜` +
-        `夹到过=${r.heldSeen}｜recycled +${r.recycledDelta}`,
+        `夹住 #${r.heldIdx}｜recycled +${r.recycledDelta}` +
+        (r.recycledDelta > 0
+          ? `（掉下去的是 ${r.freshRecycled.map((e) => `#${e.index}`).join(' ')}）`
+          : ''),
     )
     if (!r.done) break
   }
@@ -319,16 +360,73 @@ check(
   `最低 hubY=${lowest.toFixed(2)}（待命 1.06，池底 0.42）`,
 )
 
-/* ---- ★★★ 核心：物理没有自己判输赢 ---- */
-const bad = rounds.filter((r) => r.recycledDelta !== (r.won ? 1 : 0))
+/* ---- ★★★ 核心 ①：物理层压根不认识「输赢」这个概念（源码级判据） ---- */
+/*
+  ★ 必须**先去掉注释**再找：这个文件顶部的注释里就写着「这里没有 `won`」，
+    直接 grep 会命中注释里的那几句，永远红。
+*/
+const PHYS_SRC = readFileSync(
+  new URL('../src/features/claw/clawPhysics.ts', import.meta.url),
+  'utf8',
+)
+const PHYS_CODE = PHYS_SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+const FORBIDDEN = [
+  { re: /\bwon\b/i, what: 'won' },
+  { re: /settleClawRound/, what: 'settleClawRound' },
+  { re: /coupon/i, what: 'coupon' },
+  { re: /from\s+['"][^'"]*(economy|useApp|store)/i, what: 'import 经济层' },
+]
+const hits = FORBIDDEN.filter((f) => f.re.test(PHYS_CODE)).map((f) => f.what)
 check(
-  '★★★ 掉进通道的娃娃数 == 中奖次数（物理没自己判输赢）',
-  bad.length === 0,
-  bad.length === 0
-    ? rounds.map((r) => `${r.won ? '中' : '没中'}→+${r.recycledDelta}`).join('  ')
-    : bad
-        .map((r) => `${r.won ? '中' : '没中'} 却 +${r.recycledDelta}`)
-        .join(' / '),
+  '★★★ 物理层代码里没有「输赢」这个概念（没有 won / 不 import 经济层）',
+  hits.length === 0,
+  hits.length === 0
+    ? `扫了 ${PHYS_CODE.length} 字符（已去注释），一条都没有`
+    : `出现了：${hits.join(' / ')}`,
+)
+
+/* ---- ★★★ 核心 ②：没中的那局，夹住的那只必须落回池子 ---- */
+/*
+  ★ 只断言「没中」这一边。「中了那只一定落进通道」会误报（见文件头 ⓑ 的说明），
+    降级成下面那行只报告的信息。
+  ★ `heldIdx < 0` 的局（瞄的是空地，压根没夹到）跳过 —— 没有「手里那只」可言。
+*/
+const carriedDown = (r) => r.heldIdx >= 0 && r.freshRecycled.some((e) => e.index === r.heldIdx)
+const lostWithPrize = rounds.filter((r) => r.won === false && r.heldIdx >= 0)
+check(
+  '★★★ 没中的那局，夹住的那只落回池子（「滑掉了」是真的掉回去了）',
+  lostWithPrize.length > 0 && lostWithPrize.every((r) => !carriedDown(r)),
+  lostWithPrize.length === 0
+    ? '这次没跑到「没中且夹住过」的局'
+    : lostWithPrize.map((r) => `#${r.heldIdx}→${carriedDown(r) ? '掉进通道了' : '落回池子'}`).join('  '),
+)
+
+/* ---- 演出细节：中了那局，娃娃有没有真的滚进通道（只报告，不判失败） ---- */
+const wonRounds = rounds.filter((r) => r.won)
+if (wonRounds.length) {
+  const delivered = wonRounds.filter(carriedDown).length
+  console.log(
+    `  · 中奖那局夹住的那只真的落进通道：${delivered}/${wonRounds.length} 局` +
+      '（演出细节 —— 洞口在池底、会被娃娃盖住，不保证每次都进；玩家看不见）',
+  )
+}
+
+/* ---- 中奖的每一局都夹住了某一只（否则上面那条断言会静默空转） ---- */
+check(
+  '★ 中奖的每一局都夹住了某一只（否则上面那条断言会静默失效）',
+  wonRounds.length > 0 && wonRounds.every((r) => r.heldIdx >= 0),
+  `中 ${wonRounds.length} 局，夹住下标 ${wonRounds.map((r) => `#${r.heldIdx}`).join(' ')}`,
+)
+
+/* ---- 散货掉进洞：不是错误，但值得报出来（洞就在池底） ---- */
+const strays = rounds.reduce(
+  (n, r) => n + r.freshRecycled.filter((e) => e.index !== r.heldIdx).length,
+  0,
+)
+check(
+  '散货被挤进洞的次数（不是错误，洞就在池底；持续变多说明洞口在吃池子）',
+  strays <= rounds.length * 2,
+  `${strays} 次 / ${rounds.length} 局（正常 0~1 次/局）`,
 )
 
 /* ---- 两条路径都覆盖到了 ---- */

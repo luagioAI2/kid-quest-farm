@@ -118,26 +118,100 @@ const PRIZE_PARTS = [
 /** 一只娃娃大约 0.12 kg（真毛绒玩具的量级）。按体积反推密度。 */
 const PRIZE_DENSITY = 70
 
-/**
- * 爪子自己的碰撞体。
- *
- * 爪子的三根指头是 kinematic 的，碰撞体跟着 three 的世界矩阵走 ——
- * 这样「张开多少」只有 `applyProngs()` 一个事实源，这里不重算一遍角度。
- *
- * ⚠️ 这几个数**必须跟着 `clawScene` 里的指头几何走**，而且它是抄过去的一份，
- * 不是派生 —— 改了那边的 `CapsuleGeometry` / `arm.position` / `arm.rotation.z`
- * 就要回来改这里。抄错不会报错，只会「爪子推不动娃娃」或者「隔空把娃娃顶飞」。
- *
- * 现在对着的是：上臂 `Capsule(0.0105, 0.105)` 摆在 `(0.04, -0.062)` 转 `z=0.42`，
- * 爪尖 `Capsule(0.0145, 0.022)` 在 `(0.082, -0.118)`。
- * 两个端点连起来 ≈ 从 `(0.019, -0.014)` 到 `(0.082, -0.118)`，
- * 中点 `(0.05, -0.066)`、方向与竖直线夹角 `atan2(0.063, 0.104) ≈ 0.54`、
- * 半长 `≈ 0.048`（去掉两端球半径 0.013）。
- */
-const PRONG_CAPSULE = { halfHeight: 0.048, radius: 0.013, x: 0.05, y: -0.066, z: 0, tiltZ: 0.54 }
+/* ============================ 爪子的几何 ============================ */
 
-/** hub 本体的球（比三个指头高一点，让爪子下压时能把娃娃拨开） */
-const HUB_BALL_R = 0.056
+/**
+ * hub 本体的尺寸。**视觉和碰撞体共用这两个数**。
+ *
+ * 原来是「视觉用圆柱 0.056 / 碰撞体用一个 r=0.056 的球」—— 球的底部比圆柱
+ * 底面低 0.026，于是爪子还没碰到娃娃，一个看不见的球先把娃娃顶开了。
+ */
+export const HUB_R = 0.056
+export const HUB_HH = 0.03
+
+/** 指根到 hub 轴线的距离。指头挂在这个半径上，不是从 hub 中心长出来。 */
+export const PIVOT_R = 0.026
+
+/**
+ * 指头中心线：`(径向 r, 高度 y)`，相对**指根**、合拢姿态。
+ *
+ * ★★ 2026-10-18 整段抄自参考实现（`claw-machine/src/physics.ts` 的 `PRONG_PTS`）。
+ *   原来我们是一根**直胶囊**（`Capsule(0.0105, 0.105)` 斜着摆），远看是个夹子；
+ *   原版是**外张再内收的钩子** —— 先向外鼓到 r=0.052，再收回 r=0.004，
+ *   这才有「爪子」的形状。用户反馈「连爪子形状都不同」指的就是这里。
+ *
+ * ⚠️ 这份数据是**视觉和碰撞体的唯一来源**：`clawScene.ts` 用它生成 `TubeGeometry`，
+ *   这里用它生成分段胶囊。抄成两份就会出现「看得见的钩子、摸不到的直杆」。
+ */
+export const PRONG_PTS: [number, number][] = [
+  [0, 0],
+  [0.045, -0.055],
+  [0.052, -0.115],
+  [0.032, -0.152],
+  [0.004, -0.166],
+]
+/**
+ * 指头的粗细（管子半径 / 胶囊半径，**视觉和碰撞体共用**）。
+ *
+ * ★ 0.0125 不是原版的 0.0075，是**按娃娃的尺度折算**过的：
+ *   原版的娃娃半径 0.043，我们的 `PRIZE_PARTS` 是 0.072（1.67 倍），
+ *   所以指头也该粗 1.67 倍 —— `0.0075 × 0.072 / 0.043 ≈ 0.0125`。
+ *   照抄 0.0075 的话，在手机上指头只有 **1.5 个像素**宽：钩子的形状
+ *   「技术上是对的」，看上去仍然是一根铁丝。hub 那边也是同一个比例
+ *   （`HUB_R = 0.056 = 0.034 × 1.65`），所以粗细关系是自洽的。
+ *
+ * ⚠️ **长度**（`PRONG_PTS` 的 y 到 −0.166）故意**没有**跟着放大 1.67 倍。
+ *   原版的指头是动态刚体，合拢时被娃娃顶住就停；我们是 kinematic，
+ *   合拢角度直接摆到 0.86，指头再长 1.67 倍就会**扎穿**娃娃。
+ *   要放大长度，得先有「合到碰到娃娃为止」的判定，不是改一个数的事。
+ */
+export const PRONG_RADIUS = 0.0125
+/** 三个指头的方位角（绕 Y）。和原版一致：90° / 210° / 330°。 */
+export const PRONG_AZ = [Math.PI / 2, Math.PI / 2 + (2 * Math.PI) / 3, Math.PI / 2 + (4 * Math.PI) / 3]
+
+/**
+ * 指头的两个极限角度（绕**径向轴**的切向轴转，弧度）。
+ *
+ * 待命 = 0.8（几乎全张），下爪张到 0.95，合拢 −0.32 ⇒ 扫过 **1.27 rad ≈ 73°**。
+ * 老实现是 0 → −0.28，只扫 16°，远看完全看不出在抓。
+ *
+ * ★★ 待命为什么是 0.8 而不是原版那个 `ANG_IDLE = 0.32`：
+ *   原版的指头是**动态刚体 + 力控电机**，待命时给的最大力矩只有 0.25 ——
+ *   顶不住指头自己的重量，所以它是**挂在重力里张开的**，实际停在 ≈0.9 附近。
+ *   `ANG_IDLE = 0.32` 在那个实现里只是「电机想去的角度」，不是画面的角度。
+ *
+ *   我们这边是 kinematic（位置直接摆），没有重力帮忙 —— 照抄 0.32 的结果是
+ *   爪子永远缩成一个**闭合的芽**，而原版是一个**张开的钩子**。
+ *   用户说「连爪子形状都不同」，一半是曲线（见 `PRONG_PTS`），一半就是这个张角。
+ */
+export const ANG_OPEN = 0.95
+export const ANG_IDLE = 0.8
+export const ANG_CLOSED = -0.32
+
+/**
+ * 把中心线拆成若干段胶囊（**指头本地坐标系**，径向 = +X）。
+ *
+ * Rapier 的 capsule 只有「一根直线 + 半径」，弯的钩子只能用**一串**去近似。
+ * 末端那一段半径放大 1.25 倍 —— 原版的爪尖也是加粗的橡胶头。
+ *
+ * ★ 本地方向为什么是 +X：碰撞体的位姿直接取 `prongInners[i].matrixWorld`
+ *   （那一层已经带了方位角 yaw），所以指头的「径向」在本地就是 +X。
+ *   原版是反过来做的（body 不带 yaw，`prongSegments(az)` 自己算 cos/sin）——
+ *   两种都对，但只能选一种，混用就是「三个指头挤在一边」。
+ */
+function prongSegments(): { a: [number, number, number]; b: [number, number, number]; r: number }[] {
+  const segs: { a: [number, number, number]; b: [number, number, number]; r: number }[] = []
+  for (let i = 0; i < PRONG_PTS.length - 1; i++) {
+    const [r0, y0] = PRONG_PTS[i]
+    const [r1, y1] = PRONG_PTS[i + 1]
+    segs.push({
+      a: [r0, y0, 0],
+      b: [r1, y1, 0],
+      r: i === PRONG_PTS.length - 2 ? PRONG_RADIUS * 1.25 : PRONG_RADIUS,
+    })
+  }
+  return segs
+}
 
 /**
  * 夹住时，球铰在娃娃身上的锚点（娃娃本地坐标）。
@@ -206,6 +280,14 @@ export interface ClawPhysics {
   /** 第 `index` 只娃娃**现在**在哪；越界 / 已掉走返回 `null`。 */
   positionOf(index: number): { x: number; y: number; z: number } | null
   /**
+   * 走查脚本用：第 `index` 只的**原始刚体位置**。
+   *
+   * ⚠️ 和 `positionOf` 的区别只有一个，但很要命：`positionOf` 是**玩法**口径
+   *   （掉进通道就返回 `null`，当作「池子里没有它」）；这个照实返回，掉到
+   *   −0.6 也给你 −0.6。诊断「它到底掉没掉下去」只能用它。
+   */
+  rawPositionOf(index: number): { x: number; y: number; z: number } | null
+  /**
    * `(x, z)` 正下方最高的那个面（娃娃顶 / 池底）的高度。
    *
    * 页面用它决定「下爪停在哪」—— 原版就是这么做的（`probeSurface()`），
@@ -230,6 +312,8 @@ export interface ClawPhysics {
     /** 还醒着的刚体数 —— 全睡了说明模拟已经停了（不是坏事，但要知道） */
     awake: number
     recycled: number
+    /** 回收记录（最近 24 条）—— 见 `recycledLog` 的注释 */
+    recycledLog: { index: number; x: number; y: number; z: number }[]
     steps: number
     /** 当前所有娃娃里最大的 |挤压量| —— 用来证明「软体手感」不是空操作 */
     maxSquash: number
@@ -333,7 +417,17 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   const hubBody = world.createRigidBody(
     R.RigidBodyDesc.kinematicPositionBased().setTranslation(hub.position.x, hub.position.y, hub.position.z),
   )
-  world.createCollider(R.ColliderDesc.ball(HUB_BALL_R).setFriction(0.4).setCollisionGroups(clawGroups), hubBody)
+  /*
+    hub 用**圆柱**，尺寸和视觉上的那个圆柱完全一致（`HUB_R` / `HUB_HH`）。
+
+    以前这里是一个半径 0.056 的**球** —— 球的底部比圆柱底面低 0.026，
+    于是「爪子还没碰到娃娃，先被一个看不见的球顶开」。肉眼看不出来，
+    只会觉得「爪子老是差一点点够不着」。
+  */
+  world.createCollider(
+    R.ColliderDesc.cylinder(HUB_HH, HUB_R).setFriction(0.4).setCollisionGroups(clawGroups),
+    hubBody,
+  )
 
   const prongBodies = prongs.map(() =>
     // 先摆在 hub 那儿；第一次 `step()` 会用 three 的世界矩阵把它们挪到正确位置。
@@ -343,15 +437,38 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       R.RigidBodyDesc.kinematicPositionBased().setTranslation(hub.position.x, hub.position.y, hub.position.z),
     ),
   )
-  const prongColliders = prongBodies.map((b) => {
-    const tilt = Math.sin(PRONG_CAPSULE.tiltZ / 2)
-    const desc = R.ColliderDesc.capsule(PRONG_CAPSULE.halfHeight, PRONG_CAPSULE.radius)
-      .setTranslation(PRONG_CAPSULE.x, PRONG_CAPSULE.y, PRONG_CAPSULE.z)
-      .setRotation({ x: 0, y: 0, z: tilt, w: Math.cos(PRONG_CAPSULE.tiltZ / 2) })
-      .setFriction(1.1)
-      .setCollisionGroups(clawGroups)
-    return world.createCollider(desc, b)
-  })
+  /*
+    每根指头 = **一串**胶囊（`PRONG_PTS` 拆出来的 4 段），不是一根直胶囊。
+
+    ★★ 这是「爪子形状」在物理侧的全部事实。改 `PRONG_PTS` 之后，
+      `clawScene` 画的管子和这里的碰撞体**同时**变 —— 因为两边读的是同一份数据。
+      抄成两份的症状：看得见钩子、摸到的是直杆（或者反过来，娃娃被一根
+      不存在的直杆隔空顶飞）。
+  */
+  const prongColliders: RAPIER.Collider[] = []
+  {
+    const UP = { x: 0, y: 1, z: 0 }
+    for (const b of prongBodies) {
+      for (const s of prongSegments()) {
+        const dx = s.b[0] - s.a[0]
+        const dy = s.b[1] - s.a[1]
+        const dz = s.b[2] - s.a[2]
+        const len = Math.hypot(dx, dy, dz)
+        const dir = { x: dx / len, y: dy / len, z: dz / len }
+        prongColliders.push(
+          world.createCollider(
+            R.ColliderDesc.capsule(len / 2, s.r)
+              .setTranslation((s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2, (s.a[2] + s.b[2]) / 2)
+              // capsule 的轴默认是 +Y，转到这一段的方向上
+              .setRotation(quatFromUnitVectors(UP, dir))
+              .setFriction(1.1)
+              .setCollisionGroups(clawGroups),
+            b,
+          ),
+        )
+      }
+    }
+  }
 
   /* ---------------- 娃娃 ---------------- */
 
@@ -412,6 +529,17 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   let accumulator = 0
   let steps = 0
   let recycled = 0
+  /**
+   * 回收记录：**哪一只、从哪儿掉下去的**（只留最近 24 条）。
+   *
+   * ★ 为什么光有 `recycled` 这个数字不够：它把两件事混成了一个数 ——
+   *   ①「这一局夹住的那只被送进通道」（中奖的正常表现）
+   *   ②「池子里有散货被挤进洞」（洞就在池底，娃娃互相挤会掉进去）
+   *   实测一次 `recycled +2` 花半小时写探针才分清是哪一种。
+   *   记下下标之后，走查脚本可以直接断言
+   *   「**手里那只**掉没掉下去」，而不是「总数对不对」。
+   */
+  let recycledLog: { index: number; x: number; y: number; z: number }[] = []
   let respawnCursor = 0
   let heldIndex: number | null = null
   let gripJoint: RAPIER.ImpulseJoint | null = null
@@ -421,23 +549,47 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
 
   /* ---------------- 夹住 / 松开 ---------------- */
 
+  /**
+   * 指头碰撞体的开关。
+   *
+   * ★★ 为什么「拿着娃娃」和「刚松手」这两段都必须**关着**：
+   *
+   *   拿着的时候关，是为了让球铰独占这只娃娃（开着的话合爪会把娃娃往外顶）。
+   *
+   *   刚松手的时候也必须关 —— 这一条是 2026-10-18 踩出来的：
+   *   时间线里 `release` 只占 0.5 秒，`held` 在它一半的时候就变 null 了，
+   *   而那一刻指头**还半合着**（`close ≈ 0.5`），娃娃正好卡在三个钩子中间。
+   *   这时候把碰撞体打开 = 三根钩子同时顶它一下，娃娃被顶出洞口、
+   *   落回池子里 ⇒ **中奖了但没掉进通道**。
+   *   症状是 `e2e-claw-physics` 那条「掉进通道的娃娃数 == 中奖次数」变红，
+   *   而画面上看起来只是「这次没夹稳」—— 很容易被当成手感问题去调参数。
+   *
+   *   ➜ 所以恢复碰撞要**等到指头张到快全开**（见 `step()` 里的 `pendingProngsOn`）。
+   */
+  let pendingProngsOn = false
+
+  function setProngColliders(on: boolean): void {
+    for (const c of prongColliders) c.setEnabled(on)
+  }
+
   function releaseGrip(): void {
     if (gripJoint) {
       world.removeImpulseJoint(gripJoint, true)
       gripJoint = null
     }
-    // 松手后指头恢复碰撞 —— 拿着的时候是关掉的，否则合爪会把娃娃挤飞
-    for (const c of prongColliders) c.setEnabled(true)
     heldIndex = null
+    // 不在这里 `setProngColliders(true)` —— 见上面 `pendingProngsOn` 的注释
+    pendingProngsOn = true
   }
 
   function grab(index: number, pose: ClawPhysicsPose): void {
     const pb = prizeBodies[index]
     if (!pb) return
     heldIndex = index
+    pendingProngsOn = false
     // 拿着的时候，指头和娃娃不再碰：球铰已经把它固定住了，
     // 再让指头挤它，solver 会把娃娃往外顶（看着像夹不住）
-    for (const c of prongColliders) c.setEnabled(false)
+    setProngColliders(false)
 
     const p = pb.body.translation()
     // 锚点取娃娃**头顶现在的位置**，换算到 hub 本地 —— 这样建铰的瞬间
@@ -461,6 +613,8 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       const spot = RESPAWN_SPOTS[respawnCursor % RESPAWN_SPOTS.length]
       respawnCursor++
       recycled++
+      recycledLog.push({ index: i, x: p.x, y: p.y, z: p.z })
+      if (recycledLog.length > 24) recycledLog.shift()
       pb.body.setTranslation({ x: spot.x, y: RESPAWN_Y, z: spot.z }, true)
       pb.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
       pb.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
@@ -492,6 +646,12 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     if (want !== heldIndex) {
       if (heldIndex !== null) releaseGrip()
       if (want !== null) grab(want, pose)
+    }
+    // 松手之后、指头张到快全开才恢复碰撞（见 `pendingProngsOn` 的注释）。
+    // 0.1：`release` 段末尾 `close` 走到 0，这里留一点余量，避免卡在边界上。
+    if (pendingProngsOn && pose.close < 0.1) {
+      setProngColliders(true)
+      pendingProngsOn = false
     }
 
     /* ③ 推进（固定步长 + 补步上限） */
@@ -565,6 +725,13 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     return { index: best, dist: bestD }
   }
 
+  function rawPositionOf(index: number): { x: number; y: number; z: number } | null {
+    const pb = prizeBodies[index]
+    if (!pb) return null
+    const p = pb.body.translation()
+    return { x: p.x, y: p.y, z: p.z }
+  }
+
   function positionOf(index: number): { x: number; y: number; z: number } | null {
     const pb = prizeBodies[index]
     if (!pb) return null
@@ -606,6 +773,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       held: heldIndex !== null && gripJoint !== null,
       awake,
       recycled,
+      recycledLog: recycledLog.slice(),
       steps,
       maxSquash,
     }
@@ -620,10 +788,47 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
 
   const squashOf = (index: number): number => prizeBodies[index]?.squash ?? 0
 
-  return { step, nearest, positionOf, surfaceAt, squashOf, debug, dispose }
+  return { step, nearest, positionOf, rawPositionOf, surfaceAt, squashOf, debug, dispose }
 }
 
 /* ============================ 小工具 ============================ */
+
+/**
+ * 把单位向量 `a` 转到单位向量 `b` 的最短旋转（四元数）。
+ *
+ * 给胶囊定向用：Rapier 的 capsule 轴固定是 +Y，而指头每一段的方向都不一样。
+ *
+ * ★ `r < 1e-6` 那一支是**反平行**（a 和 b 正好相反）的退化情况 ——
+ *   此时叉积是零向量，`l` 会变成 0，直接除就是 NaN，而 Rapier 拿到 NaN
+ *   四元数不会报错，只会让那个碰撞体**静默消失**。必须挑一条垂直轴兜住。
+ */
+function quatFromUnitVectors(
+  a: { x: number; y: number; z: number },
+  b: { x: number; y: number; z: number },
+): { x: number; y: number; z: number; w: number } {
+  let r = a.x * b.x + a.y * b.y + a.z * b.z + 1
+  let x: number
+  let y: number
+  let z: number
+  if (r < 1e-6) {
+    r = 0
+    if (Math.abs(a.x) > Math.abs(a.z)) {
+      x = -a.y
+      y = a.x
+      z = 0
+    } else {
+      x = 0
+      y = -a.z
+      z = a.y
+    }
+  } else {
+    x = a.y * b.z - a.z * b.y
+    y = a.z * b.x - a.x * b.z
+    z = a.x * b.y - a.y * b.x
+  }
+  const l = Math.hypot(x, y, z, r)
+  return { x: x / l, y: y / l, z: z / l, w: r / l }
+}
 
 /**
  * 从 three 的 4×4 世界矩阵（列主序 `elements`）里取出旋转四元数。

@@ -482,6 +482,23 @@ for (const vp of SELECTED) {
       await page.click('[data-claw-drop]')
       await wait(ROUND_MS)
     }
+    /*
+      ★ `ROUND_MS` 是「动画时长 + 0.8 秒」推出来的，但那 0.8 秒要同时盖住
+        「投币走一次 IndexedDB 事务」的延迟。机器忙的时候（比如同时跑着 vitest）
+        这个延迟会超过 0.8 秒 ⇒ 读到的还是**上一局被清空之后**的空元素：
+        文案 `「」`、`data-claw-won=undefined`，而商城币那一条却是对的
+        （账已经结算了）—— 看着像「赢了但没显示」，其实只是读早了。
+      ➜ 结果这件事按**状态**等，不按墙钟等。
+    */
+    await page
+      .waitForFunction(
+        () => {
+          const el = document.querySelector('[data-claw-result]')
+          return !!el && el.getAttribute('data-claw-won') !== null
+        },
+        { timeout: 15000 },
+      )
+      .catch(() => {})
     const afterWin = await page.evaluate(() => {
       const s = window.__kqf__.getState()
       return {
@@ -613,8 +630,36 @@ for (const vp of SELECTED) {
       return v ? { hubY: v.hubY } : null
     })
 
-    /* ---- 第 1 局：**默认瞄准点**（池子正中 = 三层之间的空隙） ----
-       这一局证明「对着空地会一直压到池底」，而不是停在写死的 0.42。 */
+    /* ---- 第 1 局：**确认是空地**再瞄 ----
+       这一局证明「对着空地会一直压到池底」，而不是停在写死的 0.42。
+
+       ★★ 原来这里写的是「默认瞄准点 = 池子正中 = 三层之间的空隙」——
+         那是个**假设**，不是事实。娃娃沉降、以及回收之后从
+         `RESPAWN_SPOTS`（其中一个是 `(0.02, -0.02)`，基本就是正中）放回来，
+         都可能让正中正好坐着一只。实测 2026-10-18 就坐了：合爪 hubY=0.239
+         （= 娃娃顶 0.197 + 0.042），断言红，而「探面」本身是好的。
+         ➜ 先问物理「哪儿是空的」（`surfaceAt === 0`），再瞄那儿。
+         避开采光口那一角：洞口探面也返回 0，但爪子下到洞口里拍照很难看。
+    */
+    const emptySpot = await page.evaluate(() => {
+      const st = window.__kqfClawStage
+      if (!st) return null
+      for (let r = 0; r <= 0.42; r += 0.1) {
+        for (let a = 0; a < 12; a++) {
+          const ang = (a / 12) * Math.PI * 2
+          const x = +(r * Math.cos(ang)).toFixed(3)
+          const z = +(r * Math.sin(ang)).toFixed(3)
+          if (x > 0.2 && z > 0) continue // 取物口那一角
+          if (st.surfaceAt(x, z) === 0) return { x, z }
+        }
+      }
+      return null
+    })
+    check('找得到一个空地来瞄（探面 = 0）', !!emptySpot, emptySpot ? `(${emptySpot.x}, ${emptySpot.z})` : '')
+    if (emptySpot) {
+      await page.evaluate((p) => window.__kqfClawAim?.(p.x, p.z), emptySpot)
+      await wait(120)
+    }
     const gapFrames = await runRound()
     const gapPick = pickFrames(gapFrames)
     const gB = gapFrames[gapPick.bottom]
@@ -670,7 +715,7 @@ for (const vp of SELECTED) {
     check(
       '★★ 对着空地：压到池底（合爪 hubY ≤ 0.20，不是悬在半空）',
       !!gC && gC.hubY <= 0.2,
-      `合爪 hubY=${gC?.hubY.toFixed(3)}`,
+      `合爪 hubY=${gC?.hubY.toFixed(3)}（瞄的是探面=0 的 (${emptySpot?.x}, ${emptySpot?.z})）`,
     )
 
     /* ---- 第 2 局：**瞄准一只娃娃** ----

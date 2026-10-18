@@ -13,6 +13,7 @@ import {
   CLAW_HOLE_CENTER,
   CLAW_HX,
   CLAW_HZ,
+  CLAW_PRONG_IDLE,
   CLAW_RAIL_Y,
   CLAW_THEMES,
   createClawStage,
@@ -342,7 +343,7 @@ export default function ClawPage() {
       clawZ: aim.current.z,
       hubY: HUB_TOP,
       close: 0,
-      spread: 0.35,
+      spread: CLAW_PRONG_IDLE,
       held: null,
       winFlash: 0,
       busy: false,
@@ -497,7 +498,7 @@ export default function ClawPage() {
           hubY: HUB_TOP,
           close: 0,
           // 待命：微张。张到最大会像个蜘蛛趴在轨道上
-          spread: 0.35,
+          spread: CLAW_PRONG_IDLE,
           held: null,
           winFlash: flash,
           busy: false,
@@ -519,7 +520,7 @@ export default function ClawPage() {
         其余（提起 / 平移）已经合上了，用待命角度即可。
       */
       const spread =
-        m.phase === 'drop' || m.phase === 'close' || m.phase === 'release' ? 1 : 0.35
+        m.phase === 'drop' || m.phase === 'close' || m.phase === 'release' ? 1 : CLAW_PRONG_IDLE
       s.render(now / 1000, {
         clawX: pos.x,
         clawZ: pos.z,

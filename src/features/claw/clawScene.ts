@@ -47,6 +47,7 @@ import {
   BoxGeometry,
   CanvasTexture,
   CapsuleGeometry,
+  CatmullRomCurve3,
   CircleGeometry,
   Color,
   CylinderGeometry,
@@ -56,6 +57,7 @@ import {
   HemisphereLight,
   MathUtils,
   Mesh,
+  MeshBasicMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   PCFSoftShadowMap,
@@ -68,6 +70,7 @@ import {
   SpotLight,
   SRGBColorSpace,
   TorusGeometry,
+  TubeGeometry,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -79,7 +82,19 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
-import { createClawPhysics, type ClawPhysics } from './clawPhysics'
+import {
+  ANG_CLOSED,
+  ANG_IDLE,
+  ANG_OPEN,
+  HUB_HH,
+  HUB_R,
+  PIVOT_R,
+  PRONG_AZ,
+  PRONG_PTS,
+  PRONG_RADIUS,
+  createClawPhysics,
+  type ClawPhysics,
+} from './clawPhysics'
 
 /* ============================ 尺寸与配色 ============================ */
 
@@ -92,6 +107,30 @@ const BODY_H = 1.0
 const RAIL_Y = GLASS_H - 0.12
 /** 娃娃落进的那个洞（右下角）。掉进去 = 抓到了。 */
 const HOLE = { x0: 0.26, x1: HX, z0: 0.06, z1: HZ }
+
+/**
+ * **取物口**（机身正面那个圆洞）的中心。
+ *
+ * ★ 圆片 / LED 圆环 / 中奖后蹲下去看的那个机位（`doorPose()`）**都读这一个数**。
+ *   以前圆片的位置是写死在建模那段里的，相机那边再抄一份就会走散 ——
+ *   而走散的症状是「蹲下去看的地方不是取物口」，截图上看不出是哪个错了。
+ */
+const PICKUP = { x: -HX + 0.28, y: -0.52, z: HZ - 0.018 }
+/** 黑洞的半径（`CircleGeometry`）。 */
+const PICKUP_HOLE_R = 0.19
+/** LED 圆环：环心半径 + 管半径。外径 = `(r + t) * 2`。 */
+const PICKUP_RING = { r: 0.225, t: 0.022 }
+
+/**
+ * 取物口的**可视窗口**（宽 × 高，世界单位）—— `goDoor` 按它算距离。
+ *
+ * ★★ 必须是**外径**，不是黑洞的直径。
+ *   一开始照抄原版的 `0.32 × 0.34`（那是他们那台机器窗口的实际大小），
+ *   可我们这边的圆环外径是 `(0.225 + 0.022) × 2 = 0.494` —— 窗口比被 fit 的
+ *   尺寸大 1.5 倍，于是蹲下去时圆环**撑出画面**，整屏只剩一个黑圆。
+ *   ➜ 从几何常量派生，改圆环大小自动跟着变。
+ */
+const PICKUP_WINDOW = { w: (PICKUP_RING.r + PICKUP_RING.t) * 2, h: (PICKUP_RING.r + PICKUP_RING.t) * 2 }
 
 /**
  * 柜子的**实际外框**（含立柱、灯箱、底座）。
@@ -140,6 +179,14 @@ const LOOK_Y = 0.34
 const CAM_POL = 1.28
 
 /**
+ * 中奖后蹲在取物口前面**停留**多久（秒）。
+ *
+ * 参考实现是 `doorCam = 3.5`：1.1 秒蹲下去、1.1 秒站起来，中间留 1.3 秒看清窗口里的奖品。
+ * 短于 2 秒的话，蹲下去和站起来会连成一气，像镜头抽了一下。
+ */
+const DOOR_HOLD = 3.5
+
+/**
  * **取景框**：必须完整落在画面里的那块区域。
  *
  * ★★ 注意它**不是** `BOX`。原版是「站在柜子前」，画面里柜子**是满的、而且是被裁的** ——
@@ -178,6 +225,14 @@ export const CLAW_THEMES = [
   { accent: 0xf5c52a, led: 0xffd23a, name: '黄' },
   { accent: 0x3ec8d8, led: 0x4fd8e8, name: '青' },
 ] as const
+
+/**
+ * 待命时指头张开多少（`ClawVisual.spread` 的口径：0~1，1 = 张到最大）。
+ *
+ * ★ 数值来自 `clawPhysics` 的 `ANG_IDLE / ANG_OPEN`，**别在页面里再写一个 0.35** ——
+ *   写死的话，以后调待命角度只改一边，页面就会把爪子摆成另一个姿势。
+ */
+export const CLAW_PRONG_IDLE = ANG_IDLE / ANG_OPEN
 
 /* ============================ 小工具 ============================ */
 
@@ -242,8 +297,53 @@ function makeBackdropTexture(accent: number): CanvasTexture {
   return t
 }
 
-function makeSignTexture(text: string, bg: string, fg: string): CanvasTexture {
+/**
+ * 取物口**里面**那张贴图。
+ *
+ * ★ 为什么不是一块纯黑：中奖后镜头会蹲下去正对这个窗口（`doorPose()`），
+ *   纯黑圆片在那时候读起来是「贴了一张黑色圆纸」—— 奖品摆在上面像贴纸，
+ *   完全没有「里面是个格子」的感觉。
+ *
+ *   这里画三样东西，都是**便宜但有效**的深度线索：
+ *     · 中心偏下最亮、四周压暗 ⇒ 像一盏灯从里往外照；
+ *     · 底部一条暖光 ⇒ 有一块底板；
+ *     · 上沿更暗 ⇒ 有顶板挡着。
+ *
+ * ⚠️ 用 `MeshBasicMaterial`（不吃光照）：它要表现得像「一个开口」，
+ *   被柜内那盏点光源照亮反而会变成一块灰板。`toneMapped` 也关掉，
+ *   否则 ACES 会把这里的暗部整体提亮一档，黑就不黑了。
+ */
+function makePickupTexture(): CanvasTexture {
   const c = document.createElement('canvas')
+  c.width = 256
+  c.height = 256
+  const g = c.getContext('2d')
+  if (g) {
+    const rad = g.createRadialGradient(128, 150, 8, 128, 128, 132)
+    rad.addColorStop(0, '#33333a')
+    rad.addColorStop(0.55, '#15151a')
+    rad.addColorStop(1, '#08080b')
+    g.fillStyle = rad
+    g.fillRect(0, 0, 256, 256)
+    // 底板上的暖光
+    const floor = g.createLinearGradient(0, 176, 0, 256)
+    floor.addColorStop(0, 'rgba(255,198,142,0)')
+    floor.addColorStop(1, 'rgba(255,198,142,.34)')
+    g.fillStyle = floor
+    g.fillRect(0, 176, 256, 80)
+    // 顶沿压暗（有顶板）
+    const top = g.createLinearGradient(0, 0, 0, 60)
+    top.addColorStop(0, 'rgba(0,0,0,.55)')
+    top.addColorStop(1, 'rgba(0,0,0,0)')
+    g.fillStyle = top
+    g.fillRect(0, 0, 256, 60)
+  }
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  return t
+}
+
+function makeSignTexture(text: string, bg: string, fg: string): CanvasTexture {  const c = document.createElement('canvas')
   c.width = 1024
   c.height = 256
   const g = c.getContext('2d')
@@ -592,11 +692,25 @@ const PLUSH_KINDS = [
 function initialPrizeLayout(): { x: number; z: number; y: number; kind: number; seed: number }[] {
   const out: { x: number; z: number; y: number; kind: number; seed: number }[] = []
   let n = 0
-  /** 每层：[横向收窄系数, 高度, 列数, 行数] */
+  /**
+   * 每层：[横向收窄系数, 高度, 列数, 行数]
+   *
+   * ★★ 2026-10-18：从 38 只加到 **52 只**（多一层、每层密一点）。
+   *
+   * 为什么不是「把娃娃做大」：娃娃的碰撞体是 `clawPhysics.ts` 里**抄过去的一份**
+   * `PRIZE_PARTS`（r=0.072/0.028），改尺寸要同时改两边，而且爪子的开口是按现在
+   * 这个尺寸调的 —— 一旦不同步，症状是「爪子隔空夹」或「娃娃互相穿模」，都不报错。
+   *
+   * 为什么必须加数量：物理接管之后娃娃会自己沉降，能堆多高由
+   * **池底面积 ÷ 单只投影面积** 决定。38 只 × 0.0225 ≈ 0.86，而可用池底约 1.0
+   * ⇒ 沉降完只剩**一层**，看着是「摊平的」。52 只 ≈ 1.17 ⇒ 才有一层半的堆。
+   * ⚠️ 再加要掂量 draw call：每只娃娃 9 个 mesh，52 只 = 468 次。
+   */
   const LAYERS: [number, number, number, number][] = [
-    [1.0, 0.004, 5, 4],
-    [0.8, 0.115, 4, 3],
-    [0.58, 0.225, 3, 2],
+    [1.0, 0.004, 6, 4],
+    [0.82, 0.112, 5, 3],
+    [0.62, 0.220, 3, 3],
+    [0.42, 0.320, 2, 2],
   ]
   for (const [k, y, cols, rows] of LAYERS) {
     for (let r = 0; r < rows; r++) {
@@ -625,7 +739,7 @@ export interface ClawVisual {
   /** 合爪程度：0 = 完全张开，1 = 完全合上 */
   close: number
   /**
-   * 张开程度：`0.35` = 待命（微张），`1` = 下爪时张到最大。
+   * 张开程度：`CLAW_PRONG_IDLE`（≈0.84）= 待命，`1` = 下爪时张到最大。
    *
    * ⚠️ 不能只用 `close` 表达：`close` 在「待命」和「下爪」时都是 0，
    * 而这两种状态要的姿势不一样（待命微张 / 下爪全张）。
@@ -672,6 +786,25 @@ export interface ClawStage {
   /** 走查脚本用：娃娃数量 */
   prizeCount(): number
   /**
+   * 机位现在是什么状态（默认机位 / 蹲在取物口）。
+   *
+   * ★ 中奖后那 3.5 秒的「蹲下去」是个**演出**，截图缩略图上很容易看成
+   *   「差不多」；这里给数字，让走查能断言「目标点真的移到了取物口」。
+   */
+  debugCamera(): {
+    mode: 'view' | 'door'
+    /** 相机到目标点的距离 */
+    dist: number
+    /** 相机看着的那一点（蹲下去时会移到取物口附近） */
+    look: { x: number; y: number; z: number }
+    /** 取物口的世界坐标 —— 和 `look` 比就知道看的是不是它 */
+    pickup: { x: number; y: number; z: number }
+    doorHold: number
+    /** 正摆在取物口的那只奖品（−1 = 没有） */
+    winPrize: number
+    winShow: number
+  }
+  /**
    * 指头**实际**摆到的角度（弧度，`prongInners[0].rotation.z`）。
    *
    * ★ 为什么单独给一个：`debugVisual()` 报的是页面**传进来**的 `close` ——
@@ -698,6 +831,15 @@ export interface ClawStage {
    * 被夹住的那只是直接 `position.set` 过去的），那一跳很显眼。
    */
   prizeAt(index: number): { x: number; z: number } | null
+  /**
+   * 第 `index` 只娃娃**画面上**的三维位置（three 的 `Group.position`）。
+   *
+   * ★ 和 `prizeAt()` 的区别：那个给的是「池子里的平面位置」，给页面做瞄准用；
+   *   这个给的是**这一刻画出去的位置**，包括物理写回的结果。
+   *   走查用它抓「娃娃被爪子顶飞到半空」——那种 bug 在截图里很容易被当成
+   *   「堆得高」，只有数字能分辨。
+   */
+  debugPrizePos(index: number): { x: number; y: number; z: number } | null
   /**
    * `(x, z)` 正下方最高的那个面（娃娃顶 / 池底）的高度。
    *
@@ -768,6 +910,8 @@ export interface ClawStage {
     awake: number
     /** 掉进通道、被放回池子的次数 */
     recycled: number
+    /** 回收记录（最近 24 条）—— 能分清「夹住那只被送进去」和「散货被挤进去」 */
+    recycledLog: { index: number; x: number; y: number; z: number }[]
     steps: number
     error: string
   }
@@ -841,10 +985,114 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 40)
   camera.position.set(0, LOOK_Y, 4)
 
-  // 取景距离：resize 算完 contain-fit 后存到这里，render 的「呼吸」微动要拿它当基准
+  /* ---------------- 机位 ---------------- */
+
+  /** 取景距离：resize 算完 contain-fit 后存到这里，render 的「呼吸」微动要拿它当基准 */
   let cameraDist = 4
-  // 中奖特写的缓动值（host 给的 `winFlash` 是二值的，这里自己缓动一下，避免中奖瞬间硬切）
-  let winZoom = 0
+
+  /**
+   * 当前机位。
+   *
+   * `view` = 站在柜子前面（默认）；`door` = **蹲下去看取物口**（中奖那几秒）。
+   *
+   * ★ 家长 2026-10-17 定的是「只保留一个机位」，指的是**不要给玩家自由旋转**。
+   *   中奖那一蹲不是第二个机位 —— 它是原版就有的一段演出（`goDoor()`），
+   *   玩家不能自己切过去、也不能自己转，几秒后自己回来。
+   */
+  let camMode: 'view' | 'door' = 'view'
+  /** 机位之间的缓动。`null` = 已经停住了。 */
+  let camAnim: { p0: Vector3; t0: Vector3; p1: Vector3; t1: Vector3; k: number; dur: number } | null = null
+  /** 蹲在取物口还剩多少秒（≤0 就缓动回默认机位） */
+  let doorHold = 0
+  /** 上一帧的 `winFlash` —— 用它抓 0 → 1 那个沿 */
+  let prevFlash = 0
+  /** 上一帧的时间（秒）—— 相机缓动要 dt，而 `render()` 只收到绝对时间 */
+  let lastCamT = 0
+
+  /** 缓动 / 摆位的临时向量（每帧都用，不在循环里 new） */
+  const poseP = new Vector3()
+  const poseT = new Vector3()
+  const animP = new Vector3()
+  const animT = new Vector3()
+  /** 相机现在看着哪一点 —— 起手缓动时要用它当起点 */
+  const curLook = new Vector3(0, LOOK_Y, 0)
+
+  /* ---------------- 中奖演出：把奖品摆到取物口 ---------------- */
+
+  /**
+   * 这一局中奖的那只娃娃（`prizeGroups` 下标）。−1 = 没有。
+   *
+   * ★★ 为什么要**纯视觉**地摆过去，而不是让物理把它运到窗口：
+   *   我们的取物通道在池底洞口正下方（右侧），取物口在机身正面**左下** ——
+   *   两者之间没有通路，娃娃掉进通道就被 `recycle()` 放回池子了。
+   *   于是「中奖」在孩子眼里是**什么都没发生**：爪子松手，娃娃不见了。
+   *   蹲下去看取物口，看到的会是一个空黑洞。
+   *
+   *   ➜ 所以中奖那只在镜头蹲下时**从窗口探出来**，镜头回来时滑走 + 缩小
+   *     （和原版 `takePrizes()` 一个意思）。
+   *   ⚠️ 这里只改 three 的 `Group`，物理那边那只已经回池子了 ——
+   *     不碰账本、不碰碰撞体、不碰探面，所以不可能影响输赢。
+   */
+  let winPrize = -1
+  /** 最近一次被夹住的那只 —— 中奖那一刻 `held` 已经是 null 了，只能靠它记着 */
+  let lastHeld = -1
+  /** 上一帧的 `busy`：抓「新一局」的沿，用来清掉上一局的记忆 */
+  let prevBusy = false
+  /** 奖品从窗口「探出来」的程度 0~1 */
+  let winShow = 0
+  /** 奖品「被取走」的程度 0~1（往外滑 + 缩到 0） */
+  let winGone = 0
+
+  /**
+   * 默认机位：绕 `(0, lookY, 0)` 按 `pol` 俯视 `dist` 远。
+   *
+   * ★★ 球坐标公式**只有这一份**：`placeCamera()`（静态位 / `debugFrame`）
+   *   和 `render()`（带「呼吸」微动）都走它。写两份的话，`debugFrame` 量到的
+   *   取景和玩家看到的迟早不是同一个 —— 那种「判据绿着，画面歪着」最难查。
+   */
+  function viewPose(dist: number, az = 0, pol = CAM_POL, lookY = LOOK_Y): void {
+    const sp = Math.sin(pol)
+    const cp = Math.cos(pol)
+    poseP.set(dist * sp * Math.sin(az), lookY + dist * cp, dist * sp * Math.cos(az))
+    poseT.set(0, lookY, 0)
+  }
+
+  /**
+   * 蹲下去看取物口 —— 参考实现的 `goDoor()`。
+   *
+   * ★★ 为什么不是「把默认机位拉近一点」：
+   *   取物口在**机身正面下方**（`PICKUP.y = −0.52`），默认机位看的是池子
+   *   （`LOOK_Y = 0.34`）—— 两者差 0.86 个世界单位，相当于整个玻璃柜的高度。
+   *   光改距离只能把池子放大，取物口**永远在画面外**。
+   *   必须换**目标点**：`poseT` 移到取物口，相机跟着降下去。
+   *   （这就是之前「缩到 5%」和原版「完全不是一回事」的根因。）
+   *
+   * 距离按取物口的可视窗口重算（原版是 0.32 × 0.34）：
+   * 宽、高各算一次「窗口刚好占满画面」需要多远，取更远的那个。
+   * 这样换画布尺寸 / 横竖屏都不用回来调参数。
+   */
+  function doorPose(): void {
+    const t = poseT.set(PICKUP.x + 0.08, PICKUP.y, 0.36)
+    const vt = Math.tan(MathUtils.degToRad(FOV / 2))
+    const d = Math.max(PICKUP_WINDOW.w / (vt * camera.aspect), PICKUP_WINDOW.h / vt)
+    // 偏右一点、抬高一点再往前看 —— 纯正对会像一张贴图
+    poseP.set(t.x + d * 0.1, t.y + d * 0.16, t.z + d * 0.98)
+  }
+
+  /** 起手一段机位缓动（原版 `animCam`：smoothstep，1.1 秒）。 */
+  function animCamTo(mode: 'view' | 'door', dur = 1.1): void {
+    if (mode === 'door') doorPose()
+    else viewPose(cameraDist)
+    camAnim = {
+      p0: camera.position.clone(),
+      t0: curLook.clone(),
+      p1: poseP.clone(),
+      t1: poseT.clone(),
+      k: 0,
+      dur,
+    }
+    camMode = mode
+  }
 
   /* ---------------- 灯光：暖顶光 + 柜内冷白 ---------------- */
   /*
@@ -1014,11 +1262,19 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       ➜ 圆片往前挪 0.012、圆环再往前 0.006。0.012 个世界单位在柜子（宽 1.16）上
          不到 1 像素，肉眼看不出来，但足够让深度分出先后。
     */
-    const hole = new Mesh(track(new CircleGeometry(0.19, 32)), M.dark)
-    hole.position.set(-HX + 0.28, -0.52, HZ - 0.018)
+    const hole = new Mesh(
+      track(new CircleGeometry(PICKUP_HOLE_R, 32)),
+      track(
+        new MeshBasicMaterial({
+          map: track(makePickupTexture()),
+          toneMapped: false,
+        }),
+      ),
+    )
+    hole.position.set(PICKUP.x, PICKUP.y, PICKUP.z)
     add(hole)
-    const ring = new Mesh(track(new TorusGeometry(0.225, 0.022, 12, 44)), M.lamp)
-    ring.position.set(-HX + 0.28, -0.52, HZ - 0.012)
+    const ring = new Mesh(track(new TorusGeometry(PICKUP_RING.r, PICKUP_RING.t, 12, 44)), M.lamp)
+    ring.position.set(PICKUP.x, PICKUP.y, PICKUP.z + 0.006)
     add(ring)
     // 控制台
     const ledge = new Mesh(track(new RoundedBoxGeometry(HX * 1.45, 0.08, 0.22, 3, 0.03)), M.accent)
@@ -1230,8 +1486,6 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
    */
   const prongInners: Group[] = []
   {
-    const HUB_R = 0.056
-    const HUB_HH = 0.03
     const h1 = new Mesh(track(new CylinderGeometry(HUB_R, HUB_R * 0.94, HUB_HH * 2, 24)), M.chrome)
     hub.add(h1)
     const h2 = new Mesh(track(new CylinderGeometry(0.016, HUB_R * 0.95, 0.038, 20)), M.blackPlastic)
@@ -1240,52 +1494,75 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     const band = new Mesh(track(new CylinderGeometry(HUB_R * 1.03, HUB_R * 1.03, HUB_HH * 0.7, 24)), M.steel)
     band.position.y = -HUB_HH * 0.15
     hub.add(band)
+    // hub 底面中心那个小销子（原版也有）
+    const pin = new Mesh(track(new CylinderGeometry(0.006, 0.006, 0.012, 10)), M.steel)
+    pin.position.y = -HUB_HH - 0.004
+    hub.add(pin)
 
     /*
-      三个爪子，间隔 120°。每只自己一组，靠 `inner.rotation.z` 张开 / 合上。
+      三个爪指，间隔 120°。每只两层：
 
-      ★★ 2026-10-17 把指头**加长加粗**了（原来 0.085，现在 0.105）：
-        取景拉近之后，原来那套爪子只有柜子宽度的 12%，看着像个小玩具夹子；
-        参考实现里爪子约占柜宽的 20%。加长之后张开时才「撑得开」。
+        g       —— 方位角（绕 Y）。**碰撞体的 yaw 就来自这一层**
+        inner   —— 指根偏移 + 开合角（绕 Z）
+
+      ★★ 2026-10-18 整段换成参考实现的**曲线钩爪**。
+
+        原来是一根 `CapsuleGeometry(0.0105, 0.105)` 斜着摆 + 一个红爪尖 ——
+        直线，远看像个小夹子。用户原话「连爪子形状都不同」说的就是它。
+
+        现在指头的中心线来自 `PRONG_PTS`（`clawPhysics.ts`），**视觉和碰撞体
+        读的是同一份数据**：`TubeGeometry` 沿这条线扫一根管子，物理那边把同一条线
+        拆成 4 段胶囊。抄成两份的典型症状是「看得见钩子、摸到的是直杆」。
+
+      ⚠️ `inner.position` 那一行不能省：指根在 hub **底面外缘**（`PIVOT_R`）上，
+        不是 hub 中心。省掉之后三个指头会从轴心长出来，合拢时互相穿过去。
     */
-    const prongGeo = track(new CapsuleGeometry(0.0105, 0.105, 4, 8))
-    const tipGeo = track(new CapsuleGeometry(0.0145, 0.022, 4, 8))
+    const curve = new CatmullRomCurve3(
+      PRONG_PTS.map(([r, y]) => new Vector3(r, y, 0)),
+      false,
+      'centripetal',
+    )
+    const prongGeo = track(new TubeGeometry(curve, 28, PRONG_RADIUS, 8, false))
+    const tipGeo = track(new CapsuleGeometry(PRONG_RADIUS * 1.3, 0.02, 4, 10))
     const tipMat = track(new MeshStandardMaterial({ color: 0x8a2a24, roughness: 0.7 }))
-    for (let i = 0; i < 3; i++) {
+    const last = PRONG_PTS[PRONG_PTS.length - 1]
+    const prev = PRONG_PTS[PRONG_PTS.length - 2]
+    const tipDir = new Vector3(last[0] - prev[0], last[1] - prev[1], 0).normalize()
+    for (const az of PRONG_AZ) {
       const g = new Group()
-      g.rotation.y = (i / 3) * Math.PI * 2 + Math.PI / 2
+      g.rotation.y = az
       const inner = new Group()
+      // 指根：hub 底面外缘
+      inner.position.set(PIVOT_R, -HUB_HH, 0)
       g.add(inner)
-      // 上臂
-      const arm = new Mesh(prongGeo, M.chrome)
-      arm.position.set(0.04, -0.062, 0)
-      arm.rotation.z = 0.42
-      inner.add(arm)
-      // 爪尖
+      inner.add(new Mesh(prongGeo, M.chrome))
+      // 爪尖：加粗的橡胶头，沿最后一段的方向摆
       const tip = new Mesh(tipGeo, tipMat)
-      tip.position.set(0.082, -0.118, 0)
-      tip.rotation.z = -0.5
+      tip.position.set((last[0] + prev[0]) / 2, (last[1] + prev[1]) / 2, 0)
+      tip.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), tipDir)
       inner.add(tip)
+      // 指根处的销轴（原版也有，让「这是个铰链」看得出来）
+      const hinge = new Mesh(track(new CylinderGeometry(0.006, 0.006, 0.02, 10)), M.steel)
+      hinge.rotation.x = Math.PI / 2
+      inner.add(hinge)
       hub.add(g)
       prongInners.push(inner)
     }
   }
 
   /**
-   * 指头的两个极限角度（绕 hub 的 z 轴，弧度）。
+   * 指头的两个极限角度。**数值在 `clawPhysics.ts`**（和碰撞体共用一份）。
    *
-   * ★★ 原来的张开角度是 **0**，合上是 −0.28 —— 整个动作只扫 16°，
-   *   远看几乎是**不动**的。参考实现是 `ANG_OPEN 0.95 → ANG_CLOSED −0.32`，
-   *   扫 **73°**。这就是「下钩抓的过程差很多」的主要来源：爪子得**张开**才像爪子。
+   * 待命 0.8（张开的钩子）→ 下爪 0.95（张到最大）→ 合拢 −0.32，扫 **1.27 rad ≈ 73°**。
    */
-  const PRONG_OPEN = 0.62
-  const PRONG_CLOSED = -0.3
+  const PRONG_OPEN = ANG_OPEN
+  const PRONG_CLOSED = ANG_CLOSED
 
   /**
    * 爪子的开合。
    *
    * `close`：0 = 张开，1 = 合上（时间线给的）。
-   * `spread`：0.35 = **待命**姿势（微张，像原版 idle），1 = 下爪时张到最大。
+   * `spread`：`CLAW_PRONG_IDLE`（≈0.84）= **待命**姿势（张开的钩子），1 = 下爪时张到最大。
    * `holding`：手里有娃娃 —— 合到 0.86 就停，指头**夹在娃娃外面**。
    *
    * ⚠️ 为什么需要 `spread` 这个额外参数：`close` 在「待命」和「下爪」时**都是 0**，
@@ -1301,8 +1578,15 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     const open = PRONG_OPEN * MathUtils.clamp(spread, 0, 1)
     for (const inner of prongInners) {
       inner.rotation.z = PRONG_CLOSED + (open - PRONG_CLOSED) * (1 - k)
-      inner.scale.setScalar(1 - 0.06 * k)
     }
+    /*
+      ⚠️ 这里**不能**再缩放 `inner`。
+
+      以前有一行 `inner.scale.setScalar(1 - 0.06*k)`（合拢时指头缩一点，像在使劲）。
+      物理接管之后那一行是个 bug：碰撞体的位姿只取 `matrixWorld` 的**平移和旋转**，
+      缩放不进 Rapier —— 于是「看得见的指头缩了 6%，摸得到的没缩」，
+      合爪瞬间娃娃和爪子之间多出一条缝。
+    */
   }
 
   /* ---------------- 娃娃 ---------------- */
@@ -1398,10 +1682,9 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
    * 这样「俯角」是相机自己的属性，跟距离无关 —— 换个画布尺寸不会突然变平视。
    */
   function placeCamera(dist: number): void {
-    const sp = Math.sin(CAM_POL)
-    const cp = Math.cos(CAM_POL)
-    camera.position.set(0, LOOK_Y + dist * cp, dist * sp)
-    camera.lookAt(0, LOOK_Y, 0)
+    viewPose(dist)
+    camera.position.copy(poseP)
+    camera.lookAt(poseT)
     camera.updateProjectionMatrix()
     // ★ `project()` 读的是 `matrixWorldInverse`，而它由 `updateMatrixWorld()` 更新。
     //   不调的话这里算出来的角点坐标是**上一帧**相机下的 —— 迭代会收敛到错的地方。
@@ -1699,6 +1982,81 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       g.scale.set(base * (1 + s * 0.5), base * (1 - s), base * (1 + s * 0.5))
     }
 
+    /* ---- 中奖演出：奖品从取物口探出来（纯视觉，见 `winPrize` 的注释） ---- */
+
+    const camDt = lastCamT ? Math.min(0.1, t - lastCamT) : 1 / 60
+    lastCamT = t
+
+    /** `winFlash` 的**沿**：中奖后它会在 1 上停 1.5 秒，按电平判会每帧重新起手 */
+    const winEdge = v.winFlash > 0 && prevFlash === 0
+
+    // 新一局开始 → 忘掉上一局夹的是哪只（否则第二局没中奖也会摆一只出来）
+    if (v.busy && !prevBusy) lastHeld = -1
+    prevBusy = v.busy
+    if (v.held !== null) lastHeld = v.held
+
+    /*
+      中奖 → **蹲下去看取物口**（原版 `goDoor()`）。
+
+      ★ 触发用 `winFlash` 的**沿**（`winEdge`），不是电平：中奖后它会在 1 上停
+        1.5 秒，按电平判会每帧重新起手，相机永远走不完那 1.1 秒的缓动。
+      ★ 蹲多久是**场景自己**的事（`DOOR_HOLD`），不是宿主那个 1.5 秒 ——
+        原版是 3.5 秒，够看清楚窗口里的奖品。
+      ★ `reducedMotion` 下整段跳过：相机停在 resize 算好的静态位。
+      ★ 顺序要紧：这一段必须在下面「奖品探出来」**之前**跑 ——
+        奖品那一块要读本帧刚设好的 `doorHold` / `camMode`，晚一帧就会
+        「窗口里还没东西，镜头已经开始往回走了」。
+    */
+    if (!reducedMotion) {
+      if (winEdge) {
+        doorHold = DOOR_HOLD
+        animCamTo('door')
+      }
+      prevFlash = v.winFlash
+      /*
+        一开新的一局就立刻回来 —— 否则孩子按了下爪，镜头还在取物口那边
+        （要等 3.5 秒才转回来，那几秒爪子已经在池子里动了，完全看不到）。
+      */
+      if (v.busy && camMode === 'door') doorHold = 0
+      if (doorHold > 0) {
+        doorHold -= camDt
+        if (doorHold <= 0) animCamTo('view')
+      }
+    }
+
+    if (winEdge) {
+      winPrize = lastHeld
+      winShow = 0
+      winGone = 0
+    }
+    /*
+      探出来的时机跟着**镜头**走（`camAnim.k`）：镜头还在半路上就把奖品摆出来，
+      会在画面左下角看到一个玩具凭空冒出来 —— 那是「动画没对齐」的典型样子。
+    */
+    const arrive = camMode === 'door' ? (camAnim ? camAnim.k : 1) : 0
+    const showTarget = doorHold > 0 ? arrive : 0
+    winShow += (showTarget - winShow) * Math.min(1, camDt / 0.22)
+    // 镜头往回走了 → 奖品「被取走」：往外滑一点、缩小到看不见
+    if (winPrize >= 0 && doorHold <= 0 && winShow < 0.999) winGone = Math.min(1, winGone + camDt / 0.4)
+    if (winPrize >= 0 && winShow > 0.004) {
+      const g = prizeGroups[winPrize]
+      if (g) {
+        const base = (g.userData.baseScale as number | undefined) ?? 1
+        const e = winShow * winShow * (3 - 2 * winShow)
+        const gone = winGone * winGone
+        g.position.set(
+          PICKUP.x,
+          // 落在窗口**下沿**（原版那个奖品也是坐在取物口底板上，不是浮在正中）
+          PICKUP.y - 0.11 + 0.03 * e,
+          // 从窗口里「探出来」：只探出 9 cm，再多就像贴在柜门外面了
+          PICKUP.z + 0.02 + 0.07 * e + 0.2 * gone,
+        )
+        g.rotation.set(0, 0, Math.sin(t * 2.4) * 0.05 * e)
+        g.scale.setScalar(base * e * (1 - gone))
+      }
+    }
+    if (winPrize >= 0 && winGone >= 0.999) winPrize = -1
+
     // ---- 灯：呼吸 + 中奖闪烁 ----
     const breathe = reducedMotion ? 1.6 : 1.5 + 0.6 * Math.sin(t * 2.6)
     const flash = v.winFlash > 0 && !reducedMotion ? 1.6 * Math.abs(Math.sin(t * 14)) : 0
@@ -1709,34 +2067,41 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     // 颗粒每帧换一次种子（静态颗粒像屏幕脏了，动起来才像胶片）
     if (grain) grain.uniforms.uT.value = t
 
-    // ---- 相机：待机「呼吸」微动（参考实现的氛围来源；纯视觉，不动经济/物理不变式）----
-    // ★ 只在非 reducedMotion 下动相机；reducedMotion 时相机停在 resize 算好的静态位
-    if (!reducedMotion) {
-      // flash 是二值的（中奖后 1500ms 内 = 1），自己缓动一下，避免中奖瞬间硬切
-      const zoomTarget = v.winFlash > 0 ? 1 : 0
-      winZoom += (zoomTarget - winZoom) * 0.08
-      if (winZoom < 0.001) winZoom = 0
+    // ---- 相机（触发在「中奖演出」那段，这里只负责**摆**）----
+    if (camAnim) {
+      camAnim.k = Math.min(1, camAnim.k + camDt / camAnim.dur)
+      // smoothstep：起步和收尾都不像开关
+      const e = camAnim.k * camAnim.k * (3 - 2 * camAnim.k)
+      animP.lerpVectors(camAnim.p0, camAnim.p1, e)
+      animT.lerpVectors(camAnim.t0, camAnim.t1, e)
+      camera.position.copy(animP)
+      curLook.copy(animT)
+      camera.lookAt(curLook)
+      if (camAnim.k >= 1) camAnim = null
+      camera.updateMatrixWorld(true)
+    } else if (camMode === 'door') {
+      // 蹲在取物口：每帧重算（`camera.aspect` 可能刚被 resize 改过）
+      doorPose()
+      camera.position.copy(poseP)
+      curLook.copy(poseT)
+      camera.lookAt(curLook)
+      camera.updateMatrixWorld(true)
+    } else if (!reducedMotion) {
+      /*
+        默认机位 + 待机「呼吸」微动。
 
-      const az = Math.sin(t * 0.19) * 0.1              // 水平微摆（±~5.7°），比参考小，卡在卡片里不会裁边
-      const pol = CAM_POL + Math.sin(t * 0.27) * 0.018 // 俯角微浮（±~1°）
-      const sp = Math.sin(pol)
-      const cp = Math.cos(pol)
-      let d = cameraDist
-      let lookY = LOOK_Y
-      // 中奖特写：极轻地拉近 + 视线略往下压到取物口（缩到 5% 以内，不会冲出 contain-fit）
-      if (winZoom > 0) {
-        d *= 1 - 0.05 * winZoom
-        lookY -= 0.1 * winZoom
-      }
-      const hx = d * sp * Math.sin(az)
-      const hz = d * sp * Math.cos(az)
-      const hy = lookY + d * cp
-      // 轻微手持晃动（中奖特写期间关掉，免得晃）
-      const sway = winZoom > 0 ? 0 : 1
-      const sx = (Math.sin(t * 0.71) + Math.sin(t * 1.37 + 1) * 0.5) * 0.008 * sway
-      const sy = (Math.sin(t * 0.53 + 2) + Math.sin(t * 1.13) * 0.4) * 0.006 * sway
-      camera.position.set(hx + sx, hy + sy, hz)
-      camera.lookAt(0, lookY, 0)
+        az / pol 的扰动幅度和参考实现同量级（±5.7° / ±1°）——
+        这是「有人在柜子前面站着」而不是「三脚架」的来源。
+        手持晃动再小一档（0.008 / 0.006 世界单位）：再大就会看出画面在飘。
+      */
+      const az = Math.sin(t * 0.19) * 0.1
+      const pol = CAM_POL + Math.sin(t * 0.27) * 0.018
+      viewPose(cameraDist, az, pol)
+      const sx = (Math.sin(t * 0.71) + Math.sin(t * 1.37 + 1) * 0.5) * 0.008
+      const sy = (Math.sin(t * 0.53 + 2) + Math.sin(t * 1.13) * 0.4) * 0.006
+      camera.position.set(poseP.x + sx, poseP.y + sy, poseP.z)
+      curLook.copy(poseT)
+      camera.lookAt(curLook)
       // ★ 项目铁律：动完相机必须刷世界矩阵（resize 里的 placeCamera 也这么干）
       camera.updateMatrixWorld(true)
     }
@@ -1898,6 +2263,24 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     dispose,
     debugFrame,
     debugEffects,
+    /**
+     * 机位现在是什么状态 —— 走查脚本用它断言「中奖后真的蹲下去了」。
+     *
+     * ★ 判据不能只看截图：蹲没蹲下去在缩略图上都能看成「差不多」。
+     *   这里给的是**数**：`mode`、目标点 `look`、以及取物口本身的位置 `pickup`
+     *   —— 脚本可以自己算「看的是不是取物口」，而不是抄一份期望坐标。
+     */
+    debugCamera: () => ({
+      mode: camMode,
+      dist: camera.position.distanceTo(curLook),
+      look: { x: curLook.x, y: curLook.y, z: curLook.z },
+      pickup: { x: PICKUP.x, y: PICKUP.y, z: PICKUP.z },
+      /** 蹲在取物口的剩余秒数（0 = 已经回到默认机位） */
+      doorHold,
+      /** 正摆在取物口的那只奖品（−1 = 没有） */
+      winPrize,
+      winShow,
+    }),
     debugVisual: () => lastVisual,
     setTheme,
     themeIndex: () => themeIdx,
@@ -1925,6 +2308,22 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       const p = prizeRest[index]
       return p ? { x: p.x, z: p.z } : null
     },
+    debugPrizePos: (index: number) => {
+      /*
+        ★ 读**物理刚体**的位置，不读视觉 group 的位置。
+
+        踩过：中奖之后那只娃娃的 group 会被「取物窗里摆一只」那段代码
+        直接 `position.set(PICKUP...)`（纯视觉），于是探针量到的是
+        **窗口里那只摆设**（y ≈ −0.6、x = −0.3），不是它真实的刚体位置 ——
+        看起来像「它掉进通道了」，其实物理那边还在池子里。
+        这种「探针量到了动画、没量到对象」的坑，光看数字是分不出来的。
+      */
+      const p = phys?.rawPositionOf(index)
+      if (p) return { x: p.x, y: p.y, z: p.z }
+      const g = prizeGroups[index]
+      if (!g) return null
+      return { x: g.position.x, y: g.position.y, z: g.position.z }
+    },
     surfaceAt: (x: number, z: number) => {
       // 物理在跑：射线探，地板和娃娃都算（和原版同一条路）
       if (phys) return phys.surfaceAt(x, z)
@@ -1951,6 +2350,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
         held: d?.held ?? false,
         awake: d?.awake ?? 0,
         recycled: d?.recycled ?? 0,
+        recycledLog: d?.recycledLog ?? [],
         steps: d?.steps ?? 0,
         maxSquash: d?.maxSquash ?? 0,
         error: physError,
