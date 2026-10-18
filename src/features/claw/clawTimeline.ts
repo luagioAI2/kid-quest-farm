@@ -151,7 +151,15 @@ export function clawHubYAt(m: ClawMoment, top: number, bottom: number): number {
 /**
  * 这一刻爪子**手里有没有娃娃**。
  *
- * 中奖：`close` 合上之后一直拿着，直到 `release` 结束（丢进出口）。
+ * 中奖：`close` 合上之后一直拿着，直到 `release` 段**过半**（0.5）—— 那一刻在
+ *       取物口上方松手，娃娃落到下面的滑道里（`clawPhysics` 那边有真的滑道）。
+ *
+ *       ★★ 为什么是「松手」而不是「送进洞口」：
+ *         原来的实现是爪子一路挪到池子**侧的洞口**（`CLAW_HOLE_CENTER`）再把娃娃
+ *         塞下去 —— 可取物口在**机身正面下方**（y≈−0.52），池子里的洞口在
+ *         **池底同一平面**。两者根本不是一回事：孩子看到的是娃娃在池底凭空消失，
+ *         而不是「从机器下面掉出来」。参考实现是前者（松手 → 滑道 → 取物口）。
+ *
  * 没中：`close` 之后也拿着（演得像夹到了），到 `lift` 的 `SLIP_AT` 就松手 ——
  * 这一段「拿过又掉了」正是孩子看到的「滑掉了」。
  */
@@ -159,6 +167,7 @@ export function clawHoldingAt(m: ClawMoment, won: boolean): boolean {
   if (m.phase === 'close') return false
   if (m.phase === 'lift') return won ? true : m.t < SLIP_AT
   if (m.phase === 'move') return won
+  // 松手过半就放开 —— 松手动作是「指头张开」，放开之后娃娃才开始自由落体
   if (m.phase === 'release') return m.t < 0.5
   return false
 }

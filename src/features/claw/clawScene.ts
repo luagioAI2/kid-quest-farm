@@ -44,6 +44,7 @@
  */
 import {
   ACESFilmicToneMapping,
+  BackSide,
   BoxGeometry,
   CanvasTexture,
   CapsuleGeometry,
@@ -77,7 +78,6 @@ import {
   WebGLRenderTarget,
 } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
@@ -131,6 +131,26 @@ const PICKUP_RING = { r: 0.225, t: 0.022 }
  *   ➜ 从几何常量派生，改圆环大小自动跟着变。
  */
 const PICKUP_WINDOW = { w: (PICKUP_RING.r + PICKUP_RING.t) * 2, h: (PICKUP_RING.r + PICKUP_RING.t) * 2 }
+
+/**
+ * 取物口窗口的 4 个角（世界坐标，贴在机身正面）。
+ *
+ * ★ 只给 `debugCamera().winW / winH` 用：它让走查能直接问
+ *   「蹲下去以后这个窗口在画面里**比平时大多少倍**」——
+ *   这是**同一个物体、同一个投影片面**的两次测量，比例干净。
+ *   （拿两个机位的 `dist` 相除是不干净的：那两个数是两套 fit 算出来的。）
+ * ⚠️ z 取 `HZ`（机身正面）而不是 `PICKUP.z`（−0.018）：差 1.8 cm，
+ *   投影上差不到千分之一，但省得解释「为什么窗口角不在正面」。
+ */
+const PICKUP_QUAD: [number, number, number][] = (() => {
+  const r = PICKUP_WINDOW.w / 2
+  return [
+    [PICKUP.x - r, PICKUP.y - r, HZ],
+    [PICKUP.x + r, PICKUP.y - r, HZ],
+    [PICKUP.x + r, PICKUP.y + r, HZ],
+    [PICKUP.x - r, PICKUP.y + r, HZ],
+  ]
+})()
 
 /**
  * 柜子的**实际外框**（含立柱、灯箱、底座）。
@@ -203,21 +223,55 @@ const DOOR_HOLD = 3.5
 const FRAME = {
   minX: -(HX + 0.05),
   maxX: HX + 0.05,
-  minY: -0.72,
+  /*
+    ★★ 2026-10-18：`-0.72` → **`-0.42`**。用户原话「游戏开始的视角要近一点」。
+
+    差在哪：玻璃区是 `0…1.2`。用 `-0.72` 时整个框高 **2.18**，玻璃只占 **55%**；
+    参考实现竖屏的 `fitDist()` 把 `0.95` 的高度装进可见区 ——
+    也就是**玻璃几乎占满画面高度**，只露一条机顶、机身基本看不见。
+    `-0.42` 让框高 → 1.88，玻璃占 ≈ 64%，机身只露出取物口上沿。
+
+    ⚠️ 别再往下压到 `-0.2` 以下：取物口在 `y = -0.52`，框底高于它之后
+      「蹲下去看取物口」那个过场就会从一个**完全看不见**的地方开始。
+  */
+  minY: -0.42,
   maxY: GLASS_H + 0.22,
   minZ: -(HZ + 0.05),
   maxZ: HZ + 0.05,
 }
-const FRAME_W = FRAME.maxX - FRAME.minX
-const FRAME_H = FRAME.maxY - FRAME.minY
 
 /**
- * 取景留白：框最多占画面的 `1 / FIT_MARGIN`（约 97%）。
+ * 玻璃区在画面上至少要占多少（取**较满的那个方向**，0~1）。
  *
- * 不设的话迭代会停在「刚好贴边」上 —— 实测底边离画布只剩 4px，
- * 换个 DPR 或者柜子高一点点就越界。
+ * ★★ 2026-10-18 改判据：原来只看**高度**占比。但手机是窄屏，
+ *   约束方向一直是**宽度** —— 只量高度的话，「宽度上已经怼满了」和
+ *   「整台机器缩在中间」量出来没区别（两者高度都接近 1）。
+ *   ➜ 现在取 `max(高度占比, 宽度占比)`，两个方向谁满算谁。
+ *
+ * 取值 **0.86**（竖屏）：玻璃横向被裁掉一点（参考实现就裁约 23%），
+ * 但**不许**整柜缩进去。实测竖屏 `glassFill ≈ 1.03`。
+ *
+ * ⚠️ **横屏是另一个档位**：844×390 的视口里舞台只有 384×228，
+ *   玻璃（高 1.2，俯视 17°）投影下来最多占画布高的 **0.78** ——
+ *   再近就把玻璃顶裁掉了（实测 `top = −16.8`）。
+ *   所以横屏的阈值是 **0.74**：它守的是「别缩成一小条」，
+ *   不是「必须占满」—— 占满是物理上做不到的。
+ *   把横屏也钉在 0.86，只会逼着取景去裁玻璃顶，那是**用判据逼出坏画面**。
  */
-const FIT_MARGIN = 1.03
+const GLASS_MIN_FILL = 0.86
+const GLASS_MIN_FILL_WIDE = 0.74
+
+/**
+ * 宽屏取景的修正系数 —— 对应参考实现的 `hFrac / visFrac`。
+ *
+ * 它的画面被 UI 吃掉了：两侧操作列占 `2 × 230~320px`，上下是 LED 板与操作台。
+ * 我们这边宽屏时页面是 `.page-col`（672~1024）居中，两侧留白更大，
+ * 所以不是照抄 `0.15 / 0.72` 的比例，而是给固定值：横屏拟合 `0.72 / 0.86` 宽、`1.22 / 0.93` 高。
+ * 数值本身不重要 —— 重要的是**横屏不能沿用竖屏的 `0.62`**：
+ * 横屏画面宽得多，沿用窄值会让柜子只剩画面中间一小条。
+ */
+const HFRAC_WIDE = 0.86
+const VISFRAC_WIDE = 0.93
 
 /** 三档主题色。和参考实现一样给 3 个，默认第一个（粉）。 */
 export const CLAW_THEMES = [
@@ -235,6 +289,61 @@ export const CLAW_THEMES = [
 export const CLAW_PRONG_IDLE = ANG_IDLE / ANG_OPEN
 
 /* ============================ 小工具 ============================ */
+
+/**
+ * 给 `PMREMGenerator` 用的**方向性**环境（参考实现的 `buildEnvScene()` 同思路）。
+ *
+ * 一个大的暗色内壁盒子 + 顶部一排发光面板。
+ *
+ * ★★ 为什么非得自己搭：three 自带的 `RoomEnvironment` 是「摄影棚」——
+ *   四周一圈白色柔光箱，从**所有方向**均匀照亮。那种环境光会把娃娃之间的
+ *   **接触阴影从下面填平**：影子画出来了，却被照得看不见。
+ *   换成「顶上亮、四周暗」之后，环境光自己就有方向，缝隙里收不到光。
+ *
+ * ⚠️ 盒子用 `BackSide`（我们在它**里面**，看不见正面）；
+ *   面板材质是 `MeshBasicMaterial`（自发光）—— 用 `Standard` + emissive 也行，
+ *   但 `Basic` 少一次光照计算，而这里只关心「往哪个方向发射光」。
+ */
+function makeEnvScene(): Scene {
+  const s = new Scene()
+  const shell = new Mesh(
+    new BoxGeometry(16, 5, 16),
+    new MeshStandardMaterial({ color: 0xe8e4de, side: BackSide, roughness: 1 }),
+  )
+  shell.position.y = 1.5
+  s.add(shell)
+  // 顶部灯板：一排暖白，密度够高才不会被 PMREM 卷积成「一个大软光」
+  const panelMat = new MeshBasicMaterial({ color: 0xfff6ea })
+  const panel = new PlaneGeometry(1.2, 0.35)
+  for (let x = -6; x <= 6; x += 2.4) {
+    for (let z = -6; z <= 6; z += 2.4) {
+      const p = new Mesh(panel, panelMat)
+      p.rotation.x = Math.PI / 2
+      p.position.set(x, 3.95, z)
+      s.add(p)
+    }
+  }
+  /*
+    侧面几块**弱**的彩色板：给金属爪子一点能反射的东西，别让镀铬全黑。
+    ★ 这里和参考实现有个刻意的差别：它是 `MeshStandardMaterial({ emissive, emissiveIntensity })`
+      自发光（不受 env 内的半球光影响）；我们直接用 `MeshBasicMaterial`（颜色即出射）。
+      效果等价而且便宜 —— **别**换成 Standard + emissive，那会让 PMREM 里多一个
+      受光项，侧板亮度就跟着半球光走，改一处影响两处。
+  */
+  const side = (c: number, x: number, z: number, ry: number, w = 3) => {
+    const m = new Mesh(new PlaneGeometry(w, 1.2), new MeshBasicMaterial({ color: c }))
+    m.position.set(x, 1.2, z)
+    m.rotation.y = ry
+    s.add(m)
+  }
+  side(0x6a5f66, 0, 7.9, Math.PI, 6)
+  side(0x8a8468, -7.9, 2, Math.PI / 2)
+  side(0x64707a, 7.9, -1, -Math.PI / 2)
+  // 环境盒自己的 hemisphere：只影响 env 里那块**亮**盒子（Standard 材质），
+  // 也就是让「从上往下」的梯度成立，而不是纯反射盒底
+  s.add(new HemisphereLight(0xfff5f0, 0xb0a898, 0.7))
+  return s
+}
 
 /** `0xf47aa8` → `'#f47aa8'`。给 canvas 画贴图用（`fillStyle` 只吃字符串）。 */
 function hexOf(n: number): string {
@@ -693,24 +802,27 @@ function initialPrizeLayout(): { x: number; z: number; y: number; kind: number; 
   const out: { x: number; z: number; y: number; kind: number; seed: number }[] = []
   let n = 0
   /**
-   * 每层：[横向收窄系数, 高度, 列数, 行数]
+   * ★★ 2026-10-18：这份布局**不再是最终位置**，只提供三件事：
+   *   ① 有几只（数量决定堆多高）；② 每只是什么颜色/种子；③ 物理不可用时的降级位置。
    *
-   * ★★ 2026-10-18：从 38 只加到 **52 只**（多一层、每层密一点）。
+   *   物理正常时，`clawPhysics` 会在建世界的时候**分波从空中投放**，
+   *   位置和朝向由它自己的确定性扰动决定（见那边的「建池」一段）。
+   *   所以这里不用再精心设计分层 —— 之前那四层交给物理之后会被压平，
+   *   精细的 `y` 和收窄系数全是白写的（量出来平均 0.133、最高 0.216）。
    *
-   * 为什么不是「把娃娃做大」：娃娃的碰撞体是 `clawPhysics.ts` 里**抄过去的一份**
-   * `PRIZE_PARTS`（r=0.072/0.028），改尺寸要同时改两边，而且爪子的开口是按现在
-   * 这个尺寸调的 —— 一旦不同步，症状是「爪子隔空夹」或「娃娃互相穿模」，都不报错。
-   *
-   * 为什么必须加数量：物理接管之后娃娃会自己沉降，能堆多高由
-   * **池底面积 ÷ 单只投影面积** 决定。38 只 × 0.0225 ≈ 0.86，而可用池底约 1.0
-   * ⇒ 沉降完只剩**一层**，看着是「摊平的」。52 只 ≈ 1.17 ⇒ 才有一层半的堆。
-   * ⚠️ 再加要掂量 draw call：每只娃娃 9 个 mesh，52 只 = 468 次。
+   * 数量 **96**：池底可用面积 ≈ 1.02，单只投影 ≈ 0.0162 ⇒
+   *   96 只 ≈ 1.5 层，实测堆顶能到 0.30~0.35（娃娃直径 0.144），
+   *   也就是池深（到玻璃顶 1.2）的三成 —— 和原版「满到需要拨开」的观感对得上。
+   * ⚠️ 加数量要掂量 draw call：每只 9 个 mesh，96 只 ≈ 864 次。
+   *   再往上就该合并 geometry / 用 InstancedMesh 了，别硬加。
+   * ⚠️ 降级路径（物理加载失败）会按这个布局静态摆 —— 96 只按层平铺也够看。
    */
   const LAYERS: [number, number, number, number][] = [
-    [1.0, 0.004, 6, 4],
-    [0.82, 0.112, 5, 3],
-    [0.62, 0.220, 3, 3],
-    [0.42, 0.320, 2, 2],
+    [1.0, 0.004, 8, 5],
+    [0.86, 0.112, 7, 4],
+    [0.66, 0.220, 5, 3],
+    [0.46, 0.320, 3, 3],
+    [0.3, 0.40, 2, 2],
   ]
   for (const [k, y, cols, rows] of LAYERS) {
     for (let r = 0; r < rows; r++) {
@@ -769,6 +881,14 @@ export interface ClawStage {
   debugFrame(): {
     /** ★ 判据：玻璃区必须**完整**在画布内，而且横向要铺满 */
     glass: { left: number; top: number; right: number; bottom: number }
+    /** ★ 判据：玻璃区占画面高度的比例 */
+    glassFillY: number
+    /** ★ 判据：玻璃区占画面宽度的比例（竖屏时它才是约束方向） */
+    glassFillX: number
+    /** ★ 判据：`max(glassFillX, glassFillY)`，必须 ≥ `glassFillMin` —— 走查只认这两个 */
+    glassFill: number
+    /** ★ 当前画幅下 `glassFill` 的合格线（竖屏 0.86 / 横屏 0.74，见 `GLASS_MIN_FILL_WIDE`） */
+    glassFillMin: number
     /** 取景框（必须完整可见的那块） */
     frame: { left: number; top: number; right: number; bottom: number }
     /** 整台机器 —— **允许越界**（原版就是裁掉底座的） */
@@ -782,6 +902,11 @@ export interface ClawStage {
      * ★ 忘了 `shadow.camera.updateProjectionMatrix()` 时它会变成 0.0098 而不是 0.0008。
      */
     shadowTexel: number
+    /**
+     * 天车导轨 / 待命位（爪子上方那条缆绳露出来多少，走查要量）。
+     * `railY - hubY` 就是待命时的吊杆长度 —— 原版是 `L_MIN = 0.12`。
+     */
+    railY: number
   }
   /** 走查脚本用：娃娃数量 */
   prizeCount(): number
@@ -793,8 +918,14 @@ export interface ClawStage {
    */
   debugCamera(): {
     mode: 'view' | 'door'
-    /** 相机到目标点的距离 */
+    /** 相机到目标点的**直线**距离（`view` 模式下它在「呼吸」里会微动） */
     dist: number
+    /** 蹲到取物口时的设计距离 `doorPose()` 算出来的 `d`（和上面同单位、不同口径） */
+    doorDist: number
+    /** 取物口窗口在**画面宽度**里占多少（当前机位下投出来的，默认机位也有值） */
+    winW: number
+    /** 取物口窗口在**画面高度**里占多少 */
+    winH: number
     /** 相机看着的那一点（蹲下去时会移到取物口附近） */
     look: { x: number; y: number; z: number }
     /** 取物口的世界坐标 —— 和 `look` 比就知道看的是不是它 */
@@ -976,11 +1107,35 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     经 `PMREMGenerator` 预卷积成 mipmap 链。只生成一次，之后零成本。
   */
   const pmrem = new PMREMGenerator(renderer)
-  const roomEnv = new RoomEnvironment()
-  const envRT = pmrem.fromScene(roomEnv, 0.04)
+  /*
+    ★★★ 环境贴图**不能用 `RoomEnvironment`**（2026-10-18 换掉）。
+
+    它是「摄影棚」：四周一圈白色柔光箱，**从各个方向**均匀照亮，
+    也就是最常见的「无方向环境光」。后果不是「亮了点」，而是
+    **接触阴影被从下面填平** —— 娃娃之间的缝隙照样收到光，
+    于是没有任何影子，整池娃娃像贴在背景上。
+
+    这正是「没有影子」那条投诉的根因之一（另一半是 `key.target` 没进场景，
+    见上方主光那一段）。把 `shadowMap.enabled` 打开、把 mapSize 调到 2048
+    都改变不了它：影子**画出来了**，只是被环境光洗掉了。
+
+    ➜ 换成参考实现的 `buildEnvScene()`：一个**浅色**盒子 + **顶部一排自发光面板**
+      （面板 `emissiveIntensity = 10`，所以能量几乎全在正上方）+ 三块弱的侧灯。
+      环境光本身「从上往下」，缝隙里收不到 ⇒ 接触阴影留得住，金属爪子也仍有东西可反射。
+
+    ⚠️ 盒子别改成深色（我一开始写了 `0x2a2730`）：参考实现是 `0xe8e4de`。
+      深色盒子 + PMREM 之后，柜体白面会**整体发闷**，而影子并不会因此更明显 ——
+      对比度不够是「主光 : 平光」的比例问题，不是绝对亮度。
+  */
+  const envRT = pmrem.fromScene(makeEnvScene(), 0.02)
   scene.environment = envRT.texture
-  // 0.55：够让白柜子和玻璃有层次，又不至于把暖色灯光冲淡
-  scene.environmentIntensity = 0.55
+  /*
+    参考实现是 **0.65**。之前我们写 0.55 却「没有影子」，原因不在这个数，
+    而在 `RoomEnvironment` 是全向的（见上）。换成有方向的环境之后，
+    照抄参考实现的 0.65 —— 环境光在这里负责的是「玻璃和镀铬的反射」，
+    往低压只会让柜子发脏，对影子没有帮助。
+  */
+  scene.environmentIntensity = 0.65
 
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 40)
   camera.position.set(0, LOOK_Y, 4)
@@ -989,6 +1144,8 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
 
   /** 取景距离：resize 算完 contain-fit 后存到这里，render 的「呼吸」微动要拿它当基准 */
   let cameraDist = 4
+  /** 蹲到取物口时的距离（`debugCamera().dist` 在中奖镜头下读它，和上面同单位） */
+  let doorDist = 0
 
   /**
    * 当前机位。
@@ -1068,15 +1225,41 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
    *   （这就是之前「缩到 5%」和原版「完全不是一回事」的根因。）
    *
    * 距离按取物口的可视窗口重算（原版是 0.32 × 0.34）：
-   * 宽、高各算一次「窗口刚好占满画面」需要多远，取更远的那个。
+   * 宽、高各算一次「窗口占画面多少」需要多远，取更远的那个。
    * 这样换画布尺寸 / 横竖屏都不用回来调参数。
+   *
+   * ★★ 2026-10-18 的教训（改了三次才对，写下来免得再来一次）：
+   *
+   *   ① 原版那两行是 `d = max(0.32/(vt·aspect·hFrac), 0.34/(vt·visFrac))`。
+   *      我一开始把 `hFrac`/`visFrac` 当成「可用区还要收窄 0.82」——
+   *      分母变小 ⇒ 反而**更远**（2.79 → 2.20），走查直接变红。
+   *      它们是「机身占画面的比例」，作用方向是让窗口**填得更满**（更近）。
+   *
+   *   ② 门槛 0.6（蹲位距离 < 默认机位的 60%）在窄屏上**结构上达不到**：
+   *      390×844 下「窗口宽占画面」那一项永远赢（`0.494/(vt·aspect·H)`），
+   *      把 H 提到 0.98 也只有 0.71。再往前推就会把圆环顶出画布左右。
+   *
+   *   ③ 根本原因：两边的「1 倍」不是同一个东西 ——
+   *      默认机位 fit 的是**整台机器**，蹲位 fit 的是**窗口**。而窗口外径
+   *      0.494 已经接近机身宽度 1.24 的一半（原版是 1.24 里的 0.32，只有 1/4）。
+   *      ➜ 我们这台机器上「窗口 vs 整机」天然就只差 2.4 倍，不是原版的 3.9 倍。
+   *
+   *   ➜ 别再往 `H_FRAC`/`V_FRAC` 里加码：它们已经贴着 1 了（窗口几乎占满画布）。
+   *     判据看的是**放大倍数**（走查 `mag`），实测 1.66×，门槛 1.5。
    */
   function doorPose(): void {
     const t = poseT.set(PICKUP.x + 0.08, PICKUP.y, 0.36)
     const vt = Math.tan(MathUtils.degToRad(FOV / 2))
-    const d = Math.max(PICKUP_WINDOW.w / (vt * camera.aspect), PICKUP_WINDOW.h / vt)
+    // 「窗口占画面」的比例（横向 / 纵向）。越接近 1 越近。见上面 ③，别再往上加。
+    const H_FRAC = 0.95
+    const V_FRAC = 0.94
+    const d = Math.max(
+      PICKUP_WINDOW.w / (vt * camera.aspect * H_FRAC),
+      PICKUP_WINDOW.h / (vt * V_FRAC),
+    )
     // 偏右一点、抬高一点再往前看 —— 纯正对会像一张贴图
     poseP.set(t.x + d * 0.1, t.y + d * 0.16, t.z + d * 0.98)
+    doorDist = d
   }
 
   /** 起手一段机位缓动（原版 `animCam`：smoothstep，1.1 秒）。 */
@@ -1102,15 +1285,38 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       它会把所有阴影**填平**，柜子就没有体积感了，看着发灰。
       加了阴影之后这一点尤其明显：环境光一高，影子淡到看不见。
   */
-  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 0.3))
-  const key = new DirectionalLight(0xfff8f2, 2.6)
+  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 0.55))
+  /*
+    ★★ 2026-10-18：主光 2.6 → **1.5**，补光 0.4 → **0.9**，柜内灯 1.5 → **2.8**。
+    这三个数一次性对齐参考实现，因为它们本来就是**一组比例**，
+    单独改任何一个都会把「灯光 : 平光」的平衡弄丢（下面那段注释讲的就是这件事）。
+
+    为什么当初会把主光推到 2.6：那时 `key.target` 没进场景，阴影相机朝向是错的 ⇒
+    影子整体歪到画面外 ⇒ 只会觉得「灯不够亮」，于是一路加码。**根因修掉之后，
+    2.6 的主光会把柜体顶面烤成死白**，娃娃的高光也全糊在一起。
+  */
+  const key = new DirectionalLight(0xfff8f2, 1.5)
   /*
     ★ 主光放**正上方**（参考实现是 0.05, 3.2, 0.35），不是斜前方。
     影子垂直落在娃娃正下方 ⇒ 看得出「一层层堆起来」；
     侧光会把影子拉成长条，堆叠关系反而糊。
   */
   key.position.set(0.05, 3.2, 0.35)
-  scene.add(key)
+  /*
+    ★★★ `key.target` **必须一起进场景**，否则整片阴影是歪的 —— 而且完全不报错。
+
+    three 的 `LightShadow.getFrustum()` 会读 `light.target.matrixWorld` 来定
+    阴影相机朝向（见 `three/src/lights/LightShadow.js`）。但 `Object3D` 的
+    `matrixWorld` 只在**它在场景里**的时候才会被 `updateMatrixWorld()` 刷到 ——
+    不在场景里就永远是默认的 `(0,0,0)` 且 `matrixWorld` 是单位阵。
+
+    这里的光在 `y=3.2`，默认 target 是原点 ⇒ 光轴几乎垂直朝下，方向碰巧还行，
+    所以**看着像没问题**；但一旦有人把光挪成斜的（参考实现是 `0.05, 3.2, 0.35`），
+    阴影就整体歪到画面外，而灯光本身照得好好的 —— 症状是「灯是亮的，就是没有影子」。
+
+    ⚠️ 参考实现写的是 `scene.add(sun, sun.target)`；我们少了第二个参数。
+  */
+  scene.add(key, key.target)
 
   /*
     只让主光投影。正交阴影相机要**刚好裹住柜子**：
@@ -1128,6 +1334,8 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   */
   key.castShadow = true
   key.shadow.mapSize.set(2048, 2048)
+  // 参考实现：`{ left: -0.62, right: 0.62, top: 0.55, bottom: -0.55, near: 1.6, far: 4 }`
+  // 我们这里比它宽一圈（±0.8），因为爪子在 `x = ±0.5` 的轨道上跑，要连爪子一起罩住
   key.shadow.camera.near = 1.2
   key.shadow.camera.far = 5.2
   key.shadow.camera.left = -0.8
@@ -1138,6 +1346,11 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   key.shadow.bias = -0.0006
   // 0.012（参考实现的数）：texel 变细之后，normalBias 给大了会让影子**整体离开物体**
   key.shadow.normalBias = 0.012
+  /*
+    `radius = 4`（参考实现的数）。`PCFSoftShadowMap` 会**忽略**这个值，
+    所以它是「以后换成 PCFShadowMap 时不用回来调」的预留 —— 我们目前用 Soft，看不到效果。
+  */
+  key.shadow.radius = 4
   /*
     ★★★ 这一行**不能删**，删了上面六个数字全部作废。
 
@@ -1150,7 +1363,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     ➜ 改完范围必须紧接着调一次；`debugFrame().shadowTexel` 会把它暴露出来。
   */
   key.shadow.camera.updateProjectionMatrix()
-  const fill = new DirectionalLight(0xffe8f0, 0.4)
+  const fill = new DirectionalLight(0xffe8f0, 0.9)
   fill.position.set(-0.8, 2.6, 3.2)
   scene.add(fill)
   /*
@@ -1169,7 +1382,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
         主光 1.9→2.6：让「会投影的那盏」在总量里占大头。
       **别只盯着单盏灯的绝对值** —— 决定层次的是投影光 : 平光的比例。
   */
-  const inner = new SpotLight(0xfff5fa, 1.5, 2.2, 1.0, 0.8, 1.5)
+  const inner = new SpotLight(0xfff5fa, 2.8, 2.2, 1.0, 0.8, 1.5)
   inner.position.set(0, GLASS_H - 0.03, 0.3)
   // target 必须一起进场景，否则它的世界矩阵不更新，光会一直朝原点外的默认方向打
   scene.add(inner, inner.target)
@@ -1650,16 +1863,15 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     }
   }
   /**
-   * 取景框**正面**的 4 个角 —— 取景迭代用它。
+   * 取景框**正面**的 4 个角。
    *
-   * ★★ 为什么只取 `z = maxZ` 这一面、而不是 8 个角：
-   *   相机是**斜着俯视**的，柜子前脸（z=+0.55）离相机近得多，同样 x 的角点
-   *   投出来**宽**很多。拿 8 个角去拟合，决定距离的是**前脸**那几个点 ——
-   *   等于「把前脸装进画面」，后面的角自然更小。
+   * ★★ 2026-10-18：它**不再参与取景距离的计算**（距离已改为照抄参考实现
+   *   `fitDist()` 的「拟合玻璃」口径，见 `resize()`）。
+   *   保留它只为一件事：`debugFrame().frame` —— 走查脚本用它断言
+   *   「灯箱露一条、机身裁掉大半」这种**构图**，这是和参考实现对齐的另一半证据。
    *
-   *   但用 8 个角会让迭代**多收几轮**：它会先按后脸估一个距离、发现前脸越界、
-   *   再放大…… 收敛得慢，而且中途的估计值没有意义。
-   *   直接拟合前脸，一步到位。
+   * ⚠️ 如果以后想把它重新接进取景，先读 `resize()` 里那段注释：
+   *   用 `FRAME` 做 contain 时，**宽度永远是约束方向**，改高度毫无效果。
    */
   const FRAME_CORNERS: [number, number, number][] = []
   for (const x of [FRAME.minX, FRAME.maxX]) {
@@ -1710,24 +1922,6 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   }
 
   /**
-   * 取景框 8 个角里最「越界」的那个，以 NDC 为单位。**≤ 1 = 整个框都在画面里。**
-   *
-   * 投影是「距离越远、画面越小」，比例大致是 1/dist，所以这个数直接就是
-   * 「距离还要再乘几倍」的估计值（迭代几次收敛）。
-   */
-  function frameOverflow(): number {
-    let m = 0
-    for (const [x, y, z] of FRAME_CORNERS) {
-      _p.set(x, y, z).project(camera)
-      const a = Math.abs(_p.x)
-      const b = Math.abs(_p.y)
-      if (a > m) m = a
-      if (b > m) m = b
-    }
-    return m
-  }
-
-  /**
    * 后处理链。`null` = 不启用（低端机 / WebGL 起不来），直接 `renderer.render`。
    *
    * ⚠️ 必须是 `let` 且在 `resize` 之前声明 —— `resize` 里要按新尺寸调
@@ -1751,39 +1945,127 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     camera.aspect = aspect
 
     /*
-      contain 的**起点**：让「设计矩形」整个装得下。取两个方向需要的距离里更大的那个。
+      取景距离 —— **照抄参考实现的 `fitDist()` 的形状**。
 
-      ★★ 但起点**不是终点** —— 相机是**斜的**（`placeCamera` 里那个 `dist * 0.09` /
-      `dist * 0.075` 偏移），所以「设计矩形装得下」不等于「柜子的角装得下」。
-      2026-10-16 实测：390×844 下画布高 554，而柜子底边投影在 **614.7**
-      —— 柜子被裁掉了一截，而这是**纯几何**的问题，肉眼扫一眼截图看不出来
-      （底部那截正好是深色的底座）。
+      ★★★ 2026-10-18 的重要更正：**取景的约束方向是宽度，不是高度。**
 
-      ➜ 所以再按**真实外框**收一次：把 8 个角投出来，越界就把距离按需要的比例放大。
-        迭代几次就收敛；而且**以后改柜子的尺寸也不用回来重新调参数**。
+      之前一直用「整个 `FRAME` 框 contain 进画面」。`FRAME` 宽 `1.26`、高 `1.64`，
+      而手机是窄屏（390×844，`aspect ≈ 0.46`）⇒
+        · 宽度需要 `1.26 / 2 / (vt·aspect) ≈ 3.63`
+        · 高度需要 `1.64 / 2 / vt      ≈ 1.98`
+      **宽度那一条永远赢**，所以改 `FRAME.minY` 对镜头远近**一点影响都没有** ——
+      这正是「改了框高、实测玻璃占比还从 0.539 没动」的原因。
+
+      参考实现竖屏拟合的是**固定的世界尺寸**（不是包围盒）：
+        · 宽 `0.62`  —— 玻璃只有 `1.16` 宽，所以它**允许被裁掉左右各 0.27**
+        · 高 `0.95`  —— 玻璃高 `1.2`，上下各让 0.12 出去
+      取两者中更远的那个。宽屏则拟合 `0.72 × 1.22`（带 `hFrac / visFrac`，
+      因为宽屏时两侧有操作列、上下有顶栏，画面被 UI 吃掉了一部分）。
+
+      ➜ 这里直接量**真实的玻璃投影**而不是抄那个常数：
+        「把 `GLASS_CORNERS` 里最宽的那一对角点装进 `FIT_W × FIT_H` 的世界尺寸」，
+        等价于 `fitDist()`，但以后改柜子尺寸不用回来重算常数。
     */
     const vt = Math.tan(MathUtils.degToRad(FOV / 2))
-    let dist = Math.max(FRAME_H / 2 / vt, FRAME_W / 2 / (vt * aspect))
+    const wide = aspect > 1.05
+    const fitW = wide ? 0.72 / HFRAC_WIDE : 0.62
+    const fitH = wide ? 1.22 / VISFRAC_WIDE : 0.95
+    let dist = Math.max(fitH / 2 / vt, fitW / 2 / (vt * aspect))
+    placeCamera(dist)
+
     /*
-      ★ 迭代到 `over ≈ 1`，**不是**「`over ≤ 1` 就收工」。
-
-      只判「装得下」会**严重欠收**：起点距离是按「取景框在目标平面上」估的，
-      可前脸比目标平面近 0.8 个单位，一测就超了 ⇒ `dist *= over` 一步放大 1.5 倍
-      ⇒ 再测就变成 0.86（装得下）⇒ 停。
-      结果柜子只占画面宽度的 **86%**，四周还留一圈空 —— 看着就是「没怼上去」。
-      实测就是这么来的（玻璃区只占 76%）。
-
-      `dist` 和 `over` 是单调的，所以反复乘会收敛（几步就到 1.00）。
+      ★ 只在 `fitDist()` 之上再做一件事：**别把整个画面填满到看不见柜体轮廓**。
+      参考实现靠 `setViewOffset` 把可视窗口压到 LED 板与操作台之间；
+      我们的取景框是和画布等大的，所以用「玻璃的横向投影别超过画面 92%」当上限。
+      这个值只影响横屏（窄屏那边是高度在约束），但它保证横屏不会把柜子怼到贴边。
     */
-    for (let i = 0; i < 12; i++) {
+    const CLOSE_MAX_W = 0.92
+    for (let i = 0; i < 8; i++) {
       placeCamera(dist)
-      // ×FIT_MARGIN：框最多占画面的 1/1.03 ≈ 97%，别正好贴边（浮点一动就走查红）
-      const over = frameOverflow() * FIT_MARGIN
-      if (Math.abs(over - 1) < 0.005) break
-      dist *= over
+      const g = projectRect(GLASS_CORNERS, w, h)
+      const gw = (g.right - g.left) / w
+      if (gw <= CLOSE_MAX_W) break
+      // 投影宽度 ∝ 1/dist，一次乘到位
+      dist *= gw / CLOSE_MAX_W
     }
     placeCamera(dist)
     cameraDist = dist // 存给 render 的「呼吸」微动当基准
+
+    /*
+      ★★ 上界：玻璃**上下不能出画** —— 这是「近」往上走到哪里的边界。
+
+      镜头再近，玻璃顶（灯箱下沿）和池底都必须留在画面里：
+      顶被裁掉 ⇒ 看不到吊杆和爪子起始位置；底被裁掉 ⇒ 看不到娃娃堆和爪子下到底。
+
+      ⚠️ 2026-10-18 第一版这里写成了「超出去的**像素**按比例退回」，
+      横屏实测 `top = −17.4`（玻璃顶跑出画布 17px）没被修 ——
+      因为它只判了**超出多少**，没判**缺多少**。
+      ➜ 现在改成**迭代**：只要任一方向出界就把 `dist` 按比例拉远，最多 8 轮。
+        这种「按比例乘」对透视投影是单调收敛的（`dist` 和投影尺寸近似成反比）。
+    */
+    /*
+      ★ 余量 2px（不是 0.004×h）：实测 tablet-landscape 收敛到 `top = -1.9`，
+        也就是「刚好贴边再差一点点」。判据那边留 0.5px 容差，这里必须比它更宽，
+        否则两边在同一条边界上互相打架：场景认为「够了」、走查认为「越界 1.9px」。
+    */
+    const SLACK_PX = 2
+    for (let i = 0; i < 8; i++) {
+      placeCamera(dist)
+      const g = projectRect(GLASS_CORNERS, w, h)
+      const needTop = (-g.top + SLACK_PX) / h // > 0 = 顶部出界（含余量）
+      const needBot = (g.bottom - h + SLACK_PX) / h // > 0 = 底部出界（含余量）
+      const need = Math.max(needTop, needBot)
+      if (need <= 0) break
+      /*
+        出界比例 `need` 是「画面上还要再留这么多」，换算成距离：
+        把投影高度再缩到 `1 / (1 + need)`，距离就乘 `1 + need`。
+        （多留 15% 冗余，避免在两帧之间来回抖。）
+      */
+      dist *= 1 + need * 1.15
+    }
+    placeCamera(dist)
+    cameraDist = dist
+
+    /*
+      ★★ 「视角够近」的**下界兜底**：玻璃长度的投影必须占画面一定比例。
+
+      为什么它不是只写在走查脚本里：靠肉眼看截图分不出「玻璃占 55%」和「占 65%」，
+      而用户说的「游戏开始的视角要近一点」正是这条。所以由场景自己量、自己收。
+      量法用的是**同一套投影**（`GLASS_CORNERS`），所以它和 `debugFrame()`
+      报的 `glassFillY / glassFillX` 不可能走散。
+
+      ⚠️ 判据取 `max(高占比, 宽占比)`，**不是只看高**：
+      竖屏时宽度才是约束（玻璃被允许裁掉左右），此时高度占比会接近 1；
+      横屏时反过来。只看一个方向的话，另一个方向上「整台机器缩在中间」测不出来 ——
+      这正是 10-18 之前一直误判的原因。
+
+      ★★★ 但它**必须让位给上面的「上下不出画」**。
+      2026-10-18 横屏实测：上界把 dist 从 1.668 拉到约 1.95（玻璃刚好装进 228px 的画布），
+      紧接着这一段又按 `fill / 0.86` 把它拉回 2.157 —— 两段**互相拆台**，
+      最终 `top = −16.8`（玻璃顶被裁），而 `glassFill` 看着是 0.892「合格」。
+      ➜ 所以这里只在「拉近之后上下仍然完整」时才动手；否则保留上界的结果，
+        并把实际 fill 报给走查（`glassFill` 会低于阈值 ⟹ **判据红，而不是画面红**）。
+
+      ⚠️ 横屏的根因是**画布太扁**：844×390 的视口里舞台只有 384×228，
+        玻璃高 1.2 + 俯视 17° 投影下来撑不进 228px。这不是取景参数能解决的，
+        是「横屏要不要把玻璃完整装进画面」的产品取舍。当前选择：装完整。
+    */
+    {
+      const g0 = projectRect(GLASS_CORNERS, w, h)
+      const fill0 = Math.max((g0.bottom - g0.top) / h, (g0.right - g0.left) / w)
+      // 横屏的画布天生矮，阈值放低（见 `GLASS_MIN_FILL_WIDE`）
+      const want = aspect > 1.05 ? GLASS_MIN_FILL_WIDE : GLASS_MIN_FILL
+      if (fill0 < want) {
+        const trial = dist * (fill0 / want)
+        placeCamera(trial)
+        const g1 = projectRect(GLASS_CORNERS, w, h)
+        const stillInside = g1.top >= -0.5 && g1.bottom <= h + 0.5
+        if (stillInside) {
+          dist = trial
+          cameraDist = dist
+        }
+      }
+    }
 
     /*
       商场房间开不开：看**柜身两侧在画布上还剩多少像素**。
@@ -2187,11 +2469,13 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     // 后处理链有自己的 render target，`renderer.dispose()` 不管它
     composer?.dispose()
     composer = null
-    // 环境贴图这条链上的三个对象都要单独放：PMREM 的中间 render target
+    // 环境贴图这条链上的两个对象都要单独放：PMREM 的中间 render target
     // 不释放就是一块常驻显存（而且切走再进来会再分配一块）
+    // ⚠️ 2026-10-18：`RoomEnvironment` 换成自建的 `makeEnvScene()` 之后，
+    //   已经没有 `roomEnv` 这个对象了 —— 那边 new 出来的只是普通的
+    //   Geometry / Material，走 `renderer.dispose()` 就够，别再加一行它的 dispose。
     scene.environment = null
     envRT.dispose()
-    roomEnv.dispose()
     pmrem.dispose()
     // 换色会替换这两张贴图；当前这一张不在 `disposables` 里（换过之后是新 new 的）
     signMat.map?.dispose()
@@ -2232,6 +2516,22 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
        * 底座允许被裁（`cabinet` 会超出画面，这是**预期**，不是 bug）。
        */
       glass,
+      /**
+       * 玻璃区占画面高 / 宽的比例。
+       *
+       * ★ 这是「视角够不够近」的判据（见 `GLASS_MIN_FILL`）。单独给数而不是让
+       *   脚本自己用 `glass` 算：脚本手里那份 `canvas.h` 是 DOM 量的，
+       *   这里的 `h` 是渲染器量的，两者在 DPR / 边界上差一点时，
+       *   同一个判据会得出两个结论。**判据的数字由场景给。**
+       *
+       * ⚠️ 走查要断言的是 `glassFill`（两者的 max），**不是 `glassFillY`**：
+       *   竖屏时宽度是约束方向，高度占比永远接近 1，单看它会「绿着说谎」。
+       */
+      glassFillY: (glass.bottom - glass.top) / h,
+      glassFillX: (glass.right - glass.left) / w,
+      glassFill: Math.max((glass.bottom - glass.top) / h, (glass.right - glass.left) / w),
+      glassFillMin: w / h > 1.05 ? GLASS_MIN_FILL_WIDE : GLASS_MIN_FILL,
+      railY: RAIL_Y,
       /** 取景框（必须完整可见的那块） */
       frame,
       /** 整台机器 —— 允许越界 */
@@ -2288,6 +2588,38 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     debugCamera: () => ({
       mode: camMode,
       dist: camera.position.distanceTo(curLook),
+      /**
+       * ★ 蹲到取物口时的**设计距离**（`doorPose()` 算出来的那个 `d`）。
+       *
+       * 只给 `dist` 是不够的：它量的是「相机到目标点」的**直线**距离，
+       * 而蹲位是斜着往上看的（`+d*0.16` / `+d*0.98`），直线距离比 `d`
+       * 大 1.5%——小的差别，但走查拿它跟默认机位的 `dist` 比比例，
+       * 两个口径混着用就会得出「蹲下去没近多少」这种假结论。
+       * ➜ 要走查按比例比，就两条都读**同一个口径**。
+       */
+      doorDist,
+      /**
+       * ★★ 取物口窗口在画面里占多少（宽 / 高，都不是 0~1 归一，是「相对画布」）。
+       *
+       * 这是**当前机位下投**出来的，所以默认机位也能读 —— 于是走查可以问
+       * 「蹲下去之后窗口比平时大多少倍」，而不是拿两个不同口径的距离相除。
+       *
+       * 踩过的坑：用 `dist` 比比例时，两个机位的 `dist` 是**两种 fit**算出来的
+       * （一个 fit 玻璃、一个 fit 窗口），比例里混着「窗口外径 0.494 vs 原版 0.32」
+       * 这种和自己的画面无关的量 ⇒ 门槛只能靠猜。
+       */
+      winW: (() => {
+        if (!renderer) return 0
+        const w = renderer.domElement.clientWidth
+        return projectRect(PICKUP_QUAD, w, renderer.domElement.clientHeight).right / w
+      })(),
+      winH: (() => {
+        if (!renderer) return 0
+        const w = renderer.domElement.clientWidth
+        const h = renderer.domElement.clientHeight
+        const g = projectRect(PICKUP_QUAD, w, h)
+        return (g.bottom - g.top) / h
+      })(),
       look: { x: curLook.x, y: curLook.y, z: curLook.z },
       pickup: { x: PICKUP.x, y: PICKUP.y, z: PICKUP.z },
       /** 蹲在取物口的剩余秒数（0 = 已经回到默认机位） */

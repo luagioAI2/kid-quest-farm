@@ -13,7 +13,19 @@
 */
 .kqf-claw-stage {
   position: relative;
-  flex: 1 1 auto;
+  /*
+    ★★ `flex-basis: 0` 不是 `auto` —— 这一条是 2026-10-18 横屏事故的根。
+
+    `flex-basis: auto` 的意思是「先按内容定高」，而这里的内容是 canvas：
+    `renderer.setSize()` 会把容器的 `clientHeight` 写进 canvas 的 **height 属性**，
+    而 CSS 里 canvas 又是 `height: 100%` ⇒ 属性值成了固有高度 ⇒ 反过来把容器
+    撑到那个值。于是「量一次 → 写进去 → 下次量到更大的 → 再写进去」形成回路，
+    停在哪取决于哪一帧先量（实测横屏停在 324px，正好是画布宽度的一半，
+    看着像有人写了个 2:1 的宽高比，其实没有）。
+
+    改成 0 之后容器高度只由 flex 分配决定，canvas 只负责画。
+  */
+  flex: 1 1 0;
   min-height: 15rem;
   overflow: hidden;
   border-radius: 1.25rem;
@@ -31,11 +43,113 @@
   `updateStyle=false` 是**必须的**（见 `clawScene.ts` 的注释）：让 three 别写内联样式，
   宽高由这里给，跟着 `.page-col` 走。
   `display: block` 去掉 inline 元素底部那条基线缝。
+
+  ★★ 必须 `position: absolute; inset: 0`，**不能**留在文档流里。
+  留在流里的话，canvas 的 height 属性（= 上次量到的容器高度）会被当成
+  「固有高度」参与父容器的高度计算 —— 和上面 `flex-basis` 那条注释是同一个回路，
+  只是从另一头进。绝对定位之后它对布局的贡献恒为 0，只剩「画」。
 */
 .kqf-claw-stage canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* ============================================================
+   横屏手机（可用高度 ≤ 520px）：控件挪到**两侧**，画布吃掉整个高度
+   ------------------------------------------------------------
+   2026-10-18 实测 `844×390`：顶栏 63 + 底栏 83 = 146，`main` 只剩 244。
+   而纵向栈里 币条 44 + 结果行 56 + 内边距 24 + 间距 20 就吃掉 144
+   ⇒ 画布只剩 100px，机器小到看不清；就算勉强塞下，取景框底边也会落到
+   底栏后面（`frameBottom 448.6` vs `navTop 307`，压住 141.6px）。
+
+   ★ 所以横屏不是「把每样东西压扁」，而是**换一个方向**：高度是最稀缺的，
+     而宽度有 672（`page-col`）—— 机器本身只占 ≈140px 宽，两侧各有 260px 空着。
+     控件放进这两块空白，画布就拿到全部 244px。
+
+   ★ 用 `order` 而不是改 DOM 顺序：竖屏的结构（币条 / 画布 / 结果行）不动，
+     只在这里重排。`order` 只影响视觉顺序，读屏顺序仍然是 DOM 顺序 ——
+     币条 → 画布 → 结果，和竖屏一致，不会突然变成「先读按钮再读画面」。
+   ============================================================ */
+@media (max-height: 520px) and (orientation: landscape) {
+  .kqf-claw-page {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0.5rem;
+    /* 12px → 8px：这一档每一像素都要省 */
+    padding: 0.5rem;
+  }
+
+  /* 画布：高度全给它，宽度吃剩下的 */
+  .kqf-claw-stagewrap {
+    order: 2;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* 15rem 的兜底在这一档会**把页面顶出屏幕**（它正是「必须一屏放下」的反面） */
+  .kqf-claw-stage {
+    min-height: 0;
+  }
+
+  /* 两侧控件列：竖排、定宽 */
+  .kqf-claw-coins,
+  .kqf-claw-foot {
+    order: 1;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .kqf-claw-coins {
+    width: 7rem;
+    justify-content: center;
+  }
+
+  /* 结果文字在上、下爪在下（`flex-1` 让文字那块吃掉上方空间） */
+  .kqf-claw-foot {
+    order: 3;
+    width: 9rem;
+    justify-content: flex-end;
+  }
+
+  /* 窄列里不收缩内边距的话，「🪙 10 换 1 个」会被挤成两行 */
+  .kqf-claw-coins > button {
+    padding-inline: 0.375rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .kqf-claw-coins > span:first-child {
+    justify-content: center;
+  }
+
+  /* 这一行是「抓到一只 = N 商城币」，宽度 7rem 里放不下，横屏就不显示了
+     （中奖文案本身已经写着 +N 商城币） */
+  .kqf-claw-rate {
+    display: none;
+  }
+
+  /* 结果文案在 9rem 里换行，行高收紧一点 */
+  .kqf-claw-result {
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+
+  .kqf-claw-hint {
+    font-size: 0.6875rem;
+  }
+
+  .kqf-claw-foot > button {
+    width: 100%;
+    height: 3rem;
+    padding-inline: 0.5rem;
+    font-size: 1rem;
+  }
 }
 
 /* 结果文字的入场 —— 只做一次轻微放大，不弹跳（结果已经发生了，不需要再强调） */

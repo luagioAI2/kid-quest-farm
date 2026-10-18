@@ -11,17 +11,20 @@
  * 是同一类补盲区脚本。
  *
  * ------------------------------------------------------------
- * ★★ 这一份最重要的判据：**玻璃区完整、取景框铺满限制方向**
+ * ★★ 这一份最重要的判据：**玻璃上下完整、横向被裁、占满至少一个方向**
  *
- * ⚠️ 2026-10-17 这条判据**改过两次**，别照抄旧结论：
- *    · 旧判据 = 「整台机器（`cabinet`）完整在画布内」。那是**远距离全柜取景**，
+ * ⚠️ 这条判据改过**三次**，每次都是「量错了对象」。别照抄旧结论：
+ *    · 第 1 次 = 「整台机器（`cabinet`）完整在画布内」。那是**远距离全柜取景**，
  *      和原版差很多 —— 原版是**站在机器前面**看，底座是被裁掉的。
- *    · 第二次 = 「玻璃区（`glass`）完整」+「**玻璃区**铺满限制方向」。
- *      后半句**量错了对象**：相机 fit 的是取景框（高 2.14），玻璃只占 1.2，
- *      所以玻璃天生只有框高的 56% —— 按高度取景的 4 档全红，画面却是好的。
- *    · 现在 = 「玻璃区完整」+「**取景框**铺满限制方向」+「玻璃在框里占比 ≥50%」。
- *      `cabinet` 仍然**故意**溢出画布，所以它不再是判据。
- *    换判据时如果只改数字不改断言，脚本会继续「通过」，而画面已经变成另一个样子。
+ *    · 第 2 次 = 「玻璃区完整」+「**取景框**铺满限制方向」。
+ *      「玻璃完整」其实**不允许左右裁**，而原版竖屏是裁的（它拟合固定宽度 0.62，
+ *      玻璃宽 1.16）。用户说「视角要近一点」时，这条断言反而是拦路的那一条。
+ *    · 现在 = 「玻璃**上下**完整」+「横向裁得不过头」+「`glassFill` ≥ 0.86」。
+ *      `glassFill` 由**场景**给（`max(横向占比, 纵向占比)`），脚本不重算。
+ *
+ * ★★★ 教训（写在最显眼的地方）：**判据写错方向时，它会长期绿着，而且保护的是错误画面。**
+ *   换判据时如果只改数字不改断言，脚本会继续「通过」，而画面已经变成另一个样子。
+ *   每换一次判据，都要能回答：**这一条红了的话，是画面错了还是判据错了？**
  *
  * 为什么仍然必须量数字：取景对不对，肉眼**看不出来** —— 多裁 30px 的玻璃边
  * 和「本来就该这样」在截图上没有区别。判据是 `stage.debugFrame()`：
@@ -114,10 +117,38 @@ if (!SELECTED.length) {
   process.exit(2)
 }
 
-/** 截图字节数 —— 用来看「画布里有东西没有」（理由见文件头） */
-async function shotSize(page, clip) {
-  const buf = await page.screenshot({ clip, encoding: 'binary' })
-  return buf.length
+/**
+ * 截图统计：字节数 + **像素层面的颜色多样性**。
+ *
+ * ★★ 为什么光看字节数不够（2026-10-18 实测）：`phone-landscape` 有一次 WebGL 整块
+ *   **全黑**，而「有画面 184 KB / 空白 12 KB」照样通过 —— 一块纯黑在 PNG 里
+ *   比纯色背景**更难压**，字节数反而更大。**黑屏也能骗过字节数**。
+ *   ➜ 把截图解码回来，量化到 64×64 数「不同颜色」和「近黑像素占比」：
+ *     渲染正常 ⇒ 几十种颜色、近黑占比低；黑屏 ⇒ 1 种颜色、近黑 100%。
+ * ★ 对照组（藏起 canvas 拍容器底色）天然只有 1~2 种颜色，说明这个探针**分得开**。
+ */
+async function shotStats(page, clip) {
+  const b64 = await page.screenshot({ clip, encoding: 'base64' })
+  const px = await page.evaluate(async (data) => {
+    const img = new Image()
+    img.src = `data:image/png;base64,${data}`
+    await img.decode()
+    const c = document.createElement('canvas')
+    c.width = 64
+    c.height = 64
+    const ctx = c.getContext('2d')
+    ctx.drawImage(img, 0, 0, 64, 64)
+    const d = ctx.getImageData(0, 0, 64, 64).data
+    const colors = new Set()
+    let dark = 0
+    for (let i = 0; i < d.length; i += 4) {
+      // 每通道量化到 16 级：既不会被抖动拆成一堆「不同颜色」，又分得开渐变
+      colors.add(((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4))
+      if (d[i] + d[i + 1] + d[i + 2] < 30) dark++
+    }
+    return { colors: colors.size, darkFrac: dark / (64 * 64) }
+  }, b64)
+  return { bytes: Math.round((b64.length * 3) / 4), ...px }
 }
 
 for (const vp of SELECTED) {
@@ -230,73 +261,72 @@ for (const vp of SELECTED) {
   const { glass: gl, frame: fr, cabinet: cb, canvas: cv } = geo.frame
 
   /*
-    ★★ 核心判据：**玻璃区完整在画布内**。
+    ★★★ 核心判据（2026-10-18 第三次改，前两次都是**量错对象**）：
 
-    ⚠️ 判的是 `glass` 不是 `cabinet`：现在取景是「站在机器前面」，
-       底座**故意**被裁掉（原版就是这样）。判 `cabinet` 会要求把整柜缩进画面，
-       而那正是之前「视角没感觉」的原因 —— 两条判据互相排斥，只能留一条。
+    **竖屏时玻璃区允许被裁掉左右** —— 这是原版的行为，不是妥协。
+      参考实现竖屏的 `fitDist()` 拟合的是固定的世界宽度 `0.62`，
+      而玻璃宽 `1.16` ⇒ 左右各裁掉约 0.27（约 23%）。
+      也就是「人贴着柜子站，眼睛只装得下中间那一块」。
+
+    ➜ 所以判据改成三条，各管一件事：
+      ① 玻璃**高度**必须完整（上下不能裁）—— 爪子下到池底、娃娃堆顶都要看得见；
+      ② 玻璃**不能**被裁得太多（`glassFillX` 有上界）；
+      ③ 「够不够近」由 `glassFill`（场景自己算的 max）保证，不在这里重算。
+      左右**确实**会被裁 —— 硬断言「左右都有余量」等于要求退回远距离全柜取景。
+
+    ⚠️ 别再把 ① 写成「四边都在画布内」：那一条和「视角要近」是互斥的，
+      而且它上一次绿着的时候，画面正是用户说的「跟原版差很多」。
   */
-  const glassInside =
-    gl.left >= 0 && gl.top >= 0 && gl.right <= cv.w && gl.bottom <= cv.h
+  const glassVertInside = gl.top >= -0.5 && gl.bottom <= cv.h + 0.5
   check(
-    '★★ 玻璃区**完整**在画布内（一条边都没被裁）',
-    glassInside,
-    `玻璃 ${gl.left.toFixed(1)},${gl.top.toFixed(1)} → ${gl.right.toFixed(1)},${gl.bottom.toFixed(1)} / 画布 ${cv.w}×${cv.h}`,
+    '★★ 玻璃区**上下**完整在画布内（左右可以裁 —— 原版竖向取景就是这样）',
+    glassVertInside,
+    `玻璃 top=${gl.top.toFixed(1)} bottom=${gl.bottom.toFixed(1)} / 画布高 ${cv.h}`,
   )
+  /*
+    横向**裁切幅度**的上下界，只为竖屏设。
 
-  // 四边各自的余量 —— 单看「在里面」会漏掉「有一边只剩 0.4px」这种
-  const gm = {
-    left: gl.left,
-    top: gl.top,
-    right: cv.w - gl.right,
-    bottom: cv.h - gl.bottom,
-  }
+    ★ 竖屏：原版拟合固定宽度 `0.62`（玻璃 1.16）⇒ 裁约 23%，横向占比 ≈ 123%。
+      「再宽就成特写」的上界 130%；下限 0.55 防「玻璃被压成一条竖缝」。
+    ★★ 横屏**不该判这一条**：那时画布宽得多，玻璃只占约 50% 宽是**正常**的
+      （高度才是约束方向，`glassFillY` 撑着合格线）。
+      2026-10-18 实测横屏 `glassFillX=0.502` 被 0.55 的下界拦成红 ——
+      而画面是对的：那是把竖屏的判据硬套到横屏上。
+  */
+  const landscape = cv.w > cv.h * 1.05
+  const gmx = geo.frame.glassFillX
   check(
-    '★ 玻璃区四边都有余量（不是贴着边，浮点一动就又会越界）',
-    Math.min(...Object.values(gm)) >= 2,
-    Object.entries(gm)
-      .map(([k, v]) => `${k}=${v.toFixed(1)}`)
-      .join(' '),
+    landscape ? '★ 玻璃区横向占比（横屏仅供参考，不是判据）' : '★ 玻璃区横向没被裁得过头（0.55 ≤ X ≤ 1.30）',
+    landscape || (gmx <= 1.3 && gmx >= 0.55),
+    `glassFillX=${gmx.toFixed(3)}${landscape ? '（横屏不判）' : ''}`,
   )
 
   /*
-    取景框（`FRAME`：玻璃 + 一圈柜身）必须完整可见 —— 它是相机实际去 fit 的那个盒子。
-    它越界就说明「fit 迭代没收敛」，而不是「设计上允许裁」。
+    「够不够近」的**唯一判据**：场景给的 `glassFill` 和**配套的合格线** `glassFillMin`。
+    ★ 不在这里自己算 —— `glass` 是画布坐标、`canvas.h` 是 DOM 量的，
+      两边在 DPR / 边界上差一点就会得出两个结论（这条踩过）。
+    ★★ 合格线也由场景给（竖屏 0.86 / 横屏 0.74）：横屏画布只有 228px 高，
+      玻璃装完整最多占 0.78 —— 拿竖屏的 0.86 去判横屏，只会逼出「裁掉玻璃顶」。
   */
-  const frameInside = fr.left >= 0 && fr.top >= 0 && fr.right <= cv.w && fr.bottom <= cv.h
+  const gf = geo.frame.glassFill
+  const gfMin = geo.frame.glassFillMin
   check(
-    '★★ 取景框完整可见（相机真的把它 fit 进去了）',
-    frameInside,
-    `框 ${fr.left.toFixed(1)},${fr.top.toFixed(1)} → ${fr.right.toFixed(1)},${fr.bottom.toFixed(1)}`,
+    '★★ 视角够近：玻璃占满至少一个方向（合格线由场景按画幅给）',
+    gf >= gfMin,
+    `glassFill=${gf.toFixed(3)} ≥ ${gfMin.toFixed(2)}（X=${geo.frame.glassFillX.toFixed(3)} Y=${geo.frame.glassFillY.toFixed(3)}）`,
   )
 
   /*
-    「不是缩成一小坨」：**取景框**必须铺满限制方向。
-
-    ⚠️ 2026-10-17 换了测量对象（门槛没动）：原来量的是**玻璃区**，量错了。
-      取景框是 `FRAME`（`minY=-0.72` → `maxY=1.42`，高 **2.14**），玻璃只占其中
-      1.2 —— 玻璃**天生**只有框高的 56%。所以「玻璃要占满 80%」这条在**任何**
-      按高度取景的档位（横屏 / 平板 / 桌面）都不可能成立：实测 4 档全红，
-      只剩 phone 一档绿，而画面其实是好的。
-      ➜ 相机 fit 的是**框**，就该量框。量对了自然过（实测 5 档 92%~97%，
-        因为 `FIT_MARGIN` 只留 3% 白）。
-    ⚠️ 另外留一条「玻璃不许太小」的下限，防止将来框被撑大到玻璃只剩一条缝。
+    取景框**不再**要求完整可见 —— 但它要么被"满格"推出画面，要么就说明镜头还远。
+    ★ 按方向判：竖屏是**宽度**在碰边，横屏是**高度**。写死"宽度 ≥ 100%"会在
+      横屏时报红，而横屏那档的取景是对的（宽度只占 58%，高度占 78%）。
   */
-  const fillW = (fr.right - fr.left) / cv.w
-  const fillH = (fr.bottom - fr.top) / cv.h
+  const frW = (fr.right - fr.left) / cv.w
+  const frH = (fr.bottom - fr.top) / cv.h
   check(
-    '★★ 取景框铺满了限制方向（相机真的怼上去了）',
-    Math.max(fillW, fillH) >= 0.8,
-    `框 宽 ${(fillW * 100).toFixed(0)}% / 高 ${(fillH * 100).toFixed(0)}%`,
-  )
-  const glassShare = Math.max(
-    (gl.right - gl.left) / (fr.right - fr.left),
-    (gl.bottom - gl.top) / (fr.bottom - fr.top),
-  )
-  check(
-    '★ 玻璃区在取景框里占比正常（不是框撑大了、玻璃缩成一条缝）',
-    glassShare >= 0.5,
-    `玻璃/框 ${(glassShare * 100).toFixed(0)}%`,
+    '★ 取景框在某个方向溢出（近景取景的正向证据：两个方向都没溢出 = 又退回全柜了）',
+    Math.max(frW, frH) >= 1.0,
+    `框 宽 ${(frW * 100).toFixed(0)}% / 高 ${(frH * 100).toFixed(0)}%`,
   )
 
   /*
@@ -357,6 +387,52 @@ for (const vp of SELECTED) {
     geo.cut ? `${geo.cut.tag}: ${geo.cut.scrollH} vs ${geo.cut.clientH}` : '没有裁剪祖先',
   )
 
+  /*
+    ★★ 取景框必须**整块落在底栏上方** —— 判据在**视口坐标**里。
+
+    ⚠️ 上面每一条几何判据量的都是**画布内部坐标**（`debugFrame()` 给的是 canvas px）。
+      它们能证明「柜子在画布里放得下」，但证明不了「画布本身在屏幕上没被压住」。
+      2026-10-18 就是这么漏的：横屏手机上 `stage` 被 canvas 的**固有高度**撑到 324px
+      （`renderer.setSize` 写进 height 属性 → 反过来撑开容器 → 回路），
+      页面溢出 224px，而底栏是 `sticky bottom-0` ⇒ 正好压在取景框下沿 **141.6px** 上，
+      池子和取物口全在导航栏后面 —— 而当时 5 档几何判据**全绿**。
+
+    ★ 两条判据：
+      · `frameBottom ≤ navTop`：取景框下沿不许进底栏（+1px 容差给亚像素）；
+      · `scrollHeight === clientHeight`：这一页要**一屏放得下**，
+        否则「看得见」得靠孩子自己去滚 —— 而他不知道要滚。
+    ★ 期望值全部现场量，不抄任何高度常量（顶栏 / 底栏高度都是会变的）。
+  */
+  const vis = await page.evaluate(() => {
+    const el = document.querySelector('[data-claw-stage]')
+    const f = window.__kqfClawStage.debugFrame()
+    const r = el.getBoundingClientRect()
+    const navs = [...document.querySelectorAll('nav')]
+    const nav = navs.length ? navs[navs.length - 1] : null
+    const se = document.scrollingElement
+    return {
+      frameTop: r.top + f.frame.top,
+      frameBottom: r.top + f.frame.bottom,
+      navTop: nav ? nav.getBoundingClientRect().top : null,
+      scrollH: se.scrollHeight,
+      clientH: se.clientHeight,
+    }
+  })
+  const navOverlap = vis.navTop === null ? Infinity : vis.frameBottom - vis.navTop
+  check(
+    '★★ 取景框整块在底栏上方（视口坐标 —— 画布内坐标看不出这件事）',
+    vis.navTop !== null && navOverlap <= 1,
+    vis.navTop === null
+      ? '找不到底部导航'
+      : `框 ${vis.frameTop.toFixed(1)} → ${vis.frameBottom.toFixed(1)} / 底栏顶 ${vis.navTop.toFixed(1)}` +
+          (navOverlap > 1 ? ` ⇒ 压住 ${navOverlap.toFixed(1)}px` : ''),
+  )
+  check(
+    '★ 这一页一屏放得下（不用滚动才看得见机器）',
+    vis.scrollH <= vis.clientH + 1,
+    `scrollH ${vis.scrollH} / clientH ${vis.clientH} ⇒ 溢出 ${vis.scrollH - vis.clientH}px`,
+  )
+
   /* ================= 画面不是空白（对照组 A） ================= */
 
   const clip = await page.evaluate(() => {
@@ -364,14 +440,14 @@ for (const vp of SELECTED) {
     const r = el.getBoundingClientRect()
     return { x: r.x, y: r.y, width: r.width, height: r.height }
   })
-  const withCanvas = await shotSize(page, clip)
+  const withCanvas = await shotStats(page, clip)
   // 对照组：把 canvas 藏起来 —— 剩下的是容器那层纯色背景（`#e9e6f2`）
   await page.evaluate(() => {
     const c = document.querySelector('[data-claw-stage] canvas')
     if (c) c.style.visibility = 'hidden'
   })
   await wait(250)
-  const blank = await shotSize(page, clip)
+  const blank = await shotStats(page, clip)
   await page.evaluate(() => {
     const c = document.querySelector('[data-claw-stage] canvas')
     if (c) c.style.visibility = ''
@@ -379,8 +455,39 @@ for (const vp of SELECTED) {
   await wait(250)
   check(
     '★★ 画布里有画面（比「藏起 canvas 的纯色背景」明显大）',
-    withCanvas > blank * 1.5,
-    `有画面 ${withCanvas}B / 空白 ${blank}B（×${(withCanvas / blank).toFixed(2)}）`,
+    withCanvas.bytes > blank.bytes * 1.5,
+    `有画面 ${withCanvas.bytes}B / 空白 ${blank.bytes}B（×${(withCanvas.bytes / blank.bytes).toFixed(2)}）`,
+  )
+  /*
+    阳性对照：在画布那块位置盖一张**纯黑**的 fixed 遮罩再拍一张 ——
+    证明「黑屏」这一支**真的会红**。
+    （只看「有画面 vs 空白」不够：2026-10-18 有一次 WebGL 整块全黑，
+     字节数反而比底色更大，那条判据照样绿。）
+    ★ 不能靠「把容器背景涂黑」：容器里还压着摇杆 / 配色块这些 DOM，涂黑之后
+      仍然有上百种颜色（实测 102 种）—— 那样这个对照就证明不了什么。
+  */
+  await page.evaluate((r) => {
+    const ov = document.createElement('div')
+    ov.id = '__black_ctl'
+    ov.style.cssText =
+      `position:fixed;left:${r.x}px;top:${r.y}px;width:${r.width}px;height:${r.height}px;` +
+      'background:#000;z-index:2147483647;pointer-events:none'
+    document.body.appendChild(ov)
+  }, clip)
+  await wait(150)
+  const blackCtl = await shotStats(page, clip)
+  await page.evaluate(() => document.getElementById('__black_ctl')?.remove())
+  await wait(250)
+  check(
+    '★★ 画面不是一块纯色 / 黑屏（字节数分不出黑屏，见 `shotStats` 的注释）',
+    // 实测 5 档正常画面：102~150 种颜色、近黑 0~1%；纯黑遮罩：1 种、近黑 100%
+    withCanvas.colors >= 8 && withCanvas.darkFrac < 0.5,
+    `${withCanvas.colors} 种颜色、近黑 ${(withCanvas.darkFrac * 100).toFixed(0)}%`,
+  )
+  check(
+    '★ 探针自检：纯黑画面会被判成「黑屏」（这一支不是恒真）',
+    blackCtl.colors <= 8 && blackCtl.darkFrac > 0.9,
+    `涂黑后 ${blackCtl.colors} 种颜色、近黑 ${(blackCtl.darkFrac * 100).toFixed(0)}%`,
   )
 
   /* ================= 画布没被遮住（对照组 B：探针自检） ================= */

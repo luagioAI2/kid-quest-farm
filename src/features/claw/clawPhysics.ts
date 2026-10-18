@@ -292,25 +292,46 @@ const UPRIGHT = { x: 0, y: 0, z: 0, w: 1 }
 
 /* ============================ 掉进洞之后 ============================ */
 
-/** 低于这个高度 = 已经掉进取物通道了（池底 y=0）。 */
-const CHUTE_Y = -0.12
-
 /**
- * 娃娃掉进通道后，从这些点重新放回池子里。
+ * 低于这个高度 = 已经离开池子、进了取物通道（池底 y=0）。
  *
- * **确定性**（不是 `Math.random()`）：同一局重放，池子里的变化要一样，
- * 否则截图走查每次都不一样，也说不清「这次是不是真坏了」。
- * 都避开了取物口（`x > 0.26 && z > 0.06`）。
+ * ★★ 2026-10-18：`-0.12` → **`-0.58`**。
+ *
+ * 原来 `-0.12` 只比池底低一点点，那是为「池底侧面的竖井」设的。
+ * 现在娃娃是从**取物口上方松手、落进下面的滑道**（跟参考实现一样），
+ * 路径上一路都在 `y < -0.12`：`-0.12` 一到就 `recycle()`，
+ * 孩子看到的是娃娃**刚落下去就凭空回到池子里** —— 「抓取后移动到出口有问题」里
+ * 最刺眼的一条。
+ *
+ * `-0.58` 在取物口（−0.52）下面、托盘（−0.66）上面：
+ * 娃娃要走完滑道、滑到窗口，才被收走。
+ *
+ * ⚠️ 这个值和 `recycle()` / `nearest()` / `positionOf()` 共用 —— 改它只改一处，
+ *   别在别处再写一个「−0.12」。
  */
+const CHUTE_Y = -0.58
+
+/*
+  娃娃掉进通道后，从这些点重新放回池子里。
+
+  ⚠️ 2026-10-18 起，**最终落点是算出来的、不是写死的**（见 `pickRespawnSpot()`）：
+    写死坐标踩过两次 —— `(0.18, 0)` 离洞只有 0.100（小于一只娃娃的直径 0.144），
+    放回去正好卡在口沿上，一堆娃娃一挤又把它推下去 ⇒
+    「掉洞 → 放回洞口 → 再掉洞」。实测就是这样把「散货被挤进洞」顶到 15 次 / 2 局。
+
+    ➜ 这里只留一张**候选表**（左半边、离洞口至少一个身位），最终用哪个由
+      `pickRespawnSpot()` 按「离洞口最远 + 被占得最少」现算，并随 `recycled` 轮转
+      —— 两只同时掉下去不会叠在同一个点上被弹飞。
+*/
 const RESPAWN_SPOTS = [
   { x: -0.34, z: -0.3 },
   { x: -0.06, z: -0.32 },
-  { x: 0.2, z: -0.24 },
+  { x: 0.2, z: -0.28 },
   { x: -0.32, z: 0.0 },
   { x: 0.02, z: -0.02 },
-  { x: 0.18, z: 0.0 },
+  { x: -0.2, z: -0.16 },
   { x: -0.14, z: 0.22 },
-  { x: 0.06, z: 0.2 },
+  { x: 0.02, z: -0.18 },
 ] as const
 
 /** 从多高放回去。太高会砸得整池子跳，太低会凭空出现。 */
@@ -462,6 +483,39 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     (hole.z0 + hole.z1) / 2,
   )
 
+  /** 洞口中心（滑道 / 接货盘都以它对齐，只算一次） */
+  const cx = (hole.x0 + hole.x1) / 2
+  const cz = (hole.z0 + hole.z1) / 2
+
+  /*
+    ★★★ 洞口围栏（亚克力挡板）—— **没有它，池子会自己「发奖」**。
+
+    2026-10-18 实测：池子从 52 只加到 96 只（为了堆出两层）之后，
+    两局里 **15 只散货**被邻居挤进洞口（`recycled` 单局 +11）。
+    这不是显示问题：掉进洞口在**视觉上等于抓到**，而结算其实早就定死了
+    —— 于是孩子会看到「明明没夹到，娃娃自己滚进洞里了」。
+
+    参考实现在洞口周围立了一圈高 `0.055` 的挡板（`buildStatic` 里
+    "acrylic barrier around the drop hole"）：散货沿着挡板滑过去，
+    只有**从上方**放下的娃娃（爪子送进来的）才越过它落进洞里。
+    我们原来没有这一圈，是因为以前池子只有一层、娃娃根本挤不到洞口。
+
+    ⚠️ 三面即可：洞口顶在柜子右边（`hole.x1 === hx`）和前面（`hole.z1 === hz`），
+      那两面就是柜壁，再立挡板会穿出去。
+    ⚠️ 挡板**不能太高**：爪子的指头合拢后从 `hubY - 0.166` 往下探，
+      0.055 只有指长的一半，爪子能把娃娃放到洞口正上方再松手。
+  */
+  {
+    const BH = 0.055
+    const BT = 0.004
+    const holeHalfW = (hole.x1 - hole.x0) / 2
+    const holeHalfD = (hole.z1 - hole.z0) / 2
+    // 后沿（z = hole.z0）
+    addStatic(R.ColliderDesc.cuboid(holeHalfW, BH, BT), cx, BH, hole.z0 - BT)
+    // 左沿（x = hole.x0）
+    addStatic(R.ColliderDesc.cuboid(BT, BH, holeHalfD), hole.x0 - BT, BH, cz)
+  }
+
   // 四壁 + 顶（顶是为了不让娃娃被弹飞出去 —— 没有它偶尔会飞出一只）
   const T = 0.02
   addStatic(R.ColliderDesc.cuboid(T, glassH / 2, hz + T), -hx - T, glassH / 2, 0)
@@ -470,15 +524,105 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   addStatic(R.ColliderDesc.cuboid(hx, glassH / 2, T), 0, glassH / 2, hz + T)
   addStatic(R.ColliderDesc.cuboid(hx, T, hz), 0, glassH + T, 0)
 
-  // 取物通道：洞口下面一个方井，娃娃掉进去就看不见了
-  const CHUTE_DEPTH = 0.6
-  const cx = (hole.x0 + hole.x1) / 2
-  const cz = (hole.z0 + hole.z1) / 2
-  addStatic(R.ColliderDesc.cuboid(hx, T, hz), cx, -CHUTE_DEPTH, cz) // 井底
-  addStatic(R.ColliderDesc.cuboid(T, CHUTE_DEPTH, (hole.z1 - hole.z0) / 2), hole.x0 - T, -CHUTE_DEPTH / 2, cz)
-  addStatic(R.ColliderDesc.cuboid((hole.x1 - hole.x0) / 2, CHUTE_DEPTH, T), cx, -CHUTE_DEPTH / 2, hole.z0 - T)
-  addStatic(R.ColliderDesc.cuboid(T, CHUTE_DEPTH, (hole.z1 - hole.z0) / 2), hole.x1 + T, -CHUTE_DEPTH / 2, cz)
-  addStatic(R.ColliderDesc.cuboid((hole.x1 - hole.x0) / 2, CHUTE_DEPTH, T), cx, -CHUTE_DEPTH / 2, hole.z1 + T)
+  /* ================= 取物通道 ================= */
+
+  /*
+    ★★★ 2026-10-18 最重要的一条更正：**通道是一个「封起来的盒子」，不是几条板子。**
+
+    实测（`claw-hole-idle.mjs`，完全不玩、空转 25 秒）：
+
+        起步 recycled=1，空转 25 秒 → 变化 0
+        回收记录： #71(-0.45, -37.20, 0.31)
+
+    `y = -37.20` 的意思是那只娃娃**穿过地板掉了 37 米** —— 它根本没碰到滑道。
+    成因是：洞是 `x 0.26…0.58 × z 0.06…0.50`，而滑道只有 `x 0.27…0.57`、
+    而且只在 `z` 中段 —— 洞的四条边各留了一条**一两厘米的缝**，垂直落下的娃娃
+    从缝里钻过去，一路掉到 `CHUTE_Y` 之下才被 `recycle()` 捞回来。
+
+    症状有两层，都很容易被误判：
+      · 建池时白白 `recycle()` 一只（池子「自己少了一只又补一只」）；
+      · 走查里「没中的那局，夹住的那只掉进通道了」—— 其实那是 `recycle()`
+        **把它搬到了通道里**，不是爪子漏了。
+
+    ➜ 现在把工艺反过来：**先按洞的边界造一个封闭盒子**，滑道只是盒子里的一块斜板。
+      这样不管娃娃从洞的哪一点落下来，先被接住，再顺着斜面滚出去。
+  */
+  {
+    const GAP = 0.006
+    const yTop = -0.02
+    const yBot = CHUTE_Y - 0.02
+    const bh = (yTop - yBot) / 2
+    const by = (yTop + yBot) / 2
+    const halfW = (hole.x1 - hole.x0) / 2 + GAP
+    const halfD = (hole.z1 - hole.z0) / 2 + GAP
+    const panX = (hole.x0 + hole.x1) / 2 + 0.28
+    addStatic(R.ColliderDesc.cuboid(halfW, bh, 0.004), cx, by, hole.z0 - 0.004)
+    addStatic(R.ColliderDesc.cuboid(0.004, bh, halfD), hole.x0 - 0.004, by, cz)
+    addStatic(R.ColliderDesc.cuboid(halfW, bh, 0.004), cx, by, hz + GAP + 0.004)
+    addStatic(R.ColliderDesc.cuboid(0.004, bh, halfD), hx + GAP + 0.004, by, cz)
+    // 盒底（兜底）：滑道在盒子里，盒底只负责「绝不穿到虚空里」
+    addStatic(R.ColliderDesc.cuboid(halfW, 0.004, halfD), cx, yBot, cz)
+    // 盒底再往前伸一段，接住从取物口缝隙漏下来的（取物口下面本来就是托盘）
+    addStatic(R.ColliderDesc.cuboid(0.16, 0.004, halfD), Math.max(cx, panX), yBot, cz)
+  }
+
+  /*
+    取物通道：**斜坡滑道，不是竖井**。
+
+    ★★ 2026-10-18 改掉了原来的「方井 + 井底」。
+
+    原来爪子把娃娃送到池子**侧面**的洞口、从池底高度塞下去，娃娃在井里往下掉，
+    `CHUTE_Y` 一到就被 `recycle()` 放回池子。孩子看到的是「娃娃在池底消失」。
+
+    参考实现的走法是：爪子移到**取物口正上方**松手 → 娃娃落进**取物口正下方**的
+    滑道 → 顺着斜面滚出去 → 从机身正面的取物口里探出来。这就是「抓取后移动到
+    出口」的正确样子（用户原话点名的那个问题）。
+
+    ➜ 所以井底换成**朝正面（+z）倾斜的斜坡**：落到斜坡上的娃娃会自己滑向取物窗口，
+      而 `recycle()` 仍然按 `CHUTE_Y` 把它收走（账务上的中奖次数不变）。
+
+    ⚠️ 斜坡用**四元数绕 x 轴转 `RAMP_ANG`**。写 `{x: sin(a/2), ...}` 是 three/Rapier
+      都认的四元数，但符号写反会让坡朝后倾斜 —— 娃娃会往后墙滚，永远滑不出来。
+  */
+  /*
+    ★★ 2026-10-18 按参考实现重新落位（原来 -0.36 / 半长 0.22，低端比托盘高 0.26
+    —— 娃娃顺着斜面滑到底会**悬空掉一段**，看着像掉进虚空）。
+
+    参考实现的关键一句是 *"ramp's lower (front) edge meets the bin floor"*：
+    **斜面低端与托盘面平齐**，娃娃是「滑」进窗口的，中间没有落差。
+    所以这里用同一条式子算高度：托盘面 + 半厚，再往上抬斜面长度的一半 × sin。
+  */
+  const RAMP_ANG = 0.5
+  const ramp = R.ColliderDesc.cuboid(0.16, 0.01, 0.2).setRotation({
+    x: Math.sin(RAMP_ANG / 2),
+    y: 0,
+    z: 0,
+    w: Math.cos(RAMP_ANG / 2),
+  })
+  const BIN_FLOOR_Y = -0.66
+  addStatic(ramp, cx, BIN_FLOOR_Y + 0.096 - 0.004, 0.32 - 0.176)
+  addStatic(R.ColliderDesc.cuboid(0.16, 0.01, 0.13), cx, BIN_FLOOR_Y - 0.01, 0.345)
+
+  /* ---------------- 取物口下面的接货盘 ---------------- */
+
+  /*
+    娃娃从滑道滚出来之后得**有个东西托住**（不然它会一直往下掉，看起来像掉进虚空）。
+
+    取物口在机身正面：`y ≈ −0.52`、`z ≈ HZ`。这里放一块浅底盘 + 后挡板，
+    前面**不封** —— 从正面（相机那一侧）能看见娃娃躺在里面。
+
+    ⚠️ 纯视觉托盘，**不参与输赢**。`recycle()` 到了 `CHUTE_Y` 就把这个娃娃收走了，
+      所以托盘上通常什么都没有。真正「告诉孩子到手了」的是页面上的中奖卡片
+      （参考实现也一样：`showWin()` 弹一个小转盘渲染图）。
+  */
+  {
+    const BIN_Y = BIN_FLOOR_Y
+    const BIN_Z = hz + 0.12
+    addStatic(R.ColliderDesc.cuboid(0.16, 0.012, 0.16), cx, BIN_Y - 0.012, BIN_Z) // 盘底
+    addStatic(R.ColliderDesc.cuboid(0.16, 0.1, 0.012), cx, BIN_Y + 0.088, BIN_Z - 0.16) // 后挡板
+    addStatic(R.ColliderDesc.cuboid(0.012, 0.1, 0.16), cx - 0.16, BIN_Y + 0.088, BIN_Z) // 左挡板
+    addStatic(R.ColliderDesc.cuboid(0.012, 0.1, 0.16), cx + 0.16, BIN_Y + 0.088, BIN_Z) // 右挡板
+  }
 
   /* ---------------- 爪子：hub + 三根指头，全是 kinematic ---------------- */
 
@@ -582,16 +726,74 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     }
   })
 
-  /* ---------------- 先让它自己沉一下 ---------------- */
+  /* ---------------- 建池：分波从空中落下，让它们自己堆 ---------------- */
 
   /*
-    手写的那套三层摆放**不完全满足接触约束**（层与层之间有几厘米的重叠）。
-    直接开跑的话，前 0.5 秒整池娃娃会同时往外弹一下 —— 像被吹了口气。
+    ★★★ 2026-10-18 整段重写：原来是把 `clawScene.initialPrizeLayout()` 的手写四层
+    直接交给物理，空跑 1.5 秒「把重叠推开」。实测**堆不起来**：
+      · 布局写的是四层（y = 0.004 / 0.112 / 0.220 / 0.320），
+        但同一层的娃娃是**水平摆**的、相邻间距又大于一只的直径 ⇒ 「层」其实是
+        **悬空的**；
+      · 一开跑，上面几层同时自由落体砸下去，把下面一层压平 —— 最后变成
+        平均 0.133、最高 0.216 的**一层**（`claw-pose.mjs` 量出来的数）。
 
-    这里先空跑 90 步（1.5 秒）把重叠推开，再交接给渲染。
-    代价约 10~30 ms，发生在物理加载完的那一帧，用户还看不出区别。
+    参考实现的做法是 `fill(30)`：**分波从空中投放**，每批 6 只、`y = 0.12~0.37`，
+    每批之间步进 90 次，最后再沉降 360 次。这样堆是**物理自己长出来的**
+    —— 会互相搭着、会靠着墙斜着，正是娃娃机那种「有点乱的堆」。
+
+    ➜ 这里照抄它的**手法**（不是它的数字）：投放点复用 `RESPAWN_SPOTS`
+      （确定性，避开取物口），高度按波次递增，每只再加一点确定性的位置/朝向扰动。
+      扰动很关键：位置完全相同的一摞会精确地叠成一根柱子。
   */
-  for (let i = 0; i < 90; i++) world.step()
+
+  /** 确定性伪随机：同一局重放，池子变化完全一样（走查截图不会每次不同）。 */
+  const jitter = (n: number) => {
+    const x = Math.sin(n * 127.1 + 311.7) * 43758.5453
+    return x - Math.floor(x)
+  }
+
+  /** 一次投放。`i` 只用于扰动，决定它是「第几只」，不参与任何玩法判定。 */
+  const dropOne = (pb: PrizeBody, i: number, y: number) => {
+    const spot = RESPAWN_SPOTS[i % RESPAWN_SPOTS.length]
+    const ox = (jitter(i * 3 + 1) - 0.5) * 0.10
+    const oz = (jitter(i * 3 + 2) - 0.5) * 0.10
+    const turn = jitter(i * 3 + 3) * Math.PI * 2
+    pb.body.setTranslation({ x: spot.x + ox, y, z: spot.z + oz }, true)
+    pb.body.setRotation({ x: 0, y: Math.sin(turn / 2), z: 0, w: Math.cos(turn / 2) }, true)
+    pb.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+    pb.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+    pb.from = { x: spot.x + ox, y, z: spot.z + oz }
+  }
+
+  /*
+    ★ 投放高度：`0.12 + wave * 0.05`，封顶 0.42。
+      别一上来就放到接近玻璃顶（1.2）：落下来的速度太快，会把下面压塌成一层，
+      而且第一帧看起来像「有人往柜子里倒娃娃」。
+    ⚠️ 别调成「只放一波、全部同高」—— 同一高度同一点投放必然叠成柱。
+  */
+  const WAVE = 6
+  for (let i = 0; i < prizeBodies.length; i += WAVE) {
+    const wave = i / WAVE
+    for (let j = 0; j < WAVE && i + j < prizeBodies.length; j++) {
+      dropOne(prizeBodies[i + j], i + j, 0.12 + Math.min(0.3, wave * 0.05))
+    }
+    // 每波之间让它落稳（60Hz × 0.75s）
+    for (let k = 0; k < 45; k++) world.step()
+  }
+  /*
+    最后再沉降 4 秒。
+
+    ★ 这一步**不能省**，也不能短。2026-10-18 三次数值：
+      · 90 步（1.5 秒）：截图里还有两只娃娃卡在半空（被邻居架住）；
+      · 155 步（2.6 秒）：走查「空转 1.3 秒后池子是静的」仍然红，
+        最大位移 **0.906** —— 说明那 1.3 秒里还有娃娃在掉，池子没静下来；
+      · 240 步（4 秒）：目标是把所有娃娃落到**静止**（`sleep`）为止。
+    ⚠️ 判据不能只看「建世界花多久」：这 4 秒是同步空跑，约 30~50ms，
+      在物理 chunk 加载完之后才跑，玩家看不到。
+    ⚠️ 如果以后又加娃娃（>120 只），这里还得加长 —— 判据是走查那条
+      「空转 1.3 秒后最大位移 < 0.05」，不是这里写了多少步。
+  */
+  for (let i = 0; i < 240; i++) world.step()
 
   /* ---------------- 状态 ---------------- */
 
@@ -609,7 +811,6 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
    *   「**手里那只**掉没掉下去」，而不是「总数对不对」。
    */
   let recycledLog: { index: number; x: number; y: number; z: number }[] = []
-  let respawnCursor = 0
   let heldIndex: number | null = null
   /**
    * 握持的相对位置：抓的那一刻娃娃在 hub 本地坐标里的位置，以及当时的 hub 高度。
@@ -658,7 +859,14 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   }
 
   function releaseGrip(): void {
+    /*
+      ★ 松手之后 `heldIndex` 变成 null，但「这只**就是**这局中奖的那只」这件事
+        要一直记着 —— 它要留在取物窗口里当证据（`WIN_HOLD`）。
+        所以另存一份 `winIndex`，只有**下一次开抓**才会被覆盖。
+    */
+    if (heldIndex !== null) winIndex = heldIndex
     heldIndex = null
+    winHold = 0
     // 不在这里 `setProngColliders(true)` —— 见上面 `pendingProngsOn` 的注释
     pendingProngsOn = true
   }
@@ -699,14 +907,69 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
 
   /* ---------------- 掉进通道就放回池子 ---------------- */
 
-  function recycle(): void {
+  /**
+   * 通道里那只既然「到手了」，就**得在取物窗口里被看见**。
+   *
+   * ★★ 2026-10-18：这是用户那句「抓取后移动到出口位置有问题」的最后一块。
+   *   原来 `recycle()` 在 `CHUTE_Y`（−0.58）就把它搬回池子，而托盘面在 −0.66
+   *   —— **托盘永远是空的**。孩子看到的是：娃娃滑到窗口边上、然后凭空消失。
+   *   参考实现不是这样：中奖的那只**躺在窗口里**，家长按「拿走」它才滑出去
+   *   （`takePrizes()`，0.45 秒缩没）。
+   *
+   *   ➜ 放进窗口的那只（= `heldIndex`，也就是这局中奖的那只）先**不动**；
+   *     等它真的落到托盘面上（`BIN_FLOOR_Y - 0.04` 以下）再过 `WIN_HOLD` 秒
+   *     才搬走。搬走的那一刻 `recycled` 才 +1，走查「这局少了一只」的账不变。
+   *
+   * ⚠️ 计时放在物理层（用 `world.step()` 累加）而不是页面层：
+   *    走查是直接调 `step()` 的，用 `performance.now()` 的话「快进」会让它永远不触发。
+   */
+  const WIN_HOLD = 1.6
+  let winHold = 0
+  /**
+   * 「这局到手的那只」—— 松爪之后仍然记着（`heldIndex` 会变 null）。
+   * 它要在取物窗口里躺 `WIN_HOLD` 秒再被搬回池子，否则托盘永远是空的。
+   */
+  let winIndex: number | null = null
+
+  function pickRespawnSpot(skip: number): { x: number; z: number } {
+    let best: { x: number; z: number } = RESPAWN_SPOTS[0]
+    let bestScore = -Infinity
+    for (let k = 0; k < RESPAWN_SPOTS.length; k++) {
+      const s = RESPAWN_SPOTS[(k + recycled) % RESPAWN_SPOTS.length]
+      // 离洞口越远越好（洞口 = 右前角那块矩形）
+      const dx = Math.max(0, hole.x0 - s.x)
+      const dz = Math.max(0, hole.z0 - s.z)
+      let score = Math.hypot(dx, dz)
+      // 被占得越多越差：8 cm 以内每只扣 0.05
+      for (let j = 0; j < prizeBodies.length; j++) {
+        if (j === skip) continue
+        const q = prizeBodies[j].body.translation()
+        if (Math.abs(q.x - s.x) + Math.abs(q.z - s.z) < 0.08) score -= 0.05
+      }
+      if (score > bestScore) {
+        bestScore = score
+        best = s
+      }
+    }
+    return best
+  }
+
+  function recycle(dt: number): void {
+    /* 中奖的那只已经躺在窗口里了？开始计时（只有**松过爪**的那只算） */
+    if (winIndex !== null) {
+      const p = prizeBodies[winIndex]?.body.translation()
+      if (p && p.y <= BIN_FLOOR_Y + 0.06) winHold += dt
+    }
+    const winDone = winIndex !== null && winHold >= WIN_HOLD
+
     for (let i = 0; i < prizeBodies.length; i++) {
       if (i === heldIndex) continue
       const pb = prizeBodies[i]
       const p = pb.body.translation()
+      /* ★ 中奖的那只**留在取物窗口里**，别急着搬走（见 `WIN_HOLD`） */
+      if (i === winIndex && !winDone) continue
       if (p.y > CHUTE_Y) continue
-      const spot = RESPAWN_SPOTS[respawnCursor % RESPAWN_SPOTS.length]
-      respawnCursor++
+      const spot = pickRespawnSpot(i)
       recycled++
       recycledLog.push({ index: i, x: p.x, y: p.y, z: p.z })
       if (recycledLog.length > 24) recycledLog.shift()
@@ -828,7 +1091,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     // 补不完的丢掉（切后台回来时不要试图追回几秒钟）
     if (n === MAX_STEPS) accumulator = 0
 
-    recycle()
+    recycle(dt)
 
     /*
       软体手感：撞击（速度骤降）→ 弹簧挤压。和参考实现同一条路

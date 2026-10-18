@@ -60,8 +60,20 @@ import './claw.css'
    动画只是把这件已经发生的事演出来。
    ============================================================ */
 
-/** 待命高度：爪子贴着轨道下沿（和 `clawScene` 里缆绳锚点同一个高度）。 */
-const HUB_TOP = CLAW_RAIL_Y - 0.02
+/**
+ * 待命时 hub 顶面离导轨多远 = **吊杆露出来的长度**。
+ *
+ * ★★ 2026-10-18：`0`（贴在导轨上）→ **`0.12`**，抄参考实现的 `L_MIN = 0.12`。
+ *
+ * 差在哪：缆绳是「从小车底面拉到 hub 顶面」的一段圆柱，长度就是这两个点的差。
+ * 写成 `RAIL_Y - 0.02` 时差值是 0.02 —— 几乎为 0，缆绳缩成一个点，
+ * 待命画面上就是**一个铁疙瘩悬在机顶下方**，没有「吊着」的感觉。
+ * 原版待命时爪子上方有一段明显的杆，下落时那段杆才一点点被拉长。
+ *
+ * 爪子的**行程**没变（`bottomY` 还是探表面算的），变的只是最高点。
+ */
+const CLAW_HANG_MIN = 0.12
+const HUB_TOP = CLAW_RAIL_Y - CLAW_HANG_MIN
 
 /**
  * 爪子下爪时，hub 停在**探测到的面**上方多少。
@@ -683,11 +695,11 @@ export default function ClawPage() {
   const canBuy = !busy && points >= CLAW_PLAY_COST
 
   return (
-    <div className="page-col flex flex-1 flex-col gap-2.5 px-3 pb-3 pt-3">
+    <div className="kqf-claw-page page-col flex flex-1 flex-col gap-2.5 px-3 pb-3 pt-3">
       {/* 币条：还有几个币 + 换币入口。
           ⚠️ 这里**不再显示 🪙 积分** —— 顶栏（`App.tsx`）常驻显示着，
           同一屏里同一件事出现两次。只在「换币」按钮上写要花几个积分。 */}
-      <div className="flex items-center gap-2">
+      <div className="kqf-claw-coins flex items-center gap-2">
         <span
           data-claw-coins
           aria-label={`${CLAW_COIN_NAME} ${coins}`}
@@ -707,7 +719,7 @@ export default function ClawPage() {
         >
           🪙 {CLAW_PLAY_COST} 换 1 个
         </button>
-        <span className="ml-auto hidden shrink-0 text-xs font-bold text-ink-500 md:block">
+        <span className="kqf-claw-rate ml-auto hidden shrink-0 text-xs font-bold text-ink-500 md:block">
           抓到一只 = {econ.exchangePerPrize} 商城币
         </span>
       </div>
@@ -729,7 +741,7 @@ export default function ClawPage() {
           ARIA（读屏软件会把按钮当成图片的一部分读掉）。
           包一层之后，按钮既在视觉上叠在画面上，语义上又是独立的控件。
         */
-        <div className="relative flex flex-1 flex-col">
+        <div className="kqf-claw-stagewrap relative flex flex-1 flex-col">
           <div
             ref={stageRef}
             data-claw-stage
@@ -818,7 +830,7 @@ export default function ClawPage() {
       )}
 
       {/* 结果 + 下爪 */}
-      <div className="flex items-center gap-3">
+      <div className="kqf-claw-foot flex items-center gap-3">
         <div className="min-w-0 flex-1">
           {result ? (
             <span
@@ -839,7 +851,7 @@ export default function ClawPage() {
               ) : null}
             </span>
           ) : (
-            <span className="text-xs leading-snug text-ink-500">
+            <span className="kqf-claw-hint text-xs leading-snug text-ink-500">
               按住画面拖动，把爪子移到想抓的娃娃上面。
               <br />
               {CLAW_PLAY_COST} 积分换 1 个币，1 个币玩 1 局。
