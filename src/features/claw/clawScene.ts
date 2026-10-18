@@ -904,7 +904,7 @@ export interface ClawStage {
   debugPhysics(): {
     state: 'loading' | 'ready' | 'failed' | 'off'
     bodies: number
-    /** 手里有没有东西（球铰建起来没有） */
+    /** 手里有没有东西（握持目标还挂着没有） */
     held: boolean
     /** 还醒着的刚体数 —— 全睡了说明模拟真的停了 */
     awake: number
@@ -2016,8 +2016,16 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       /*
         一开新的一局就立刻回来 —— 否则孩子按了下爪，镜头还在取物口那边
         （要等 3.5 秒才转回来，那几秒爪子已经在池子里动了，完全看不到）。
+
+        ⚠️ 必须**真的调** `animCamTo('view')`，不能只把 `doorHold` 清 0：
+           下面那段 `if (doorHold > 0)` 一旦不成立就再也不会调它，镜头
+           会**永远停在取物口**（下次中奖再 `animCamTo('door')` 也是原地不动）。
+           `camMode === 'door'` 这个条件同时挡住了重复触发（第一帧就切走了）。
       */
-      if (v.busy && camMode === 'door') doorHold = 0
+      if (v.busy && camMode === 'door') {
+        doorHold = 0
+        animCamTo('view')
+      }
       if (doorHold > 0) {
         doorHold -= camDt
         if (doorHold <= 0) animCamTo('view')
@@ -2032,12 +2040,19 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     /*
       探出来的时机跟着**镜头**走（`camAnim.k`）：镜头还在半路上就把奖品摆出来，
       会在画面左下角看到一个玩具凭空冒出来 —— 那是「动画没对齐」的典型样子。
+
+      ★★ 「镜头离窗口多近」= `arrive`，**回来的时候也要按它褪**：
+        原来写的是 `camMode === 'door' ? k : 0`，一往回走就变成 0，于是
+        镜头还贴在窗口前（缓动前 0.3 秒几乎没动）娃娃就**凭空消失**了。
+        实测截图：蹲镜最后那段是一圈**空窗口**，看着像「赢了但什么都没给」。
+        现在回来时 `arrive = 1 - k`，娃娃随着镜头拉远一起缩小。
     */
-    const arrive = camMode === 'door' ? (camAnim ? camAnim.k : 1) : 0
-    const showTarget = doorHold > 0 ? arrive : 0
+    const arrive = camMode === 'door' ? (camAnim ? camAnim.k : 1) : camAnim ? 1 - camAnim.k : 0
+    const showTarget = arrive
     winShow += (showTarget - winShow) * Math.min(1, camDt / 0.22)
-    // 镜头往回走了 → 奖品「被取走」：往外滑一点、缩小到看不见
-    if (winPrize >= 0 && doorHold <= 0 && winShow < 0.999) winGone = Math.min(1, winGone + camDt / 0.4)
+    // 镜头已经离开窗口（`arrive < 0.15`，娃娃这时基本看不见了）才真的「取走」。
+    // 在窗口前就收 = 凭空消失；等镜头走了再收，玩家只会觉得「娃娃被拿走了」。
+    if (winPrize >= 0 && doorHold <= 0 && arrive < 0.15) winGone = Math.min(1, winGone + camDt / 0.4)
     if (winPrize >= 0 && winShow > 0.004) {
       const g = prizeGroups[winPrize]
       if (g) {

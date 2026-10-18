@@ -446,8 +446,36 @@ for (const vp of SELECTED) {
     check('买一个币：币 +1', afterBuy.coins === before.coins + 1, `coins=${afterBuy.coins}`)
     check('买一个币：积分 −1', afterBuy.points === before.points - 1, `积分 ${before.points} → ${afterBuy.points}`)
 
-    await page.click('[data-claw-drop]')
-    await wait(ROUND_MS)
+    /*
+      ★★ 下爪之后**等状态**，不等猜出来的毫秒数。
+
+      踩过两次：`wait(ROUND_MS)`（动画 + 0.8 秒）在机器忙的时候不够 ——
+      投币要走一次 IndexedDB 事务，结算也走一次。实测「一局结束有结果文案」
+      读到空字符串（那 0.8 秒被事务吃掉了），而币和局数都是对的。
+      ➜ 顺序是：点下去 → 等**局数 +1**（真的开始了）→ 等**结果文案非空**。
+        中间那个 150ms 是给 `setResult(null)`（新一局开始时清掉上一局文案）
+        落地的，不然可能立刻读到上一局的旧文案。
+    */
+    const dropAndWait = async () => {
+      const p0 = await page.evaluate(() => window.__kqf__.getState().clawPlays)
+      await page.click('[data-claw-drop]')
+      const started = await page
+        .waitForFunction((p) => window.__kqf__.getState().clawPlays > p, { timeout: 8000 }, p0)
+        .then(() => true, () => false)
+      if (!started) return false
+      await wait(150)
+      return await page
+        .waitForFunction(
+          () => {
+            const el = document.querySelector('[data-claw-result]')
+            return !!el && (el.innerText ?? '').trim().length > 0
+          },
+          { timeout: 25000 },
+        )
+        .then(() => true, () => false)
+    }
+
+    const roundDone = await dropAndWait()
     const afterRound = await page.evaluate(() => {
       const s = window.__kqf__.getState()
       return {
@@ -458,7 +486,11 @@ for (const vp of SELECTED) {
     })
     check('下爪一局：币 −1（投进去了）', afterRound.coins === afterBuy.coins - 1, `coins=${afterRound.coins}`)
     check('下爪一局：局数 +1', afterRound.plays === before.plays + 1, `plays=${afterRound.plays}`)
-    check('一局结束有结果文案', afterRound.result.trim().length > 0, `「${afterRound.result.trim()}」`)
+    check(
+      '一局结束有结果文案',
+      roundDone && afterRound.result.trim().length > 0,
+      `「${afterRound.result.trim()}」（等到结果=${roundDone}）`,
+    )
 
     /* ---- ★ 中一局真的发商城币 ----
        结果由局数算出来（幂等伪随机），所以脚本**先问**「第几局会中」，
@@ -478,10 +510,21 @@ for (const vp of SELECTED) {
     })
     check('★ 算得出「第几局会中」（走的是结算用的同一个函数）', win.idx >= 0, `第 ${win.idx} 局`)
 
+    let playedAll = true
     for (let i = 0; i < win.need; i++) {
-      await page.click('[data-claw-drop]')
-      await wait(ROUND_MS)
+      /*
+        ★ 一局一局**等演完**再投下一枚。
+        原来这里是 `click → wait(ROUND_MS)`：机器忙的时候动画 + 结算会超过
+        那个数，于是下一枚被「还在演」挡掉 ⇒ 实际局数和 `findRound` 算出来的
+        目标局**错开**，然后「中了那一局：商城币 +1」随机红。而且它红的时候
+        看起来像账本算错了。
+      */
+      if (!(await dropAndWait())) {
+        playedAll = false
+        break
+      }
     }
+    check('★ 精确走到中奖那一局（每一局都真的演完了）', playedAll, `need=${win.need} 局`)
     /*
       ★ `ROUND_MS` 是「动画时长 + 0.8 秒」推出来的，但那 0.8 秒要同时盖住
         「投币走一次 IndexedDB 事务」的延迟。机器忙的时候（比如同时跑着 vitest）

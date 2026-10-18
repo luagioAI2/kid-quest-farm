@@ -347,7 +347,7 @@ check('每一局都演完了（结果元素出现）', rounds.every((r) => r.don
 /* ---- 爪子真的抓过东西 ---- */
 const grabRounds = rounds.filter((r) => r.heldSeen)
 check(
-  '★★ 爪子真的夹住过娃娃（球铰建起来了，不是只在半空合爪）',
+  '★★ 爪子真的夹住过娃娃（握持建起来了，不是只在半空合爪）',
   grabRounds.length > 0,
   `${grabRounds.length}/${rounds.length} 局夹到过`,
 )
@@ -447,7 +447,7 @@ check(
 )
 
 const finalPhys = await page.evaluate(() => window.__kqfClawStage?.debugPhysics?.() ?? null)
-check('局后手里是空的（球铰拆掉了）', finalPhys?.held === false, String(finalPhys?.held))
+check('局后手里是空的（握持撤掉了）', finalPhys?.held === false, String(finalPhys?.held))
 
 await page.screenshot({ path: join(OUT, `${VIEWPORT}-物理走查.png`) })
 

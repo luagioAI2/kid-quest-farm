@@ -20,6 +20,14 @@
  *      —— 否则「蹲下去看一个空黑洞」比不蹲更糟；
  *   ④ 3.5 秒后自己站起来（回到 `view`、目标点回到池子）
  *      —— 不回来的话孩子下一局是在取物口的特写里下爪，完全看不见爪子。
+ *   ⑤ 蹲镜期间按「下爪」→ 镜头**立刻**站回去
+ *      —— 只清 `doorHold` 不调 `animCamTo` 的话，镜头会永远卡在取物口；
+ *         而这个状态只在「中奖后马上又投一币」时出现，手点很难碰上。
+ *   ⑥ 镜头往回走的前半段，窗口里**还有**奖品
+ *      —— 一到点就撤奖品的话，镜头还贴着窗口娃娃就凭空消失了（实测截图
+ *         里蹲镜最后那段是一圈空窗口，像「赢了但什么都没给」）。
+ *         判据用**几何**不用秒数：`dist` 还在「蹲镜 ↔ 默认」中点以内时，
+ *         `winShow` 必须还 > 0.3。
  *
  * ⚠️ 全部走 `debugCamera()`，**不比截图**（截图抖动 3~252 B，逐字节比对无效）。
  *
@@ -187,7 +195,18 @@ const waitBack = async (timeout = (DOOR_HOLD + DOOR_DUR) * 1000 + 1500) => {
   return cur
 }
 
-const playRound = async () => {
+const playRound = async (fresh = false) => {
+  /*
+    ★★ `fresh` 那一步不能省：上一局的 `[data-claw-result]` 还在 DOM 里的时候，
+      下面那个 `waitForFunction(结果元素存在)` **立刻**就返回了 —— 拿到的是
+      **上一局**的结果。实测代价：⑤ 拿它去测「蹲镜期间按一下」，
+      根本没开始新的一局，那条断言于是永远是绿的（改坏也绿）。
+  */
+  if (fresh) {
+    await page
+      .waitForFunction(() => !document.querySelector('[data-claw-result]'), { timeout: 12000 })
+      .catch(() => {})
+  }
   await page.evaluate(async () => {
     const k = window.__kqf__
     if (k.getState().balance < 2) await k.addPoints(10)
@@ -258,11 +277,138 @@ check(
   back.mode === 'view' && back.look.y > 0 && Math.abs(back.dist - idleCam.dist) < 0.05,
   `mode=${back.mode} look.y=${back.look.y.toFixed(2)} dist=${back.dist.toFixed(2)}`,
 )
+// 收尾是 0.4 秒的「滑出去 + 缩到 0」（见 `winGone`），镜头刚到位时它还在收 —— 等一下再看
+await wait(700)
+const backGone = await page.evaluate(() => window.__kqfClawStage.debugCamera())
 check(
   '★ 站回去之后窗口里那只奖品已经收走了（不会浮在柜门外）',
-  back.winPrize < 0,
-  `winPrize=${back.winPrize}`,
+  backGone.winPrize < 0,
+  `winPrize=${backGone.winPrize}`,
 )
+
+/* ---- ⑤ 蹲镜期间按「下爪」→ 镜头立刻回来 ---- */
+let busyWin = null
+for (let i = 0; i < 5 && !busyWin; i++) {
+  const r = await playRound(true)
+  if (!r) break
+  if (r.won) busyWin = r
+  else await wait(1200)
+}
+if (busyWin) {
+  /*
+    ★★ 判据必须落在**因果**上，不能落在「比自然超时快」。
+
+    踩过：原来是「按下之后 X 毫秒内回到 view」，X 取了 2.3 秒。可实测按下那一刻
+    `doorHold` 只剩 **0.37 秒** —— 每次 `page.evaluate` 往返要 200~300 ms，
+    投币 + 读局数 + 按空格三趟下来，蹲镜早就快走完了。于是镜头是**自然超时**
+    回去的，把 `animCamTo('view')` 整行删掉，那条断言照样绿。
+
+    ➜ 现在测的是「新一局一开始，`doorHold` 是不是**立刻**归零、镜头是不是
+      **立刻**开始后退」。没修的话 `doorHold` 会继续按秒递减（还 >1），
+      镜头一动不动 —— 和自然超时怎么排都分得开。
+    ★ 采样放在**页面里**（rAF），不在 node 里轮询：往返太慢，采不到前几帧。
+  */
+  const idleDist = idleCam.dist
+  const pre = await page.evaluate(async () => {
+    const k = window.__kqf__
+    if (k.getState().balance < 2) await k.addPoints(10)
+    await k.getState().buyClawCoin()
+    const c = window.__kqfClawStage.debugCamera()
+    return { before: k.getState().clawPlays, hold0: c.doorHold, dist0: c.dist }
+  })
+  // 逐帧采样先装好（在**页面里**跑 rAF），再按空格 —— 不然前几帧根本采不到
+  await page.evaluate(() => {
+    const k = window.__kqf__
+    const trace = []
+    window.__busyTrace = trace
+    const tick = () => {
+      const c = window.__kqfClawStage?.debugCamera?.()
+      if (c) {
+        trace.push({
+          t: Math.round(performance.now()),
+          mode: c.mode,
+          dist: +c.dist.toFixed(3),
+          hold: +c.doorHold.toFixed(2),
+          plays: k.getState().clawPlays,
+        })
+      }
+      if (trace.length < 600) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  await page.keyboard.press('Space')
+  await page
+    .waitForFunction((p) => window.__kqf__.getState().clawPlays > p, { timeout: 6000 }, pre.before)
+    .catch(() => {})
+  await wait(DOOR_DUR * 1000 + 600)
+  const trace = await page.evaluate(() => window.__busyTrace ?? [])
+
+  // 「新一局开始」的那一刻 = 局数第一次变大的那一帧（不用 node 的时钟，免得混两个时基）
+  const startIdx = trace.findIndex((s) => s.plays > pre.before)
+  const after = trace.length ? trace[trace.length - 1].plays : pre.before
+  check(
+    '★ 蹲镜期间真的又投了一币（下面几条断言不是空的）',
+    startIdx >= 0,
+    `局数 ${pre.before} → ${after}（按下时 doorHold=${pre.hold0.toFixed(2)}）`,
+  )
+  const tail = startIdx >= 0 ? trace.slice(startIdx) : []
+  const rel = (i) => (tail[i] ? tail[i].t - tail[0].t : Infinity)
+  const zeroIdx = tail.findIndex((s) => s.hold <= 0.01)
+  check(
+    '★★ 新一局一开始 `doorHold` 立刻归零（不是等它自己数完）',
+    zeroIdx >= 0 && rel(zeroIdx) < 700,
+    zeroIdx >= 0 ? `${rel(zeroIdx)}ms 后 doorHold=0（按下时还有 ${pre.hold0.toFixed(2)}s）` : '整段都没归零',
+  )
+  const movedIdx = tail.findIndex((s) => s.dist > pre.dist0 + 0.08)
+  check(
+    '★★ 镜头立刻开始后退（没有卡在取物口）',
+    movedIdx >= 0 && rel(movedIdx) < 700,
+    movedIdx >= 0 ? `${rel(movedIdx)}ms 后 dist ${pre.dist0.toFixed(2)} → ${tail[movedIdx].dist.toFixed(2)}` : 'dist 一直没动',
+  )
+  const backIdx = tail.findIndex((s) => s.mode === 'view' && Math.abs(s.dist - idleDist) < 0.05)
+  check(
+    '★★ 一局之内站回默认机位（缓动没被卡住）',
+    backIdx >= 0 && rel(backIdx) < DOOR_DUR * 1000 + 700,
+    backIdx >= 0 ? `${rel(backIdx)}ms 后 dist=${tail[backIdx].dist.toFixed(2)}` : '没回到默认机位',
+  )
+}
+
+/* ---- ⑥ 往回走的前半段窗口里还有奖品 ---- */
+let showWin = null
+for (let i = 0; i < 5 && !showWin; i++) {
+  const r = await playRound(true)
+  if (!r) break
+  if (r.won) showWin = r
+  else await wait(1200)
+}
+if (showWin) {
+  /*
+    ★ 在**页面里**逐帧采样，不在 node 里轮询：每次 `page.evaluate` 往返要
+      50~100 ms，而回来的缓动只有 1.1 秒 —— 实测只采到 **1 帧**，
+      那条断言等于没判（改坏之前它也是绿的）。
+  */
+  await page.evaluate(() => {
+    const trace = []
+    window.__doorTrace = trace
+    const tick = () => {
+      const c = window.__kqfClawStage?.debugCamera?.()
+      if (c) trace.push({ mode: c.mode, dist: c.dist, show: c.winShow })
+      if (trace.length < 600) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  const mid = (showWin.cam.dist + idleCam.dist) / 2
+  await waitBack()
+  const trace = await page.evaluate(() => window.__doorTrace ?? [])
+  // 只统计「镜头已经往回走、但还没走过一半」那一段
+  const near = trace.filter((s) => s.mode === 'view' && s.dist < mid)
+  const minShow = near.length ? Math.min(...near.map((s) => s.show)) : 0
+  check(
+    '★★ 镜头往回走的**前半段**窗口里还有奖品（不是一到点就凭空消失）',
+    near.length >= 5 && minShow > 0.3,
+    `镜头还在 ${mid.toFixed(2)} 以内时 winShow 最小 ${minShow.toFixed(2)}（${near.length} 帧）`,
+  )
+}
 
 check('全程没有未捕获的页面异常', pageErrors.length === 0, pageErrors[0] ?? '')
 

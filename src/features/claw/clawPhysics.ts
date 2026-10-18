@@ -35,8 +35,9 @@
  * 但抓力一旦是物理算的，**它就会决定娃娃掉不掉** —— 又回到上面那条。
  *
  * 这里爪子是 kinematic（位置由动画直接摆），它照样**推得动**池子里的娃娃，
- * 只是自己不会被推开。夹住用的是一个显式球铰（`JointData.spherical`），
- * 松手就是拆掉那个铰。看着和原版一样，但「掉不掉」是时间线说的。
+ * 只是自己不会被推开。夹住是**软握持**（每步把娃娃的速度朝目标推，
+ * 见 `driveHeld()`），松手就是把目标撤掉、让它自己掉下去。
+ * 看着和原版一样，但「掉不掉」是时间线说的。
  *
  * ---------------------------------------------------------------------------
  * ★ 加载与降级
@@ -214,12 +215,80 @@ function prongSegments(): { a: [number, number, number]; b: [number, number, num
 }
 
 /**
- * 夹住时，球铰在娃娃身上的锚点（娃娃本地坐标）。
+ * 娃娃「头顶」在自己本地坐标里的高度 —— 握持时它才是那个「挂点」。
  *
- * 0.15 ≈ 头顶。从头顶提起来，娃娃会自然**垂在**爪子下面，
- * 而不是被从腰上顶起来（那看着像用托盘端着）。
+ * ★ 从 `PRIZE_PARTS` 推出来，不写死：耳朵是 0.128 + 0.028 = 0.156，
+ *   比身子球（0.066 + 0.072 = 0.138）还高一点。
+ *   按头顶算吊高，娃娃才**垂在**钩子下面；按腰算会像用托盘端着。
  */
-const GRIP_ANCHOR_Y = 0.15
+const GRIP_ANCHOR_Y = Math.max(...PRIZE_PARTS.map((p) => p.y + p.r))
+
+/**
+ * 钩子尖端在 hub 本地坐标里的高度（`PRONG_PTS` 最后一点 + 指根的挂高）。
+ *
+ * ★ 也是推出来的：指头形状一改，握持高度跟着改，不用再手调一个数。
+ */
+const PRONG_TIP_HUB_Y = -HUB_HH + PRONG_PTS[PRONG_PTS.length - 1][1]
+
+/**
+ * 钩子尖端**扎进娃娃头顶**多少。
+ *
+ * ★★ 我们的娃娃（身子球 r=0.072）比钩子围出来的兜（最宽 r=0.052）还大，
+ *   所以钩子不可能把娃娃「装进」兜里 —— 只能是钩子从上面扣住它的头，
+ *   尖端埋进毛里。埋 0.045 的时候：钩子最鼓那圈（r=0.052）正好在耳朵
+ *   两侧擦过、三个尖端扎进头顶，看着就是「扣住了」。
+ *   埋得太浅（<0.02）像悬在头顶没碰上，太深（>0.08）整根钩子都看不见了。
+ */
+const PRONG_BITE = 0.045
+
+/**
+ * 夹住之后，娃娃头顶在 hub 本地坐标里的高度。
+ * 再减掉锚点到娃娃原点的距离，就是娃娃原点该待的地方。
+ */
+const GRIP_TOP_HUB_Y = PRONG_TIP_HUB_Y + PRONG_BITE
+
+/**
+ * 夹住之后，娃娃**吊正**时原点在 hub 本地坐标里的高度。
+ *
+ * 头顶落在钩子尖端下 `PRONG_BITE` 的地方，再减掉头顶到原点的距离。
+ */
+const GRIP_HANG_Y = GRIP_TOP_HUB_Y - GRIP_ANCHOR_Y
+
+/**
+ * 夹住之后，娃娃水平方向最多偏离爪子轴线多少（世界单位）。
+ *
+ * ★ 0.05 ≈ hub 半径（0.056）以内。见 `grab()` 里的注释：不夹这个偏移，
+ *   娃娃会一直吊在爪子**侧面**（指头扫进堆里时把它推开了 0.16）。
+ */
+const GRIP_MAX_OFFSET = 0.05
+
+/**
+ * 抬多高之后娃娃才算「吊正」（0 → 抓的那一刻的相对位置，1 → `GRIP_HANG_Y`）。
+ *
+ * ★★ 为什么不是「一夹住就吊正」：爪子是**扎进娃娃堆**里合的爪，抓的那一刻
+ *   hub 常常只比池底高 0.2，而吊正要低 0.307 —— 直接摆过去就是把娃娃
+ *   **塞进池底**。实测那一帧娃娃在钩子外面，画面像「没夹住」。
+ *   ➜ 抓住时保持相对位置（跟着爪子刚性上升），抬到 0.35 之后才吊正：
+ *     画面上就是「先扣住、提起来，再垂下去」，跟真的爪子一样。
+ */
+const GRIP_SETTLE_RISE = 0.35
+
+/**
+ * 握持的跟随速度（1/s）：位置误差按 `e^(-k·t)` 收敛，16 ⇒ 0.1 秒收掉 80%。
+ *
+ * ★ 不是铰：铰把位置**锁死**，而这里需要「软」一点 —— 娃娃被爪子提着走，
+ *   但抬起来的过程中要能从「扣住的姿势」滑到「吊在下面」。
+ */
+const GRIP_FOLLOW = 16
+
+/** 跟随速度上限（世界单位/秒）—— 免得建握那一帧娃娃「嗖」地窜过去。 */
+const GRIP_MAX_SPEED = 2.5
+
+/** 娃娃原点低于这个高度就插进池底了（它的碰撞体最低点在原点下方 0.006）。 */
+const GRIP_FLOOR_Y = 0.006
+
+/** 单位四元数 = 娃娃「正着」（本地 +Y 朝上）。见 `driveHeld()` 的姿势回正。 */
+const UPRIGHT = { x: 0, y: 0, z: 0, w: 1 }
 
 /* ============================ 掉进洞之后 ============================ */
 
@@ -542,7 +611,23 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   let recycledLog: { index: number; x: number; y: number; z: number }[] = []
   let respawnCursor = 0
   let heldIndex: number | null = null
-  let gripJoint: RAPIER.ImpulseJoint | null = null
+  /**
+   * 握持的相对位置：抓的那一刻娃娃在 hub 本地坐标里的位置，以及当时的 hub 高度。
+   *
+   * ★ 见 `GRIP_SETTLE_RISE`：抬升过程中从这个相对位置**过渡**到 `GRIP_HANG_Y`，
+   *   而不是一夹住就摆到吊正的位置（那会把娃娃塞进池底）。
+   */
+  let gripRel = { x: 0, y: 0, z: 0 }
+  let gripHubY = 0
+  /**
+   * 抓的那一刻娃娃的姿势。抬升过程中从它 slerp 到「正着」（单位四元数）。
+   *
+   * ★ 不 slerp 的话，堆里躺着的娃娃会**躺着**被吊上来（实测截图：整只横过来，
+   *   像被拎着耳朵），而且看上去和钩子完全没接触。
+   */
+  let gripQuat = { x: 0, y: 0, z: 0, w: 1 }
+  /** 上一帧爪子在哪 —— 用来算爪子速度（握持前馈）。 */
+  let lastHub = { x: 0, y: 0, z: 0 }
   /** 交接插值：0 → 1，走完 0.35 秒。防止「物理一接管，整池娃娃瞬移」。 */
   let handover = 0
   let disposed = false
@@ -554,7 +639,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
    *
    * ★★ 为什么「拿着娃娃」和「刚松手」这两段都必须**关着**：
    *
-   *   拿着的时候关，是为了让球铰独占这只娃娃（开着的话合爪会把娃娃往外顶）。
+   *   拿着的时候关，是为了让握持**独占**这只娃娃（开着的话合爪会把娃娃往外顶）。
    *
    *   刚松手的时候也必须关 —— 这一条是 2026-10-18 踩出来的：
    *   时间线里 `release` 只占 0.5 秒，`held` 在它一半的时候就变 null 了，
@@ -573,10 +658,6 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   }
 
   function releaseGrip(): void {
-    if (gripJoint) {
-      world.removeImpulseJoint(gripJoint, true)
-      gripJoint = null
-    }
     heldIndex = null
     // 不在这里 `setProngColliders(true)` —— 见上面 `pendingProngsOn` 的注释
     pendingProngsOn = true
@@ -587,19 +668,33 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     if (!pb) return
     heldIndex = index
     pendingProngsOn = false
-    // 拿着的时候，指头和娃娃不再碰：球铰已经把它固定住了，
+    // 拿着的时候，指头和娃娃不再碰：握持已经把它固定住了，
     // 再让指头挤它，solver 会把娃娃往外顶（看着像夹不住）
     setProngColliders(false)
 
+    /*
+      ★★ 握持是**软约束**（每步把速度朝目标推），不是铰。三段都是 2026-10-18 实测的：
+
+      ① **球铰锁不住姿势**。球铰只让「两个点」重合，娃娃还能绕那个点**自由转**。
+         实测：锚点已经夹到离轴线 0.05 以内了，提到半空时娃娃原点仍然在
+         `dx=0.169 / dz=-0.132` —— 它不是被挪开的，是**转开**的（原点绕着头顶
+         那个锚点摆出去了），画面上像粘在爪子的肩膀上。
+      ② **固定铰又会把娃娃塞进池底**。爪子是扎进娃娃堆里合的爪，抓的那一刻
+         hub 常常只比池底高 0.2，而「吊在下面」要低 0.307 —— 位置被锁死的话，
+         那一帧娃娃直接进地板，然后被接触推出来，`合爪` 的截图里它根本不在钩子里。
+      ③ 所以抓的那一刻**只记相对位置**（跟着爪子刚性上升），抬到
+         `GRIP_SETTLE_RISE` 之后才过渡到「吊正」。水平方向同时夹到
+         `GRIP_MAX_OFFSET` 以内 —— 指头扫进堆里会把娃娃推开（实测 0.16），
+         不夹的话它一直吊在爪子**侧面**。
+    */
     const p = pb.body.translation()
-    // 锚点取娃娃**头顶现在的位置**，换算到 hub 本地 —— 这样建铰的瞬间
-    // 两端已经重合，不会「啪」地被拽一下
-    const topY = p.y + GRIP_ANCHOR_Y
-    const ax = p.x - pose.clawX
-    const ay = topY - pose.hubY
-    const az = p.z - pose.clawZ
-    const jd = R.JointData.spherical({ x: ax, y: ay, z: az }, { x: 0, y: GRIP_ANCHOR_Y, z: 0 })
-    gripJoint = world.createImpulseJoint(jd, hubBody, pb.body, true)
+    gripRel = {
+      x: Math.max(-GRIP_MAX_OFFSET, Math.min(GRIP_MAX_OFFSET, p.x - pose.clawX)),
+      y: p.y - pose.hubY,
+      z: Math.max(-GRIP_MAX_OFFSET, Math.min(GRIP_MAX_OFFSET, p.z - pose.clawZ)),
+    }
+    gripHubY = pose.hubY
+    gripQuat = pb.body.rotation()
   }
 
   /* ---------------- 掉进通道就放回池子 ---------------- */
@@ -625,6 +720,58 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
 
   /* ---------------- 每帧 ---------------- */
 
+  /**
+   * 把夹住的那只往「它该在的位置」推（每个物理子步都推一次）。
+   *
+   * 目标 = 从 `gripRel`（抓的那一刻的相对位置）**过渡**到 `GRIP_HANG_Y`（吊正），
+   * 过渡量按爪子**抬了多少**算（`GRIP_SETTLE_RISE`）。于是：
+   *   · 刚合爪：目标和它现在的位置重合 ⇒ 一动不动（不会塞进池底）；
+   *   · 抬起来：目标越来越低 ⇒ 它相对爪子往下沉，最后正好吊在钩子下面。
+   *
+   * ★ 只改**速度**、不 `setTranslation`：这样接触还能拦住它（娃娃被别的娃娃
+   *   压着的时候不会穿过去），而且松手之后它就是「带着这点速度往下掉」，
+   *   不需要额外的交接。
+   */
+  function driveHeld(pose: ClawPhysicsPose, hubV: { x: number; y: number; z: number }): void {
+    if (heldIndex === null) return
+    const pb = prizeBodies[heldIndex]
+    if (!pb) return
+
+    // 抬升进度 0 → 1，用 smoothstep 免得起点/终点有速度突变
+    const w = Math.max(0, Math.min(1, (pose.hubY - gripHubY) / GRIP_SETTLE_RISE))
+    const k = w * w * (3 - 2 * w)
+    const relY = gripRel.y + (GRIP_HANG_Y - gripRel.y) * k
+    const relX = gripRel.x * (1 - k)
+    const relZ = gripRel.z * (1 - k)
+    // 爪子还扎在堆里的时候，吊在下面会插进池底 ⇒ 至少让它贴着池底
+    const ty = Math.max(pose.hubY + relY, GRIP_FLOOR_Y)
+
+    const p = pb.body.translation()
+    /*
+      ★ 前馈（`hubV * k`）：光有 P 项的话，爪子在以 0.8/s 抬升时娃娃会**稳定地**
+        落后 `0.8 / GRIP_FOLLOW = 0.05` —— 实测截图里钩子和娃娃之间一道明显的缝，
+        看着像根本没夹到它。加上前馈，误差项只需要修「初始偏差」，抬升过程中
+        娃娃和爪子**同速**走。
+      ★ 乘 `k` 是为了抓住那一刻不前馈：那一帧 hub 正在往下扎（≈ −1/s），
+        前馈会把娃娃往池底按。
+    */
+    let vx = (pose.clawX + relX - p.x) * GRIP_FOLLOW + hubV.x * k
+    let vy = (ty - p.y) * GRIP_FOLLOW + hubV.y * k
+    let vz = (pose.clawZ + relZ - p.z) * GRIP_FOLLOW + hubV.z * k
+    const sp = Math.hypot(vx, vy, vz)
+    if (sp > GRIP_MAX_SPEED) {
+      const s = GRIP_MAX_SPEED / sp
+      vx *= s
+      vy *= s
+      vz *= s
+    }
+    pb.body.setLinvel({ x: vx, y: vy, z: vz }, true)
+    // 被夹住就不许转：爪子是硬的，娃娃在钩子里不会自己翻滚
+    pb.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+    // 姿势跟着抬升进度正过来（躺着被吊上来像被拎着耳朵）
+    if (k > 0) pb.body.setRotation(slerpQuat(gripQuat, UPRIGHT, k), true)
+  }
+
   function step(dt: number, pose: ClawPhysicsPose): void {
     if (disposed) return
 
@@ -641,7 +788,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       prongBodies[i].setNextKinematicRotation(q)
     }
 
-    /* ② 手里那只变了就换铰 */
+    /* ② 手里那只变了就换握 */
     const want = pose.held
     if (want !== heldIndex) {
       if (heldIndex !== null) releaseGrip()
@@ -655,9 +802,24 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     }
 
     /* ③ 推进（固定步长 + 补步上限） */
+    /*
+      爪子这一帧的速度 —— 握持的前馈项用（见 `driveHeld()`）。
+      夹 ±6 是为了挡住「切后台回来 dt 很小」那种尖峰。
+    */
+    const hubV = { x: 0, y: 0, z: 0 }
+    if (dt > 1e-4) {
+      const inv = 1 / dt
+      const clamp6 = (v: number) => Math.max(-6, Math.min(6, v))
+      hubV.x = clamp6((pose.clawX - lastHub.x) * inv)
+      hubV.y = clamp6((pose.hubY - lastHub.y) * inv)
+      hubV.z = clamp6((pose.clawZ - lastHub.z) * inv)
+    }
+    lastHub = { x: pose.clawX, y: pose.hubY, z: pose.clawZ }
+
     accumulator += Math.min(dt, 0.25)
     let n = 0
     while (accumulator >= FIXED_DT && n < MAX_STEPS) {
+      driveHeld(pose, hubV)
       world.step()
       accumulator -= FIXED_DT
       steps++
@@ -770,7 +932,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     }
     return {
       bodies: prizeBodies.length,
-      held: heldIndex !== null && gripJoint !== null,
+      held: heldIndex !== null,
       awake,
       recycled,
       recycledLog: recycledLog.slice(),
@@ -828,6 +990,50 @@ function quatFromUnitVectors(
   }
   const l = Math.hypot(x, y, z, r)
   return { x: x / l, y: y / l, z: z / l, w: r / l }
+}
+
+/**
+ * 四元数球面插值：`t=0` → `a`，`t=1` → `b`。
+ *
+ * 给「被夹住的娃娃慢慢正过来」用（见 `driveHeld()`）。
+ *
+ * ★ 自己写而不是用 three 的 `Quaternion.slerp`：这个文件只 import 了 three 的
+ *   **类型**（物理层不碰渲染），为了一个插值把 three 的运行时拉进来不值当。
+ * ★★ `cos < 0` 那一支不能省：两个四元数点积为负说明它们表示**同一姿势的
+ *   反向**（q 和 −q 等价）。不翻符号的话插值会走「长的那一圈」——
+ *   娃娃会在半空里转 300° 才正过来，而且看不出来是哪行代码干的。
+ */
+function slerpQuat(
+  a: { x: number; y: number; z: number; w: number },
+  b: { x: number; y: number; z: number; w: number },
+  t: number,
+): { x: number; y: number; z: number; w: number } {
+  let cos = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w
+  let bx = b.x
+  let by = b.y
+  let bz = b.z
+  let bw = b.w
+  if (cos < 0) {
+    cos = -cos
+    bx = -bx
+    by = -by
+    bz = -bz
+    bw = -bw
+  }
+  if (cos > 0.9995) {
+    // 几乎重合：`sin(θ)` 趋于 0，除不了 ⇒ 线性插值再归一化
+    const x = a.x + (bx - a.x) * t
+    const y = a.y + (by - a.y) * t
+    const z = a.z + (bz - a.z) * t
+    const w = a.w + (bw - a.w) * t
+    const l = Math.hypot(x, y, z, w) || 1
+    return { x: x / l, y: y / l, z: z / l, w: w / l }
+  }
+  const th = Math.acos(cos)
+  const s = Math.sin(th)
+  const wa = Math.sin((1 - t) * th) / s
+  const wb = Math.sin(t * th) / s
+  return { x: a.x * wa + bx * wb, y: a.y * wa + by * wb, z: a.z * wa + bz * wb, w: a.w * wa + bw * wb }
 }
 
 /**
