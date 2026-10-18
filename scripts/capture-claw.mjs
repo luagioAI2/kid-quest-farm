@@ -299,6 +299,29 @@ for (const vp of SELECTED) {
     `玻璃/框 ${(glassShare * 100).toFixed(0)}%`,
   )
 
+  /*
+    ★★ 阴影贴图一个 texel 覆盖多大 —— 守的是「改了范围却忘了 updateProjectionMatrix()」。
+
+    three 的 `LightShadow` **不会**自动更新阴影相机的投影矩阵（只有构造时算一次，
+    默认 ±5）。忘了那一行时 `shadow.camera.left/right` 全是**死代码**，
+    贴图仍然铺在 10×10 的范围上：1024² ⇒ 一个 texel 覆盖 **9.8mm**，
+    娃娃只有 150mm 宽 = 15 个 texel ⇒ **娃娃之间不可能有接触阴影**。
+
+    最阴的地方：这个退化在画面上**只表现为「影子有点糊」**，肉眼和截图都看不出来
+    （2026-10-18 就是这么漏掉的 —— 改了范围，量了半天发现数字没动）。
+
+    ➜ 所以期望值**从源码派生**：`debugFrame().shadowTexel` 是从**实际投影矩阵**
+      反推的（`2 / m[0] / mapSize`），不是抄常量。忘了更新时会返回 0.0098，
+      而不是正确的 0.0008。
+  */
+  const texel = geo.frame.shadowTexel
+  check(
+    '★★ 阴影 texel 够细（娃娃身上 ≥100 个 texel，否则接触阴影不存在）',
+    texel > 0 && 0.15 / texel >= 100,
+    `texel ${(texel * 1000).toFixed(2)}mm ⇒ 一只娃娃 ${Math.round(0.15 / texel)} 个 texel` +
+      (texel > 0.004 ? '（≈ 9.8mm 说明忘了 shadow.camera.updateProjectionMatrix）' : ''),
+  )
+
   // 反向证据：整柜**应当**溢出 —— 没溢出说明又退回「远距离全柜取景」了
   const cabOverflow = cb.top < 0 || cb.bottom > cv.h || cb.left < 0 || cb.right > cv.w
   check(

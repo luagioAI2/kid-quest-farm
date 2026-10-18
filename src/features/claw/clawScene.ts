@@ -62,12 +62,13 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   PMREMGenerator,
-  PointLight,
   RepeatWrapping,
   Scene,
   SphereGeometry,
+  SpotLight,
   SRGBColorSpace,
   TorusGeometry,
+  Vector2,
   Vector3,
   WebGLRenderer,
   WebGLRenderTarget,
@@ -341,12 +342,182 @@ function makeRoomWallTexture(): CanvasTexture {
   return t
 }
 
+/* ---------------- 娃娃的布料：绒毛法线 + 纤维斑驳 + 缝线 ---------------- */
+
+/**
+ * 定种子伪随机。
+ *
+ * ★ 贴图噪声**不用 `Math.random()`**：走查脚本会采样像素判断「这一块是不是白成一片」，
+ *   每次刷新都换一套噪点，改前 / 改后的数字就没法比。
+ *   （游戏逻辑那边禁 `Math.random()` 是另一条理由：结算必须幂等。）
+ */
+function seeded(seed: number): () => number {
+  let s = seed >>> 0
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0
+    return s / 4294967296
+  }
+}
+
+function blankCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  return [c, c.getContext('2d')!]
+}
+
+/**
+ * 高度图 → 切线空间法线贴图。
+ *
+ * 为什么现算而不是引一张 png：整个娃娃机都是**程序生成**的（无外部贴图资源），
+ * 这样 APK 不会因为漏打包一张图而变成一堆白球。
+ */
+function heightToNormal(src: HTMLCanvasElement, strength: number): CanvasTexture {
+  const w = src.width
+  const h = src.height
+  const sd = src.getContext('2d')!.getImageData(0, 0, w, h).data
+  const [c, g] = blankCanvas(w, h)
+  const out = g.createImageData(w, h)
+  // 取高度时**环绕取模**：贴图是平铺的，边界上的斜率必须接得上，否则平铺缝处会出现一圈硬边
+  const H = (x: number, y: number) => sd[(((y + h) % h) * w + ((x + w) % w)) * 4] / 255
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (H(x + 1, y) - H(x - 1, y)) * strength
+      const dy = (H(x, y + 1) - H(x, y - 1)) * strength
+      const l = Math.hypot(dx, dy, 1)
+      const i = (y * w + x) * 4
+      out.data[i] = (-dx / l) * 0.5 * 255 + 127.5
+      out.data[i + 1] = (dy / l) * 0.5 * 255 + 127.5
+      out.data[i + 2] = (1 / l) * 0.5 * 255 + 127.5
+      out.data[i + 3] = 255
+    }
+  }
+  g.putImageData(out, 0, 0)
+  const t = new CanvasTexture(c)
+  t.wrapS = RepeatWrapping
+  t.wrapT = RepeatWrapping
+  return t
+}
+
+let fabricN: CanvasTexture | null = null
+
+/** 绒毛纤维的法线 —— 「毛绒」和「塑料球」之间最主要的差别就在这张图上。 */
+function fabricNormal(): CanvasTexture {
+  if (fabricN) return fabricN
+  const S = 256
+  const [c, g] = blankCanvas(S, S)
+  // 底色 #808080 = 高度 0.5（法线朝正前方），纤维才是在它上面起伏
+  g.fillStyle = '#808080'
+  g.fillRect(0, 0, S, S)
+  g.lineCap = 'round'
+  const rnd = seeded(0x5eed)
+  for (let i = 0; i < 5000; i++) {
+    const x = rnd() * S
+    const y = rnd() * S
+    const a = rnd() * Math.PI * 2
+    const l = 2 + rnd() * 6
+    const v = Math.floor(90 + rnd() * 90)
+    g.strokeStyle = `rgba(${v},${v},${v},0.55)`
+    g.lineWidth = 0.6 + rnd()
+    // ★ 九宫格各画一遍（-S / 0 / +S）：纤维跨过边界时另一侧要接得上，
+    //   只画中间那格的话，平铺后每隔一格能看到一条**没有纤维的空缝**
+    for (const ox of [-S, 0, S]) {
+      for (const oy of [-S, 0, S]) {
+        g.beginPath()
+        g.moveTo(x + ox, y + oy)
+        g.lineTo(x + ox + Math.cos(a) * l, y + oy + Math.sin(a) * l)
+        g.stroke()
+      }
+    }
+  }
+  fabricN = heightToNormal(c, 2.2)
+  fabricN.repeat.set(3, 3)
+  return fabricN
+}
+
+let fabricD: CanvasTexture | null = null
+
+/** 纤维斑驳 + 两侧缝线（球 UV 的 u=0 / 0.5 / 1 正好落在侧面，缝线就该在那儿）。 */
+function fabricDetail(): CanvasTexture {
+  if (fabricD) return fabricD
+  const W = 512
+  const H = 256
+  const [c, g] = blankCanvas(W, H)
+  // 底是近白不是纯白：`map` 会和底色相乘，纯白等于「没有贴图」
+  g.fillStyle = '#f4f4f4'
+  g.fillRect(0, 0, W, H)
+  const rnd = seeded(0xfab2)
+  for (let i = 0; i < 14000; i++) {
+    const v = 200 + rnd() * 55
+    g.fillStyle = `rgba(${v},${v},${v},0.5)`
+    g.fillRect(rnd() * W, rnd() * H, 1.5, 1.5)
+  }
+  for (const u of [0, 0.5, 1]) {
+    const x = u * W
+    const grd = g.createLinearGradient(x - 6, 0, x + 6, 0)
+    grd.addColorStop(0, 'rgba(0,0,0,0)')
+    grd.addColorStop(0.5, 'rgba(60,40,40,0.38)')
+    grd.addColorStop(1, 'rgba(0,0,0,0)')
+    g.fillStyle = grd
+    g.fillRect(x - 6, 0, 12, H)
+    // 缝线：一针一针斜着走，不是一条直线
+    g.strokeStyle = 'rgba(70,50,50,0.45)'
+    g.lineWidth = 1.4
+    for (let y = 6; y < H - 6; y += 7) {
+      g.beginPath()
+      g.moveTo(x - 3.5, y)
+      g.lineTo(x + 3.5, y + 3)
+      g.stroke()
+    }
+  }
+  fabricD = new CanvasTexture(c)
+  fabricD.colorSpace = SRGBColorSpace
+  fabricD.anisotropy = 4
+  fabricD.wrapS = RepeatWrapping
+  return fabricD
+}
+
+const PLUSH_WHITE = new Color(0xffffff)
+/** 同色只建一次材质（一只娃娃 3 个材质 × 12 只 = 36 个，没必要） */
+const plushMats = new Map<string, MeshPhysicalMaterial>()
+
+/**
+ * 娃娃的毛绒材质。
+ *
+ * ★★ 为什么不是 `MeshStandardMaterial({ roughness: 0.95 })`：那在屏幕上是**哑光塑料球**
+ *    —— 表面没有任何可分辨的细节，40px 宽时只剩一团淡色。
+ *    参考实现看着「渲染很好」，靠的就是这三样：
+ *    ① `sheen` —— 逆光时边缘一圈绒光，绒毛和光滑球的分界线就在这里；
+ *    ② `normalMap` —— 纤维起伏把高光打碎成一片，而不是一个干净的圆斑；
+ *    ③ `map` —— 纤维斑驳 + 两侧缝线（只有身体要，肚皮 / 耳朵内侧是光面布）。
+ */
+function plushMaterial(color: number, seams: boolean): MeshPhysicalMaterial {
+  const key = `${color}:${seams ? 1 : 0}`
+  const hit = plushMats.get(key)
+  if (hit) return hit
+  const c = new Color(color)
+  const m = new MeshPhysicalMaterial({
+    color: c,
+    roughness: 0.96,
+    metalness: 0,
+    sheen: 0.8,
+    sheenRoughness: 0.5,
+    // sheen 颜色比底色亮 30%：和底色同色的话，绒边在亮背景上根本看不见
+    sheenColor: c.clone().lerp(PLUSH_WHITE, 0.3),
+    normalMap: fabricNormal(),
+    normalScale: new Vector2(0.5, 0.5),
+    ...(seams ? { map: fabricDetail() } : {}),
+  })
+  plushMats.set(key, m)
+  return m
+}
+
 /** 一只娃娃：身体 + 两只耳朵 + 眼睛 + 鼻子。用基本体拼，够认出来就行。 */
 function makePlush(color: number, body: number, ear: number, seed: number): Group {
   const g = new Group()
-  const fur = new MeshStandardMaterial({ color, roughness: 0.95 })
+  const fur = plushMaterial(color, true)
   const dark = new MeshStandardMaterial({ color: 0x2a2430, roughness: 0.6 })
-  const bodyMat = new MeshStandardMaterial({ color: body, roughness: 0.9 })
+  const bodyMat = plushMaterial(body, false)
 
   // 身体（压扁一点，坐着的形状）
   const b = new Mesh(new SphereGeometry(0.075, 18, 14), fur)
@@ -492,6 +663,11 @@ export interface ClawStage {
     dpr: number
     /** 商场房间（地板 + 后墙）这一档开没开 —— 只在两侧有空白时开，见 `resize()` */
     roomVisible: boolean
+    /**
+     * 阴影贴图一个 texel 覆盖多少世界单位（从实际投影矩阵反推）。
+     * ★ 忘了 `shadow.camera.updateProjectionMatrix()` 时它会变成 0.0098 而不是 0.0008。
+     */
+    shadowTexel: number
   }
   /** 走查脚本用：娃娃数量 */
   prizeCount(): number
@@ -678,8 +854,8 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       它会把所有阴影**填平**，柜子就没有体积感了，看着发灰。
       加了阴影之后这一点尤其明显：环境光一高，影子淡到看不见。
   */
-  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 0.6))
-  const key = new DirectionalLight(0xfff8f2, 1.6)
+  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 0.3))
+  const key = new DirectionalLight(0xfff8f2, 2.6)
   /*
     ★ 主光放**正上方**（参考实现是 0.05, 3.2, 0.35），不是斜前方。
     影子垂直落在娃娃正下方 ⇒ 看得出「一层层堆起来」；
@@ -690,28 +866,65 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
 
   /*
     只让主光投影。正交阴影相机要**刚好裹住柜子**：
-    范围给大了 → 同样的 1024² 摊到更大面积，影子边缘发虚；
-    范围给小了 → 柜子边缘的影子被裁掉，表现为「影子到一半没了」。
-    柜子外框约 1.24 × 1.3 × 1.08（见 `BOX`），留一点余量。
+
+    ★★ 2026-10-18：这里原来是 `±1.35 / ±1.7`（2.7 × 3.4 的范围），而柜子只有
+       **1.24 × 1.1** —— 等于把 1024² 的贴图摊到 5 倍的面积上，一个 texel 覆盖
+       2.6mm，娃娃（0.15 宽）只有 57 个 texel。后果不是「影子糊一点」，
+       而是**娃娃之间根本没有可辨认的接触阴影**，整池娃娃看着像漂着。
+       参考实现是 `±0.62 / ±0.55` + 2048²（texel 密度是我们的 **4.4 倍**）。
+
+    ➜ 现在收紧到 `±0.8`（外框 + 一点余量）+ 2048² ⇒ texel 从 2.6mm 降到 0.8mm。
+      **别再放大范围**：范围一大，同一张 map 摊得更薄，接触阴影立刻消失，
+      而画面整体亮度几乎不变 —— 这种退化在截图上是「看不出哪里变了」。
+    near / far 只包住柜子在光轴上的跨度（光在 y=3.2，柜顶 1.5、柜底 -1.0）。
   */
   key.castShadow = true
-  key.shadow.mapSize.set(1024, 1024)
-  key.shadow.camera.near = 0.5
-  key.shadow.camera.far = 12
-  key.shadow.camera.left = -1.35
-  key.shadow.camera.right = 1.35
-  key.shadow.camera.top = 1.7
-  key.shadow.camera.bottom = -1.7
+  key.shadow.mapSize.set(2048, 2048)
+  key.shadow.camera.near = 1.2
+  key.shadow.camera.far = 5.2
+  key.shadow.camera.left = -0.8
+  key.shadow.camera.right = 0.8
+  key.shadow.camera.top = 0.8
+  key.shadow.camera.bottom = -0.8
   // bias 处理自阴影（acne）；normalBias 处理薄面（灯带 / 玻璃框）上的漏光
   key.shadow.bias = -0.0006
-  key.shadow.normalBias = 0.022
-  const fill = new DirectionalLight(0xffe8f0, 0.9)
+  // 0.012（参考实现的数）：texel 变细之后，normalBias 给大了会让影子**整体离开物体**
+  key.shadow.normalBias = 0.012
+  /*
+    ★★★ 这一行**不能删**，删了上面六个数字全部作废。
+
+    three 的 `LightShadow` **不会**在渲染前更新阴影相机的投影矩阵 ——
+    `OrthographicCamera` 只在构造时算一次（默认 `-5..5 / -5..5 / 0.5..500`）。
+    所以只写 `camera.left = -0.8` 而不调这个函数，阴影贴图**仍然铺在 10×10 的范围上**：
+    1024² ⇒ 一个 texel 覆盖 **9.8mm**，而娃娃只有 150mm 宽 = 15 个 texel
+    ⇒ 娃娃之间**不可能有可辨认的接触阴影**，整池看着像漂着。
+    （2026-10-18 就是靠这条查出来的：改了范围却量不出任何变化。）
+    ➜ 改完范围必须紧接着调一次；`debugFrame().shadowTexel` 会把它暴露出来。
+  */
+  key.shadow.camera.updateProjectionMatrix()
+  const fill = new DirectionalLight(0xffe8f0, 0.4)
   fill.position.set(-0.8, 2.6, 3.2)
   scene.add(fill)
-  /** 柜内顶灯（让娃娃有明暗层次，不然一团糊） */
-  const inner = new PointLight(0xfff5fa, 1.7, 3.2, 2)
-  inner.position.set(0, GLASS_H - 0.06, 0.1)
-  scene.add(inner)
+  /*
+    柜内顶灯 —— **SpotLight 不是 PointLight**。
+
+    ★ PointLight 是全向的：它把娃娃堆正面照得很平。SpotLight 有 `distance` + `decay`，
+      光落成一个**池子**，池边和娃娃缝隙自然暗下去。参考实现就是
+      `SpotLight(0xfff5fa, 2.8, 2.2, 1.0, 0.8, 1.5)`，角度 1.0rad ≈ 57°、
+      penumbra 0.8（池边是渐变不是硬圈）。
+
+    ★★ 但**换成 SpotLight 只挪了一点点**：娃娃堆 p5 从 0.545 到 0.533。
+      原因不是灯的形状，是**光比** —— 全场景只有主光投影，其余四盏
+      （柜内灯 / 半球 / 环境 / 补光）都是**不投影的平光**：
+      影子里的娃娃照样能收到约 70% 的光，影子当然看不见。
+      ➜ 所以这里把柜内灯从 2.8 降到 **1.5**，同时半球 0.5→0.3、补光 0.7→0.4、
+        主光 1.9→2.6：让「会投影的那盏」在总量里占大头。
+      **别只盯着单盏灯的绝对值** —— 决定层次的是投影光 : 平光的比例。
+  */
+  const inner = new SpotLight(0xfff5fa, 1.5, 2.2, 1.0, 0.8, 1.5)
+  inner.position.set(0, GLASS_H - 0.03, 0.3)
+  // target 必须一起进场景，否则它的世界矩阵不更新，光会一直朝原点外的默认方向打
+  scene.add(inner, inner.target)
 
   /* ---------------- 材质 ---------------- */
   const M = {
@@ -734,21 +947,36 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       池底垫子。参考实现是一块**蓝灰色的地垫**。
       ⚠️ 原来是草绿（`0x6f8f66`）—— 在一池粉紫娃娃底下铺一块草地绿，
       截图里很跳（2026-10-16 走查确认）。换成冷灰蓝，和暖色的柜体、娃娃分开。
+      ★ 2026-10-18 又压暗了一档（`0x93a1b0` → `0x6d7889`）：娃娃是**浅色**的，
+        垫子也是浅灰时两者之间没有明度差，整池看上去是「一坨浅色的东西」。
+        垫子压暗之后，娃娃的轮廓才立得住 —— 这也是参考版那块深色垫子的作用。
     */
-    felt: track(new MeshStandardMaterial({ color: 0x93a1b0, roughness: 0.97 })),
+    felt: track(new MeshStandardMaterial({ color: 0x6d7889, roughness: 0.97 })),
     glass: track(
       new MeshPhysicalMaterial({
         color: 0xe8f2f0,
         roughness: 0.06,
         metalness: 0,
         transparent: true,
-        opacity: 0.10,
+        /*
+          ★★ 0.10 → 0.05（2026-10-18）。玻璃是**整面均匀**蒙在柜子上的：
+            每多 1% 不透明度，里面所有东西就统一降 1% 对比度，而且是**一层雾**。
+            参考实现的 `glassTint` 只有 **0.04**，它的「玻璃感」来自局部的
+            污渍 / 反射贴图，不是整面调不透明度。
+            ⚠️ 别再往上调：调到 0.10 时，背板和娃娃看上去像隔着一层毛玻璃，
+              而那正是「渲染不好」最直接的那个观感。
+        */
+        opacity: 0.05,
         depthWrite: false,
         side: 2,
-        // ⚠️ clearcoat 从 1 降到 0.4：整面玻璃上那层清漆高光会糊成一大片白，
-        // 把柜子内部（背板 + 娃娃）一起洗白 —— 实测截图里上半截就是一片白，
-        // 看着像「柜子是空的」。玻璃还是要有点反光，但不能盖过里面的东西。
-        clearcoat: 0.4,
+        /*
+          clearcoat 1 → 0.4（2026-10-17）→ **0.15**（2026-10-18）。
+
+          两层原因叠在一起：① 清漆高光在整面玻璃上糊成一片白，把柜内洗白；
+          ② 加了 `scene.environment` 之后，玻璃还会**反射环境贴图**，
+             两股高光叠加 ⇒ 上半截直接是一片白。0.15 只留一道若有若无的光。
+        */
+        clearcoat: 0.15,
         clearcoatRoughness: 0.06,
       }),
     ),
@@ -776,12 +1004,21 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     const f = new Mesh(track(new RoundedBoxGeometry(HX * 2, BODY_H - 0.12, 0.26, 3, 0.015)), M.body)
     f.position.set(0, -BODY_H / 2 + 0.04, HZ - 0.16)
     add(f)
-    // 取物口：黑洞 + LED 圆环
+    /*
+      取物口：黑洞 + LED 圆环。
+
+      ★★ z 值不能再改回 `HZ - 0.03`。上面那块前脸 `f` 是**深度 0.26 的盒子**，
+         放在 `HZ - 0.16` ⇒ 它的正面正好落在 `HZ - 0.03`，和原来的圆片**完全共面**。
+         两个共面片抢深度缓冲，画出来就是一块**黑白棋盘**（走查图里左下那个圆
+         看着像贴图坏了，其实就是这个）。
+      ➜ 圆片往前挪 0.012、圆环再往前 0.006。0.012 个世界单位在柜子（宽 1.16）上
+         不到 1 像素，肉眼看不出来，但足够让深度分出先后。
+    */
     const hole = new Mesh(track(new CircleGeometry(0.19, 32)), M.dark)
-    hole.position.set(-HX + 0.28, -0.52, HZ - 0.03)
+    hole.position.set(-HX + 0.28, -0.52, HZ - 0.018)
     add(hole)
     const ring = new Mesh(track(new TorusGeometry(0.225, 0.022, 12, 44)), M.lamp)
-    ring.position.set(-HX + 0.28, -0.52, HZ - 0.025)
+    ring.position.set(-HX + 0.28, -0.52, HZ - 0.012)
     add(ring)
     // 控制台
     const ledge = new Mesh(track(new RoundedBoxGeometry(HX * 1.45, 0.08, 0.22, 3, 0.03)), M.accent)
@@ -866,9 +1103,18 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     add(floor)
     // 取物口是个真的凹坑（BackSide 的盒子），娃娃掉进去就看不见了
     const pitW = HOLE.x1 - HOLE.x0
-    const pitD = HOLE.z1 - HOLE.z0
+    /*
+      ★ 深度比 `HOLE` 的 z 跨度**短 0.06**，整体再往后挪 0.03。
+
+      前脸 `f` 占 z 0.21~0.47，而 `HOLE.z1` 是 0.5 —— 直接用 `HOLE.z1 - HOLE.z0`
+      会让凹坑的前壁从柜门里**探出 0.03**，在白柜体右下角留下一个 **L 形黑边**
+      （走查截图里一直有，2026-10-18 才定位到是它）。收进去之后照样看不见坑底，
+      但不会再露边。`HOLE` 本身**不动** —— 它是「爪子把娃娃送到哪算赢」的判据，
+      改了就是改玩法。
+    */
+    const pitD = HOLE.z1 - HOLE.z0 - 0.06
     const pit = new Mesh(track(new BoxGeometry(pitW, 0.4, pitD)), track(new MeshStandardMaterial({ color: 0x141416, roughness: 0.9, side: 1 })))
-    pit.position.set((HOLE.x0 + HOLE.x1) / 2, -0.2, (HOLE.z0 + HOLE.z1) / 2)
+    pit.position.set((HOLE.x0 + HOLE.x1) / 2, -0.2, (HOLE.z0 + HOLE.z1) / 2 - 0.03)
     add(pit)
     // 洞口的高亮边（告诉孩子「这里就是出口」）
     const edge = new Mesh(track(new BoxGeometry(pitW + 0.01, 0.008, 0.008)), M.accent)
@@ -1613,6 +1859,17 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       canvas: { w, h },
       dpr,
       roomVisible: room.visible,
+      /**
+       * 阴影贴图一个 texel 覆盖多少**世界单位**。
+       *
+       * ★★ 这个数是从**实际投影矩阵**反推的，不是从上面的常量抄的 —— 正因为如此，
+       *   它能抓住「改了 `shadow.camera.left/right` 却忘了 `updateProjectionMatrix()`」：
+       *   那种情况下矩阵还是默认的 ±5，这里会返回 **0.0098**（10 / 1024），
+       *   而正确值 ≈ **0.0008**。差 12 倍，画面上只表现为「影子有点糊」，
+       *   肉眼和截图都看不出来 —— 所以必须有个数字盯着它。
+       *   （正交投影：`elements[0] = 2 / (right - left)`。）
+       */
+      shadowTexel: 2 / key.shadow.camera.projectionMatrix.elements[0] / key.shadow.mapSize.x,
     }
   }
 
