@@ -50,6 +50,7 @@
  */
 import type { Group } from 'three'
 import type RAPIER from '@dimforge/rapier3d-compat'
+import { topOf, type PrizeType } from './scene/prizeTypes'
 
 /**
  * Rapier 的运行时命名空间类型。
@@ -101,23 +102,19 @@ const MAX_STEPS = 4
 /* ============================ 娃娃的碰撞体 ============================ */
 
 /**
- * 一只娃娃由 3 个球拼成：身子一个大的、两只耳朵各一个小的。
+ * ★★ 2026-10-19：娃娃的碰撞体**不再是我们手搓的三个球**，而是
+ * `scene/prizeTypes.ts` 里每种娃娃自己的 `parts`（照搬原版）。
  *
- * 为什么不是「一个球」：一个球会**滚**。娃娃在池子里滚来滚去不像毛绒玩具，
- * 而且滚起来之后 `nearestPrize` 会一直变。三个球拼出来的轮廓是扁的、带凸起，
+ * 以前五种娃娃共用「身子 + 两只耳朵」，企鹅和兔子摸起来一模一样；
+ * 而视觉那边（`scene/plush.ts`）是**按种类**画的 —— 于是「看得见的耳朵」
+ * 和「摸得到的耳朵」不是同一个东西，抓企鹅的鳍会滑过去。
+ *
+ * ➜ 现在两边读同一份 `PRIZE_TYPES`：形状、质量、「头顶在哪」全从它推。
+ *
+ * 为什么不是一个球：一个球会**滚**。娃娃在池子里滚来滚去不像毛绒玩具，
+ * 而且滚起来之后 `nearestPrize` 会一直变。多球拼出来的轮廓是扁的、带凸起，
  * 摩擦力一咬就停住，像真的堆在那。
- *
- * 数值对着 `clawScene.makePlush()` 的几何抄：身子球 r=0.075 压在 y=0.066，
- * 耳朵 r=0.03 在 (±0.048, 0.13)。
  */
-const PRIZE_PARTS = [
-  { r: 0.072, x: 0, y: 0.066, z: 0 },
-  { r: 0.028, x: -0.048, y: 0.128, z: -0.004 },
-  { r: 0.028, x: 0.048, y: 0.128, z: -0.004 },
-] as const
-
-/** 一只娃娃大约 0.12 kg（真毛绒玩具的量级）。按体积反推密度。 */
-const PRIZE_DENSITY = 70
 
 /* ============================ 爪子的几何 ============================ */
 
@@ -171,23 +168,26 @@ export const PRONG_RADIUS = 0.0125
 export const PRONG_AZ = [Math.PI / 2, Math.PI / 2 + (2 * Math.PI) / 3, Math.PI / 2 + (4 * Math.PI) / 3]
 
 /**
- * 指头的两个极限角度（绕**径向轴**的切向轴转，弧度）。
+ * 指头的三个角度（绕**径向轴**的切向轴转，弧度）。
  *
- * 待命 = 0.8（几乎全张），下爪张到 0.95，合拢 −0.32 ⇒ 扫过 **1.27 rad ≈ 73°**。
- * 老实现是 0 → −0.28，只扫 16°，远看完全看不出在抓。
+ * ★★ 2026-10-19：**唯一来源改成 `scene/dims.ts`**（原版的数）。
  *
- * ★★ 待命为什么是 0.8 而不是原版那个 `ANG_IDLE = 0.32`：
- *   原版的指头是**动态刚体 + 力控电机**，待命时给的最大力矩只有 0.25 ——
- *   顶不住指头自己的重量，所以它是**挂在重力里张开的**，实际停在 ≈0.9 附近。
- *   `ANG_IDLE = 0.32` 在那个实现里只是「电机想去的角度」，不是画面的角度。
+ *   这里以前自己写了一份 `ANG_IDLE = 0.8`，理由是：
+ *   「原版是力控电机、力矩 0.25 顶不住指头自重，画面停在 ≈0.9；
+ *     我们是 kinematic 没有重力，照抄 0.32 会缩成一个闭合的芽」。
  *
- *   我们这边是 kinematic（位置直接摆），没有重力帮忙 —— 照抄 0.32 的结果是
- *   爪子永远缩成一个**闭合的芽**，而原版是一个**张开的钩子**。
- *   用户说「连爪子形状都不同」，一半是曲线（见 `PRONG_PTS`），一半就是这个张角。
+ *   那个理由**只对老几何成立**。老指头是一根直的 `CapsuleGeometry` 斜着摆，
+ *   本身没有外扩的弧度，只能靠张角把它「掰开」。现在的 `PRONG_PTS` 是
+ *   原版那条**向外弯再勾回来**的曲线 —— 静止时指尖本来就已经在 ~24°，
+ *   再叠 0.8 就变成四脚蜘蛛（实测 `debugProng() = 0.8`，
+ *   和原版 `1-idle.png` 一比，指尖比 hub 还高，完全不像）。
+ *
+ *   ➜ 结论：换成原版的 0.32，画面就和 `1-idle.png` 对上了
+ *     （指尖落在 hub 下方约 2.5 个 hub 直径处，钩子朝下）。
+ *   ⚠️ 别再在别处写第二份角度 —— `dims.ts` 是唯一来源，
+ *      `ANG_*` 从那里 re-export，`applyProngs()` 和碰撞体读的是同一个数。
  */
-export const ANG_OPEN = 0.95
-export const ANG_IDLE = 0.8
-export const ANG_CLOSED = -0.32
+export { ANG_CLOSED, ANG_IDLE, ANG_OPEN } from './scene/dims'
 
 /**
  * 把中心线拆成若干段胶囊（**指头本地坐标系**，径向 = +X）。
@@ -217,11 +217,15 @@ function prongSegments(): { a: [number, number, number]; b: [number, number, num
 /**
  * 娃娃「头顶」在自己本地坐标里的高度 —— 握持时它才是那个「挂点」。
  *
- * ★ 从 `PRIZE_PARTS` 推出来，不写死：耳朵是 0.128 + 0.028 = 0.156，
- *   比身子球（0.066 + 0.072 = 0.138）还高一点。
- *   按头顶算吊高，娃娃才**垂在**钩子下面；按腰算会像用托盘端着。
+ * ★ 从**这只娃娃的种类**推出来（`topOf`），不写死：兔子耳朵顶到 0.162，
+ *   小鸡只有 0.052。按头顶算吊高，娃娃才**垂在**钩子下面；按腰算会像用托盘端着。
+ *   以前五种娃娃共用一套碰撞体，所以只能取一个折中值 —— 现在每只都不一样。
  */
-const GRIP_ANCHOR_Y = Math.max(...PRIZE_PARTS.map((p) => p.y + p.r))
+function anchorOf(index: number, types: PrizeType[], prizes: Group[]): number {
+  const t = types[index]
+  if (!t) return 0.1
+  return topOf(t) * (prizes[index]?.scale.x || 1)
+}
 
 /**
  * 钩子尖端在 hub 本地坐标里的高度（`PRONG_PTS` 最后一点 + 指根的挂高）。
@@ -233,13 +237,13 @@ const PRONG_TIP_HUB_Y = -HUB_HH + PRONG_PTS[PRONG_PTS.length - 1][1]
 /**
  * 钩子尖端**扎进娃娃头顶**多少。
  *
- * ★★ 我们的娃娃（身子球 r=0.072）比钩子围出来的兜（最宽 r=0.052）还大，
- *   所以钩子不可能把娃娃「装进」兜里 —— 只能是钩子从上面扣住它的头，
- *   尖端埋进毛里。埋 0.045 的时候：钩子最鼓那圈（r=0.052）正好在耳朵
- *   两侧擦过、三个尖端扎进头顶，看着就是「扣住了」。
- *   埋得太浅（<0.02）像悬在头顶没碰上，太深（>0.08）整根钩子都看不见了。
+ * ★★ 2026-10-19：0.045 → **0.03**。娃娃换成原版尺寸之后（一只约 0.09 宽），
+ *   钩子围出来的兜（最宽 r=0.052）**装得下**一只娃娃的头了 ——
+ *   原来是娃娃比兜还大，只能扣在头顶上，所以埋得很深。
+ *   现在埋 0.03：三个尖端正好扎进头顶的毛里，钩子最鼓那圈在耳朵两侧擦过。
+ *   太浅（<0.015）像悬在头顶没碰上，太深（>0.06）整根钩子都看不见了。
  */
-const PRONG_BITE = 0.045
+const PRONG_BITE = 0.03
 
 /**
  * 夹住之后，娃娃头顶在 hub 本地坐标里的高度。
@@ -252,7 +256,9 @@ const GRIP_TOP_HUB_Y = PRONG_TIP_HUB_Y + PRONG_BITE
  *
  * 头顶落在钩子尖端下 `PRONG_BITE` 的地方，再减掉头顶到原点的距离。
  */
-const GRIP_HANG_Y = GRIP_TOP_HUB_Y - GRIP_ANCHOR_Y
+function hangYOf(index: number, types: PrizeType[], prizes: Group[]): number {
+  return GRIP_TOP_HUB_Y - anchorOf(index, types, prizes)
+}
 
 /**
  * 夹住之后，娃娃水平方向最多偏离爪子轴线多少（世界单位）。
@@ -311,28 +317,39 @@ const UPRIGHT = { x: 0, y: 0, z: 0, w: 1 }
  */
 const CHUTE_Y = -0.58
 
-/*
-  娃娃掉进通道后，从这些点重新放回池子里。
-
-  ⚠️ 2026-10-18 起，**最终落点是算出来的、不是写死的**（见 `pickRespawnSpot()`）：
-    写死坐标踩过两次 —— `(0.18, 0)` 离洞只有 0.100（小于一只娃娃的直径 0.144），
-    放回去正好卡在口沿上，一堆娃娃一挤又把它推下去 ⇒
-    「掉洞 → 放回洞口 → 再掉洞」。实测就是这样把「散货被挤进洞」顶到 15 次 / 2 局。
-
-    ➜ 这里只留一张**候选表**（左半边、离洞口至少一个身位），最终用哪个由
-      `pickRespawnSpot()` 按「离洞口最远 + 被占得最少」现算，并随 `recycled` 轮转
-      —— 两只同时掉下去不会叠在同一个点上被弹飞。
-*/
-const RESPAWN_SPOTS = [
-  { x: -0.34, z: -0.3 },
-  { x: -0.06, z: -0.32 },
-  { x: 0.2, z: -0.28 },
-  { x: -0.32, z: 0.0 },
-  { x: 0.02, z: -0.02 },
-  { x: -0.2, z: -0.16 },
-  { x: -0.14, z: 0.22 },
-  { x: 0.02, z: -0.18 },
-] as const
+/**
+ * 放回池子的**候选点** —— 由柜子尺寸推，不是写死的一张表。
+ *
+ * ★★ 2026-10-19：这张表原来是写死的 8 个坐标，按**旧的宽柜子**（`hx 0.58 / hz 0.5`）挑的。
+ *   换成原版尺寸（`hx 0.5 / hz 0.4`）之后，8 个点全挤在中间偏左，
+ *   右边和前面各留下一条空垫子 —— 30 只娃娃看着像「一撮」，不像「一池」。
+ *   （写死坐标还踩过更狠的一次：`(0.18, 0)` 离洞只有 0.100，小于一只娃娃的直径，
+ *     放回去正好卡在口沿上，一挤又推下去 ⇒「掉洞 → 放回洞口 → 再掉洞」。）
+ *
+ * ➜ 现在铺 4×4 网格盖满池底、内缩 `INSET`（≈半只娃娃），
+ *   再剔掉**洞口矩形 + `CLEAR` 余量**里的点。洞口在哪完全由 `hole` 决定，
+ *   不假设它贴着哪个角。
+ *
+ * 最终用哪个点由 `pickRespawnSpot()` 按「离洞口最远 + 被占得最少」现算，
+ * 并随 `recycled` 轮转 —— 两只同时掉下去不会叠在同一个点上被弹飞。
+ */
+function respawnCandidates(hx: number, hz: number, hole: ClawPhysicsCabinet['hole']) {
+  const INSET = 0.07 // 半只娃娃：别贴着玻璃
+  const CLEAR = 0.06 // 洞口外再让一圈，别放在口沿上
+  const COLS = 4
+  const ROWS = 4
+  const out: { x: number; z: number }[] = []
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const x = -hx + INSET + (c / (COLS - 1)) * (2 * (hx - INSET))
+      const z = -hz + INSET + (r / (ROWS - 1)) * (2 * (hz - INSET))
+      const inHole =
+        x > hole.x0 - CLEAR && x < hole.x1 + CLEAR && z > hole.z0 - CLEAR && z < hole.z1 + CLEAR
+      if (!inHole) out.push({ x, z })
+    }
+  }
+  return out
+}
 
 /** 从多高放回去。太高会砸得整池子跳，太低会凭空出现。 */
 const RESPAWN_Y = 0.72
@@ -415,6 +432,13 @@ export interface ClawPhysicsOpts {
   cabinet: ClawPhysicsCabinet
   /** 每只娃娃的 three Group（位置 / 朝向由物理写回） */
   prizes: Group[]
+  /**
+   * 每只娃娃的**种类**（和 `prizes` 一一对应）。
+   *
+   * 碰撞体形状 / 质量 / 「头顶在哪」全部从它推出来 —— 见 `scene/prizeTypes.ts`。
+   * ★ 视觉和物理共用同一份数据，才不会出现「看得见的耳朵、摸不到的耳朵」。
+   */
+  types: PrizeType[]
   /** 爪子的 hub（位置由动画摆，物理只读） */
   hub: Group
   /** 三个指头的**内层** Group（带着开合的旋转） */
@@ -440,8 +464,11 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   const R: RapierNS = (await import('@dimforge/rapier3d-compat')).default
   await R.init()
 
-  const { cabinet, prizes, hub, prongs } = opts
+  const { cabinet, prizes, types, hub, prongs } = opts
   const { hx, hz, glassH, hole } = cabinet
+
+  /** 放回池子的候选点 —— 由柜子尺寸推，不写死（见 `respawnCandidates()`） */
+  const respawnSpots = respawnCandidates(hx, hz, hole)
 
   const world = new R.World({ x: 0, y: -9.81, z: 0 })
   world.timestep = FIXED_DT
@@ -469,19 +496,36 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       · 靠后那一条（z < hole.z0）是**整宽**的；
       · 靠前那一条（z > hole.z0）只有**洞口左边**那截。
   */
-  const backDepth = (hole.z0 + hz) / 2
-  addStatic(R.ColliderDesc.cuboid(hx, FLOOR_T, backDepth), 0, -FLOOR_T, -hz + backDepth)
+  /*
+    ★★ 2026-10-19：这段改成**按洞的实际位置**拼，不再假设「洞在右下角」。
 
-  // 前半块：从 -hx 一直到 hole.x0（**不是**从 hole.x1 开始 —— 那是洞的右边缘，
-  // 洞本来就顶到柜子右边，那样算出来的宽度是 0，等于整个前半块没有地板）
-  const frontHalfW = (hole.x0 + hx) / 2
+    原版的取物洞在**左下角**（`HOLE.x0 === -hx`，`z1 === hz`），
+    而我们的老代码写死了「洞顶到右边」—— 换成原版尺寸之后，
+    那个式子算出来的前半块宽度是 **0**，等于整个前半块没有地板：
+    娃娃会一只只从池底漏下去，然后被 `recycle()` 放回来、再漏。
+    （这种「数量一直对、池子一直在动」的 bug 只有「池子是静的」那条断言能抓。）
+
+    ➜ 现在三块地板都由洞的边界推：
+      · 后半块（z < hole.z0）：整宽；
+      · 前半块（z > hole.z0）：洞左边一截 + 洞右边一截（哪边没有就跳过）。
+  */
   const holeHalfD = (hole.z1 - hole.z0) / 2
-  addStatic(
-    R.ColliderDesc.cuboid(frontHalfW, FLOOR_T, holeHalfD),
-    -hx + frontHalfW,
-    -FLOOR_T,
-    (hole.z0 + hole.z1) / 2,
-  )
+  const frontCz = (hole.z0 + hole.z1) / 2
+  // 后半块
+  const backDepth = hole.z0 + hz
+  if (backDepth > 0.01) {
+    addStatic(R.ColliderDesc.cuboid(hx, FLOOR_T, backDepth / 2), 0, -FLOOR_T, -hz + backDepth / 2)
+  }
+  // 前半块：洞左边
+  const leftW = hole.x0 + hx
+  if (leftW > 0.01) {
+    addStatic(R.ColliderDesc.cuboid(leftW / 2, FLOOR_T, holeHalfD), -hx + leftW / 2, -FLOOR_T, frontCz)
+  }
+  // 前半块：洞右边
+  const rightW = hx - hole.x1
+  if (rightW > 0.01) {
+    addStatic(R.ColliderDesc.cuboid(rightW / 2, FLOOR_T, holeHalfD), hole.x1 + rightW / 2, -FLOOR_T, frontCz)
+  }
 
   /** 洞口中心（滑道 / 接货盘都以它对齐，只算一次） */
   const cx = (hole.x0 + hole.x1) / 2
@@ -510,10 +554,17 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     const BT = 0.004
     const holeHalfW = (hole.x1 - hole.x0) / 2
     const holeHalfD = (hole.z1 - hole.z0) / 2
-    // 后沿（z = hole.z0）
-    addStatic(R.ColliderDesc.cuboid(holeHalfW, BH, BT), cx, BH, hole.z0 - BT)
-    // 左沿（x = hole.x0）
-    addStatic(R.ColliderDesc.cuboid(BT, BH, holeHalfD), hole.x0 - BT, BH, cz)
+    /*
+      ★ 只立**不是柜壁**的那两面。原版的洞顶在左壁和前脸（`x0 === -hx`、`z1 === hz`），
+        所以立的是**右沿**（x = hole.x1）和**后沿**（z = hole.z0）。
+        写死「后沿 + 左沿」的话，换成原版位置之后右边是敞开的 ——
+        散货会从右边滚进洞里，孩子看到「没夹到却自己掉进去了」。
+    */
+    const EPS = 1e-6
+    if (hole.z0 > -hz + EPS) addStatic(R.ColliderDesc.cuboid(holeHalfW, BH, BT), cx, BH, hole.z0 - BT)
+    if (hole.z1 < hz - EPS) addStatic(R.ColliderDesc.cuboid(holeHalfW, BH, BT), cx, BH, hole.z1 + BT)
+    if (hole.x0 > -hx + EPS) addStatic(R.ColliderDesc.cuboid(BT, BH, holeHalfD), hole.x0 - BT, BH, cz)
+    if (hole.x1 < hx - EPS) addStatic(R.ColliderDesc.cuboid(BT, BH, holeHalfD), hole.x1 + BT, BH, cz)
   }
 
   // 四壁 + 顶（顶是为了不让娃娃被弹飞出去 —— 没有它偶尔会飞出一只）
@@ -695,7 +746,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     lastSpeed: number
   }
 
-  const prizeBodies: PrizeBody[] = prizes.map((g) => {
+  const prizeBodies: PrizeBody[] = prizes.map((g, index) => {
     const scale = g.scale.x || 1
     const body = world.createRigidBody(
       R.RigidBodyDesc.dynamic()
@@ -706,16 +757,38 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
         .setAngularDamping(1.5)
         .setCcdEnabled(true),
     )
-    for (const part of PRIZE_PARTS) {
-      world.createCollider(
-        R.ColliderDesc.ball(part.r * scale)
-          .setTranslation(part.x * scale, part.y * scale, part.z * scale)
-          .setDensity(PRIZE_DENSITY)
-          .setFriction(0.95)
-          .setRestitution(0.04)
-          .setCollisionGroups(groups(G_PRIZE, 0xffff)),
-        body,
-      )
+    /*
+      按**这只娃娃的种类**建碰撞体（`PRIZE_TYPES[i].parts`）。
+
+      ★ 密度按「质量 / 体积」反推，不是写死一个数：小鸡（0.085 kg）和
+        企鹅（0.12 kg）体积差很多，同一个密度会让小鸡轻得像纸片、
+        被爪子一碰就飞。原版就是这么算的。
+    */
+    const type = types[index]
+    if (type) {
+      let vol = 0
+      for (const part of type.parts) {
+        vol +=
+          part.kind === 'ball'
+            ? (4 / 3) * Math.PI * (part.r * scale) ** 3
+            : Math.PI * (part.r * scale) ** 2 * (2 * (part.hh ?? 0) * scale + (4 / 3) * part.r * scale)
+      }
+      const density = vol > 0 ? (type.mass * scale ** 3) / vol : 70
+      for (const part of type.parts) {
+        const d =
+          part.kind === 'ball'
+            ? R.ColliderDesc.ball(part.r * scale)
+            : R.ColliderDesc.capsule((part.hh ?? 0.02) * scale, part.r * scale)
+        world.createCollider(
+          d
+            .setTranslation(part.p[0] * scale, part.p[1] * scale, part.p[2] * scale)
+            .setDensity(density)
+            .setFriction(0.85)
+            .setRestitution(0.05)
+            .setCollisionGroups(groups(G_PRIZE, 0xffff)),
+          body,
+        )
+      }
     }
     return {
       body,
@@ -741,9 +814,16 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     每批之间步进 90 次，最后再沉降 360 次。这样堆是**物理自己长出来的**
     —— 会互相搭着、会靠着墙斜着，正是娃娃机那种「有点乱的堆」。
 
-    ➜ 这里照抄它的**手法**（不是它的数字）：投放点复用 `RESPAWN_SPOTS`
-      （确定性，避开取物口），高度按波次递增，每只再加一点确定性的位置/朝向扰动。
+    ➜ 这里照抄它的**手法**：投放点**铺满整个池底**（不是复用一个固定小表），
+      高度 `0.12~0.37`，每只再加一点确定性的位置/朝向扰动。
       扰动很关键：位置完全相同的一摞会精确地叠成一根柱子。
+
+    ★★ 2026-10-19：投放点从「`RESPAWN_SPOTS` 里挑 8 个」改成**照抄原版 `fill()` 的取点公式**：
+      `x ∈ [-(hx-0.07), hx-0.07]`、`z ∈ [-(hz-0.07), hz-0.07]`，随机撒、碰到洞口就重抽，
+      再往**后 / 右**偏一点（`x*0.9+0.03`、`z*0.9-0.03`）——
+      原版注释说是「像一台被玩过一阵的机台」。
+      之前复用 8 个固定点，30 只娃娃全落在中间那一条，
+      前半边池底空着 —— 一眼就不像原版那个「满池子」。
   */
 
   /** 确定性伪随机：同一局重放，池子变化完全一样（走查截图不会每次不同）。 */
@@ -752,32 +832,48 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     return x - Math.floor(x)
   }
 
+  /** 取一个投放点：铺满池底、避开洞口（洞口位置由 `hole` 决定，不假设在哪个角）。 */
+  const fillSpot = (i: number): { x: number; z: number } => {
+    const mx = hx - 0.07 // 留半只娃娃，别贴着玻璃
+    const mz = hz - 0.07
+    let x = 0
+    let z = 0
+    for (let t = 0; t < 30; t++) {
+      x = -mx + jitter(i * 91 + t * 7 + 1) * 2 * mx
+      z = -mz + jitter(i * 91 + t * 7 + 2) * 2 * mz
+      const inHole =
+        x > hole.x0 - 0.08 && x < hole.x1 + 0.08 && z > hole.z0 - 0.08 && z < hole.z1 + 0.08
+      if (!inHole) break
+    }
+    // 原版：往**后 / 右**偏一点，像被玩过一阵的机台
+    return { x: x * 0.9 + 0.03, z: z * 0.9 - 0.03 }
+  }
+
   /** 一次投放。`i` 只用于扰动，决定它是「第几只」，不参与任何玩法判定。 */
-  const dropOne = (pb: PrizeBody, i: number, y: number) => {
-    const spot = RESPAWN_SPOTS[i % RESPAWN_SPOTS.length]
-    const ox = (jitter(i * 3 + 1) - 0.5) * 0.10
-    const oz = (jitter(i * 3 + 2) - 0.5) * 0.10
+  const dropOne = (pb: PrizeBody, i: number) => {
+    const spot = fillSpot(i)
+    // 高度照抄原版 `0.12 + rng()*0.25` —— 别从玻璃顶往下倒
+    const y = 0.12 + jitter(i * 3 + 4) * 0.25
     const turn = jitter(i * 3 + 3) * Math.PI * 2
-    pb.body.setTranslation({ x: spot.x + ox, y, z: spot.z + oz }, true)
+    pb.body.setTranslation({ x: spot.x, y, z: spot.z }, true)
     pb.body.setRotation({ x: 0, y: Math.sin(turn / 2), z: 0, w: Math.cos(turn / 2) }, true)
     pb.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
     pb.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
-    pb.from = { x: spot.x + ox, y, z: spot.z + oz }
+    pb.from = { x: spot.x, y, z: spot.z }
   }
 
   /*
-    ★ 投放高度：`0.12 + wave * 0.05`，封顶 0.42。
+    ★ 投放高度由 `dropOne()` 自己算（`0.12~0.37`），**不再按波次递增**。
       别一上来就放到接近玻璃顶（1.2）：落下来的速度太快，会把下面压塌成一层，
       而且第一帧看起来像「有人往柜子里倒娃娃」。
     ⚠️ 别调成「只放一波、全部同高」—— 同一高度同一点投放必然叠成柱。
   */
   const WAVE = 6
   for (let i = 0; i < prizeBodies.length; i += WAVE) {
-    const wave = i / WAVE
     for (let j = 0; j < WAVE && i + j < prizeBodies.length; j++) {
-      dropOne(prizeBodies[i + j], i + j, 0.12 + Math.min(0.3, wave * 0.05))
+      dropOne(prizeBodies[i + j], i + j)
     }
-    // 每波之间让它落稳（60Hz × 0.75s）
+    // 每波之间让它落稳（60Hz × 0.75s，等价于原版的 90 × 1/120）
     for (let k = 0; k < 45; k++) world.step()
   }
   /*
@@ -932,13 +1028,13 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   let winIndex: number | null = null
 
   function pickRespawnSpot(skip: number): { x: number; z: number } {
-    let best: { x: number; z: number } = RESPAWN_SPOTS[0]
+    let best: { x: number; z: number } = respawnSpots[0]
     let bestScore = -Infinity
-    for (let k = 0; k < RESPAWN_SPOTS.length; k++) {
-      const s = RESPAWN_SPOTS[(k + recycled) % RESPAWN_SPOTS.length]
-      // 离洞口越远越好（洞口 = 右前角那块矩形）
-      const dx = Math.max(0, hole.x0 - s.x)
-      const dz = Math.max(0, hole.z0 - s.z)
+    for (let k = 0; k < respawnSpots.length; k++) {
+      const s = respawnSpots[(k + recycled) % respawnSpots.length]
+      // 离洞口越远越好（**点到矩形**的距离，不假设洞在哪个角）
+      const dx = Math.max(0, Math.max(hole.x0 - s.x, s.x - hole.x1))
+      const dz = Math.max(0, Math.max(hole.z0 - s.z, s.z - hole.z1))
       let score = Math.hypot(dx, dz)
       // 被占得越多越差：8 cm 以内每只扣 0.05
       for (let j = 0; j < prizeBodies.length; j++) {
@@ -1003,7 +1099,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     // 抬升进度 0 → 1，用 smoothstep 免得起点/终点有速度突变
     const w = Math.max(0, Math.min(1, (pose.hubY - gripHubY) / GRIP_SETTLE_RISE))
     const k = w * w * (3 - 2 * w)
-    const relY = gripRel.y + (GRIP_HANG_Y - gripRel.y) * k
+    const relY = gripRel.y + (hangYOf(heldIndex, types, prizes) - gripRel.y) * k
     const relX = gripRel.x * (1 - k)
     const relZ = gripRel.z * (1 - k)
     // 爪子还扎在堆里的时候，吊在下面会插进池底 ⇒ 至少让它贴着池底

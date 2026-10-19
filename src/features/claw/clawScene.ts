@@ -44,90 +44,72 @@
  */
 import {
   ACESFilmicToneMapping,
-  BackSide,
-  BoxGeometry,
-  CanvasTexture,
-  CapsuleGeometry,
-  CatmullRomCurve3,
-  CircleGeometry,
   Color,
-  CylinderGeometry,
   DirectionalLight,
   Group,
   HalfFloatType,
   HemisphereLight,
   MathUtils,
   Mesh,
-  MeshBasicMaterial,
-  MeshPhysicalMaterial,
   MeshStandardMaterial,
   PCFSoftShadowMap,
   PerspectiveCamera,
-  PlaneGeometry,
   PMREMGenerator,
-  RepeatWrapping,
   Scene,
-  SphereGeometry,
   SpotLight,
   SRGBColorSpace,
-  TorusGeometry,
-  TubeGeometry,
-  Vector2,
   Vector3,
   WebGLRenderer,
   WebGLRenderTarget,
 } from 'three'
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { ANG_CLOSED, ANG_IDLE, ANG_OPEN, createClawPhysics, type ClawPhysics } from './clawPhysics'
 import {
-  ANG_CLOSED,
-  ANG_IDLE,
-  ANG_OPEN,
-  HUB_HH,
-  HUB_R,
-  PIVOT_R,
-  PRONG_AZ,
-  PRONG_PTS,
-  PRONG_RADIUS,
-  createClawPhysics,
-  type ClawPhysics,
-} from './clawPhysics'
+  CAB,
+  CARRIAGE_Y,
+  HOLE,
+  OX,
+  OZ,
+  PH,
+  HOME,
+  PICKUP,
+  PICKUP_RING,
+} from './scene/dims'
+import { buildMachine, buildRoom, buildEnvScene, disposeMachine, M, applyTheme } from './scene/machine'
+import { buildPrize, disposePlush, setFurShells, type PlushModel } from './scene/plush'
+import { PRIZE_TYPES, type PrizeType } from './scene/prizeTypes'
+import { CLAW_THEMES } from './scene/themes'
 
-/* ============================ 尺寸与配色 ============================ */
+export { CLAW_THEMES }
 
-/** 柜体半宽 / 半深 / 玻璃区高度。和参考实现同一套比例（观感一致）。 */
-const HX = 0.58
-const HZ = 0.5
-const GLASS_H = 1.2
-const BODY_H = 1.0
-/** 天车轨道的高度（爪子在它下面吊着） */
-const RAIL_Y = GLASS_H - 0.12
-/** 娃娃落进的那个洞（右下角）。掉进去 = 抓到了。 */
-const HOLE = { x0: 0.26, x1: HX, z0: 0.06, z1: HZ }
+/* ============================ 尺寸 ============================ */
 
-/**
- * **取物口**（机身正面那个圆洞）的中心。
- *
- * ★ 圆片 / LED 圆环 / 中奖后蹲下去看的那个机位（`doorPose()`）**都读这一个数**。
- *   以前圆片的位置是写死在建模那段里的，相机那边再抄一份就会走散 ——
- *   而走散的症状是「蹲下去看的地方不是取物口」，截图上看不出是哪个错了。
- */
-const PICKUP = { x: -HX + 0.28, y: -0.52, z: HZ - 0.018 }
-/** 黑洞的半径（`CircleGeometry`）。 */
-const PICKUP_HOLE_R = 0.19
-/** LED 圆环：环心半径 + 管半径。外径 = `(r + t) * 2`。 */
-const PICKUP_RING = { r: 0.225, t: 0.022 }
+/*
+  柜体的所有尺寸都来自 `scene/dims.ts` —— 那是参考实现的一份逐字搬运。
+  这里只做**别名**，因为文件后半段（取景 / 走查）到处在用 `HX` / `HZ` / `GLASS_H`。
+
+  ★★ 2026-10-19：`HX/HZ` 从 **0.58 / 0.5** 改成 **0.5 / 0.4**。
+    以前这两个数是「机身外框」的尺寸，被当成玻璃柜用了 ——
+    于是玻璃柜比原版大 16%，同一套取景参数下柜子显得**矮胖**，
+    而且娃娃相对柜子更大。原版的 `CAB` 是玻璃柜内尺寸，
+    外框另有 `OX / OZ`（0.58 / 0.5）。
+*/
+const HX = CAB.hx
+const HZ = CAB.hz
+const GLASS_H = CAB.top
+/** 天车轨道的高度（爪子在它下面吊着）。 */
+const RAIL_Y = CARRIAGE_Y
 
 /**
- * 取物口的**可视窗口**（宽 × 高，世界单位）—— `goDoor` 按它算距离。
+ * 取物口的**可视窗口**（宽 × 高，世界单位）—— `doorPose()` 按它算距离。
  *
- * ★★ 必须是**外径**，不是黑洞的直径。
- *   一开始照抄原版的 `0.32 × 0.34`（那是他们那台机器窗口的实际大小），
- *   可我们这边的圆环外径是 `(0.225 + 0.022) × 2 = 0.494` —— 窗口比被 fit 的
- *   尺寸大 1.5 倍，于是蹲下去时圆环**撑出画面**，整屏只剩一个黑圆。
+ * ★★ 必须是**外径**，不是黑洞的直径。一开始照抄原版的 `0.32 × 0.34`
+ *   （那是他们那台机器窗口的实际大小），可我们的圆环外径是
+ *   `(0.22 + 0.022) × 2 = 0.484` —— 窗口比被 fit 的尺寸大 1.5 倍，
+ *   蹲下去时圆环**撑出画面**，整屏只剩一个黑圆。
  *   ➜ 从几何常量派生，改圆环大小自动跟着变。
  */
 const PICKUP_WINDOW = { w: (PICKUP_RING.r + PICKUP_RING.t) * 2, h: (PICKUP_RING.r + PICKUP_RING.t) * 2 }
@@ -138,36 +120,31 @@ const PICKUP_WINDOW = { w: (PICKUP_RING.r + PICKUP_RING.t) * 2, h: (PICKUP_RING.
  * ★ 只给 `debugCamera().winW / winH` 用：它让走查能直接问
  *   「蹲下去以后这个窗口在画面里**比平时大多少倍**」——
  *   这是**同一个物体、同一个投影片面**的两次测量，比例干净。
- *   （拿两个机位的 `dist` 相除是不干净的：那两个数是两套 fit 算出来的。）
- * ⚠️ z 取 `HZ`（机身正面）而不是 `PICKUP.z`（−0.018）：差 1.8 cm，
- *   投影上差不到千分之一，但省得解释「为什么窗口角不在正面」。
  */
 const PICKUP_QUAD: [number, number, number][] = (() => {
   const r = PICKUP_WINDOW.w / 2
   return [
-    [PICKUP.x - r, PICKUP.y - r, HZ],
-    [PICKUP.x + r, PICKUP.y - r, HZ],
-    [PICKUP.x + r, PICKUP.y + r, HZ],
-    [PICKUP.x - r, PICKUP.y + r, HZ],
+    [PICKUP.x - r, PICKUP.y - r, PICKUP.z],
+    [PICKUP.x + r, PICKUP.y - r, PICKUP.z],
+    [PICKUP.x + r, PICKUP.y + r, PICKUP.z],
+    [PICKUP.x - r, PICKUP.y + r, PICKUP.z],
   ]
 })()
 
 /**
- * 柜子的**实际外框**（含立柱、灯箱、底座）。
+ * 整台机器的**实际外框**（含立柱、灯箱、底座）。`debugFrame` 用它报 `cabinet`。
  *
- * ★★ 这份边界**只有一份**：取景（`resize`）和走查（`debugFrame`）都读它。
- * 以前 `debugFrame` 自己写了一套数字、取景用的是另一套抽象「设计矩形」，
- * 两者不一致 —— 结果就是**量出来柜子底边掉在画布外 60px**
- * （2026-10-16 实测：390×844 下画布高 554，柜子底边在 614.7）。
- * 同一个事实存两份，必然走散。
+ * ★★ 这份边界**只有一份**：走查和取景都读它。以前 `debugFrame` 自己写了一套数字、
+ *   取景用的是另一套抽象「设计矩形」，两者不一致 —— 结果就是
+ *   **量出来柜子底边掉在画布外 60px**（2026-10-16 实测）。同一个事实存两份，必然走散。
  */
 const BOX = {
-  minX: -(HX + 0.04),
-  maxX: HX + 0.04,
-  minY: -BODY_H,
+  minX: -(OX + 0.04),
+  maxX: OX + 0.04,
+  minY: -PH,
   maxY: GLASS_H + 0.32,
-  minZ: -(HZ + 0.04),
-  maxZ: HZ + 0.04,
+  minZ: -(OZ + 0.04),
+  maxZ: OZ + 0.04,
 }
 
 /**
@@ -180,6 +157,10 @@ const BOX = {
  */
 const FOV = 45
 
+/** 临时：`?fit` 时把取景各阶段的 dist / 投影打到 console（排查用，平时关着）。 */
+const DEBUG_FIT =
+  typeof location !== 'undefined' && new URLSearchParams(location.search).has('fit')
+
 /**
  * 相机看哪里。**不是**柜子的几何中心。
  *
@@ -188,6 +169,23 @@ const FOV = 45
  * 爪子在中间偏上 —— 和参考实现一致（它的 `target.y` 在竖屏下是 0.35）。
  */
 const LOOK_Y = 0.34
+
+/**
+ * **横屏**的视线高度。
+ *
+ * ★★ 2026-10-19：横屏原来也用 `LOOK_Y = 0.34`，结果**机顶灯箱整个被顶出画面**
+ *   （实测 `FRAME.top = −38.7px`，舞台只有 228px 高）。
+ *   原因很直接：横屏的画布又宽又矮，而「玻璃必须完整」这条把 `dist` 锁死了 ——
+ *   玻璃刚好占满高度，上面就一点余量都没有，而灯箱在玻璃**上面**
+ *   （`CAB.top + 0.32 ≈ 1.52`，`machine.ts` 里 `top + 0.16 ± 0.16`）。
+ *
+ * ➜ 抬视线 = 画面整体下移：灯箱进来、机身被裁。
+ *   这正是原版的横屏构图（它的 `target.y` 横屏 **0.45**、竖屏 **0.35** ——
+ *   横屏也抬了一点，只是它画布高得多，抬 0.1 就够）。
+ *
+ * ⚠️ 别再抬到 0.6 以上：玻璃底会被顶出画面下沿，池子和娃娃就看不见了。
+ */
+const LOOK_Y_WIDE = 0.52
 
 /**
  * 相机的极角（从 +Y 量，弧度）= 俯视多少。参考实现竖屏用 **1.28**。
@@ -251,15 +249,14 @@ const FRAME = {
  * 取值 **0.86**（竖屏）：玻璃横向被裁掉一点（参考实现就裁约 23%），
  * 但**不许**整柜缩进去。实测竖屏 `glassFill ≈ 1.03`。
  *
- * ⚠️ **横屏是另一个档位**：844×390 的视口里舞台只有 384×228，
- *   玻璃（高 1.2，俯视 17°）投影下来最多占画布高的 **0.78** ——
- *   再近就把玻璃顶裁掉了（实测 `top = −16.8`）。
- *   所以横屏的阈值是 **0.74**：它守的是「别缩成一小条」，
- *   不是「必须占满」—— 占满是物理上做不到的。
- *   把横屏也钉在 0.86，只会逼着取景去裁玻璃顶，那是**用判据逼出坏画面**。
+ * ⚠️ **横屏不用这个数**（2026-10-19 起）。
+ *   横屏的承诺是「**整台机器完整**」：装下 [玻璃底, 灯箱顶]（`VERT_CORNERS_WIDE`），
+ *   玻璃就注定只占 ~0.60。以前那个 `GLASS_MIN_FILL_WIDE = 0.74` 是在
+ *   「横屏只装玻璃」的年代定的，现在既做不到、也不该做到 ——
+ *   再往前推就是把灯箱裁掉（那是用户抱怨过的「机器被切头」）。
+ *   ➜ 横屏的「够不够近」由走查量**整机纵向占比**，判据和承诺同一口径。
  */
 const GLASS_MIN_FILL = 0.86
-const GLASS_MIN_FILL_WIDE = 0.74
 
 /**
  * 宽屏取景的修正系数 —— 对应参考实现的 `hFrac / visFrac`。
@@ -273,12 +270,6 @@ const GLASS_MIN_FILL_WIDE = 0.74
 const HFRAC_WIDE = 0.86
 const VISFRAC_WIDE = 0.93
 
-/** 三档主题色。和参考实现一样给 3 个，默认第一个（粉）。 */
-export const CLAW_THEMES = [
-  { accent: 0xf47aa8, led: 0xff7ab0, name: '粉' },
-  { accent: 0xf5c52a, led: 0xffd23a, name: '黄' },
-  { accent: 0x3ec8d8, led: 0x4fd8e8, name: '青' },
-] as const
 
 /**
  * 待命时指头张开多少（`ClawVisual.spread` 的口径：0~1，1 = 张到最大）。
@@ -288,557 +279,112 @@ export const CLAW_THEMES = [
  */
 export const CLAW_PRONG_IDLE = ANG_IDLE / ANG_OPEN
 
-/* ============================ 小工具 ============================ */
+/**
+ * 爪子的**待命位**（原版的 `HOME`：左前角）。
+ *
+ * ★ 页面用它当瞄准的初值 —— 原版空转时爪子就停在那儿，不是池子正中。
+ *   写死 `{x:0,z:0}` 的话，开局那一帧爪子在正中间，第一次投币前会「飘」一下。
+ */
+export const CLAW_HOME: { x: number; z: number } = { x: HOME.x, z: HOME.z }
+
+/* ============================ 娃娃 ============================ */
 
 /**
- * 给 `PMREMGenerator` 用的**方向性**环境（参考实现的 `buildEnvScene()` 同思路）。
+ * 池子里放多少只 —— 参考实现是 `game.fill(30)`。
  *
- * 一个大的暗色内壁盒子 + 顶部一排发光面板。
+ * ★★ 从 **96 只缩到 30 只**（2026-10-19，照搬原版）。
+ *   我们以前一只娃娃直径 0.144（原版是 0.09~0.11），为了把池子堆满硬塞了 96 只，
+ *   代价是每只 9 个 mesh ⇒ 近 900 次 draw call，而且娃娃**个头太大**，
+ *   看上去像一池子抱枕 —— 这也是「跟原版不一样」的一条。
  *
- * ★★ 为什么非得自己搭：three 自带的 `RoomEnvironment` 是「摄影棚」——
- *   四周一圈白色柔光箱，从**所有方向**均匀照亮。那种环境光会把娃娃之间的
- *   **接触阴影从下面填平**：影子画出来了，却被照得看不见。
- *   换成「顶上亮、四周暗」之后，环境光自己就有方向，缝隙里收不到光。
- *
- * ⚠️ 盒子用 `BackSide`（我们在它**里面**，看不见正面）；
- *   面板材质是 `MeshBasicMaterial`（自发光）—— 用 `Standard` + emissive 也行，
- *   但 `Basic` 少一次光照计算，而这里只关心「往哪个方向发射光」。
+ *   现在娃娃是原版尺寸、原版造型（五种），30 只正好堆成原版那种
+ *   「满到需要拨开、但还看得见垫子」的样子。
  */
-function makeEnvScene(): Scene {
-  const s = new Scene()
-  const shell = new Mesh(
-    new BoxGeometry(16, 5, 16),
-    new MeshStandardMaterial({ color: 0xe8e4de, side: BackSide, roughness: 1 }),
-  )
-  shell.position.y = 1.5
-  s.add(shell)
-  // 顶部灯板：一排暖白，密度够高才不会被 PMREM 卷积成「一个大软光」
-  const panelMat = new MeshBasicMaterial({ color: 0xfff6ea })
-  const panel = new PlaneGeometry(1.2, 0.35)
-  for (let x = -6; x <= 6; x += 2.4) {
-    for (let z = -6; z <= 6; z += 2.4) {
-      const p = new Mesh(panel, panelMat)
-      p.rotation.x = Math.PI / 2
-      p.position.set(x, 3.95, z)
-      s.add(p)
+const PRIZE_COUNT = 30
+
+/**
+ * 娃娃的**初始布局**。
+ *
+ * ⚠️ 这**不是**最终位置：物理可用时 `clawPhysics` 会按自己的确定性扰动
+ *   分波从空中投放，让它们自己堆（见那边的「建池」）。这里只提供三件事：
+ *   ① 有几只；② 每只是什么种类 / 颜色 / 种子；③ 物理起不来时的降级位置。
+ *
+ * ⚠️ 必须确定性（不用 `Math.random()`）：走查要能复现同一池子。
+ */
+function initialPrizeLayout(): {
+  x: number
+  z: number
+  y: number
+  type: number
+  color: number
+  seed: number
+  scale: number
+}[] {
+  const out: {
+    x: number
+    z: number
+    y: number
+    type: number
+    color: number
+    seed: number
+    scale: number
+  }[] = []
+  /** 确定性伪随机（和物理那边同源手法，但各算各的，互不依赖）。 */
+  const rnd = (n: number) => {
+    const v = Math.sin(n * 127.1 + 311.7) * 43758.5453
+    return v - Math.floor(v)
+  }
+  const mx = HX - 0.07
+  const mz = HZ - 0.07
+  for (let i = 0; i < PRIZE_COUNT; i++) {
+    /*
+      ★★ 2026-10-19：这里原来是一张 6×5 的**阅兵网格**，而且「碰到洞口就 `continue`」
+        —— 于是 30 只变成 26 只（`debugPhysics().bodies` 一直是 26，一直没人发现）。
+        网格还只铺到 `x ±0.40 / z -0.30…0.28`，比池底小一圈 ⇒ 前半边永远是空的。
+
+      ➜ 现在和物理的 `fillSpot()` 用同一套口径：铺满池底、碰到洞口**重抽**（不是丢弃），
+        所以**数量恒等于 `PRIZE_COUNT`**，位置也是原版那种散开的堆。
+        这仍然只是「物理起不来时的降级位置」，真正落点由物理投放决定。
+    */
+    let x = 0
+    let z = 0
+    for (let t = 0; t < 30; t++) {
+      x = -mx + rnd(i * 91 + t * 7 + 1) * 2 * mx
+      z = -mz + rnd(i * 91 + t * 7 + 2) * 2 * mz
+      const inHole =
+        x > HOLE.x0 - 0.08 && x < HOLE.x1 + 0.08 && z > HOLE.z0 - 0.08 && z < HOLE.z1 + 0.08
+      if (!inHole) break
     }
-  }
-  /*
-    侧面几块**弱**的彩色板：给金属爪子一点能反射的东西，别让镀铬全黑。
-    ★ 这里和参考实现有个刻意的差别：它是 `MeshStandardMaterial({ emissive, emissiveIntensity })`
-      自发光（不受 env 内的半球光影响）；我们直接用 `MeshBasicMaterial`（颜色即出射）。
-      效果等价而且便宜 —— **别**换成 Standard + emissive，那会让 PMREM 里多一个
-      受光项，侧板亮度就跟着半球光走，改一处影响两处。
-  */
-  const side = (c: number, x: number, z: number, ry: number, w = 3) => {
-    const m = new Mesh(new PlaneGeometry(w, 1.2), new MeshBasicMaterial({ color: c }))
-    m.position.set(x, 1.2, z)
-    m.rotation.y = ry
-    s.add(m)
-  }
-  side(0x6a5f66, 0, 7.9, Math.PI, 6)
-  side(0x8a8468, -7.9, 2, Math.PI / 2)
-  side(0x64707a, 7.9, -1, -Math.PI / 2)
-  // 环境盒自己的 hemisphere：只影响 env 里那块**亮**盒子（Standard 材质），
-  // 也就是让「从上往下」的梯度成立，而不是纯反射盒底
-  s.add(new HemisphereLight(0xfff5f0, 0xb0a898, 0.7))
-  return s
-}
+    x = x * 0.9 + 0.03
+    z = z * 0.9 - 0.03
+    const type = i % PRIZE_TYPES.length
+    const colors = PRIZE_TYPES[type].colors
+    out.push({
+      x,
+      z,
+      // 降级摆放的层高：让它们**看起来**是一堆，而不是平铺一层
+      y: 0.02 + rnd(i * 17 + 5) * 0.18,
+      type,
+      color: colors[(i * 3 + 1) % colors.length],
+      seed: ((i * 37) % 97) / 97,
+      /*
+        ★★ 每只的**尺寸**在 0.95~1.25 之间浮动 —— 照抄原版
+          （`physics.ts` 的 `spawnPrize`：`sc = 0.95 + rng()*0.3`）。
 
-/** `0xf47aa8` → `'#f47aa8'`。给 canvas 画贴图用（`fillStyle` 只吃字符串）。 */
-function hexOf(n: number): string {
-  return `#${(n >>> 0).toString(16).padStart(6, '0')}`
-}
+        这不是装饰：全部一样大时池子看着像「一排复制粘贴」，
+        而且平均小 10%（1.0 vs 1.1）⇒ 30 只铺不满池底、还堆不起来，
+        和原版那种「满到要拨开」的观感差一截。
 
-/**
- * 把 canvas 画成贴图。**唯一一张贴图** —— 灯箱上的字。
- * 程序化生成（不落盘图片），和本项目「图片零落盘」的口径一致。
- */
-/**
- * 柜内背板（贴纸）。
- *
- * ★ 参考实现里玻璃柜背面是一张**印好的海报**。没有它的话，柜子内部就是
- * 场景背景色 —— 一片惨白的空盒子，玩具只占底下一条
- * （2026-10-16 走查截图确认过：上半截全是空的）。
- *
- * canvas 画：竖向渐变 + 波点墙纸 + 底边一条主题色。
- *
- * ⚠️ 第一版中间画了一「团云」（一个大白圆）。结果它太大太白，在截图里
- * 读起来**还是一片空白** —— 白圆在浅粉底上等于没有图案。
- * 波点不一样：它是**重复的小图案**，一眼就能看出「这是有意画的」。
- *
- * ⚠️ 颜色**要够实**。柜内那盏点光源 + ACES 色调映射会把这里整体提亮一档，
- * 所以按「会被提亮」来挑色（第一版的「白 → #f6d9e5」实测被洗成全白）。
- *
- * ⚠️ **不写字** —— 「爪爪乐」已经在灯箱上了，背板再写一遍是同一件事说两遍。
- */
-function makeBackdropTexture(accent: number): CanvasTexture {
-  const c = document.createElement('canvas')
-  c.width = 512
-  c.height = 512
-  const g = c.getContext('2d')
-  if (g) {
-    const grad = g.createLinearGradient(0, 0, 0, c.height)
-    grad.addColorStop(0, '#f8c6dc')
-    grad.addColorStop(0.55, '#f3aecd')
-    grad.addColorStop(1, '#ea93bb')
-    g.fillStyle = grad
-    g.fillRect(0, 0, c.width, c.height)
-
-    // 波点墙纸：交错排列（相邻行错开半个间距），看着比正方格柔和
-    g.fillStyle = 'rgba(255,255,255,.42)'
-    const step = 68
-    for (let row = 0, y = 30; y < c.height - 34; row++, y += step) {
-      const offset = (row % 2) * (step / 2)
-      for (let x = 30 + offset; x < c.width; x += step) {
-        g.beginPath()
-        g.arc(x, y, 13, 0, Math.PI * 2)
-        g.fill()
-      }
-    }
-
-    // 底边一条主题色带子 —— 把背板和柜体绑在一起
-    g.fillStyle = `#${(accent >>> 0).toString(16).padStart(6, '0')}`
-    g.fillRect(0, c.height - 34, c.width, 34)
-  }
-  const t = new CanvasTexture(c)
-  t.colorSpace = SRGBColorSpace
-  return t
-}
-
-/**
- * 取物口**里面**那张贴图。
- *
- * ★ 为什么不是一块纯黑：中奖后镜头会蹲下去正对这个窗口（`doorPose()`），
- *   纯黑圆片在那时候读起来是「贴了一张黑色圆纸」—— 奖品摆在上面像贴纸，
- *   完全没有「里面是个格子」的感觉。
- *
- *   这里画三样东西，都是**便宜但有效**的深度线索：
- *     · 中心偏下最亮、四周压暗 ⇒ 像一盏灯从里往外照；
- *     · 底部一条暖光 ⇒ 有一块底板；
- *     · 上沿更暗 ⇒ 有顶板挡着。
- *
- * ⚠️ 用 `MeshBasicMaterial`（不吃光照）：它要表现得像「一个开口」，
- *   被柜内那盏点光源照亮反而会变成一块灰板。`toneMapped` 也关掉，
- *   否则 ACES 会把这里的暗部整体提亮一档，黑就不黑了。
- */
-function makePickupTexture(): CanvasTexture {
-  const c = document.createElement('canvas')
-  c.width = 256
-  c.height = 256
-  const g = c.getContext('2d')
-  if (g) {
-    const rad = g.createRadialGradient(128, 150, 8, 128, 128, 132)
-    rad.addColorStop(0, '#33333a')
-    rad.addColorStop(0.55, '#15151a')
-    rad.addColorStop(1, '#08080b')
-    g.fillStyle = rad
-    g.fillRect(0, 0, 256, 256)
-    // 底板上的暖光
-    const floor = g.createLinearGradient(0, 176, 0, 256)
-    floor.addColorStop(0, 'rgba(255,198,142,0)')
-    floor.addColorStop(1, 'rgba(255,198,142,.34)')
-    g.fillStyle = floor
-    g.fillRect(0, 176, 256, 80)
-    // 顶沿压暗（有顶板）
-    const top = g.createLinearGradient(0, 0, 0, 60)
-    top.addColorStop(0, 'rgba(0,0,0,.55)')
-    top.addColorStop(1, 'rgba(0,0,0,0)')
-    g.fillStyle = top
-    g.fillRect(0, 0, 256, 60)
-  }
-  const t = new CanvasTexture(c)
-  t.colorSpace = SRGBColorSpace
-  return t
-}
-
-function makeSignTexture(text: string, bg: string, fg: string): CanvasTexture {  const c = document.createElement('canvas')
-  c.width = 1024
-  c.height = 256
-  const g = c.getContext('2d')
-  if (g) {
-    g.fillStyle = bg
-    g.fillRect(0, 0, c.width, c.height)
-    g.fillStyle = 'rgba(255,255,255,.22)'
-    g.fillRect(0, 0, c.width, 18)
-    g.fillStyle = fg
-    g.font = 'bold 150px "PingFang SC","Microsoft YaHei",sans-serif'
-    g.textAlign = 'center'
-    g.textBaseline = 'middle'
-    g.fillText(text, c.width / 2, c.height / 2 + 8)
-  }
-  const t = new CanvasTexture(c)
-  t.colorSpace = SRGBColorSpace
-  return t
-}
-
-/**
- * 商场地面贴图 —— 淡紫灰地砖。
- *
- * ★ 为什么要地砖而不是一整块纯色：柜子两侧在横屏下会露出 200~330px 的空白
- *   （实测：phone-landscape 左右各 218px、desktop 各 332px）。纯色读起来像
- *   「3D 没加载完」；有透视收敛的地砖线，那块空白立刻变成「站在商场里」。
- *   参考实现用的就是 tile 贴图（`floorTiles()`），同一个理由。
- *
- * ⚠️ 颜色是**量出来的，不是调出来的**。第一版取 `#d7d1e2`（"只比背景深一点"），
- *   截图取样一看：墙 L=198 / 地板 L=195 / 柜身 L=200 —— 三个数挤在 5 级以内，
- *   等于没有分层，整个画面糊成一团奶白。现在这组让地板比柜身低 25~40 级，
- *   白柜子才立得住。
- *   ➜ 以后改这三个颜色，改完**取像素比一下**，别只看截图"感觉还行"
- *     （`.e2e-scratch/sample-px.mjs` 就是干这个的）。
- */
-function makeRoomFloorTexture(): CanvasTexture {
-  const c = document.createElement('canvas')
-  c.width = 256
-  c.height = 256
-  const g = c.getContext('2d')
-  if (g) {
-    g.fillStyle = '#9a93ab'
-    g.fillRect(0, 0, c.width, c.height)
-    // 砖缝
-    g.strokeStyle = '#837c96'
-    g.lineWidth = 2
-    for (let i = 0; i <= c.width; i += 64) {
-      g.beginPath()
-      g.moveTo(i, 0)
-      g.lineTo(i, c.height)
-      g.stroke()
-      g.beginPath()
-      g.moveTo(0, i)
-      g.lineTo(c.width, i)
-      g.stroke()
-    }
-    // 每块砖里一点极淡的斑驳，免得 16 块砖看着像复制粘贴
-    g.fillStyle = 'rgba(255,255,255,.14)'
-    for (let row = 0; row < 4; row++) {
-      for (let col = 0; col < 4; col++) {
-        if ((row * 4 + col) % 3 !== 0) continue
-        g.fillRect(col * 64 + 10, row * 64 + 10, 44, 44)
-      }
-    }
-  }
-  const t = new CanvasTexture(c)
-  t.colorSpace = SRGBColorSpace
-  t.wrapS = RepeatWrapping
-  t.wrapT = RepeatWrapping
-  return t
-}
-
-/**
- * 商场后墙 —— 竖向渐变 + 一条踢脚线。
- *
- * ⚠️ 墙**必须比地板亮**，而且上下要有渐变。纯色墙 + 纯色地板在截图里会糊成
- *   一整片，看不出「这是两面墙」，反而比原来的纯背景更糊。
- */
-function makeRoomWallTexture(): CanvasTexture {
-  const c = document.createElement('canvas')
-  c.width = 4
-  c.height = 256
-  const g = c.getContext('2d')
-  if (g) {
-    // ⚠️ canvas 的 y 轴向下，而 plane 的 uv 是向上 —— 所以「顶部亮」要画在 y=0
-    const grad = g.createLinearGradient(0, 0, 0, c.height)
-    grad.addColorStop(0, '#c2bcd1')
-    grad.addColorStop(1, '#a79fb9')
-    g.fillStyle = grad
-    g.fillRect(0, 0, c.width, c.height)
-    // 踢脚线（贴地的最后 6%）
-    g.fillStyle = '#8b8499'
-    g.fillRect(0, c.height - 15, c.width, 15)
-  }
-  const t = new CanvasTexture(c)
-  t.colorSpace = SRGBColorSpace
-  return t
-}
-
-/* ---------------- 娃娃的布料：绒毛法线 + 纤维斑驳 + 缝线 ---------------- */
-
-/**
- * 定种子伪随机。
- *
- * ★ 贴图噪声**不用 `Math.random()`**：走查脚本会采样像素判断「这一块是不是白成一片」，
- *   每次刷新都换一套噪点，改前 / 改后的数字就没法比。
- *   （游戏逻辑那边禁 `Math.random()` 是另一条理由：结算必须幂等。）
- */
-function seeded(seed: number): () => number {
-  let s = seed >>> 0
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0
-    return s / 4294967296
-  }
-}
-
-function blankCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
-  const c = document.createElement('canvas')
-  c.width = w
-  c.height = h
-  return [c, c.getContext('2d')!]
-}
-
-/**
- * 高度图 → 切线空间法线贴图。
- *
- * 为什么现算而不是引一张 png：整个娃娃机都是**程序生成**的（无外部贴图资源），
- * 这样 APK 不会因为漏打包一张图而变成一堆白球。
- */
-function heightToNormal(src: HTMLCanvasElement, strength: number): CanvasTexture {
-  const w = src.width
-  const h = src.height
-  const sd = src.getContext('2d')!.getImageData(0, 0, w, h).data
-  const [c, g] = blankCanvas(w, h)
-  const out = g.createImageData(w, h)
-  // 取高度时**环绕取模**：贴图是平铺的，边界上的斜率必须接得上，否则平铺缝处会出现一圈硬边
-  const H = (x: number, y: number) => sd[(((y + h) % h) * w + ((x + w) % w)) * 4] / 255
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const dx = (H(x + 1, y) - H(x - 1, y)) * strength
-      const dy = (H(x, y + 1) - H(x, y - 1)) * strength
-      const l = Math.hypot(dx, dy, 1)
-      const i = (y * w + x) * 4
-      out.data[i] = (-dx / l) * 0.5 * 255 + 127.5
-      out.data[i + 1] = (dy / l) * 0.5 * 255 + 127.5
-      out.data[i + 2] = (1 / l) * 0.5 * 255 + 127.5
-      out.data[i + 3] = 255
-    }
-  }
-  g.putImageData(out, 0, 0)
-  const t = new CanvasTexture(c)
-  t.wrapS = RepeatWrapping
-  t.wrapT = RepeatWrapping
-  return t
-}
-
-let fabricN: CanvasTexture | null = null
-
-/** 绒毛纤维的法线 —— 「毛绒」和「塑料球」之间最主要的差别就在这张图上。 */
-function fabricNormal(): CanvasTexture {
-  if (fabricN) return fabricN
-  const S = 256
-  const [c, g] = blankCanvas(S, S)
-  // 底色 #808080 = 高度 0.5（法线朝正前方），纤维才是在它上面起伏
-  g.fillStyle = '#808080'
-  g.fillRect(0, 0, S, S)
-  g.lineCap = 'round'
-  const rnd = seeded(0x5eed)
-  for (let i = 0; i < 5000; i++) {
-    const x = rnd() * S
-    const y = rnd() * S
-    const a = rnd() * Math.PI * 2
-    const l = 2 + rnd() * 6
-    const v = Math.floor(90 + rnd() * 90)
-    g.strokeStyle = `rgba(${v},${v},${v},0.55)`
-    g.lineWidth = 0.6 + rnd()
-    // ★ 九宫格各画一遍（-S / 0 / +S）：纤维跨过边界时另一侧要接得上，
-    //   只画中间那格的话，平铺后每隔一格能看到一条**没有纤维的空缝**
-    for (const ox of [-S, 0, S]) {
-      for (const oy of [-S, 0, S]) {
-        g.beginPath()
-        g.moveTo(x + ox, y + oy)
-        g.lineTo(x + ox + Math.cos(a) * l, y + oy + Math.sin(a) * l)
-        g.stroke()
-      }
-    }
-  }
-  fabricN = heightToNormal(c, 2.2)
-  fabricN.repeat.set(3, 3)
-  return fabricN
-}
-
-let fabricD: CanvasTexture | null = null
-
-/** 纤维斑驳 + 两侧缝线（球 UV 的 u=0 / 0.5 / 1 正好落在侧面，缝线就该在那儿）。 */
-function fabricDetail(): CanvasTexture {
-  if (fabricD) return fabricD
-  const W = 512
-  const H = 256
-  const [c, g] = blankCanvas(W, H)
-  // 底是近白不是纯白：`map` 会和底色相乘，纯白等于「没有贴图」
-  g.fillStyle = '#f4f4f4'
-  g.fillRect(0, 0, W, H)
-  const rnd = seeded(0xfab2)
-  for (let i = 0; i < 14000; i++) {
-    const v = 200 + rnd() * 55
-    g.fillStyle = `rgba(${v},${v},${v},0.5)`
-    g.fillRect(rnd() * W, rnd() * H, 1.5, 1.5)
-  }
-  for (const u of [0, 0.5, 1]) {
-    const x = u * W
-    const grd = g.createLinearGradient(x - 6, 0, x + 6, 0)
-    grd.addColorStop(0, 'rgba(0,0,0,0)')
-    grd.addColorStop(0.5, 'rgba(60,40,40,0.38)')
-    grd.addColorStop(1, 'rgba(0,0,0,0)')
-    g.fillStyle = grd
-    g.fillRect(x - 6, 0, 12, H)
-    // 缝线：一针一针斜着走，不是一条直线
-    g.strokeStyle = 'rgba(70,50,50,0.45)'
-    g.lineWidth = 1.4
-    for (let y = 6; y < H - 6; y += 7) {
-      g.beginPath()
-      g.moveTo(x - 3.5, y)
-      g.lineTo(x + 3.5, y + 3)
-      g.stroke()
-    }
-  }
-  fabricD = new CanvasTexture(c)
-  fabricD.colorSpace = SRGBColorSpace
-  fabricD.anisotropy = 4
-  fabricD.wrapS = RepeatWrapping
-  return fabricD
-}
-
-const PLUSH_WHITE = new Color(0xffffff)
-/** 同色只建一次材质（一只娃娃 3 个材质 × 12 只 = 36 个，没必要） */
-const plushMats = new Map<string, MeshPhysicalMaterial>()
-
-/**
- * 娃娃的毛绒材质。
- *
- * ★★ 为什么不是 `MeshStandardMaterial({ roughness: 0.95 })`：那在屏幕上是**哑光塑料球**
- *    —— 表面没有任何可分辨的细节，40px 宽时只剩一团淡色。
- *    参考实现看着「渲染很好」，靠的就是这三样：
- *    ① `sheen` —— 逆光时边缘一圈绒光，绒毛和光滑球的分界线就在这里；
- *    ② `normalMap` —— 纤维起伏把高光打碎成一片，而不是一个干净的圆斑；
- *    ③ `map` —— 纤维斑驳 + 两侧缝线（只有身体要，肚皮 / 耳朵内侧是光面布）。
- */
-function plushMaterial(color: number, seams: boolean): MeshPhysicalMaterial {
-  const key = `${color}:${seams ? 1 : 0}`
-  const hit = plushMats.get(key)
-  if (hit) return hit
-  const c = new Color(color)
-  const m = new MeshPhysicalMaterial({
-    color: c,
-    roughness: 0.96,
-    metalness: 0,
-    sheen: 0.8,
-    sheenRoughness: 0.5,
-    // sheen 颜色比底色亮 30%：和底色同色的话，绒边在亮背景上根本看不见
-    sheenColor: c.clone().lerp(PLUSH_WHITE, 0.3),
-    normalMap: fabricNormal(),
-    normalScale: new Vector2(0.5, 0.5),
-    ...(seams ? { map: fabricDetail() } : {}),
-  })
-  plushMats.set(key, m)
-  return m
-}
-
-/** 一只娃娃：身体 + 两只耳朵 + 眼睛 + 鼻子。用基本体拼，够认出来就行。 */
-function makePlush(color: number, body: number, ear: number, seed: number): Group {
-  const g = new Group()
-  const fur = plushMaterial(color, true)
-  const dark = new MeshStandardMaterial({ color: 0x2a2430, roughness: 0.6 })
-  const bodyMat = plushMaterial(body, false)
-
-  // 身体（压扁一点，坐着的形状）
-  const b = new Mesh(new SphereGeometry(0.075, 18, 14), fur)
-  b.scale.set(1, 0.88, 0.94)
-  b.position.y = 0.066
-  g.add(b)
-  // 肚皮
-  const belly = new Mesh(new SphereGeometry(0.048, 14, 12), bodyMat)
-  belly.scale.set(1, 0.85, 0.6)
-  belly.position.set(0, 0.055, 0.05)
-  g.add(belly)
-  // 耳朵
-  for (const s of [-1, 1]) {
-    const e = new Mesh(new SphereGeometry(0.03, 12, 10), fur)
-    e.scale.set(0.85, 1, 0.6)
-    e.position.set(s * 0.048, 0.13, -0.004)
-    e.rotation.z = s * 0.25
-    g.add(e)
-    const inner = new Mesh(new SphereGeometry(0.017, 10, 8), bodyMat)
-    inner.scale.set(0.8, 1, 0.5)
-    inner.position.set(s * 0.05, 0.132, 0.014)
-    inner.rotation.z = s * 0.25
-    g.add(inner)
-    void ear
-  }
-  // 眼睛
-  for (const s of [-1, 1]) {
-    const eye = new Mesh(new SphereGeometry(0.011, 10, 8), dark)
-    eye.position.set(s * 0.028, 0.088, 0.063)
-    g.add(eye)
-  }
-  // 鼻子
-  const nose = new Mesh(new SphereGeometry(0.009, 10, 8), dark)
-  nose.scale.set(1.25, 0.8, 0.8)
-  nose.position.set(0, 0.062, 0.072)
-  g.add(nose)
-
-  // 每只歪一点点，看着不像复制粘贴
-  const r = (n: number) => {
-    const x = Math.sin((seed + n) * 12.9898) * 43758.5453
-    return x - Math.floor(x)
-  }
-  g.rotation.y = (r(1) - 0.5) * 1.4
-  g.scale.setScalar(0.92 + r(2) * 0.16)
-  return g
-}
-
-/** 娃娃的配色。名字只给走查脚本 / 无障碍用，界面上不显示。 */
-const PLUSH_KINDS = [
-  { name: '粉兔', fur: 0xf2a7c0, belly: 0xfff1f5 },
-  { name: '奶熊', fur: 0xf7d9a8, belly: 0xfff6e6 },
-  { name: '小鸭', fur: 0xf5d36a, belly: 0xfff3c4 },
-  { name: '蓝鲸', fur: 0x9fd8e8, belly: 0xe6f7fb },
-  { name: '紫喵', fur: 0xb9a6e8, belly: 0xefe9ff },
-  { name: '白云', fur: 0xeceff5, belly: 0xffffff },
-] as const
-
-/**
- * 娃娃在池子里的初始布局。**确定性**（走查脚本要能稳定复现）。
- *
- * ★★ 堆成**三层**，不是平铺一层。
- *
- * 参考实现里池子是**满**的（约 40 只堆成一个小山），因为那正是娃娃机的卖点
- * ——「一池子娃娃」。第一版平铺了一层 17 只、还都贴着地板，玻璃柜看上去就是
- * 个**空盒子**（2026-10-16 截图确认：娃娃只占柜子高度的一成）。
- *
- * ⚠️ 不用物理沉降（那要多引 1.65MB 的 Rapier，见文件头），所以三层是**手写**的：
- * 下密上疏、逐层错开、每层收窄一点 —— 看着像个堆，位置全确定，脚本不会抖。
- *
- * ⚠️ `y` 一定要跟着返回：调用方以前写死 `0.004`，三层就叠不起来了。
- */
-function initialPrizeLayout(): { x: number; z: number; y: number; kind: number; seed: number }[] {
-  const out: { x: number; z: number; y: number; kind: number; seed: number }[] = []
-  let n = 0
-  /**
-   * ★★ 2026-10-18：这份布局**不再是最终位置**，只提供三件事：
-   *   ① 有几只（数量决定堆多高）；② 每只是什么颜色/种子；③ 物理不可用时的降级位置。
-   *
-   *   物理正常时，`clawPhysics` 会在建世界的时候**分波从空中投放**，
-   *   位置和朝向由它自己的确定性扰动决定（见那边的「建池」一段）。
-   *   所以这里不用再精心设计分层 —— 之前那四层交给物理之后会被压平，
-   *   精细的 `y` 和收窄系数全是白写的（量出来平均 0.133、最高 0.216）。
-   *
-   * 数量 **96**：池底可用面积 ≈ 1.02，单只投影 ≈ 0.0162 ⇒
-   *   96 只 ≈ 1.5 层，实测堆顶能到 0.30~0.35（娃娃直径 0.144），
-   *   也就是池深（到玻璃顶 1.2）的三成 —— 和原版「满到需要拨开」的观感对得上。
-   * ⚠️ 加数量要掂量 draw call：每只 9 个 mesh，96 只 ≈ 864 次。
-   *   再往上就该合并 geometry / 用 InstancedMesh 了，别硬加。
-   * ⚠️ 降级路径（物理加载失败）会按这个布局静态摆 —— 96 只按层平铺也够看。
-   */
-  const LAYERS: [number, number, number, number][] = [
-    [1.0, 0.004, 8, 5],
-    [0.86, 0.112, 7, 4],
-    [0.66, 0.220, 5, 3],
-    [0.46, 0.320, 3, 3],
-    [0.3, 0.40, 2, 2],
-  ]
-  for (const [k, y, cols, rows] of LAYERS) {
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const x =
-          ((c - (cols - 1) / 2) / Math.max(1, cols - 1)) * 2 * 0.44 * k + (r % 2) * 0.03 * k
-        const z = ((r - (rows - 1) / 2) / Math.max(1, rows - 1)) * 2 * 0.36 * k
-        // 让开取物口
-        if (x > HOLE.x0 - 0.1 && z > HOLE.z0 - 0.1) continue
-        out.push({ x, z, y, kind: n % PLUSH_KINDS.length, seed: n * 7 + 3 })
-        n++
-      }
-    }
+        ⚠️ 只在这里算一次。视觉和碰撞体**都读这个数**：
+          视觉是 `group.scale`，物理在 `clawPhysics` 里读 `g.scale.x`
+          再乘到每个零件的半径上 —— 所以不会出现「看得见的大、摸得着的小」。
+      */
+      scale: 0.95 + rnd(i * 53 + 11) * 0.3,
+    })
   }
   return out
 }
+
 
 /* ============================ 对外接口 ============================ */
 
@@ -887,7 +433,12 @@ export interface ClawStage {
     glassFillX: number
     /** ★ 判据：`max(glassFillX, glassFillY)`，必须 ≥ `glassFillMin` —— 走查只认这两个 */
     glassFill: number
-    /** ★ 当前画幅下 `glassFill` 的合格线（竖屏 0.86 / 横屏 0.74，见 `GLASS_MIN_FILL_WIDE`） */
+    /**
+     * ★ **竖屏**的合格线（`GLASS_MIN_FILL`）。
+     *
+     * ⚠️ 横屏不要用它 —— 横屏的承诺是「整台机器完整」，玻璃只占约 0.60，
+     *   走查在横屏改量 `cabinet` 的纵向占比（见 `capture-claw.mjs`）。
+     */
     glassFillMin: number
     /** 取景框（必须完整可见的那块） */
     frame: { left: number; top: number; right: number; bottom: number }
@@ -1018,6 +569,32 @@ export interface ClawStage {
     theme: number
   }
   /**
+   * 「再画一帧，而且**这一帧**强制开/关阴影」—— 只给走查做 A/B 对照。
+   *
+   * ★★★ 为什么必须做到「同一帧」：前面三版 A/B 都是「截图 → 调开关 → 再截图」，
+   *   **全部不可证伪**，而且变异测试三版全绿。两层原因：
+   *
+   *   ① 截图时机：`debugSetShadows()` 同步返回，页面**下一帧**才重画；
+   *      紧跟其后的截图可能拍到还没重画的那帧。
+   *   ② 画面自己会动：软体回弹 / LED 呼吸 / 光晕都在改像素。实测「**同一状态**
+   *      连拍两张」的平均差 3.7~4.5 个色阶，而「开 vs 关」只差 8.6~25 ——
+   *      只有 2~5 倍。判据卡在这个量级上，换个时间跑就会翻。
+   *
+   *   ➜ 这个接口把开关翻在 `render()` **内部**：同步画一帧，用的 `t` 是
+   *     **上一帧那个**（灯光呼吸 / 相机缓动全冻在同一时刻），
+   *     所以两张图的唯一变量就是「这一帧有没有画阴影贴图」。
+   *
+   * ⚠️ 它**不参与任何游戏逻辑**（只是把最后一次的视觉状态重画一遍），
+   *   页面里没有任何调用点。返回值 = 这一帧**真的用**的那个开关值
+   *   （读回真实状态，不是回显入参 —— 见 `debugSetShadows` 那段说明）。
+   */
+  debugForceShadowFrame(on: boolean): { shadows: boolean; drew: boolean }
+  /**
+   * 开关阴影贴图 —— **只给走查做 A/B 对照**（页面里没有任何调用点）。
+   * 返回切换之后的值；用完必须 `debugSetShadows(true)` 调回去。
+   */
+  debugSetShadows(on: boolean): boolean
+  /**
    * 走查脚本用：**最后一帧收到的视觉状态**。
    *
    * 断言「摇杆 / 键盘真的把爪子挪了」只能靠它 —— `ClawVisual` 是页面算完
@@ -1059,12 +636,6 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     return null
   }
 
-  const disposables: { dispose(): void }[] = []
-  const track = <T extends { dispose(): void }>(x: T): T => {
-    disposables.push(x)
-    return x
-  }
-
   const canvas = renderer.domElement
   canvas.style.display = 'block'
   canvas.style.width = '100%'
@@ -1090,6 +661,16 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   */
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = PCFSoftShadowMap
+
+  /*
+    毛壳层数（娃娃身上那层「毛」）按设备分档。
+
+    ★ 参考实现是 6 层。每层都是一次完整的 instanced draw，
+      30 只娃娃 × 每个材质一份 ⇒ 低端机上这是最大的一笔开销。
+      `hardwareConcurrency <= 4` 时降到 3 层：毛的边缘会硬一点，
+      但在手机上根本看不出来，帧率却是实打实的。
+  */
+  setFurShells((navigator.hardwareConcurrency || 4) > 4 ? 6 : 3)
 
   const scene = new Scene()
   scene.background = new Color(0xe9e6f2)
@@ -1127,7 +708,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       深色盒子 + PMREM 之后，柜体白面会**整体发闷**，而影子并不会因此更明显 ——
       对比度不够是「主光 : 平光」的比例问题，不是绝对亮度。
   */
-  const envRT = pmrem.fromScene(makeEnvScene(), 0.02)
+  const envRT = pmrem.fromScene(buildEnvScene(), 0.02)
   scene.environment = envRT.texture
   /*
     参考实现是 **0.65**。之前我们写 0.55 却「没有影子」，原因不在这个数，
@@ -1135,7 +716,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     照抄参考实现的 0.65 —— 环境光在这里负责的是「玻璃和镀铬的反射」，
     往低压只会让柜子发脏，对影子没有帮助。
   */
-  scene.environmentIntensity = 0.65
+  scene.environmentIntensity = 0.4
 
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 40)
   camera.position.set(0, LOOK_Y, 4)
@@ -1201,13 +782,22 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   let winGone = 0
 
   /**
+   * 当前画幅的视线高度。`resize()` 按横竖屏切换（见 `LOOK_Y_WIDE`）。
+   *
+   * ★ 必须是**变量**：`viewPose()` 的默认参数、`placeCamera()`、`debugFrame()`
+   *   和 `render()` 的呼吸都要读到**同一个**值 —— 写死 `LOOK_Y` 的话，
+   *   横屏的实际画面和 `debugFrame()` 量的会差一截（那种「判据绿着、画面歪着」）。
+   */
+  let camLookY = LOOK_Y
+
+  /**
    * 默认机位：绕 `(0, lookY, 0)` 按 `pol` 俯视 `dist` 远。
    *
    * ★★ 球坐标公式**只有这一份**：`placeCamera()`（静态位 / `debugFrame`）
    *   和 `render()`（带「呼吸」微动）都走它。写两份的话，`debugFrame` 量到的
    *   取景和玩家看到的迟早不是同一个 —— 那种「判据绿着，画面歪着」最难查。
    */
-  function viewPose(dist: number, az = 0, pol = CAM_POL, lookY = LOOK_Y): void {
+  function viewPose(dist: number, az = 0, pol = CAM_POL, lookY = camLookY): void {
     const sp = Math.sin(pol)
     const cp = Math.cos(pol)
     poseP.set(dist * sp * Math.sin(az), lookY + dist * cp, dist * sp * Math.cos(az))
@@ -1285,17 +875,22 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       它会把所有阴影**填平**，柜子就没有体积感了，看着发灰。
       加了阴影之后这一点尤其明显：环境光一高，影子淡到看不见。
   */
-  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 0.55))
+  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 0.35))
   /*
-    ★★ 2026-10-18：主光 2.6 → **1.5**，补光 0.4 → **0.9**，柜内灯 1.5 → **2.8**。
-    这三个数一次性对齐参考实现，因为它们本来就是**一组比例**，
-    单独改任何一个都会把「灯光 : 平光」的平衡弄丢（下面那段注释讲的就是这件事）。
+    ★★ 四盏灯是**一组比例**，单独改任何一个都会把「投影光 : 平光」弄丢。
+    当前生效（2026-10-19 实测校准，改前先看 `capture-claw.mjs` 的影子 A/B）：
 
-    为什么当初会把主光推到 2.6：那时 `key.target` 没进场景，阴影相机朝向是错的 ⇒
-    影子整体歪到画面外 ⇒ 只会觉得「灯不够亮」，于是一路加码。**根因修掉之后，
-    2.6 的主光会把柜体顶面烤成死白**，娃娃的高光也全糊在一起。
+        半球 0.35 · 主光 2.0（唯一投影）· 补光 0.9 · 柜内 Spot 1.5
+
+    为什么不是照抄参考实现的 0.55 / 1.5 / 0.9 / 2.8：我们多了一层
+    `scene.environment`（PMREM，见 `makeEnvScene`），那是一层**不投影的平光**，
+    参考实现没有。照抄的绝对值会让平光总量偏大 ⇒ 影子被填平（实测玻璃区里
+    关掉阴影只有 2.6% 的像素变亮）。现在这组数让「会投影的那盏」在总量里占大头。
+
+    ⚠️ 2026-10-18 那轮曾把主光推到 2.6（当时 `key.target` 没进场景、影子全歪出画面，
+      只能靠加亮补偿）。根因修掉后 2.6 会把柜顶烤成死白，所以停在 2.0。
   */
-  const key = new DirectionalLight(0xfff8f2, 1.5)
+  const key = new DirectionalLight(0xfff8f2, 2.0)
   /*
     ★ 主光放**正上方**（参考实现是 0.05, 3.2, 0.35），不是斜前方。
     影子垂直落在娃娃正下方 ⇒ 看得出「一层层堆起来」；
@@ -1345,7 +940,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   // bias 处理自阴影（acne）；normalBias 处理薄面（灯带 / 玻璃框）上的漏光
   key.shadow.bias = -0.0006
   // 0.012（参考实现的数）：texel 变细之后，normalBias 给大了会让影子**整体离开物体**
-  key.shadow.normalBias = 0.012
+  key.shadow.normalBias = 0.003
   /*
     `radius = 4`（参考实现的数）。`PCFSoftShadowMap` 会**忽略**这个值，
     所以它是「以后换成 PCFShadowMap 时不用回来调」的预留 —— 我们目前用 Soft，看不到效果。
@@ -1378,404 +973,45 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       原因不是灯的形状，是**光比** —— 全场景只有主光投影，其余四盏
       （柜内灯 / 半球 / 环境 / 补光）都是**不投影的平光**：
       影子里的娃娃照样能收到约 70% 的光，影子当然看不见。
-      ➜ 所以这里把柜内灯从 2.8 降到 **1.5**，同时半球 0.5→0.3、补光 0.7→0.4、
-        主光 1.9→2.6：让「会投影的那盏」在总量里占大头。
+      ➜ 所以柜内灯从参考实现的 2.8 降到 **1.5**（其余三盏的当前值见主光上方那段），
+        让「会投影的那盏」在总量里占大头。
       **别只盯着单盏灯的绝对值** —— 决定层次的是投影光 : 平光的比例。
   */
-  const inner = new SpotLight(0xfff5fa, 2.8, 2.2, 1.0, 0.8, 1.5)
+  const inner = new SpotLight(0xfff5fa, 1.5, 2.2, 1.0, 0.8, 1.5)
   inner.position.set(0, GLASS_H - 0.03, 0.3)
   // target 必须一起进场景，否则它的世界矩阵不更新，光会一直朝原点外的默认方向打
   scene.add(inner, inner.target)
 
-  /* ---------------- 材质 ---------------- */
-  const M = {
-    body: track(
-      new MeshPhysicalMaterial({
-        color: 0xffffff,
-        roughness: 0.22,
-        metalness: 0.05,
-        clearcoat: 0.85,
-        clearcoatRoughness: 0.18,
-      }),
-    ),
-    accent: track(new MeshPhysicalMaterial({ color: CLAW_THEMES[0].accent, roughness: 0.28, clearcoat: 0.7 })),
-    alu: track(new MeshStandardMaterial({ color: 0xc8ccd0, roughness: 0.28, metalness: 0.95 })),
-    chrome: track(new MeshStandardMaterial({ color: 0xe0e2e6, roughness: 0.18, metalness: 1 })),
-    steel: track(new MeshStandardMaterial({ color: 0x9a9ea4, roughness: 0.35, metalness: 0.92 })),
-    dark: track(new MeshStandardMaterial({ color: 0x14141a, roughness: 0.9 })),
-    blackPlastic: track(new MeshStandardMaterial({ color: 0x222226, roughness: 0.55 })),
-    /*
-      池底垫子。参考实现是一块**蓝灰色的地垫**。
-      ⚠️ 原来是草绿（`0x6f8f66`）—— 在一池粉紫娃娃底下铺一块草地绿，
-      截图里很跳（2026-10-16 走查确认）。换成冷灰蓝，和暖色的柜体、娃娃分开。
-      ★ 2026-10-18 又压暗了一档（`0x93a1b0` → `0x6d7889`）：娃娃是**浅色**的，
-        垫子也是浅灰时两者之间没有明度差，整池看上去是「一坨浅色的东西」。
-        垫子压暗之后，娃娃的轮廓才立得住 —— 这也是参考版那块深色垫子的作用。
-    */
-    felt: track(new MeshStandardMaterial({ color: 0x6d7889, roughness: 0.97 })),
-    glass: track(
-      new MeshPhysicalMaterial({
-        color: 0xe8f2f0,
-        roughness: 0.06,
-        metalness: 0,
-        transparent: true,
-        /*
-          ★★ 0.10 → 0.05（2026-10-18）。玻璃是**整面均匀**蒙在柜子上的：
-            每多 1% 不透明度，里面所有东西就统一降 1% 对比度，而且是**一层雾**。
-            参考实现的 `glassTint` 只有 **0.04**，它的「玻璃感」来自局部的
-            污渍 / 反射贴图，不是整面调不透明度。
-            ⚠️ 别再往上调：调到 0.10 时，背板和娃娃看上去像隔着一层毛玻璃，
-              而那正是「渲染不好」最直接的那个观感。
-        */
-        opacity: 0.05,
-        depthWrite: false,
-        side: 2,
-        /*
-          clearcoat 1 → 0.4（2026-10-17）→ **0.15**（2026-10-18）。
+  /* ============================ 机器（照搬原版） ============================ */
 
-          两层原因叠在一起：① 清漆高光在整面玻璃上糊成一片白，把柜内洗白；
-          ② 加了 `scene.environment` 之后，玻璃还会**反射环境贴图**，
-             两股高光叠加 ⇒ 上半截直接是一片白。0.15 只留一道若有若无的光。
-        */
-        clearcoat: 0.15,
-        clearcoatRoughness: 0.06,
-      }),
-    ),
-    led: track(new MeshStandardMaterial({ color: 0x111111, emissive: CLAW_THEMES[0].led, emissiveIntensity: 1.8 })),
-    lamp: track(new MeshStandardMaterial({ color: 0x222222, emissive: CLAW_THEMES[0].led, emissiveIntensity: 0.4 })),
-    tube: track(new MeshStandardMaterial({ color: 0x000000, emissive: 0xf5f8ff, emissiveIntensity: 2.6 })),
-  }
+  /*
+    整台机器来自 `scene/machine.ts` —— 那是参考实现 `models.ts` 的逐字搬运：
+    亮面白机身 / 圆形取物口 / 检修门 / 控制台（摇杆 + 红按钮 + LCD）/ 脚轮 /
+    铝合金立柱 / LED 灯带 / 三面玻璃（淡色 + 反射 + 污渍）/ 柜内横幅 /
+    背板海报 / 深蓝灰地垫 / 亚克力围栏 / 灯箱 / 日光灯管 / 天车。
 
-  const root = new Group()
+    ★ 以前这里是 600 行手搓的柜子。手搓的问题是「每个零件都差一点」：
+      机身太方、没有控制台和脚轮、玻璃只有一层淡色、背板是一张纯粉海报。
+      单独看每一条都不起眼，叠在一起就是「像娃娃机，但不是那一台」。
+  */
+  const machine = buildMachine(CLAW_THEMES[0])
+  const root = machine.root
   scene.add(root)
 
-  const add = <T extends Mesh>(m: T, parent: Group = root): T => {
-    parent.add(m)
-    return m
-  }
-  const box = (w: number, h: number, d: number, mat: MeshStandardMaterial | MeshPhysicalMaterial, x: number, y: number, z: number, parent?: Group) =>
-    add(new Mesh(track(new BoxGeometry(w, h, d)), mat), parent).translateX(x).translateY(y).translateZ(z)
-
-  /* ---------------- 下半柜体 ---------------- */
-  {
-    const b = new Mesh(track(new RoundedBoxGeometry(HX * 2, BODY_H - 0.01, HZ * 2 - 0.28, 4, 0.02)), M.body)
-    b.position.set(0, -BODY_H / 2, -0.14)
-    add(b)
-    // 前脸
-    const f = new Mesh(track(new RoundedBoxGeometry(HX * 2, BODY_H - 0.12, 0.26, 3, 0.015)), M.body)
-    f.position.set(0, -BODY_H / 2 + 0.04, HZ - 0.16)
-    add(f)
-    /*
-      取物口：黑洞 + LED 圆环。
-
-      ★★ z 值不能再改回 `HZ - 0.03`。上面那块前脸 `f` 是**深度 0.26 的盒子**，
-         放在 `HZ - 0.16` ⇒ 它的正面正好落在 `HZ - 0.03`，和原来的圆片**完全共面**。
-         两个共面片抢深度缓冲，画出来就是一块**黑白棋盘**（走查图里左下那个圆
-         看着像贴图坏了，其实就是这个）。
-      ➜ 圆片往前挪 0.012、圆环再往前 0.006。0.012 个世界单位在柜子（宽 1.16）上
-         不到 1 像素，肉眼看不出来，但足够让深度分出先后。
-    */
-    const hole = new Mesh(
-      track(new CircleGeometry(PICKUP_HOLE_R, 32)),
-      track(
-        new MeshBasicMaterial({
-          map: track(makePickupTexture()),
-          toneMapped: false,
-        }),
-      ),
-    )
-    hole.position.set(PICKUP.x, PICKUP.y, PICKUP.z)
-    add(hole)
-    const ring = new Mesh(track(new TorusGeometry(PICKUP_RING.r, PICKUP_RING.t, 12, 44)), M.lamp)
-    ring.position.set(PICKUP.x, PICKUP.y, PICKUP.z + 0.006)
-    add(ring)
-    // 控制台
-    const ledge = new Mesh(track(new RoundedBoxGeometry(HX * 1.45, 0.08, 0.22, 3, 0.03)), M.accent)
-    ledge.position.set(0, -0.02, HZ + 0.06)
-    ledge.rotation.x = 0.12
-    add(ledge)
-    // 摇杆 + 红按钮（纯装饰 —— 真的操作在 DOM 上，触控目标才够大）
-    const stick = new Mesh(track(new CylinderGeometry(0.006, 0.006, 0.08, 10)), M.steel)
-    stick.position.set(-0.16, 0.06, HZ + 0.06)
-    add(stick)
-    const ball = new Mesh(track(new SphereGeometry(0.022, 20, 14)), M.accent)
-    ball.position.set(-0.16, 0.105, HZ + 0.06)
-    add(ball)
-    const btn = new Mesh(track(new CylinderGeometry(0.04, 0.042, 0.016, 28)), M.lamp)
-    btn.position.set(0.14, 0.03, HZ + 0.06)
-    btn.rotation.x = 0.12
-    add(btn)
-  }
-
-  /* ---------------- 立柱 + LED 灯带 ---------------- */
-  const ledStrips: Mesh[] = []
-  {
-    const post = track(new RoundedBoxGeometry(0.04, GLASS_H + 0.02, 0.04, 2, 0.005))
-    for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        const p = new Mesh(post, M.alu)
-        p.position.set(sx * (HX + 0.02), GLASS_H / 2, sz * (HZ + 0.02))
-        add(p)
-      }
-    }
-    const stripGeo = track(new BoxGeometry(0.012, GLASS_H - 0.04, 0.012))
-    for (const sx of [-1, 1]) {
-      const s = new Mesh(stripGeo, M.led)
-      s.position.set(sx * (HX + 0.006), GLASS_H / 2, HZ + 0.008)
-      add(s)
-      ledStrips.push(s)
-    }
-    const hGeo = track(new BoxGeometry(HX * 2 - 0.04, 0.01, 0.01))
-    for (const y of [GLASS_H - 0.02, 0.02]) {
-      const s = new Mesh(hGeo, M.led)
-      s.position.set(0, y, HZ + 0.008)
-      add(s)
-      ledStrips.push(s)
-    }
-  }
-
-  /* ---------------- 玻璃 ---------------- */
-  {
-    const paneGeo = track(new PlaneGeometry(HX * 2, GLASS_H))
-    const front = new Mesh(paneGeo, M.glass)
-    front.position.set(0, GLASS_H / 2, HZ + 0.01)
-    add(front)
-    const sideGeo = track(new PlaneGeometry(HZ * 2, GLASS_H))
-    for (const sx of [-1, 1]) {
-      const s = new Mesh(sideGeo, M.glass)
-      s.position.set(sx * (HX + 0.01), GLASS_H / 2, 0)
-      s.rotation.y = (sx * Math.PI) / 2
-      add(s)
-    }
-  }
-
-  /* ---------------- 柜内背板 ----------------
-     没有它的话柜子内部就是场景背景色 —— 一个惨白的空盒子（见
-     `makeBackdropTexture` 的注释）。挂在玻璃**里面**（z = -HZ + 0.02）。
-
-     ⚠️ 材质单独留一个引用：换色时要**重画贴图**（`setTheme` 用）。
-     背板的花纹是画在 CanvasTexture 上的，改 `material.color` 对它没用。 */
-  let backdropMat: MeshStandardMaterial
-  {
-    const tex = track(makeBackdropTexture(CLAW_THEMES[0].accent))
-    backdropMat = track(new MeshStandardMaterial({ map: tex, roughness: 0.95 }))
-    const back = new Mesh(track(new PlaneGeometry(HX * 2 - 0.02, GLASS_H - 0.02)), backdropMat)
-    back.position.set(0, GLASS_H / 2, -HZ + 0.02)
-    add(back)
-  }
-
-  /* ---------------- 地板 + 取物口 ---------------- */
-  {
-    const floor = new Mesh(track(new PlaneGeometry(HX * 2, HZ * 2)), M.felt)
-    floor.rotation.x = -Math.PI / 2
-    floor.position.y = 0.002
-    add(floor)
-    // 取物口是个真的凹坑（BackSide 的盒子），娃娃掉进去就看不见了
-    const pitW = HOLE.x1 - HOLE.x0
-    /*
-      ★ 深度比 `HOLE` 的 z 跨度**短 0.06**，整体再往后挪 0.03。
-
-      前脸 `f` 占 z 0.21~0.47，而 `HOLE.z1` 是 0.5 —— 直接用 `HOLE.z1 - HOLE.z0`
-      会让凹坑的前壁从柜门里**探出 0.03**，在白柜体右下角留下一个 **L 形黑边**
-      （走查截图里一直有，2026-10-18 才定位到是它）。收进去之后照样看不见坑底，
-      但不会再露边。`HOLE` 本身**不动** —— 它是「爪子把娃娃送到哪算赢」的判据，
-      改了就是改玩法。
-    */
-    const pitD = HOLE.z1 - HOLE.z0 - 0.06
-    const pit = new Mesh(track(new BoxGeometry(pitW, 0.4, pitD)), track(new MeshStandardMaterial({ color: 0x141416, roughness: 0.9, side: 1 })))
-    pit.position.set((HOLE.x0 + HOLE.x1) / 2, -0.2, (HOLE.z0 + HOLE.z1) / 2 - 0.03)
-    add(pit)
-    // 洞口的高亮边（告诉孩子「这里就是出口」）
-    const edge = new Mesh(track(new BoxGeometry(pitW + 0.01, 0.008, 0.008)), M.accent)
-    edge.position.set((HOLE.x0 + HOLE.x1) / 2, 0.005, HOLE.z0)
-    add(edge)
-  }
-
-  /* ---------------- 灯箱 ---------------- */
-  /** 灯箱材质 —— 换色时 `map` 和 `emissiveMap` 都要换（`setTheme` 用） */
-  let signMat: MeshStandardMaterial
-  {
-    const head = new Mesh(track(new RoundedBoxGeometry(HX * 2, 0.32, HZ * 2 - 0.04, 3, 0.02)), M.body)
-    head.position.set(0, GLASS_H + 0.16, 0)
-    add(head)
-    const signTex = track(makeSignTexture('爪爪乐', hexOf(CLAW_THEMES[0].accent), '#ffffff'))
-    signMat = track(
-      new MeshStandardMaterial({ map: signTex, emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 0.95, roughness: 0.3 }),
-    )
-    const sign = new Mesh(track(new PlaneGeometry(1.06, 0.24)), signMat)
-    sign.position.set(0, GLASS_H + 0.17, HZ - 0.014)
-    add(sign)
-    // 柜内顶上的日光灯管
-    const tubeGeo = track(new CylinderGeometry(0.009, 0.009, HX * 1.7, 10))
-    tubeGeo.rotateZ(Math.PI / 2)
-    const tube = new Mesh(tubeGeo, M.tube)
-    tube.position.set(0, GLASS_H - 0.03, HZ - 0.06)
-    add(tube)
-  }
-
-  /* ---------------- 商场房间（地板 + 后墙） ----------------
-     2026-10-17 加回来的一半（另一半「邻居柜子」仍然不做，理由见文件头表格）。
-
-     ★ 加它的**理由是可量化的**：横屏时柜子是按高度取景的，两侧会剩下
-       一大片空白 —— 实测 phone-landscape 左右各 **218px**、tablet-landscape 各 **257px**、
-       desktop 各 **332px**（画布 1000px 宽，柜子只占中间三分之一）。
-       那片空白以前是 `scene.background` 的一整块纯色，读起来像「3D 没加载完」。
-       地板 + 后墙一放，同样那块地方就变成「站在商场里，机器立在脚边」。
-
-     ⚠️ 只画地板和墙，**不画第二台机器**：家长 2026-10-16 明确说「只用显示一台」。
-     ⚠️ 竖屏时柜子横向铺满（phone 左右各只剩 7px），房间**整个藏起来**
-        （`resize` 末尾按「两侧空白」开关 `room.visible`），一分钱都不花。
-  */
-  const room = new Group()
-  scene.add(room)
-  {
-    const floorTex = track(makeRoomFloorTexture())
-    // 16 单位铺 8 遍 ⇒ 一张贴图管 2 单位，贴图里是 4×4 块砖 ⇒ 一块砖 ≈ 0.5 单位
-    floorTex.repeat.set(8, 8)
-    const roomFloor = new Mesh(
-      track(new PlaneGeometry(16, 16)),
-      track(new MeshStandardMaterial({ map: floorTex, roughness: 0.5, metalness: 0.03 })),
-    )
-    roomFloor.rotation.x = -Math.PI / 2
-    // 和柜体底面同一高度：高一点柜子会「陷进地里」，低一点会「浮在空中」
-    roomFloor.position.y = -BODY_H
-    /*
-      ⚠️ 不接阴影。主光的阴影相机只裹住柜子（±1.35 / ±1.7），
-      地板一旦 `receiveShadow`，影子会在那个方框边缘**凭空断掉**，
-      露出来的那截比没有影子更假。
-    */
-    room.add(roomFloor)
-
-    const wall = new Mesh(
-      track(new PlaneGeometry(16, 8)),
-      track(new MeshStandardMaterial({ map: track(makeRoomWallTexture()), roughness: 0.95 })),
-    )
-    // 墙底 = 地板面（`-BODY_H`），再往上 8 个单位 ⇒ 中心在 `-BODY_H + 4`
-    wall.position.set(0, -BODY_H + 4, -1.6)
-    room.add(wall)
-
-    /*
-      ⚠️ 这里**故意没有**「柜脚接触阴影」那张贴片。写过一版，删掉了：
-      取景是「站在机器前面」，五档视口下柜身底边**全都落在画布外**
-      （实测 phone -35 / tablet -65 / desktop -40 px）——
-      没有「柜脚」可压，贴片永远在画外。想让它露出来就得把地板整个抬起来，
-      那又会让柜子浮空。等哪天取景改成「看得到底座」再加回来。
-    */
-  }
-  // 默认关掉，由 `resize()` 末尾按「两侧还有没有空白」决定开不开
-  room.visible = false
-
-  /* ---------------- 天车（横梁 + 小车 + 缆绳） ---------------- */
-  const beam = new Group()
-  root.add(beam)
-  const carriage = new Group()
-  root.add(carriage)
-  {
-    for (const s of [-1, 1]) {
-      const rail = box(0.02, 0.025, HZ * 2, M.alu, s * (HX - 0.012), RAIL_Y + 0.035, 0)
-      void rail
-    }
-    const bar = new Mesh(track(new BoxGeometry(HX * 2 - 0.02, 0.02, 0.028)), M.alu)
-    bar.position.set(0, RAIL_Y + 0.025, 0)
-    beam.add(bar)
-    const car = new Mesh(track(new RoundedBoxGeometry(0.075, 0.05, 0.07, 2, 0.006)), M.blackPlastic)
-    car.position.set(0, RAIL_Y + 0.005, 0)
-    carriage.add(car)
-  }
-  // 缆绳：单位长度朝下，靠 scale.y 拉长
-  const cableGeo = track(new CylinderGeometry(0.0018, 0.0018, 1, 6))
-  cableGeo.translate(0, -0.5, 0)
-  const cable = new Mesh(cableGeo, M.steel)
-  root.add(cable)
-
-  /* ---------------- 爪子 ---------------- */
-  const hub = new Group()
-  root.add(hub)
+  const { beam, carriage, cable, hub } = machine
   /**
-   * 三个指头的**内层** Group —— 开合旋转就在这一层上。
+   * 三个指头的**内层** Group（带方位角 + 开合角）。
    *
-   * 物理层要拿它的世界矩阵去摆 kinematic 碰撞体（见 `clawPhysics.ts`），
-   * 这样「张开多少」只有 `applyProngs()` 一个事实源，物理那边不重算角度。
+   * 物理层读它的 `matrixWorld` 去摆 kinematic 碰撞体 —— 所以「张开多少」
+   * 只有 `applyProngs()` 一个事实源，物理那边不重算角度。
    */
-  const prongInners: Group[] = []
-  {
-    const h1 = new Mesh(track(new CylinderGeometry(HUB_R, HUB_R * 0.94, HUB_HH * 2, 24)), M.chrome)
-    hub.add(h1)
-    const h2 = new Mesh(track(new CylinderGeometry(0.016, HUB_R * 0.95, 0.038, 20)), M.blackPlastic)
-    h2.position.y = HUB_HH + 0.019
-    hub.add(h2)
-    const band = new Mesh(track(new CylinderGeometry(HUB_R * 1.03, HUB_R * 1.03, HUB_HH * 0.7, 24)), M.steel)
-    band.position.y = -HUB_HH * 0.15
-    hub.add(band)
-    // hub 底面中心那个小销子（原版也有）
-    const pin = new Mesh(track(new CylinderGeometry(0.006, 0.006, 0.012, 10)), M.steel)
-    pin.position.y = -HUB_HH - 0.004
-    hub.add(pin)
-
-    /*
-      三个爪指，间隔 120°。每只两层：
-
-        g       —— 方位角（绕 Y）。**碰撞体的 yaw 就来自这一层**
-        inner   —— 指根偏移 + 开合角（绕 Z）
-
-      ★★ 2026-10-18 整段换成参考实现的**曲线钩爪**。
-
-        原来是一根 `CapsuleGeometry(0.0105, 0.105)` 斜着摆 + 一个红爪尖 ——
-        直线，远看像个小夹子。用户原话「连爪子形状都不同」说的就是它。
-
-        现在指头的中心线来自 `PRONG_PTS`（`clawPhysics.ts`），**视觉和碰撞体
-        读的是同一份数据**：`TubeGeometry` 沿这条线扫一根管子，物理那边把同一条线
-        拆成 4 段胶囊。抄成两份的典型症状是「看得见钩子、摸到的是直杆」。
-
-      ⚠️ `inner.position` 那一行不能省：指根在 hub **底面外缘**（`PIVOT_R`）上，
-        不是 hub 中心。省掉之后三个指头会从轴心长出来，合拢时互相穿过去。
-    */
-    const curve = new CatmullRomCurve3(
-      PRONG_PTS.map(([r, y]) => new Vector3(r, y, 0)),
-      false,
-      'centripetal',
-    )
-    const prongGeo = track(new TubeGeometry(curve, 28, PRONG_RADIUS, 8, false))
-    const tipGeo = track(new CapsuleGeometry(PRONG_RADIUS * 1.3, 0.02, 4, 10))
-    const tipMat = track(new MeshStandardMaterial({ color: 0x8a2a24, roughness: 0.7 }))
-    const last = PRONG_PTS[PRONG_PTS.length - 1]
-    const prev = PRONG_PTS[PRONG_PTS.length - 2]
-    const tipDir = new Vector3(last[0] - prev[0], last[1] - prev[1], 0).normalize()
-    for (const az of PRONG_AZ) {
-      const g = new Group()
-      g.rotation.y = az
-      const inner = new Group()
-      // 指根：hub 底面外缘
-      inner.position.set(PIVOT_R, -HUB_HH, 0)
-      g.add(inner)
-      inner.add(new Mesh(prongGeo, M.chrome))
-      // 爪尖：加粗的橡胶头，沿最后一段的方向摆
-      const tip = new Mesh(tipGeo, tipMat)
-      tip.position.set((last[0] + prev[0]) / 2, (last[1] + prev[1]) / 2, 0)
-      tip.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), tipDir)
-      inner.add(tip)
-      // 指根处的销轴（原版也有，让「这是个铰链」看得出来）
-      const hinge = new Mesh(track(new CylinderGeometry(0.006, 0.006, 0.02, 10)), M.steel)
-      hinge.rotation.x = Math.PI / 2
-      inner.add(hinge)
-      hub.add(g)
-      prongInners.push(inner)
-    }
-  }
-
-  /**
-   * 指头的两个极限角度。**数值在 `clawPhysics.ts`**（和碰撞体共用一份）。
-   *
-   * 待命 0.8（张开的钩子）→ 下爪 0.95（张到最大）→ 合拢 −0.32，扫 **1.27 rad ≈ 73°**。
-   */
-  const PRONG_OPEN = ANG_OPEN
-  const PRONG_CLOSED = ANG_CLOSED
+  const prongInners = machine.prongs as unknown as Group[]
 
   /**
    * 爪子的开合。
    *
    * `close`：0 = 张开，1 = 合上（时间线给的）。
-   * `spread`：`CLAW_PRONG_IDLE`（≈0.84）= **待命**姿势（张开的钩子），1 = 下爪时张到最大。
+   * `spread`：`CLAW_PRONG_IDLE`（≈0.34）= **待命**姿势（张开的钩子），1 = 下爪时张到最大。
    * `holding`：手里有娃娃 —— 合到 0.86 就停，指头**夹在娃娃外面**。
    *
    * ⚠️ 为什么需要 `spread` 这个额外参数：`close` 在「待命」和「下爪」时**都是 0**，
@@ -1784,72 +1020,93 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
    * ⚠️ 为什么需要 `holding`：夹着娃娃还合到底，指头会穿进娃娃身体里。
    *    原版是靠「抓力上限」自然卡住的（`setProngs(ANG_CLOSED, grip)`，娃娃顶住就合不动）。
    *    我们这里是 kinematic 直接摆角度，所以得显式留出那点缝。
+   *
+   * ⚠️ 这里**不能**再缩放 `inner`：碰撞体的位姿只取 `matrixWorld` 的平移和旋转，
+   *    缩放不进 Rapier ⇒「看得见的指头缩了 6%，摸得到的没缩」，合爪瞬间多一条缝。
    */
   const applyProngs = (close: number, spread: number, holding: boolean) => {
     const cap = holding ? 0.86 : 1
     const k = MathUtils.clamp(close, 0, cap)
-    const open = PRONG_OPEN * MathUtils.clamp(spread, 0, 1)
+    const open = ANG_OPEN * MathUtils.clamp(spread, 0, 1)
     for (const inner of prongInners) {
-      inner.rotation.z = PRONG_CLOSED + (open - PRONG_CLOSED) * (1 - k)
+      inner.rotation.z = ANG_CLOSED + (open - ANG_CLOSED) * (1 - k)
     }
-    /*
-      ⚠️ 这里**不能**再缩放 `inner`。
-
-      以前有一行 `inner.scale.setScalar(1 - 0.06*k)`（合拢时指头缩一点，像在使劲）。
-      物理接管之后那一行是个 bug：碰撞体的位姿只取 `matrixWorld` 的**平移和旋转**，
-      缩放不进 Rapier —— 于是「看得见的指头缩了 6%，摸得到的没缩」，
-      合爪瞬间娃娃和爪子之间多出一条缝。
-    */
   }
 
-  /* ---------------- 娃娃 ---------------- */
+  /* ============================ 商场（地板 + 后墙） ============================ */
+
+  /*
+    ⚠️ 只画地板和墙，**不画第二台机器**：家长 2026-10-16 明确说「只用显示一台」。
+    ⚠️ 竖屏时柜子横向铺满（phone 左右各只剩几像素），房间**整个藏起来**
+       （`resize` 末尾按「两侧空白」开关 `room.visible`），一分钱都不花。
+  */
+  const room = buildRoom()
+  scene.add(room)
+  room.visible = false
+
+  /* ============================ 娃娃 ============================ */
+
   const prizeGroups: Group[] = []
+  /** 每只娃娃的**种类**（交给物理建碰撞体 —— 见 `clawPhysics` 的 `types`）。 */
+  const prizeTypes: PrizeType[] = []
+  /** 每只娃娃的着色器 uniform（软体变形：压扁 / 爪子按出的凹坑 / 陷进池底）。 */
+  const prizeModels: PlushModel[] = []
   const prizeRest: { x: number; z: number; y: number }[] = []
   {
     for (const p of initialPrizeLayout()) {
-      const kind = PLUSH_KINDS[p.kind]
-      const g = makePlush(kind.fur, kind.belly, kind.fur, p.seed)
+      const model = buildPrize(PRIZE_TYPES[p.type], p.color, p.seed)
+      const g = model.group
       g.position.set(p.x, p.y, p.z)
-      // 记下「原始大小」：撞击挤压是**乘法**叠在这个基准上，不能把它覆盖掉
-      g.userData.baseScale = g.scale.x
-      // 娃娃自己带的那几个材质也要能 dispose
-      g.traverse((o) => {
-        const m = o as Mesh
-        if (m.isMesh) {
-          track(m.geometry)
-          const mat = m.material
-          if (Array.isArray(mat)) mat.forEach((x) => track(x))
-          else if (mat) track(mat)
-        }
-      })
+      // ★ 尺寸差异（见 `initialPrizeLayout` 的 `scale`）：物理读的就是这个 `scale`
+      g.scale.setScalar(p.scale)
+      /*
+        ★ `baseScale` 是**降级路径**（物理起不来时中奖动画）读的那份基准。
+        以前只有读、没有写（`?? 1` 兜底），所以那只娃娃会在中奖瞬间
+        **跳回 1.0** —— 现在每只尺寸都不一样，不写就会看到「大小突变」。
+      */
+      g.userData.baseScale = p.scale
       root.add(g)
       prizeGroups.push(g)
+      prizeTypes.push(PRIZE_TYPES[p.type])
+      prizeModels.push(model)
       prizeRest.push({ x: p.x, z: p.z, y: p.y })
     }
   }
 
-  /* ---------------- 阴影开关：等所有东西都进 root 之后再统一开 ----------------
+  /* ---------------- 阴影：等所有东西都进 root 之后再统一开 ----------------
      ⚠️ 必须放在**娃娃之后** —— 娃娃也是 `root` 的子节点，先开就会漏掉它们，
-     而「娃娃没有影子」正是这次要修的那个「像贴纸」的观感。
+     而「娃娃没有影子」正是「像贴纸」那条观感的根。
 
-     排除三类：透明玻璃（投出来是一块实心黑）、自发光灯带（它自己是光源）、
-     洞口黑面（平贴在柜门上，投影只会打架）。 */
+     ★★ 参考实现的取舍和这里**相反**：它把整台机器 `castShadow = false`，
+       只让天车 / 爪子 / 娃娃投影。因为机身是白的、又是自己的光源，
+       机身投影只会把柜内压暗；真正需要影子的是「娃娃之间」和「爪子压在娃娃上」。
+       ➜ 这里照抄它的取舍。
+  */
   {
-    const noShadow = new Set<unknown>([M.glass, M.led, M.lamp, M.tube, M.dark])
     root.traverse((o) => {
       const m = o as Mesh
       if (!m.isMesh) return
-      const mat = m.material as unknown
-      if (noShadow.has(mat)) {
-        m.castShadow = false
-        m.receiveShadow = false
-        return
-      }
+      m.castShadow = false
       m.receiveShadow = true
-      // 地板只接收：它是水平面，投影只会和自己打架（acne）
-      m.castShadow = mat !== M.felt
     })
+    // 只有爪子和娃娃投影
+    for (const o of [machine.beam, machine.carriage, machine.hub, machine.cable, ...machine.prongs]) {
+      o.traverse((c) => {
+        const m = c as Mesh
+        if (m.isMesh) m.castShadow = true
+      })
+    }
+    for (const g of prizeGroups) {
+      g.traverse((c) => {
+        const m = c as Mesh
+        if (!m.isMesh) return
+        const tr = (m.material as MeshStandardMaterial).transparent
+        m.castShadow = !tr
+        m.receiveShadow = !tr
+      })
+    }
   }
+
 
   /* ============================ 取景（contain） ============================ */
 
@@ -1882,6 +1139,33 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   for (const x of [-HX, HX]) {
     for (const y of [0, GLASS_H]) {
       for (const z of [-HZ, HZ]) GLASS_CORNERS.push([x, y, z])
+    }
+  }
+
+  /**
+   * 灯箱上沿（世界高度）。
+   *
+   * 取自 `machine.ts` 的几何：灯箱是 `top + 0.16 ± 0.16` ⇒ 顶在 `top + 0.32`，
+   * 上面再留 0.02 的余量。**别在这里写死 1.52** —— `CAB.top` 改了它要跟着走。
+   */
+  const SIGN_TOP_Y = CAB.top + 0.34
+
+  /**
+   * **横屏**的纵向取景边界：玻璃底 → 灯箱顶。
+   *
+   * ★★ 2026-10-19：横屏原来只要求「玻璃完整」，于是玻璃把画面高度占满，
+   *   灯箱（在玻璃**上面**）整个被顶出画面 —— 实测 `FRAME.top = −38.7px`。
+   *   而把视线抬到 0.52 也没用：那个循环会继续把玻璃钉在画面里，
+   *   抬视线只是让相机更近、裁得更狠（实测 `FRAME.top` 反而变 −53）。
+   *
+   * ➜ 直接改**边界**：横屏要求 [玻璃底, 灯箱顶] 这一段完整可见。
+   *   机身（底座）允许被裁 —— 原版横屏也是裁的。
+   *   代价是相机要退一点、柜子小一点；换来的是「整台机器是完整的」。
+   */
+  const VERT_CORNERS_WIDE: [number, number, number][] = []
+  for (const x of [-HX, HX]) {
+    for (const y of [0, SIGN_TOP_Y]) {
+      for (const z of [-HZ, HZ]) VERT_CORNERS_WIDE.push([x, y, z])
     }
   }
 
@@ -1968,6 +1252,11 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     */
     const vt = Math.tan(MathUtils.degToRad(FOV / 2))
     const wide = aspect > 1.05
+    /*
+      ★ 横屏抬高视线（见 `LOOK_Y_WIDE`）。必须在**第一次 `placeCamera()` 之前**设，
+        否则第一轮投影用的是竖屏视线，后面几个迭代循环会围着错的框收敛。
+    */
+    camLookY = wide ? LOOK_Y_WIDE : LOOK_Y
     const fitW = wide ? 0.72 / HFRAC_WIDE : 0.62
     const fitH = wide ? 1.22 / VISFRAC_WIDE : 0.95
     let dist = Math.max(fitH / 2 / vt, fitW / 2 / (vt * aspect))
@@ -1984,12 +1273,17 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       placeCamera(dist)
       const g = projectRect(GLASS_CORNERS, w, h)
       const gw = (g.right - g.left) / w
+      if (DEBUG_FIT) console.log(`[fit] close i=${i} dist=${dist.toFixed(3)} gw=${gw.toFixed(3)}`)
       if (gw <= CLOSE_MAX_W) break
       // 投影宽度 ∝ 1/dist，一次乘到位
       dist *= gw / CLOSE_MAX_W
     }
     placeCamera(dist)
     cameraDist = dist // 存给 render 的「呼吸」微动当基准
+    if (DEBUG_FIT) {
+      const g = projectRect(GLASS_CORNERS, w, h)
+      console.log(`[fit] init w=${w} h=${h} aspect=${aspect.toFixed(3)} dist=${dist.toFixed(3)} gw=${((g.right - g.left) / w).toFixed(3)} top=${g.top.toFixed(1)} bot=${g.bottom.toFixed(1)}`)
+    }
 
     /*
       ★★ 上界：玻璃**上下不能出画** —— 这是「近」往上走到哪里的边界。
@@ -2009,9 +1303,14 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
         否则两边在同一条边界上互相打架：场景认为「够了」、走查认为「越界 1.9px」。
     */
     const SLACK_PX = 2
+    /*
+      ★ 横屏量的是 **[玻璃底, 灯箱顶]**（`VERT_CORNERS_WIDE`），竖屏仍是玻璃本身。
+        横屏若只量玻璃，玻璃会把画面高度占满、灯箱被顶出去（见 `VERT_CORNERS_WIDE`）。
+    */
+    const vertCorners = wide ? VERT_CORNERS_WIDE : GLASS_CORNERS
     for (let i = 0; i < 8; i++) {
       placeCamera(dist)
-      const g = projectRect(GLASS_CORNERS, w, h)
+      const g = projectRect(vertCorners, w, h)
       const needTop = (-g.top + SLACK_PX) / h // > 0 = 顶部出界（含余量）
       const needBot = (g.bottom - h + SLACK_PX) / h // > 0 = 底部出界（含余量）
       const need = Math.max(needTop, needBot)
@@ -2025,6 +1324,10 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     }
     placeCamera(dist)
     cameraDist = dist
+    if (DEBUG_FIT) {
+      const g = projectRect(vertCorners, w, h)
+      console.log(`[fit] vert  dist=${dist.toFixed(3)} top=${g.top.toFixed(1)} bot=${g.bottom.toFixed(1)} wide=${wide}`)
+    }
 
     /*
       ★★ 「视角够近」的**下界兜底**：玻璃长度的投影必须占画面一定比例。
@@ -2053,16 +1356,54 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     {
       const g0 = projectRect(GLASS_CORNERS, w, h)
       const fill0 = Math.max((g0.bottom - g0.top) / h, (g0.right - g0.left) / w)
-      // 横屏的画布天生矮，阈值放低（见 `GLASS_MIN_FILL_WIDE`）
-      const want = aspect > 1.05 ? GLASS_MIN_FILL_WIDE : GLASS_MIN_FILL
-      if (fill0 < want) {
-        const trial = dist * (fill0 / want)
+      /*
+        ★★ 2026-10-19：这一整段**只在竖屏跑**。
+
+        横屏的承诺变了：从「玻璃占满画面」改成「**整台机器完整**（灯箱顶不裁）」
+        —— 见 `VERT_CORNERS_WIDE`。横屏既然要装下 [玻璃底, 灯箱顶]，
+        玻璃就注定只能占约 60%，`fill0 < 0.74` 永远成立；
+        再按 `fill0/want` 把相机往前推，`stillInside` 一定会否掉（灯箱会出画），
+        所以这段在横屏下是**纯空转**：白算一轮投影，还让人以为它在起作用。
+
+        ➜ 横屏的「够不够近」改由走查量**整机的纵向占比**（`capture-claw.mjs`），
+          判据和承诺在同一个口径上。
+      */
+      if (!wide && fill0 < GLASS_MIN_FILL) {
+        const trial = dist * (fill0 / GLASS_MIN_FILL)
         placeCamera(trial)
-        const g1 = projectRect(GLASS_CORNERS, w, h)
-        const stillInside = g1.top >= -0.5 && g1.bottom <= h + 0.5
-        if (stillInside) {
+        let g1 = projectRect(vertCorners, w, h)
+        let accepted = g1.top >= -0.5 && g1.bottom <= h + 0.5
+        /*
+          ★★ 2026-10-19：顶部被裁时**别直接否掉，先抬视线**。
+
+          实测（tablet 834×1112，舞台 648×822，aspect 0.788）：
+            拉近到 `trial = 2.147` 时玻璃是 `top = −52.9 / bottom = 645.8`
+            —— 高度只占 85%、底下还空着 176px，**完全装得下**，
+            只是**位置偏上**（`LOOK_Y = 0.34` 是照手机那种瘦长画布定的）。
+            原来这里一看 `top < -0.5` 就放弃，于是相机退回 3.692，
+            画面变成一张**远距离全柜照**（整台机器带 PRIZE OUT 底座）——
+            正是走查里「又退回全柜了」那条要抓的东西。
+
+          ➜ 现在按「顶部差多少」把视线抬起来（画面整体下移），
+            抬完再验一次：**上下都进得去**才接受这个更近的距离。
+            手机（aspect 0.66）本来就不裁顶，这段是 no-op，构图一点不变。
+        */
+        if (!accepted && g1.top < -0.5) {
+          const pxPerUnit = (g1.bottom - g1.top) / GLASS_H
+          const saved = camLookY
+          camLookY = saved + (-g1.top + 1) / Math.max(1e-3, pxPerUnit)
+          placeCamera(trial)
+          g1 = projectRect(vertCorners, w, h)
+          accepted = g1.top >= -0.5 && g1.bottom <= h + 0.5
+          // 抬了还是装不下（比如画布太扁）⇒ 视线退回原值，距离也保持原来的
+          if (!accepted) camLookY = saved
+        }
+        if (accepted) {
           dist = trial
           cameraDist = dist
+        }
+        if (DEBUG_FIT) {
+          console.log(`[fit] fill  fill0=${fill0.toFixed(3)} trial=${trial.toFixed(3)} g1=${g1.top.toFixed(1)}..${g1.bottom.toFixed(1)} h=${h} accepted=${accepted} lookY=${camLookY.toFixed(3)} → dist=${dist.toFixed(3)}`)
         }
       }
     }
@@ -2178,6 +1519,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     void createClawPhysics({
       cabinet: { hx: HX, hz: HZ, glassH: GLASS_H, hole: HOLE },
       prizes: prizeGroups,
+      types: prizeTypes,
       hub,
       prongs: prongInners,
     })
@@ -2207,9 +1549,37 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
 
   /** 最后一帧收到的视觉状态（`debugVisual` 用）。 */
   let lastVisual: ClawVisual | null = null
+  /** 最后一帧的时间戳 —— `debugForceShadowFrame()` 要用它「重画同一个时刻」。 */
+  let lastT = 0
+  /**
+   * 「这一次 render 强制开/关阴影」—— **只给 `debugForceShadowFrame()` 用**。
+   * 平时是 null；非 null 时代替 `shadowMap.enabled`，render 完就恢复。
+   */
+  let shadowAB: boolean | null = null
+  /** 上一个「强制相位」**实际**用的开关值（`render()` 真跑完才写） */
+  let usedShadow = true
 
   function render(t: number, v: ClawVisual, reducedMotion: boolean): void {
     lastVisual = v
+    lastT = t
+    /*
+      ★★ 开关必须在**交给 `drawFrame()` 之前**设好，不能在 `drawFrame` 里面设。
+
+      踩了两次：
+        · 在 `render()` 里设、`finally` 里恢复 —— 但 `renderShadowAB()` 调的就是
+          `render()`，于是强制相位刚设好就被自己恢复掉了（实测 off 相位
+          读回来还是 `true`，两张图一模一样，差 −0.02）；
+        · 在 `drawFrame` 的 `try/finally` 里设 —— 那行 `if (shadowAB …)` 离真正
+          `renderer.render()` 隔着几十行，中间任何提前 return 都会让开关停住。
+      ➜ 现在：`render()` 只负责「按相位设开关 → 画 → 记下实际值」，恢复由
+        `renderShadowAB()` 自己做，路径最短。
+    */
+    if (shadowAB !== null) renderer.shadowMap.enabled = shadowAB
+    drawFrame(t, v, reducedMotion)
+    usedShadow = renderer.shadowMap.enabled
+  }
+
+  function drawFrame(t: number, v: ClawVisual, reducedMotion: boolean): void {
     // ---- 天车 / 缆绳 / 爪子 ----
     beam.position.z = v.clawZ
     carriage.position.set(v.clawX, 0, v.clawZ)
@@ -2255,13 +1625,24 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       }
     }
 
-    // ---- 软体手感：撞击压扁 + 回弹（纯视觉；碰撞体不动，所以探面 / 输赢都不受影响）----
+    /*
+      ---- 软体手感：撞击压扁 + 回弹 ----
+
+      ★★ 2026-10-19 从「缩放 Group」改成**着色器里的顶点变形**（照搬原版）：
+        缩放 Group 会把碰撞体也一起缩（视觉和物理对不上），而且挤压方向永远是
+        世界 Y。原版是在顶点着色器里沿 `uSquash.xyz` 挤、垂直方向鼓出来，
+        碰撞体一动不动 —— 纯视觉，探面 / 输赢都读不到它。
+
+      `uCenter` / `uFloorY` 管另一件事：娃娃**陷进池底**时把下半截压扁、
+        往外挤一点（像真的坐在垫子上），不然堆底那几只像插在板子里。
+    */
     for (let i = 0; i < prizeGroups.length; i++) {
+      const u = prizeModels[i]?.u
+      if (!u) continue
       const g = prizeGroups[i]
-      const s = phys ? phys.squashOf(i) : 0
-      const base = (g.userData.baseScale as number | undefined) ?? 1
-      // s > 0 = 压扁（矮一点、胖一点）；s < 0 = 回弹拉长
-      g.scale.set(base * (1 + s * 0.5), base * (1 - s), base * (1 + s * 0.5))
+      u.uSquash.value.set(0, 1, 0, phys ? phys.squashOf(i) : 0)
+      u.uCenter.value.copy(g.position)
+      u.uFloorY.value = 0
     }
 
     /* ---- 中奖演出：奖品从取物口探出来（纯视觉，见 `winPrize` 的注释） ---- */
@@ -2355,11 +1736,22 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     if (winPrize >= 0 && winGone >= 0.999) winPrize = -1
 
     // ---- 灯：呼吸 + 中奖闪烁 ----
-    const breathe = reducedMotion ? 1.6 : 1.5 + 0.6 * Math.sin(t * 2.6)
+    /*
+      ★★ 关键：**影子 A/B 的两个相位必须看见同一套灯**。
+
+      原来这两个是 `reducedMotion ? 1.6 : …` —— 也就是一进 `renderShadowAB()`
+      （它传 `reducedMotion = true` 为了冻住物理），LED 会从 1.5±0.6 跳到 **1.6**，
+      而 1.6 在灯带本身的高光上正好落在另一侧 ⇒ 整圈灯带换一个样子。
+      那个差值（实测 5~7 个色阶）**比影子本身还大**，把信号完全淹掉。
+
+      ➜ 所以这里改成用 `t` 算（`t` 就是上一帧那个，两相位相同），
+        `reducedMotion` 只挡「闪烁」这种**额外**的脉冲，不改基值。
+    */
+    const breathe = 1.5 + 0.6 * Math.sin(t * 2.6)
     const flash = v.winFlash > 0 && !reducedMotion ? 1.6 * Math.abs(Math.sin(t * 14)) : 0
-    M.led.emissiveIntensity = breathe + flash
-    M.lamp.emissiveIntensity = (0.4 + 0.2 * Math.sin(t * 2.2)) * (v.winFlash > 0 ? 4 : 1)
-    M.tube.emissiveIntensity = reducedMotion ? 2.6 : 2.6 + Math.sin(t * 13.1) * 0.03
+    M.ledStrip.emissiveIntensity = breathe + flash
+    M.doorLamp.emissiveIntensity = (0.4 + 0.2 * Math.sin(t * 2.2)) * (v.winFlash > 0 ? 4 : 1)
+    M.tube.emissiveIntensity = 2.8 + Math.sin(t * 13.1) * 0.03
 
     // 颗粒每帧换一次种子（静态颗粒像屏幕脏了，动起来才像胶片）
     if (grain) grain.uniforms.uT.value = t
@@ -2407,6 +1799,57 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     else renderer.render(scene, camera)
   }
 
+  /*
+    ★★★ 同一帧的 on/off 对拍必须**自己把世界矩阵刷一遍**。
+
+    three 的 `renderer.render()` 是「先算世界矩阵、再画阴影、再画场景」。
+    如果两个相位之间**什么都没变**（同样的 `t`、同样的 `ClawVisual`），
+    第二次 `render()` 时 `matrixWorldAutoUpdate` 已经全部算过，
+    于是「这一帧物体有没有动」的信息没了 —— 阴影图不会被重画，
+    两个相位拍出来是**同一张图**（实测差 0.29 个色阶，比噪声 1.47 还小）。
+
+    `scene.updateMatrixWorld(true)` 强制重刷，`matrixWorldNeedsUpdate`
+    重新变 true ⇒ 两帧各自完整地走一遍「算影子 + 画场景」。
+  */
+  /**
+   * 把所有材质标脏，让它们按**当前**的 `shadowMap.enabled` 重新编译。
+   *
+   * ★★ `USE_SHADOWMAP` 是 shader 的**编译期**分支：只翻
+   *   `renderer.shadowMap.enabled` 而不重编，已编译的材质仍然会去采样
+   *   `shadowMap` 那张贴图 —— 于是「关掉阴影」的两帧长得一模一样。
+   *   （实测冻结帧 A/B 只差 **6 个色阶 / 0.31% 像素**，正是这个原因。）
+   */
+  function recompileShadowMaterials(): void {
+    root.traverse((o) => {
+      const m = o as Mesh
+      if (!m.isMesh) return
+      const mats = Array.isArray(m.material) ? m.material : [m.material]
+      for (const mat of mats) if (mat) mat.needsUpdate = true
+    })
+  }
+
+  function renderShadowAB(on: boolean): void {
+    if (shadowAB !== null) return
+    const v = lastVisual
+    if (!v) return
+    const normal = renderer.shadowMap.enabled
+    scene.updateMatrixWorld(true)
+    shadowAB = on
+    try {
+      /*
+        ★ 开关变了就必须重编材质（见 `recompileShadowMaterials`）。
+          少了这一步，两个相位差不到 1 个色阶 —— A/B 就成了「同一张图」。
+      */
+      if (normal !== on) recompileShadowMaterials()
+      render(lastT, v, true)
+    } finally {
+      shadowAB = null
+      renderer.shadowMap.enabled = normal
+      // 还原之后也要重编回去，否则调试口退出时材质还停在另一个分支上
+      if (normal !== on) recompileShadowMaterials()
+    }
+  }
+
   /* ============================ 换色 ============================ */
 
   let themeIdx = 0
@@ -2425,28 +1868,16 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     const n = CLAW_THEMES.length
     const idx = ((Math.round(index) % n) + n) % n
     themeIdx = idx
-    const th = CLAW_THEMES[idx]
+    /*
+      所有染色都交给 `applyTheme()`（照搬原版）：柜身 / 控制台 / LED 灯带 /
+      取物口灯环，以及**五张画出来的贴图**（灯箱 / 背板 / 取物口 / 控制台条 / 门贴）。
 
-    // 柜身的强调色（控制台 / 摇杆球 / 取物口高亮边都共用这一个材质）
-    M.accent.color.setHex(th.accent)
-    // LED 灯带 + 取物口圆环
-    M.led.emissive.setHex(th.led)
-    M.lamp.emissive.setHex(th.led)
-
-    // 灯箱：`map` 和 `emissiveMap` 指向同一张，两个都要换
-    const oldSign = signMat.map
-    const signTex = makeSignTexture('爪爪乐', hexOf(th.accent), '#ffffff')
-    signMat.map = signTex
-    signMat.emissiveMap = signTex
-    signMat.needsUpdate = true
-    oldSign?.dispose()
-
-    // 背板
-    const oldBack = backdropMat.map
-    const backTex = makeBackdropTexture(th.accent)
-    backdropMat.map = backTex
-    backdropMat.needsUpdate = true
-    oldBack?.dispose()
+      ★ 只改 `material.color` 是不够的：那几张是 `CanvasTexture`，
+        颜色是**画进像素里**的。以前只换柜身，孩子看到的是
+        「柜身变青了，灯箱还是粉的、背板还是粉的」—— 比不换更奇怪。
+      ⚠️ 旧贴图由 `applyTheme` 内部 `dispose()`（换色可以来回点，不释放就是每点一次漏一张）。
+    */
+    applyTheme(machine, CLAW_THEMES[idx])
   }
 
   /* ============================ 收尾 ============================ */
@@ -2458,28 +1889,26 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     phys = null
     physState = 'off'
     ro.disconnect()
-    for (const d of disposables) {
-      try {
-        d.dispose()
-      } catch {
-        /* 已经释放过就算了 —— dispose 不该因为重复调用而炸 */
-      }
-    }
-    disposables.length = 0
     // 后处理链有自己的 render target，`renderer.dispose()` 不管它
     composer?.dispose()
     composer = null
     // 环境贴图这条链上的两个对象都要单独放：PMREM 的中间 render target
     // 不释放就是一块常驻显存（而且切走再进来会再分配一块）
-    // ⚠️ 2026-10-18：`RoomEnvironment` 换成自建的 `makeEnvScene()` 之后，
+    // ⚠️ 2026-10-18：`RoomEnvironment` 换成自建的 `buildEnvScene()` 之后，
     //   已经没有 `roomEnv` 这个对象了 —— 那边 new 出来的只是普通的
     //   Geometry / Material，走 `renderer.dispose()` 就够，别再加一行它的 dispose。
     scene.environment = null
     envRT.dispose()
     pmrem.dispose()
-    // 换色会替换这两张贴图；当前这一张不在 `disposables` 里（换过之后是新 new 的）
-    signMat.map?.dispose()
-    backdropMat.map?.dispose()
+    /*
+      机器和娃娃的几何 / 贴纸材质都不在 `disposables` 里（它们是照搬原版那套模块
+      现建的）。不释放的话，每进出一次娃娃机页就漏一整套几何 + 十几张贴图，
+      而且没有任何报错。
+      ⚠️ 共享材质（`M` / `fabricNormal` / `whiteMap`）由这两个函数自己跳过 ——
+        娃娃在用的纤维法线贴图不能被柜子那边放掉。
+    */
+    disposeMachine(machine)
+    for (const m of prizeModels) disposePlush(m)
     renderer.dispose()
     canvas.remove()
   }
@@ -2530,7 +1959,16 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       glassFillY: (glass.bottom - glass.top) / h,
       glassFillX: (glass.right - glass.left) / w,
       glassFill: Math.max((glass.bottom - glass.top) / h, (glass.right - glass.left) / w),
-      glassFillMin: w / h > 1.05 ? GLASS_MIN_FILL_WIDE : GLASS_MIN_FILL,
+      glassFillMin: GLASS_MIN_FILL,
+      /**
+       * 取景的**设计距离**和**视线高度**（不是 `camera.position` 的实时值）。
+       *
+       * ★ 给走查用：横竖屏用的是不同的 `LOOK_Y`（见 `LOOK_Y_WIDE`），
+       *   而 `frame.top` 那种像素判据一旦红了，光看像素分不清是
+       *   「视线抬得不够」还是「距离拉得不对」——这两个数能直接分开。
+       */
+      camDist: cameraDist,
+      lookY: camLookY,
       railY: RAIL_Y,
       /** 取景框（必须完整可见的那块） */
       frame,
@@ -2557,6 +1995,19 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
    * 「写了」和「开着」是两件事 —— 这个函数回答后者。
    * 走查脚本拿它断言，别去比截图（抖动 3~252 B，逐字节比对本来就不稳）。
    */
+  /**
+   * 「写了」和**「开着」**是两件事 —— 这个函数回答后者。
+   *
+   * ★★ 2026-10-18：这里加了 `debugSetShadows()`，**只为走查做 A/B 对照**。
+   *
+   * 为什么非要有它：之前量影子用的是「整块画布下半部的亮度分位数」，
+   * 结果在参考实现上把 `shadowMap.enabled` 关掉，p2 只动 1 个色阶 ——
+   * **那个判据根本分辨不出影子**，因为它被背景和地面淹掉了。
+   * 要证伪「有没有影子」，只能做**同机、同池、同光**的两张图，唯一变量是阴影；
+   * 而本项目不暴露 renderer（有意的），所以只能开这个口子。
+   *
+   * ⚠️ 它**不参与任何游戏逻辑**，页面里没有任何调用点；走查脚本用完必须调回去。
+   */
   function debugEffects() {
     let casters = 0
     root.traverse((o) => {
@@ -2578,6 +2029,46 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     dispose,
     debugFrame,
     debugEffects,
+    /**
+     * 开关阴影贴图 —— **只给走查做 A/B 对照**，页面里没有任何调用点。
+     *
+     * ⚠️ 用完必须 `debugSetShadows(true)` 调回去（否则后面的截图全是没影子的）。
+     *
+     * ★★ 返回值必须**读回真实状态**，不能写 `return on`：
+     *   变异测试时把赋值改成 `renderer.shadowMap.enabled = false && on`（永远 false），
+     *   如果这里返回入参 `on`，走查就会以为「关了」，实际一直开着 ——
+     *   于是「关掉阴影后画面应该变亮」这条断言**永远绿着**，实测就是这么漏过去的。
+     *   ➜ `debugEffects().shadows` 也读同一个字段，两边必须对得上。
+     */
+    /**
+     * 「再画一帧，而且**这一帧**强制开/关阴影」—— 只给走查做 A/B 对照。
+     *
+     * ★★★ 为什么必须做到「同一帧」：前面三版 A/B 都是「截图 → 调开关 → 再截图」，
+     *   **全部不可证伪**，而且变异测试三版全绿。两层原因：
+     *
+     *   ① 截图时机：`debugSetShadows()` 同步返回，页面**下一帧**才重画；
+     *      紧跟其后的截图可能拍到还没重画的那帧。
+     *   ② 画面自己会动：软体回弹 / LED 呼吸 / 光晕都在改像素。实测「**同一状态**
+     *      连拍两张」的平均差 3.7~4.5 个色阶，而「开 vs 关」只差 8.6~25 ——
+     *      只有 2~5 倍。判据卡在这个量级上，换个时间跑就会翻。
+     *
+     *   ➜ 这个接口把开关翻在 `render()` **内部**：同步画两帧（先 on 再 off），
+     *     两次用的是**同一个 `t` / 同一个 `ClawVisual`**，中间不可能插进动画。
+     *     两张图的唯一变量就是「这一帧有没有画阴影贴图」。
+     *
+     * ⚠️ 它**不参与任何游戏逻辑**（只是把最后一次的视觉状态重画两遍），
+     *   页面里没有任何调用点；返回值 = 这一帧真的用的那个开关值。
+     */
+    debugForceShadowFrame(on: boolean): { shadows: boolean; drew: boolean } {
+      renderShadowAB(on)
+      return { shadows: usedShadow, drew: lastVisual !== null }
+    },
+    debugSetShadows: (on: boolean) => {
+      renderer.shadowMap.enabled = on
+      // 材质必须重新编译（原因见 `recompileShadowMaterials`）
+      recompileShadowMaterials()
+      return renderer.shadowMap.enabled
+    },
     /**
      * 机位现在是什么状态 —— 走查脚本用它断言「中奖后真的蹲下去了」。
      *

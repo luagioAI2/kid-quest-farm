@@ -11,6 +11,7 @@ import {
 } from '@/domain/clawEconomy'
 import {
   CLAW_HOLE_CENTER,
+  CLAW_HOME,
   CLAW_HX,
   CLAW_HZ,
   CLAW_PRONG_IDLE,
@@ -193,8 +194,14 @@ export default function ClawPage() {
 
   const stageRef = useRef<HTMLDivElement>(null)
   const stage = useRef<ClawStage | null>(null)
-  /** 爪子现在瞄准池子里的哪一点（世界坐标）。拖动只改它。 */
-  const aim = useRef({ x: 0, z: 0 })
+  /**
+   * 爪子现在瞄准池子里的哪一点（世界坐标）。拖动只改它。
+   *
+   * ★ 初值取**待命位**（左前角），和原版的 `HOME` 一致 ——
+   *   不是池子正中。开局那一帧爪子在正中、第一次投币前才「飘」过去，
+   *   那个位移在手机上很明显。
+   */
+  const aim = useRef({ x: CLAW_HOME.x, z: CLAW_HOME.z })
   const roundRef = useRef<Round | null>(null)
   /** 这一局结束后，爪子**停在取物口**到什么时候（`performance.now()`）—— 免得它「嗖」地弹回瞄准位 */
   const holdRef = useRef(0)
