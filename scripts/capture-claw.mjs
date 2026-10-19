@@ -99,6 +99,30 @@ for (const s of SPANS) TOTAL += s.seconds
 const ROUND_MS = Math.ceil(TOTAL * 1000) + 800
 console.log(`· 时段表：${SPANS.map((s) => `${s.phase} ${s.seconds}s`).join(' / ')}（共 ${TOTAL.toFixed(2)}s）`)
 
+/*
+  影子 A/B 用的「暗像素」阈值（0~255 的亮度）。
+
+  ★★★ 这个数**不能猜**。2026-10-18 实测（同一帧开 / 关阴影，玻璃区）：
+
+      阈值   开(有影)   关(无影)   关/开
+        40      3.04%      3.06%   1.005   ← 噪声（这里只有真正的黑洞/深色毛）
+        76      6.87%      6.84%   0.996   ← ★ 我一开始挑了这个，「没有信号」
+       100      9.75%     11.14%   1.143   ← 反向：关掉阴影反而多出暗像素
+       130     19.61%     14.48%   0.739   ← ★ 真信号在这里
+       160     36.17%     29.29%   0.810
+
+    为什么 76 没有信号：娃娃和池底本来就偏亮，投影只把它们从 ~190 压到 ~140，
+    **进不了「< 76」那一档**。而 130 正好切在「受光面 / 投影面」之间。
+
+    为什么 100~120 会反向：把「排除光阴影」这件事从 shader 里拿掉，娃娃自身的
+    明暗完全变了（实测娃娃堆那一带整片亮 40~70 个色阶）⇒ 一部分像素从 130+
+    掉到 100 附近。**总亮度**和**暗像素占比**是两个方向，不能混着下结论。
+
+  ➜ 阈值取 **130**，判据看**相对变化**（关 / 开 < 0.85），不看绝对值 ——
+    配色、主题、画幅不同，绝对暗部占比会变，但「关掉阴影应该更亮」这个方向不变。
+*/
+const SHADOW_DARK = 130
+
 const VIEWPORTS = [
   { name: 'phone', width: 390, height: 844, flow: true },
   { name: 'phone-landscape', width: 844, height: 390, flow: false },
@@ -243,6 +267,8 @@ for (const vp of SELECTED) {
     }
     return {
       rect: { w: Math.round(r.width), h: Math.round(r.height) },
+      /* 舞台在**视口**里的位置 —— 影子 A/B 要把玻璃区坐标投到屏幕上取像素 */
+      stageRect: { x: r.left, y: r.top },
       frame: f,
       prizes: st.prizeCount(),
       canvasInDom: !!el.querySelector('canvas'),
@@ -302,32 +328,58 @@ for (const vp of SELECTED) {
   )
 
   /*
-    「够不够近」的**唯一判据**：场景给的 `glassFill` 和**配套的合格线** `glassFillMin`。
-    ★ 不在这里自己算 —— `glass` 是画布坐标、`canvas.h` 是 DOM 量的，
-      两边在 DPR / 边界上差一点就会得出两个结论（这条踩过）。
-    ★★ 合格线也由场景给（竖屏 0.86 / 横屏 0.74）：横屏画布只有 228px 高，
-      玻璃装完整最多占 0.78 —— 拿竖屏的 0.86 去判横屏，只会逼出「裁掉玻璃顶」。
-  */
-  const gf = geo.frame.glassFill
-  const gfMin = geo.frame.glassFillMin
-  check(
-    '★★ 视角够近：玻璃占满至少一个方向（合格线由场景按画幅给）',
-    gf >= gfMin,
-    `glassFill=${gf.toFixed(3)} ≥ ${gfMin.toFixed(2)}（X=${geo.frame.glassFillX.toFixed(3)} Y=${geo.frame.glassFillY.toFixed(3)}）`,
-  )
+    「够不够近」的判据 —— **横竖屏量的是两个不同的东西**。
 
-  /*
-    取景框**不再**要求完整可见 —— 但它要么被"满格"推出画面，要么就说明镜头还远。
-    ★ 按方向判：竖屏是**宽度**在碰边，横屏是**高度**。写死"宽度 ≥ 100%"会在
-      横屏时报红，而横屏那档的取景是对的（宽度只占 58%，高度占 78%）。
-  */
-  const frW = (fr.right - fr.left) / cv.w
-  const frH = (fr.bottom - fr.top) / cv.h
-  check(
-    '★ 取景框在某个方向溢出（近景取景的正向证据：两个方向都没溢出 = 又退回全柜了）',
-    Math.max(frW, frH) >= 1.0,
-    `框 宽 ${(frW * 100).toFixed(0)}% / 高 ${(frH * 100).toFixed(0)}%`,
-  )
+    ★★★ 2026-10-19：横屏的**承诺变了**，判据必须跟着变。
+
+      以前横屏只要求「玻璃完整」，于是玻璃把画面高度占满、机顶灯箱被顶出画面
+      （用户抱怨的「机器被切头」）。现在横屏要求装下 **[玻璃底, 灯箱顶]**
+      （`clawScene` 的 `VERT_CORNERS_WIDE`），玻璃就注定只占约 0.60 ——
+      此时再拿「玻璃 ≥ 0.74」去判，红的是**判据**，不是画面。
+
+      ➜ 横屏改量**整台机器**：
+        · `cabinet.top` 必须在画面里（灯箱不裁头）—— 这是新承诺本身；
+        · 整机纵向占比 ≥ 0.92（底座允许被裁）—— 守「别缩成一小条」，
+          也就是原来 `GLASS_MIN_FILL_WIDE` 想守的那件事，只是换成同一口径的量。
+
+      ⚠️ 这两条都要**能真的红**：把相机拉远成「全柜照」时，
+        纵向占比会掉到 1.0 以下、`cabinet.top` 会变成正数（机器缩在中间）。
+    */
+  if (landscape) {
+    const cabTop = geo.frame.cabinet.top
+    const cabBot = geo.frame.cabinet.bottom
+    const visibleH = Math.min(cabBot, cv.h) - Math.max(cabTop, 0)
+    check(
+      '★★ 横屏：机顶灯箱完整在画面里（不裁头 —— 这是横屏取景的承诺）',
+      cabTop >= -2,
+      `整柜 top=${cabTop.toFixed(1)}px（≥ -2）`,
+    )
+    check(
+      '★★ 横屏：整机纵向铺满画面（底座允许被裁；没铺满 = 又退回全柜照了）',
+      visibleH / cv.h >= 0.92,
+      `整机纵向占 ${((visibleH / cv.h) * 100).toFixed(0)}%（≥ 92%）`,
+    )
+  } else {
+    const gf = geo.frame.glassFill
+    const gfMin = geo.frame.glassFillMin
+    check(
+      '★★ 视角够近：玻璃占满至少一个方向（合格线由场景按画幅给）',
+      gf >= gfMin,
+      `glassFill=${gf.toFixed(3)} ≥ ${gfMin.toFixed(2)}（X=${geo.frame.glassFillX.toFixed(3)} Y=${geo.frame.glassFillY.toFixed(3)}）`,
+    )
+    /*
+      取景框**不再**要求完整可见 —— 但它要么被"满格"推出画面，要么就说明镜头还远。
+      ★ 竖屏是**宽度**在碰边。写死"宽度 ≥ 100%"会在横屏时报红，
+        而横屏那档的取景是对的 —— 所以这一条只在竖屏用。
+    */
+    const frW = (fr.right - fr.left) / cv.w
+    const frH = (fr.bottom - fr.top) / cv.h
+    check(
+      '★ 取景框在某个方向溢出（近景取景的正向证据：两个方向都没溢出 = 又退回全柜了）',
+      Math.max(frW, frH) >= 1.0,
+      `框 宽 ${(frW * 100).toFixed(0)}% / 高 ${(frH * 100).toFixed(0)}%`,
+    )
+  }
 
   /*
     ★★ 阴影贴图一个 texel 覆盖多大 —— 守的是「改了范围却忘了 updateProjectionMatrix()」。
@@ -350,6 +402,121 @@ for (const vp of SELECTED) {
     texel > 0 && 0.15 / texel >= 100,
     `texel ${(texel * 1000).toFixed(2)}mm ⇒ 一只娃娃 ${Math.round(0.15 / texel)} 个 texel` +
       (texel > 0.004 ? '（≈ 9.8mm 说明忘了 shadow.camera.updateProjectionMatrix）' : ''),
+  )
+
+  /*
+    ★★★ 「影子到底有没有」——**同机、同池、同光**的 A/B 对照。
+
+    ⚠️ 这一条改过两版，两版都**假绿**过，教训值得全项目借用：
+
+      第 1 版：量「画布下半部」的亮度分位数。
+        → 那里绝大部分是背景和地面，在参考实现上关掉阴影后 p2 只动 1 个色阶。
+          **判据分辨不出「有 / 没」，它就不是判据。**
+
+      第 2 版：改成玻璃区下半部，判据用 `p15` 差 ≥ 3。实测 Δ20，看着漂亮。
+        → 变异测试（把 `debugSetShadows` 改成永远传 false）**照样绿**。
+          逐像素相减一看：整个玻璃区**平均亮 4.6 个色阶**、娃娃堆那一带亮 40~70
+          —— 那是**娃娃被照亮了**，不是影子消失了。因为「排除光/阴影」在 three 里
+          还会改材质的 `USE_SHADOWMAP` 分支，整块受光都变了。
+
+    ➜ 第 3 版只用**一个不会被整体亮度污染的量**：暗部占比 `darkFrac`
+      （亮度 < 76/255 的像素占比）。关掉阴影时局部阴影消失、哪些像素都可能被
+      照亮，但**「很暗的像素」只会变少**。判据取**相对下降**：
+        `darkFrac(关) < darkFrac(开) × 0.85`
+      并且**先断言开关真的变了**（`debugEffects().shadows === false`）。
+
+    ➜ 第 4 版（现在）：第 3 版仍然会飘 —— 暗部 130/255 的像素**绝大部分是柜底
+      深蓝布和黑框**，影子只让其中很小一部分跨过阈值。实测只差 0.2 个百分点，
+      跑两次就翻符号（98% / 101%）。根因是它拿**全页截图 + 450ms 间隔**比，
+      而娃娃在抖、LED 在呼吸：同状态连拍的 meanAbs 是 **11.85**，
+      开/关只有 **20.47** —— 信噪比 1.7，判据必然翻。
+
+      ➜ 现在用 `debugForceShadowFrame(on)` 在**同一帧**上画两遍：两次用同一个 `t`、
+        同一个 `ClawVisual`，中间插不进动画，**唯一变量**就是阴影贴图。
+        判据改成**正向证据**：关掉阴影后有多少像素**变亮**（影子被拿掉了），
+        并要求「变暗的像素 ≈ 0」—— 这一条同时证明「两帧只差阴影」，
+        否则两帧其实是两个不同的画面，变亮变暗都会有一堆。
+
+      ★★ 还有一条**必须**的先决条件：`renderShadowAB` 要把材质标脏重编。
+        `USE_SHADOWMAP` 是 shader 的**编译期**分支，只翻 `shadowMap.enabled`
+        的话第二帧仍然采样上一帧那张阴影图 —— 实测两帧只差 **6 个色阶 / 0.31%**，
+        看着像「影子根本不存在」，其实只是 A/B 拍到了同一张图。
+
+    ⚠️ 阈值先量后定（四个视口实测：变亮 **2.5~3.0%**、平均 **+19~20 色阶**、
+       变暗 **恰好 0%**）。改光照 / 材质 / 配色后要**重新量**。
+  */
+  const shadowAB = await page.evaluate(async () => {
+    const st = window.__kqfClawStage
+    const cv = document.querySelector('[data-claw-stage] canvas')
+    if (!st || !cv) return null
+    const grab = () => cv.toDataURL('image/png')
+    // 同步画两帧、同步取图 —— 中间插不进 rAF，动画不会混进来
+    const onR = st.debugForceShadowFrame(true)
+    const onUrl = grab()
+    const offR = st.debugForceShadowFrame(false)
+    const offUrl = grab()
+    st.debugForceShadowFrame(true)
+    const load = (u) =>
+      new Promise((res) => {
+        const i = new Image()
+        i.onload = () => res(i)
+        i.src = u
+      })
+    const [ia, ib] = await Promise.all([load(onUrl), load(offUrl)])
+    const fr = st.debugFrame()
+    const g = fr.glass
+    const s = ia.width / fr.canvas.w // 画布内部像素 / CSS 像素
+    const x0 = Math.max(0, Math.round(g.left * s))
+    const y0 = Math.max(0, Math.round(g.top * s))
+    const w = Math.max(1, Math.round((g.right - g.left) * s))
+    const h = Math.max(1, Math.round((g.bottom - g.top) * s))
+    const px = (img) => {
+      const c = document.createElement('canvas')
+      c.width = w
+      c.height = h
+      const ctx = c.getContext('2d')
+      ctx.drawImage(img, x0, y0, w, h, 0, 0, w, h)
+      return ctx.getImageData(0, 0, w, h).data
+    }
+    const A = px(ia)
+    const B = px(ib)
+    let bright = 0
+    let dark = 0
+    let gain = 0
+    let n = 0
+    for (let i = 0; i < A.length; i += 4) {
+      const la = 0.299 * A[i] + 0.587 * A[i + 1] + 0.114 * A[i + 2]
+      const lb = 0.299 * B[i] + 0.587 * B[i + 1] + 0.114 * B[i + 2]
+      const d = lb - la
+      if (d > 6) {
+        bright++
+        gain += d
+      }
+      if (d < -6) dark++
+      n++
+    }
+    return {
+      drew: onR.drew && offR.drew,
+      onUsed: onR.shadows,
+      offUsed: offR.shadows,
+      brightPct: (bright / n) * 100,
+      darkPct: (dark / n) * 100,
+      meanGain: bright ? gain / bright : 0,
+    }
+  })
+  check(
+    '★★ 影子 A/B 翻在**同一帧**上（否则两张图是同一个状态，差值必然 ≈0）',
+    !!shadowAB && shadowAB.drew && shadowAB.onUsed === true && shadowAB.offUsed === false,
+    shadowAB
+      ? `开 ⇒ shadows=${shadowAB.onUsed}，关 ⇒ shadows=${shadowAB.offUsed}`
+      : '拿不到 `[data-claw-stage] canvas` 或场景对象',
+  )
+  check(
+    '★★★ 影子真的投影了（关掉阴影后娃娃脚下 / 柜底变亮，且没有像素变暗）',
+    !!shadowAB && shadowAB.brightPct >= 1.5 && shadowAB.meanGain >= 8 && shadowAB.darkPct <= 0.5,
+    shadowAB
+      ? `变亮 ${shadowAB.brightPct.toFixed(2)}%（≥1.5%）· 平均 +${shadowAB.meanGain.toFixed(1)} 色阶（≥8）· 反向变暗 ${shadowAB.darkPct.toFixed(2)}%（≤0.5%）`
+      : '—',
   )
 
   // 反向证据：整柜**应当**溢出 —— 没溢出说明又退回「远距离全柜取景」了
@@ -884,6 +1051,11 @@ for (const vp of SELECTED) {
     }
 
     /* 这一局顺便留三张证据图 —— 用 `waitForFunction` 等**状态**，不等时钟 */
+    const shoot = async (name) => {
+      const path = `${OUT}/${vp.name}-4-${name}.png`
+      await page.screenshot({ path, clip })
+      console.log(`  · 已存图 ${path}`)
+    }
     const shotWhen = async (expr, name) => {
       const ok = await page
         .waitForFunction(expr, { timeout: 12000, polling: 'raf' })
@@ -892,9 +1064,7 @@ for (const vp of SELECTED) {
         check(`等得到「${name}」那一刻`, false, expr)
         return
       }
-      const path = `${OUT}/${vp.name}-4-${name}.png`
-      await page.screenshot({ path, clip })
-      console.log(`  · 已存图 ${path}`)
+      await shoot(name)
     }
 
     await page.evaluate(async () => {
@@ -913,10 +1083,26 @@ for (const vp of SELECTED) {
       `(() => { const s = window.__kqfClawStage; return s.debugProng() < 0.1 && s.debugVisual().close > 0.3 })()`,
       '合爪',
     )
+    /*
+      ★★ 2026-10-19：「提起」那张**必须在「合爪」截图之前就开始等**。
+
+      三个 `shotWhen` 串行的话，每个 `page.screenshot()` 在 headless + WebGL 下
+      要 0.5~1.5 秒 —— 而「提起」的窗口只有约 1.5 秒（`hubY` 从 0.61 升到 1.01，
+      再算上 `move` 那 1.15 秒）。串行等常常**刚好错过**，于是这一条红、
+      而池子里其实一切正常（同一次运行的 `pickFrames()` 采样里
+      `lifted.hubY = 0.48`、`close = 1.00` 都在）。
+      ➜ 先把这个等待挂上去，再截「合爪」，两个动作重叠，窗口就不会被吃掉。
+    */
+    const liftExpr = `(() => { const s = window.__kqfClawStage; const v = s.debugVisual(); return !!v && v.close > 0.99 && v.hubY > ${((idlePose?.hubY ?? 1) - 0.4).toFixed(2)} })()`
+    const liftWait = page
+      .waitForFunction(liftExpr, { timeout: 12000, polling: 'raf' })
+      .then(() => true, () => false)
     await shotWhen(
-      `(() => { const s = window.__kqfClawStage; const v = s.debugVisual(); return !!v && v.close > 0.99 && v.hubY > ${((idlePose?.hubY ?? 1) - 0.4).toFixed(2)} })()`,
-      '提起',
+      `(() => { const s = window.__kqfClawStage; return s.debugProng() < 0.1 && s.debugVisual().close > 0.3 })()`,
+      '合爪',
     )
+    if (await liftWait) await shoot('提起')
+    else check('等得到「提起」那一刻', false, liftExpr)
     await wait(ROUND_MS)
     const pileFrames = await stopSampling()
     const pilePick = pickFrames(pileFrames)
