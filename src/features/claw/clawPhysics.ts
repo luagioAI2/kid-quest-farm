@@ -51,6 +51,7 @@
 import type { Group } from 'three'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import { topOf, type PrizeType } from './scene/prizeTypes'
+import { softStep } from './clawSoft'
 
 /**
  * Rapier 的运行时命名空间类型。
@@ -373,6 +374,11 @@ export interface ClawPhysicsPose {
   close: number
   /** 手里那只娃娃的下标；`null` = 空手 */
   held: number | null
+  /**
+   * hub 的朝向（四元数）。**摆动**时爪子是沿绳子倾斜的，hub 碰撞体也要跟着转 ——
+   * 不传就是竖直，撞娃娃的位置会比画面偏一点。
+   */
+  rot?: { x: number; y: number; z: number; w: number }
 }
 
 export interface ClawPhysics {
@@ -412,6 +418,20 @@ export interface ClawPhysics {
    *   所以探面（`surfaceAt`）、夹取、输赢都读不到这个值 —— 也就不会互相污染。
    */
   squashOf(index: number): number
+  /**
+   * 第 `index` 只娃娃身上的 3 个**压痕**（局部坐标 + 深度 `w`，0 = 没有）。
+   *
+   * ★ 和 `squashOf` 一样是**纯视觉**：`clawScene` 把它们喂给顶点着色器。
+   *   `w` 已经按 `exp(-12·dt)` 衰减过，指头一松开自己就淡掉。
+   */
+  dentsOf(index: number): { x: number; y: number; z: number; w: number }[]
+  /**
+   * 这一刻有几根指头压在 `index` 那只娃娃身上（0~3）。
+   *
+   * ★ 走查用：证明「捏扁」不是到点就播的动画，而是**真的碰到了**。
+   *   同时它也是挤压目标的唯一判据（≥2 才捏），所以不能只报个假数。
+   */
+  gripCount(index: number): number
   /** 走查脚本用：证明物理**真的在跑**，而不是只把开关打开了。 */
   debug(): {
     bodies: number
@@ -424,6 +444,8 @@ export interface ClawPhysics {
     steps: number
     /** 当前所有娃娃里最大的 |挤压量| —— 用来证明「软体手感」不是空操作 */
     maxSquash: number
+    /** 当前最深的压痕（0 = 没有任何指头压着）—— 见 `dentsOf` */
+    maxDent: number
   }
   dispose(): void
 }
@@ -710,26 +732,36 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       不存在的直杆隔空顶飞）。
   */
   const prongColliders: RAPIER.Collider[] = []
+  /**
+   * 指头碰撞体 → 第几根指头（0~2）。
+   *
+   * ★★ 为什么必须分开数：一根指头由 **4 段胶囊**拼出来，一次接触就能产生
+   *   好几个接触点。按「接触点 ≥2 就算捏住」判，**一根指头**蹭一下
+   *   就能让娃娃整只鼓起来 —— 实测点数能到 11（3 根指头 × 4 段）。
+   */
+  const colliderProng = new Map<number, number>()
   {
     const UP = { x: 0, y: 1, z: 0 }
-    for (const b of prongBodies) {
+    for (let prongIdx = 0; prongIdx < prongBodies.length; prongIdx++) {
+      const b = prongBodies[prongIdx]
       for (const s of prongSegments()) {
         const dx = s.b[0] - s.a[0]
         const dy = s.b[1] - s.a[1]
         const dz = s.b[2] - s.a[2]
         const len = Math.hypot(dx, dy, dz)
         const dir = { x: dx / len, y: dy / len, z: dz / len }
-        prongColliders.push(
-          world.createCollider(
-            R.ColliderDesc.capsule(len / 2, s.r)
-              .setTranslation((s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2, (s.a[2] + s.b[2]) / 2)
-              // capsule 的轴默认是 +Y，转到这一段的方向上
-              .setRotation(quatFromUnitVectors(UP, dir))
-              .setFriction(1.1)
-              .setCollisionGroups(clawGroups),
-            b,
-          ),
+        const col = world.createCollider(
+          R.ColliderDesc.capsule(len / 2, s.r)
+            .setTranslation((s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2, (s.a[2] + s.b[2]) / 2)
+            // capsule 的轴默认是 +Y，转到这一段的方向上
+            .setRotation(quatFromUnitVectors(UP, dir))
+            .setFriction(1.1)
+            .setCollisionGroups(clawGroups),
+          b,
         )
+        prongColliders.push(col)
+        // 一根指头 = 4 段胶囊，压痕/捏合要按**指头**数，不是按段数
+        colliderProng.set(col.handle, prongIdx)
       }
     }
   }
@@ -744,7 +776,28 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     squash: number
     squashV: number
     lastSpeed: number
+    /**
+     * 指头压出来的 3 个**压痕**（娃娃的局部坐标 + 深度），照抄参考实现。
+     *
+     * ★ 为什么不是「压扁整只」而是压痕：三根指头是**点**接触，
+     *   真实的毛绒被捏住时是**接触点凹进去**、旁边的绒鼓出来。
+     *   只压扁整只会像个被踩了一脚的球。
+     * ★ 纯视觉（着色器里的顶点位移）：`w` 按 `exp(-12·dt)` 自己衰减，
+     *   指头一松开就看不见了。碰撞体、探面、输赢都读不到它。
+     */
+    dents: { x: number; y: number; z: number; w: number }[]
   }
+
+  const newDent = () => ({ x: 0, y: 0, z: 0, w: 0 })
+
+  /**
+   * 碰撞体句柄 → 第几只娃娃。
+   *
+   * ★ 接触对只给「另一个 collider」，不给「那是谁」；而一只娃娃由好几个
+   *   球/胶囊拼出来（头、身子、耳朵）。所以压痕必须靠这张表反查，
+   *   不能假设「一只娃娃一个碰撞体」。
+   */
+  const colliderPrize = new Map<number, number>()
 
   const prizeBodies: PrizeBody[] = prizes.map((g, index) => {
     const scale = g.scale.x || 1
@@ -779,7 +832,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
           part.kind === 'ball'
             ? R.ColliderDesc.ball(part.r * scale)
             : R.ColliderDesc.capsule((part.hh ?? 0.02) * scale, part.r * scale)
-        world.createCollider(
+        const col = world.createCollider(
           d
             .setTranslation(part.p[0] * scale, part.p[1] * scale, part.p[2] * scale)
             .setDensity(density)
@@ -788,6 +841,8 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
             .setCollisionGroups(groups(G_PRIZE, 0xffff)),
           body,
         )
+        // 接触点只给句柄，得能反查「这是第几只」才能算压痕
+        colliderPrize.set(col.handle, index)
       }
     }
     return {
@@ -796,6 +851,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       squash: 0,
       squashV: 0,
       lastSpeed: 0,
+      dents: [newDent(), newDent(), newDent()],
     }
   })
 
@@ -1131,12 +1187,125 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
     if (k > 0) pb.body.setRotation(slerpQuat(gripQuat, UPRIGHT, k), true)
   }
 
+  /*
+    ---- 指头压出来的手感（挤压 + 压痕） ----
+
+    ★ 这两个数是**视觉**的：`-0.07` 直接抄原版，`0.012` 是压痕最深值。
+      为什么不能凭感觉调大：`uSquash` 是沿轴拉长 + 垂直收缩，
+      0.07 大约 7% / 3.9%，再大就变成「橡皮泥」了。
+  */
+  const GRIP_SQUASH = -0.07
+  const DENT_MAX = 0.012
+  const DENT_RADIUS = 0.015
+  /** 第几只娃娃身上有哪些指头接触点（世界坐标 + 冲量 + 是第几根指头） */
+  const prongContacts = new Map<number, { x: number; y: number; z: number; imp: number; prong: number }[]>()
+
+  /** 有**几根指头**压在这只娃娃身上（0~3）—— 不是接触点数，见 `colliderProng`。 */
+  function prongCountOf(arr: { prong: number }[] | undefined): number {
+    if (!arr || !arr.length) return 0
+    let mask = 0
+    for (const c of arr) mask |= 1 << c.prong
+    let n = 0
+    for (; mask; mask >>= 1) n += mask & 1
+    return n
+  }
+
+  /** 单位四元数旋转一个向量（逆旋转就是传共轭）。不 import three —— 见文件头。 */
+  function rotateByQuat(x: number, y: number, z: number, q: { x: number; y: number; z: number; w: number }): V3 {
+    const tx = 2 * (q.y * z - q.z * y)
+    const ty = 2 * (q.z * x - q.x * z)
+    const tz = 2 * (q.x * y - q.y * x)
+    return {
+      x: x + q.w * tx + (q.y * tz - q.z * ty),
+      y: y + q.w * ty + (q.z * tx - q.x * tz),
+      z: z + q.w * tz + (q.x * ty - q.y * tx),
+    }
+  }
+
+  /**
+   * 把「指头 ↔ 娃娃」的接触点收一遍（照抄原版 `gatherProngContacts`）。
+   *
+   * ★ 为什么用真接触而不是「指头离娃娃多近」：距离判据分不出
+   *   「轻轻碰到」和「使劲捏着」，压痕深度就没有依据；而且爪子在池子里
+   *   扫过一堆娃娃时，距离判据会给**没被夹住**的那些也画上压痕。
+   */
+  function gatherProngContacts(): void {
+    prongContacts.clear()
+    for (const c of prongColliders) {
+      const prong = colliderProng.get(c.handle) ?? 0
+      world.contactPairsWith(c, (other) => {
+        const idx = colliderPrize.get(other.handle)
+        if (idx === undefined) return
+        world.contactPair(c, other, (m) => {
+          const n = m.numSolverContacts()
+          if (!n) return
+          let imp = 0
+          for (let i = 0; i < n; i++) imp += m.contactImpulse(i)
+          for (let i = 0; i < n; i++) {
+            const pt = m.solverContactPoint(i)
+            if (!pt) continue
+            let arr = prongContacts.get(idx)
+            if (!arr) {
+              arr = []
+              prongContacts.set(idx, arr)
+            }
+            arr.push({ x: pt.x, y: pt.y, z: pt.z, imp: imp / n, prong })
+          }
+        })
+      })
+    }
+  }
+
+  /**
+   * 压痕：接触点换算到娃娃的**局部坐标**，写进 3 个槽位，按 `exp(-12·dt)` 衰减。
+   *
+   * 换算是必须的：着色器里的 `transformed` 是模型局部坐标（而且**没乘** Group 的
+   * 缩放），拿世界坐标直接当局部坐标用，压痕会出现在完全不相干的位置 ——
+   * 症状是「娃娃身上随机某个地方凹一下」，很难联想到坐标没换算。
+   */
+  function driveDents(pb: PrizeBody, index: number, cs: { x: number; y: number; z: number; imp: number }[] | undefined, dt: number): void {
+    const dents = pb.dents
+    const decay = Math.exp(-12 * dt)
+    for (const d of dents) {
+      d.w *= decay
+      // 衰减到「看不出来」就归零：着色器里 `uDent[i].w <= 0` 会整段跳过，
+      // 留着 1e-15 的残渣只是白算三次 normalize
+      if (d.w < 1e-5) d.w = 0
+    }
+    if (!cs || !cs.length) return
+    const tr = pb.body.translation()
+    const rq = pb.body.rotation()
+    // 共轭 = 逆旋转（单位四元数）
+    const inv = { x: -rq.x, y: -rq.y, z: -rq.z, w: rq.w }
+    const sc = prizes[index]?.scale.x || 1
+    let n = 0
+    for (const c of cs) {
+      if (n >= 3) break
+      const l = rotateByQuat(c.x - tr.x, c.y - tr.y, c.z - tr.z, inv)
+      const lx = l.x / sc
+      const ly = l.y / sc
+      const lz = l.z / sc
+      let dup = false
+      for (let j = 0; j < n; j++) {
+        if (Math.hypot(dents[j].x - lx, dents[j].y - ly, dents[j].z - lz) < DENT_RADIUS) dup = true
+      }
+      if (dup) continue
+      const slot = dents[n]
+      const w = Math.min(DENT_MAX, 0.004 + c.imp * 0.6)
+      slot.x = lx
+      slot.y = ly
+      slot.z = lz
+      slot.w = Math.max(slot.w, w)
+      n++
+    }
+  }
+
   function step(dt: number, pose: ClawPhysicsPose): void {
     if (disposed) return
 
     /* ① 爪子跟着动画走（kinematic 的位置是「下一帧要去的地方」） */
     hubBody.setNextKinematicTranslation({ x: pose.clawX, y: pose.hubY, z: pose.clawZ })
-    hubBody.setNextKinematicRotation({ x: 0, y: 0, z: 0, w: 1 })
+    hubBody.setNextKinematicRotation(pose.rot ?? { x: 0, y: 0, z: 0, w: 1 })
 
     // 指头的世界位姿直接读 three —— 开合角度的唯一事实源是 `applyClose()`
     for (let i = 0; i < prongBodies.length; i++) {
@@ -1194,6 +1363,7 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       （`squashV += min(6, dv*4)`，再跑一个 `-900*x - 16*v` 的弹簧）。
       ★ 只改视觉缩放，不改碰撞体 —— 探面和输赢都读不到它，不会互相污染。
     */
+    gatherProngContacts()
     for (let i = 0; i < prizeBodies.length; i++) {
       const pb = prizeBodies[i]
       const lv = pb.body.linvel()
@@ -1201,10 +1371,26 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       const dv = pb.lastSpeed - sp
       pb.lastSpeed = sp
       if (dv > 0.3) pb.squashV += Math.min(6, dv * 4)
-      // 被夹住的那只轻轻鼓一点（软软地被捏住），其余回弹到 0
-      const target = i === heldIndex ? 0.08 : 0
-      pb.squashV += (-900 * (pb.squash - target) - 16 * pb.squashV) * dt
-      pb.squash = Math.max(-0.2, Math.min(0.25, pb.squash + pb.squashV * dt))
+      /*
+        ★★ 挤压目标由**接触**决定，不是由 `held` 决定（2026-10-20 照抄原版）。
+
+        原版是 `cs.length >= 2 ? -0.07 : 0`：两根以上指头压上来就捏住。
+        我们之前写的是 `held ? +0.08 : 0`，方向是**反的** ——
+        被捏住时应该是「横向被挤、沿自由轴鼓出来」，不是「压扁」。
+
+        符号约定（见 `plush.ts` 的顶点着色器）：`uSquash.w > 0` 沿轴压扁，
+        `< 0` 沿轴拉长、垂直方向收缩。指头从三个方向夹住 ⇒ 自由轴是**上**，
+        所以被夹住要**负**值。
+      */
+      const cs = prongContacts.get(i)
+      const grip = prongCountOf(cs) >= 2 ? GRIP_SQUASH : 0
+      /*
+        ★★ 弹簧分小步积分（`softStep` 内部做，见那个文件的注释）。
+          直接一帧一积分的话，headless 的 5~10 fps 会让它发散 ——
+          `squash` 在 +0.25 / −0.20 之间跳，娃娃一帧胖一帧瘦。
+      */
+      softStep(pb, grip, dt)
+      driveDents(pb, i, cs, dt)
     }
 
     /* ④ 写回 three */
@@ -1284,10 +1470,12 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   function debug() {
     let awake = 0
     let maxSquash = 0
+    let maxDent = 0
     for (const pb of prizeBodies) {
       if (!pb.body.isSleeping()) awake++
       const a = Math.abs(pb.squash)
       if (a > maxSquash) maxSquash = a
+      for (const d of pb.dents) if (d.w > maxDent) maxDent = d.w
     }
     return {
       bodies: prizeBodies.length,
@@ -1297,6 +1485,8 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
       recycledLog: recycledLog.slice(),
       steps,
       maxSquash,
+      /** 全场最深的压痕 —— 证明「捏出手印」真的发生了（不是只有代码路径） */
+      maxDent,
     }
   }
 
@@ -1308,8 +1498,10 @@ export async function createClawPhysics(opts: ClawPhysicsOpts): Promise<ClawPhys
   }
 
   const squashOf = (index: number): number => prizeBodies[index]?.squash ?? 0
+  const dentsOf = (index: number) => prizeBodies[index]?.dents ?? []
+  const gripCount = (index: number): number => prongCountOf(prongContacts.get(index))
 
-  return { step, nearest, positionOf, rawPositionOf, surfaceAt, squashOf, debug, dispose }
+  return { step, nearest, positionOf, rawPositionOf, surfaceAt, squashOf, dentsOf, gripCount, debug, dispose }
 }
 
 /* ============================ 小工具 ============================ */

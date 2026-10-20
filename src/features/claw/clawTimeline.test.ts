@@ -3,13 +3,17 @@ import {
   CLAW_SPANS,
   CLAW_TOTAL,
   SLIP_AT,
+  clawCarriageAccel,
   clawCloseAt,
   clawHubYAt,
   clawHoldingAt,
   clawOutcomeText,
   clawPhaseAt,
   clawPositionAt,
+  clawSwingStep,
   smoothstep,
+  type ClawCarriage,
+  type ClawSwing,
   type ClawPhase,
 } from './clawTimeline'
 
@@ -181,5 +185,78 @@ describe('娃娃机 · 时间线', () => {
     expect(clawOutcomeText(false, false)).toContain('差一点')
     // 没中的两句必须不一样，否则孩子分不出「夹住了又掉」和「没夹到」
     expect(clawOutcomeText(false, true)).not.toBe(clawOutcomeText(false, false))
+  })
+})
+
+/* ============================================================
+   摆动（单摆）
+
+   为什么这些必须单测：摆的正确性**肉眼分不出**。
+   「晃了」和「晃得对」在截图上完全一样，而错的那种（匀速也晃 / 大 dt 发散）
+   要玩上十几秒才看得出来。这三条各自钉一个具体的错法。
+   ============================================================ */
+describe('爪子摆动：单摆积分', () => {
+  /** 按固定步长跑一段，返回轨迹 */
+  const run = (s: ClawSwing, ax: number, az: number, L: number, dt: number, steps: number) => {
+    const out: number[] = []
+    for (let i = 0; i < steps; i++) {
+      clawSwingStep(s, ax, az, L, dt)
+      out.push(s.x)
+    }
+    return out
+  }
+
+  it('匀速平移（加速度 0）时**不晃** —— 晃的是加速，不是移动', () => {
+    const s: ClawSwing = { x: 0, z: 0, vx: 0, vz: 0 }
+    run(s, 0, 0, 0.12, 1 / 60, 120)
+    expect(Math.abs(s.x)).toBeLessThan(1e-9)
+    expect(Math.abs(s.z)).toBeLessThan(1e-9)
+  })
+
+  it('向右加速 → 爪子向后（负方向）甩', () => {
+    const s: ClawSwing = { x: 0, z: 0, vx: 0, vz: 0 }
+    run(s, 0.7, 0, 0.12, 1 / 60, 20)
+    expect(s.x).toBeLessThan(-0.01)
+  })
+
+  it('松手后会停：2.5 秒后回到 3° 以内（不是钟摆）', () => {
+    const s: ClawSwing = { x: 0, z: 0, vx: 0, vz: 0 }
+    run(s, 0.7, 0, 0.12, 1 / 60, 45) // 加速 0.75s
+    const peak = Math.abs(s.x)
+    run(s, -0.7, 0, 0.12, 1 / 60, 45) // 刹车 0.75s
+    run(s, 0, 0, 0.12, 1 / 60, 150) // 松手滑行 2.5s
+    expect(peak).toBeGreaterThan(0.02) // 先证明它真的晃起来了
+    expect(Math.abs(s.x)).toBeLessThan(0.052) // 3°
+  })
+
+  it('掉帧到 4fps（dt=0.25）也**不发散** —— 固定子步的意义', () => {
+    const s: ClawSwing = { x: 0, z: 0, vx: 0, vz: 0 }
+    // 交替加减速，模拟玩家来回推 —— 最坏情况
+    for (let i = 0; i < 40; i++) clawSwingStep(s, i % 2 ? 0.7 : -0.7, 0, 0.12, 0.25)
+    expect(Number.isFinite(s.x)).toBe(true)
+    expect(Math.abs(s.x)).toBeLessThanOrEqual(0.25 + 1e-9) // 上限 0.25，永远不越界
+  })
+})
+
+describe('小车加速度：限幅', () => {
+  it('位置一直不动 → 加速度 0', () => {
+    const s: ClawCarriage = { x: 0.1, z: 0, vx: 0, vz: 0 }
+    for (let i = 0; i < 10; i++) {
+      const { ax, az } = clawCarriageAccel(s, 0.1, 0, 1 / 60)
+      expect(Math.abs(ax)).toBeLessThan(1e-9)
+      expect(Math.abs(az)).toBeLessThan(1e-9)
+    }
+  })
+
+  it('位置瞬移也不会产生 30 m/s² 的尖峰（键盘一按就满速）', () => {
+    const s: ClawCarriage = { x: 0, z: 0, vx: 0, vz: 0 }
+    let maxA = 0
+    // 每帧挪 0.009 m（0.52 m/s @ 60fps），从静止开始
+    for (let i = 1; i <= 60; i++) {
+      const { ax } = clawCarriageAccel(s, i * 0.009, 0, 1 / 60)
+      maxA = Math.max(maxA, Math.abs(ax))
+    }
+    expect(maxA).toBeLessThanOrEqual(0.7 + 1e-6)
+    expect(s.vx).toBeGreaterThan(0.5) // 最终还是能到巡航速度
   })
 })

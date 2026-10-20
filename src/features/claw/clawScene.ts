@@ -55,6 +55,7 @@ import {
   PCFSoftShadowMap,
   PerspectiveCamera,
   PMREMGenerator,
+  Quaternion,
   Scene,
   SpotLight,
   SRGBColorSpace,
@@ -394,6 +395,20 @@ export interface ClawVisual {
   clawX: number
   clawZ: number
   hubY: number
+  /**
+   * 摆动角（弧度，绕 X / 绕 Z）。0 = 竖直挂着。
+   *
+   * ★★ 参考实现的爪子是**吊在绳子上**的：小车一加速它就往后甩，再被重力拉回来，
+   *   1.6 的阻尼让它晃两三下停住。少了这一项，爪子就是「贴在小车底下的贴纸」——
+   *   平移再快也纹丝不动，一眼就是假的。
+   *
+   * `hub` 的**位置和朝向**都由这两个角算出来（见 `drawFrame`）：
+   * 横向偏移 `sin(角) × 绳长`、高度回正 `绳长 × (1 + cos)`，并且整只爪子沿绳倾斜。
+   * ★ 页面只负责积分这个摆（`clawSwingStep`），几何换算留在这里 ——
+   *   `clawX/clawZ` 仍然是**小车**的位置，缆绳和轨道照旧挂在上面。
+   */
+  swingX: number
+  swingZ: number
   /** 合爪程度：0 = 完全张开，1 = 完全合上 */
   close: number
   /**
@@ -495,6 +510,42 @@ export interface ClawStage {
    *   只有这个数能证明指头**真的扫过那 70°**。
    */
   debugProng(): number
+  /**
+   * 摆动的**实际**结果：角度 + hub 相对小车的偏移 + 绳子的倾角。
+   *
+   * ★ 为什么不能只看 `debugVisual().swingX`：那是页面算出来的**意图**。
+   *   要证明「画面真的晃了」，得看 `hub` 到底被摆到哪儿去了（`dx/dz`）
+   *   以及它到底转没转（`tilt`）。两个都是 0 = 摆动没接上渲染。
+   */
+  debugSwing(): { x: number; z: number; dx: number; dz: number; tilt: number }
+  /**
+   * 「捏住」这件事的**实际**结果：物理算出来的挤压 / 压痕，以及**真正上传给
+   * 着色器**的那两个数。
+   *
+   * ★★ 为什么要成对报：`squashOf()` 有值只证明物理算过；`uSquash.w` 有值才
+   *   证明顶点着色器拿到了它。这两件事之间断开的症状是「代码看着对、画面
+   *   一点没变」—— 之前踩过一模一样的坑（`userData.baseScale` 只读不写）。
+   */
+  debugGrip(): {
+    /** 被夹着（或最后被夹过）的那只，−1 = 一只都没碰过 */
+    index: number
+    /** 这一刻压在它身上的指头数（0~3） */
+    contacts: number
+    /**
+     * 这一局**最多同时**有几根指头压住它（锁存值，新一局清零）。
+     *
+     * ★ 判据要用这个，不要用 `contacts` 的采样最大值：峰值只持续几帧，
+     *   而 headless 采样只有 5~15 fps —— 实测 tablet 那档一帧都没赶上，
+     *   报「最多 1 根」，可同一局的挤压量已经到 −0.045（≥2 根才挤得出来）。
+     */
+    peakContacts: number
+    physSquash: number
+    drawnSquash: number
+    /** 上传给着色器的最大压痕深度 */
+    dentW: number
+    /** 物理侧的最大压痕深度（应当和 `dentW` 相等） */
+    dentPhys: number
+  }
   /**
    * 离 `(x, z)` 最近的娃娃下标，一个都没有就是 `-1`。
    *
@@ -774,6 +825,13 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   let winPrize = -1
   /** 最近一次被夹住的那只 —— 中奖那一刻 `held` 已经是 null 了，只能靠它记着 */
   let lastHeld = -1
+  /**
+   * 这一局「同时压在娃娃身上的指头」最多到过几根（锁存）。
+   *
+   * ★ 为什么不靠采样：见 `drawFrame` 里的注释 —— 峰值只有几帧，
+   *   rAF 采样会漏。走查要的是「有没有发生过」，不是「拍到了没有」。
+   */
+  let gripPeak = 0
   /** 上一帧的 `busy`：抓「新一局」的沿，用来清掉上一局的记忆 */
   let prevBusy = false
   /** 奖品从窗口「探出来」的程度 0~1 */
@@ -1546,6 +1604,13 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   /* ============================ 渲染 ============================ */
 
   const tmp = new Vector3()
+  /** 「竖直向下」—— 摆的参考方向（`setFromUnitVectors` 的起点） */
+  const DOWN = new Vector3(0, -1, 0)
+  /** 当前这一帧绳子指向的方向（归一化） */
+  const hangDir = new Vector3()
+  /** 软体手感用：把世界 +Y 转进娃娃的局部空间（见 `uSquash` 的注释） */
+  const tmpQuat = new Quaternion()
+  const tmpAxis = new Vector3()
 
   /** 最后一帧收到的视觉状态（`debugVisual` 用）。 */
   let lastVisual: ClawVisual | null = null
@@ -1583,17 +1648,38 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     // ---- 天车 / 缆绳 / 爪子 ----
     beam.position.z = v.clawZ
     carriage.position.set(v.clawX, 0, v.clawZ)
-    hub.position.set(v.clawX, v.hubY, v.clawZ)
+    /*
+      ★★ 摆：hub 挂在一条**会晃**的绳子上，不是贴在小车底下。
+
+      小车（`clawX/clawZ`）只决定绳子**上端**；下端按摆角算：
+        横向 = sin(角) × 绳长          高度 = 绳长 × (1 + cos) 的抬升
+      绳子长 `RAIL_Y - hubY` —— 也就是「竖直挂着时」的绳长，
+      所以摆起来时 hub 会**略微升高**（cos < 1），这正是单摆的几何。
+
+      整只爪子还要沿绳子方向**倾斜**（`setFromUnitVectors`）：
+      只平移不转的话，晃起来像一块被推着走的铁块。
+
+      ★ 摆角由页面积分（`clawSwingStep`，照搬参考实现的阻尼摆）。
+        这里只做几何换算 —— 因为 `clawX/clawZ` 同时也是轨道和缆绳的锚点，
+        两者不能混成一个数。
+    */
+    const swingLen = Math.max(0.08, RAIL_Y - v.hubY)
+    const sx = Math.sin(v.swingX)
+    const sz = Math.sin(v.swingZ)
+    const drop = -Math.sqrt(Math.max(0, 1 - sx * sx - sz * sz))
+    hangDir.set(sx, drop, sz)
+    hub.position.set(v.clawX + sx * swingLen, v.hubY + swingLen * (1 + drop), v.clawZ + sz * swingLen)
+    hub.quaternion.setFromUnitVectors(DOWN, hangDir)
     applyProngs(v.close, v.spread, v.held !== null)
 
-    // 缆绳从小车底面拉到 hub 顶面
+    // 缆绳从小车底面拉到 hub 顶面（顶面跟着倾斜走，否则绳子会插进爪子里）
     const top = tmp.set(v.clawX, RAIL_Y - 0.02, v.clawZ)
-    const dx = v.clawX - top.x
-    const dy = v.hubY + 0.03 - top.y
-    const dz = v.clawZ - top.z
+    const dx = hub.position.x - sx * 0.03 - top.x
+    const dy = hub.position.y - drop * 0.03 - top.y
+    const dz = hub.position.z - sz * 0.03 - top.z
     const len = Math.max(0.001, Math.hypot(dx, dy, dz))
     cable.position.copy(top)
-    cable.quaternion.setFromUnitVectors(new Vector3(0, -1, 0), new Vector3(dx, dy, dz).normalize())
+    cable.quaternion.setFromUnitVectors(DOWN, new Vector3(dx, dy, dz).normalize())
     cable.scale.set(1, len, 1)
 
     // ---- 娃娃 ----
@@ -1607,13 +1693,36 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       hub.updateMatrixWorld(true)
       const dt = lastPhysT ? Math.min(0.1, t - lastPhysT) : 1 / 60
       lastPhysT = t
-      phys.step(dt, { clawX: v.clawX, clawZ: v.clawZ, hubY: v.hubY, close: v.close, held: v.held })
+      phys.step(dt, {
+        // ★ 传 hub 的**实际**位置（含摆动偏移），不是小车的 ——
+        //   否则碰撞体在小车正下方、视觉在偏出去的地方，爪子会「推不到」娃娃
+        clawX: hub.position.x,
+        clawZ: hub.position.z,
+        hubY: hub.position.y,
+        close: v.close,
+        held: v.held,
+        rot: { x: hub.quaternion.x, y: hub.quaternion.y, z: hub.quaternion.z, w: hub.quaternion.w },
+      })
+      /*
+        ★★ 记「这一局最多有几根指头同时压在娃娃身上」。
+
+        为什么要**锁存**：走查脚本按 rAF 采样，而 headless 只有 5~15 fps，
+        「三根指头都压住」只持续几帧 —— 采样很容易一帧都没赶上（实测
+        tablet 那一档就漏了，报「最多 1 根」，而同一局的挤压量已经到了 −0.045，
+        那**只能**是 ≥2 根指头挤出来的）。锁存值不会被采样率骗。
+      */
+      let g = 0
+      for (let k = 0; k < prizeGroups.length; k++) {
+        const n = phys.gripCount(k)
+        if (n > g) g = n
+      }
+      if (g > gripPeak) gripPeak = g
     } else {
       // 降级路径：被夹住的那只跟着爪子，其余插值回原位
       for (let i = 0; i < prizeGroups.length; i++) {
         const g = prizeGroups[i]
         if (i === v.held) {
-          g.position.set(v.clawX, v.hubY - 0.16, v.clawZ)
+          g.position.set(hub.position.x, hub.position.y - 0.16, hub.position.z)
           g.rotation.z = Math.sin(t * 6) * 0.12 // 被提着晃
         } else if (g.visible) {
           const r = prizeRest[i]
@@ -1640,7 +1749,24 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       const u = prizeModels[i]?.u
       if (!u) continue
       const g = prizeGroups[i]
-      u.uSquash.value.set(0, 1, 0, phys ? phys.squashOf(i) : 0)
+      /*
+        ★★ 挤压轴必须是**娃娃自己的**上方向，不是世界的。
+
+        着色器里的 `transformed` 是模型局部坐标，所以要把世界 +Y 用
+        `inverse(g.quaternion)` 转进局部空间。之前写死 `(0,1,0)` 的话，
+        一只被撞歪 60° 的娃娃会沿「世界的上」压扁 —— 看着像被斜着切了一刀。
+        原版就是这么转的（`tmpV.set(0,1,0).applyQuaternion(invQ)`）。
+      */
+      tmpQuat.copy(g.quaternion).invert()
+      tmpAxis.set(0, 1, 0).applyQuaternion(tmpQuat)
+      u.uSquash.value.set(tmpAxis.x, tmpAxis.y, tmpAxis.z, phys ? phys.squashOf(i) : 0)
+      // 指头压出来的手印（局部坐标，`w` = 深度；物理侧已经衰减过）
+      const dents = phys ? phys.dentsOf(i) : null
+      for (let k = 0; k < 3; k++) {
+        const d = dents?.[k]
+        if (d) u.uDent.value[k].set(d.x, d.y, d.z, d.w)
+        else u.uDent.value[k].set(0, 0, 0, 0)
+      }
       u.uCenter.value.copy(g.position)
       u.uFloorY.value = 0
     }
@@ -1654,7 +1780,10 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     const winEdge = v.winFlash > 0 && prevFlash === 0
 
     // 新一局开始 → 忘掉上一局夹的是哪只（否则第二局没中奖也会摆一只出来）
-    if (v.busy && !prevBusy) lastHeld = -1
+    if (v.busy && !prevBusy) {
+      lastHeld = -1
+      gripPeak = 0
+    }
     prevBusy = v.busy
     if (v.held !== null) lastHeld = v.held
 
@@ -2124,6 +2253,54 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     themeIndex: () => themeIdx,
     prizeCount: () => prizeGroups.length,
     debugProng: () => prongInners[0]?.rotation.z ?? 0,
+    debugSwing: () => {
+      const v = lastVisual
+      if (!v) return { x: 0, z: 0, dx: 0, dz: 0, tilt: 0 }
+      return {
+        x: v.swingX,
+        z: v.swingZ,
+        // hub 相对**小车**偏出去多少 —— 这是「画面上真的晃了」的证据
+        dx: hub.position.x - v.clawX,
+        dz: hub.position.z - v.clawZ,
+        // 绳子偏离竖直的角度（弧度）。只平移不转的话这里恒 0
+        tilt: Math.acos(Math.max(-1, Math.min(1, -hangDir.y))),
+      }
+    },
+    debugGrip: () => {
+      /*
+        ★ 先问「这一刻被压得最狠的是哪只」，没接触才退回 `lastHeld`。
+          只看 `lastHeld` 的话，**没夹中**的那一局（`held` 从头到尾是 null）
+          会报「什么都没发生」—— 可指头明明压在娃娃身上。
+      */
+      let i = -1
+      let best = 0
+      if (phys) {
+        for (let k = 0; k < prizeGroups.length; k++) {
+          const n = phys.gripCount(k)
+          if (n > best) {
+            best = n
+            i = k
+          }
+        }
+      }
+      if (i < 0) i = lastHeld
+      const u = i >= 0 ? prizeModels[i]?.u : null
+      let dentW = 0
+      if (u) for (const d of u.uDent.value) if (d.w > dentW) dentW = d.w
+      const dents = phys && i >= 0 ? phys.dentsOf(i) : []
+      let dentPhys = 0
+      for (const d of dents) if (d.w > dentPhys) dentPhys = d.w
+      return {
+        index: i,
+        contacts: phys && i >= 0 ? phys.gripCount(i) : 0,
+        /** 这一局最多同时有几根指头压住（锁存，采样漏不掉） */
+        peakContacts: gripPeak,
+        physSquash: phys && i >= 0 ? phys.squashOf(i) : 0,
+        drawnSquash: u ? u.uSquash.value.w : 0,
+        dentW,
+        dentPhys,
+      }
+    },
     nearestPrize: (x: number, z: number) => {
       // 物理在跑的时候问**活的**位置：娃娃会被爪子推、会滚，静止坐标早就过期了
       if (phys) return phys.nearest(x, z)

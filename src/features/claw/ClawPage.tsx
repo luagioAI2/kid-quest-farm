@@ -21,12 +21,16 @@ import {
   type ClawStage,
 } from './clawScene'
 import {
+  clawCarriageAccel,
   clawCloseAt,
   clawHoldingAt,
   clawHubYAt,
   clawOutcomeText,
   clawPhaseAt,
   clawPositionAt,
+  clawSwingStep,
+  type ClawCarriage,
+  type ClawSwing,
 } from './clawTimeline'
 import './claw.css'
 
@@ -224,6 +228,20 @@ export default function ClawPage() {
   const padPrevRef = useRef<boolean[]>([])
   /** 上一帧的时间戳（算 dt 用；不用固定步长，掉帧时移动才不会变慢） */
   const lastFrameRef = useRef(0)
+  /**
+   * 爪子的**摆动**（单摆，弧度 / 角速度）。
+   *
+   * ★ 为什么需要它：原版爪子是吊在绳子上的，小车一加速它就往后甩、
+   *   再被重力拉回来。没有这一项，爪子就是「贴在小车底下的贴纸」——
+   *   平移再快也纹丝不动。用户的原话是「移动爪子都能晃动」。
+   *   积分公式见 `clawSwingStep`（和参考实现同一组数）。
+   */
+  const swingRef = useRef<ClawSwing>({ x: 0, z: 0, vx: 0, vz: 0 })
+  /**
+   * 上一帧小车的**位置和速度** —— 摆是被**加速度**甩起来的，
+   * 所以要先差分出速度、再差分出加速度。只存位置不够。
+   */
+  const carriageRef = useRef<ClawCarriage | null>(null)
   /** 摇杆是否正被按住（按住才移动；抬起立刻停） */
   const joyRef = useRef({ x: 0, z: 0, active: false })
   /**
@@ -361,6 +379,8 @@ export default function ClawPage() {
       clawX: aim.current.x,
       clawZ: aim.current.z,
       hubY: HUB_TOP,
+      swingX: 0,
+      swingZ: 0,
       close: 0,
       spread: CLAW_PRONG_IDLE,
       held: null,
@@ -508,13 +528,64 @@ export default function ClawPage() {
       if (tapBuy || padEdge(pads, 2)) buyRef.current()
 
       /* ---------------- ④ 渲染 ---------------- */
+      /*
+        先推进摆动，再渲染 —— 两个分支（空闲 / 演一局）都要走。
+
+        ★ 加速度是**差分两次**得到的：位置 → 速度 → 加速度。
+          直接拿「这一帧移动了多少」当惯性是错的：匀速平移时爪子不该晃，
+          只有**起步 / 急停 / 换向**才甩。这也是原版看着真实的原因。
+      */
+      const swing = swingRef.current
+      const stepSwing = (cx: number, cz: number, hubY: number) => {
+        const carriage = carriageRef.current ?? (carriageRef.current = { x: cx, z: cz, vx: 0, vz: 0 })
+        /*
+          ★★ 位置**瞬移**了就别当加速度算。
+
+          两处会瞬移：一局演完先在取物口停 0.9 秒，然后**跳回**瞄准点；
+          以及瞄准点本身被程序改掉（`__kqfClawAim`）。跳过去的那一帧，
+          差分出来的「速度」是 10 m/s 级的假值，限幅器会给摆动一记
+          正反各一下的**双脉冲**（下一帧目标速度变回 0，再反向修一次）。
+
+          ★ 实测过：这一记双脉冲净冲量≈0，爪子只是被轻推一下（1.8°，
+            0.5 秒内自己衰减掉），**不会**歪着挂住 —— 因为
+            `clawCarriageAccel` 每帧都把 `s.x` 归位，跳变只影响**一帧**。
+            所以这是「把不该有的抖动去掉」，不是修 bug。
+
+          判据：一帧能走多远是有上限的（0.52 m/s × dt ≤ 0.052 m），
+          超过 0.08 m 只能是跳变。
+        */
+        if (Math.hypot(cx - carriage.x, cz - carriage.z) > 0.08) {
+          carriage.x = cx
+          carriage.z = cz
+          carriage.vx = 0
+          carriage.vz = 0
+          swing.x = swing.z = swing.vx = swing.vz = 0
+          return
+        }
+        /*
+          ★ 加速度**不能**直接由位置二次差分：键盘是一按就满速，
+            差分出来是一个 30 m/s² 的尖峰，摆一下就被顶到上限。
+            `clawCarriageAccel` 里有一层 0.7 m/s² 的限幅（电机起转）。
+        */
+        const { ax, az } = clawCarriageAccel(carriage, cx, cz, dt)
+        // 减少动态效果：**不晃**（不是晃得慢一点 —— 那反而更晕）
+        if (rm) {
+          swing.x = swing.z = swing.vx = swing.vz = 0
+          return
+        }
+        clawSwingStep(swing, ax, az, CLAW_RAIL_Y - hubY, dt)
+      }
+
       if (!r) {
         // 空闲：爪子停在瞄准位；刚演完那一局先停在取物口一会儿
         const at = holdRef.current > now ? CLAW_HOLE_CENTER : aim.current
+        stepSwing(at.x, at.z, HUB_TOP)
         s.render(now / 1000, {
           clawX: at.x,
           clawZ: at.z,
           hubY: HUB_TOP,
+          swingX: swing.x,
+          swingZ: swing.z,
           close: 0,
           // 待命：微张。张到最大会像个蜘蛛趴在轨道上
           spread: CLAW_PRONG_IDLE,
@@ -527,6 +598,9 @@ export default function ClawPage() {
 
       const m = clawPhaseAt((now - r.startedAt) / 1000)
       const pos = clawPositionAt(m, { x: r.fromX, z: r.fromZ }, CLAW_HOLE_CENTER)
+      const hubY = clawHubYAt(m, HUB_TOP, r.bottomY)
+      // 吊得越低，绳越长，摆得越慢（`clawSwingStep` 里的 k = g/L）
+      stepSwing(pos.x, pos.z, hubY)
       // `held` 只在「这一刻手里真有东西」时才传 —— 滑掉之后娃娃就回池子了
       const holding = r.held !== null && clawHoldingAt(m, r.won)
       /*
@@ -543,7 +617,9 @@ export default function ClawPage() {
       s.render(now / 1000, {
         clawX: pos.x,
         clawZ: pos.z,
-        hubY: clawHubYAt(m, HUB_TOP, r.bottomY),
+        hubY,
+        swingX: swing.x,
+        swingZ: swing.z,
         close: clawCloseAt(m),
         spread,
         held: holding ? r.held : null,

@@ -183,3 +183,124 @@ export function smoothstep(t: number): number {
   const k = t < 0 ? 0 : t > 1 ? 1 : t
   return k * k * (3 - 2 * k)
 }
+
+/* ============================ 摆动（单摆） ============================ */
+
+/** 摆的状态：两个方向的角度（弧度）和角速度。 */
+export interface ClawSwing {
+  x: number
+  z: number
+  vx: number
+  vz: number
+}
+
+/** 重力加速度 —— 和参考实现同一个数。 */
+const SWING_G = 9.81
+/**
+ * 阻尼系数。参考实现是 **1.6**，我们取 **2.2**。
+ *
+ * 为什么加重：我们的绳长只有 0.12 m（`CLAW_HANG_MIN`），ω = √(g/L) ≈ 9 rad/s，
+ * ζ = 1.6 / (2ω) ≈ 0.09 —— 松手后要荡 5 秒才停。实测「移动一下，三秒后还在晃」，
+ * 看着像爪子坏了。2.2 ⇒ ζ ≈ 0.12，两三下停住，但仍然是**看得见的晃**。
+ * 再大（> 3）就变成「拖着一块铁」，反而不像吊着的爪子。
+ */
+const SWING_DAMP = 2.2
+/** 摆角上限（弧度，≈20°）。防止某帧 dt 抖动把角度甩飞。 */
+const SWING_MAX = 0.25
+
+/**
+ * 单摆一步（小角度、带阻尼）——**照搬参考实现**：
+ *
+ *     v += (−k·θ − a/L − 1.6·v)·dt      k = g / L
+ *
+ * 三个要点，少一个都不像：
+ *   · `−k·θ` 是重力回正 —— 摆开去会自己荡回来；
+ *   · `−a/L` 是**惯性**：小车一加速，爪子就往后甩。★ 关键是「加速」不是「移动」：
+ *     匀速平移时 `a = 0`，爪子应该**竖直挂着不晃**（很多人以为是「移动就晃」，
+ *     照那个写出来的是一块被拖着的铁块）；
+ *   · `−1.6·v` 是阻尼 —— 不写的话它会一直荡下去。
+ *
+ * @param ax 小车加速度（m/s²，世界 x）
+ * @param az 小车加速度（m/s²，世界 z）
+ * @param ropeLen 绳长（米）。`CLAW_RAIL_Y − hubY` —— 吊得越低摆得越慢。
+ */
+export function clawSwingStep(s: ClawSwing, ax: number, az: number, ropeLen: number, dt: number): void {
+  if (!(dt > 0)) return
+  const L = Math.max(0.08, ropeLen)
+  const k = SWING_G / L
+  /*
+    ★★ 固定子步（≤ 1/120 秒），不是「一步走完这一帧」。
+
+    绳长只有 0.12 m ⇒ ω = √(g/L) ≈ 9 rad/s，频率 1.4 Hz。
+    60fps 下 ω·dt ≈ 0.15，随便怎么积都稳；但**掉帧到 10fps** 时 ω·dt ≈ 0.9，
+    显式积分会把振幅越积越大（实测：松手 2 秒后还在 0.1 rad 上荡）。
+    这不是「动画难看一点」，是数值发散。
+  */
+  let rem = dt
+  while (rem > 0) {
+    const h = Math.min(rem, 1 / 120)
+    rem -= h
+    s.vx += (-k * s.x - ax / L - SWING_DAMP * s.vx) * h
+    s.vz += (-k * s.z - az / L - SWING_DAMP * s.vz) * h
+    s.x = Math.max(-SWING_MAX, Math.min(SWING_MAX, s.x + s.vx * h))
+    s.z = Math.max(-SWING_MAX, Math.min(SWING_MAX, s.z + s.vz * h))
+  }
+}
+
+/** 小车的运动状态（位置 + 速度）。摆是被**加速度**甩起来的，所以要单独跟踪速度。 */
+export interface ClawCarriage {
+  x: number
+  z: number
+  vx: number
+  vz: number
+}
+
+/**
+ * 小车加速度上限（m/s²）。
+ *
+ * ★ 参考实现是 0.85 —— 它的输入是摇杆模拟量，速度本来就是渐变的。
+ *   我们的方向键是「一按就满速」，位置差分出来的加速度是一个 **30 m/s² 的尖峰**，
+ *   摆一下就被顶到上限（实测直接吃满 20°）。
+ *
+ * 取 **0.7** 是量出来的：平衡角 θ ≈ a/g ≈ 4°，加上起步 / 急停的过冲也就 7~8°。
+ * 再大（1.2）时实测峰值到 0.2 rad（11°）而且 3 秒还在荡 —— 那不是「晃」，
+ * 是「爪子松了」。
+ */
+const CARRIAGE_A_MAX = 0.7
+
+/**
+ * 推进一帧小车，返回**这一帧的加速度**（给 `clawSwingStep` 用）。
+ *
+ * 速度朝「位置差分出来的目标速度」逼近，但每帧最多变 `A_MAX × dt` ——
+ * 这样 `a` 天然被限制在 `±A_MAX` 内，不需要再对结果做裁剪。
+ */
+export function clawCarriageAccel(
+  s: ClawCarriage,
+  cx: number,
+  cz: number,
+  dt: number,
+): { ax: number; az: number } {
+  if (!(dt > 0)) {
+    s.x = cx
+    s.z = cz
+    return { ax: 0, az: 0 }
+  }
+  const tvx = (cx - s.x) / dt
+  const tvz = (cz - s.z) / dt
+  const ovx = s.vx
+  const ovz = s.vz
+  const ex = tvx - ovx
+  const ez = tvz - ovz
+  const e = Math.hypot(ex, ez)
+  const step = CARRIAGE_A_MAX * dt
+  if (e <= step) {
+    s.vx = tvx
+    s.vz = tvz
+  } else {
+    s.vx = ovx + (ex / e) * step
+    s.vz = ovz + (ez / e) * step
+  }
+  s.x = cx
+  s.z = cz
+  return { ax: (s.vx - ovx) / dt, az: (s.vz - ovz) / dt }
+}
