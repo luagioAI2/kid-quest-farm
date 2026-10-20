@@ -284,6 +284,55 @@ for (const vp of SELECTED) {
   check('画布里有一只以上的娃娃（池子不是空的）', geo.prizes > 0, `${geo.prizes} 只`)
   check('canvas 真的在容器里', geo.canvasInDom)
 
+  /*
+    ★★ 「移动爪子的时候它会晃」—— 原版最显眼的手感，我们之前**完全没有**。
+
+    那时候 hub 是直接贴在小车正下方的（`hub.position.set(v.clawX, v.hubY, v.clawZ)`），
+    平移多快都纹丝不动，看着像一块被推着走的铁。原版是吊在绳子上的：
+    小车一加速它就往后甩，再被重力拉回来。
+
+    判据分两条，缺一不可：
+      · 晃得出来 —— hub 相对小车偏出去（`dx`）**而且**整只爪子沿绳倾斜（`tilt`）。
+        只平移不转 = 半成品（看着像爪子在滑冰）。
+      · 会停 —— 2 秒后回到竖直。不会停的那个叫钟摆，孩子会以为爪子坏了。
+
+    ★ 别拿 `debugVisual().swingX` 当证据：那是页面算出来的**意图**，
+      「算出来要晃」和「画面上真的晃了」是两件事。
+  */
+  await page.evaluate(() => {
+    window.__sway = []
+    const st = window.__kqfClawStage
+    const t0 = performance.now()
+    const tick = () => {
+      if (st) window.__sway.push(st.debugSwing())
+      if (performance.now() - t0 < 3600) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  /*
+    ★ 按 **900ms** 不是 300ms：`clawCarriageAccel` 有 0.7 m/s² 的加速度上限，
+      巡航速度 0.52 m/s 要 0.74 秒才到。按太短的话爪子根本没加速完，
+      摆只有 2°（实测），判据会误报成「不晃」——量的是「按得短」不是「不会晃」。
+  */
+  await page.keyboard.down('ArrowRight')
+  await new Promise((r) => setTimeout(r, 900))
+  await page.keyboard.up('ArrowRight')
+  await new Promise((r) => setTimeout(r, 2600))
+  const sway = await page.evaluate(() => window.__sway ?? [])
+  const peakDx = sway.length ? Math.max(...sway.map((s) => Math.abs(s.dx))) : 0
+  const peakTilt = sway.length ? Math.max(...sway.map((s) => s.tilt)) : 0
+  const settle = sway.length ? Math.abs(sway[sway.length - 1].x) : 1
+  check(
+    '★★ 移动爪子时它会摆（hub 偏出去 + 整只爪子沿绳倾斜）',
+    sway.length > 10 && peakDx > 0.004 && peakTilt > 0.03,
+    `采样 ${sway.length} 帧 · peak dx=${peakDx.toFixed(3)}m · tilt=${((peakTilt * 180) / Math.PI).toFixed(1)}°`,
+  )
+  check(
+    '★ 摆会停（不是钟摆：松手 2.6 秒后回到竖直）',
+    sway.length > 10 && settle < 0.06,
+    `2.6s 后 |swingX|=${settle.toFixed(3)} rad（${((settle * 180) / Math.PI).toFixed(1)}°）`,
+  )
+
   const { glass: gl, frame: fr, cabinet: cb, canvas: cv } = geo.frame
 
   /*
@@ -878,6 +927,11 @@ for (const vp of SELECTED) {
               spread: v.spread,
               prong: st.debugProng(),
               held: v.held,
+              /*
+                ★ 捏合手感（接触 → 挤压 → 压痕 → 着色器）。
+                  每帧都记，因为「捏住」只有不到 1 秒的窗口，挑帧会挑空。
+              */
+              grip: st.debugGrip(),
             })
           }
           requestAnimationFrame(tick)
@@ -946,6 +1000,11 @@ for (const vp of SELECTED) {
       const v = window.__kqfClawStage?.debugVisual()
       return v ? { hubY: v.hubY } : null
     })
+    /*
+      ★ 对照组：还没下爪时，**没有任何指头接触**。
+        没有这一条的话，下面「捏住了」在「压痕是个常量」时也成立。
+    */
+    const idleGrip = await page.evaluate(() => window.__kqfClawStage?.debugGrip() ?? null)
 
     /* ---- 第 1 局：**确认是空地**再瞄 ----
        这一局证明「对着空地会一直压到池底」，而不是停在写死的 0.42。
@@ -1031,8 +1090,9 @@ for (const vp of SELECTED) {
     */
     check(
       '★★ 对着空地：压到池底（合爪 hubY ≤ 0.20，不是悬在半空）',
-      !!gC && gC.hubY <= 0.2,
-      `合爪 hubY=${gC?.hubY.toFixed(3)}（瞄的是探面=0 的 (${emptySpot?.x}, ${emptySpot?.z})）`,
+      // 同上：量这一局最深到哪，别赌「合爪那一帧」一定被采到
+      gapFrames.length > 0 && Math.min(...gapFrames.map((f) => f.hubY)) <= 0.2,
+      `最深 hubY=${gapFrames.length ? Math.min(...gapFrames.map((f) => f.hubY)).toFixed(3) : '—'}（瞄的是探面=0 的 (${emptySpot?.x}, ${emptySpot?.z})）`,
     )
 
     /* ---- 第 2 局：**瞄准一只娃娃** ----
@@ -1078,10 +1138,6 @@ for (const vp of SELECTED) {
     await shotWhen(
       `(() => { const s = window.__kqfClawStage; const v = s.debugVisual(); return !!v && v.close === 0 && v.spread > 0.99 && v.hubY < ${((idlePose?.hubY ?? 1) - 0.45).toFixed(2)} })()`,
       '下爪',
-    )
-    await shotWhen(
-      `(() => { const s = window.__kqfClawStage; return s.debugProng() < 0.1 && s.debugVisual().close > 0.3 })()`,
-      '合爪',
     )
     /*
       ★★ 2026-10-19：「提起」那张**必须在「合爪」截图之前就开始等**。
@@ -1143,14 +1199,86 @@ for (const vp of SELECTED) {
     )
     check(
       '★★ 对着娃娃：还是扎进池子（hubY ≤ 0.46，不是悬在娃娃上方夹空气）',
-      !!pC && pC.hubY <= 0.46,
-      `合爪 hubY=${pC?.hubY.toFixed(3)}`,
+      /*
+        ★ 量的是**这一局最深到哪**（`min hubY`），不是「合爪那一帧」。
+          掉帧时 `pickFrames` 的 `closed` 可能落到「提起」中段（第一个
+          close>0.85 的帧已经是半空中）—— 实测 hubY=0.734 报红，而同一局的
+          `min hubY` 是 0.16。那红的是采样，不是产品。
+      */
+      pileFrames.length > 0 && Math.min(...pileFrames.map((f) => f.hubY)) <= 0.46,
+      `最深 hubY=${pileFrames.length ? Math.min(...pileFrames.map((f) => f.hubY)).toFixed(3) : '—'}（合爪帧 ${pC?.hubY.toFixed(3) ?? '—'}）`,
     )
     check(
       '★ 对着娃娃那一局：指头同样张到最大再合拢',
       !!pB && !!pC && pB.spread > 0.99 && pB.prong - pC.prong >= 0.6,
       `spread=${pB?.spread.toFixed(2)}，指头 ${pB?.prong.toFixed(2)} → ${pC?.prong.toFixed(2)} rad`,
     )
+
+    /*
+      ============ 捏合手感：接触 → 挤压 → 压痕 → 着色器 ============
+
+      原版「抓取很真实」靠的不是动画，是**接触驱动的形变**：
+      两根指头压上来 → 整只被横向挤（沿自由轴鼓出来）；
+      接触点再在娃娃身上压出手印，指头松开后按 `exp(-12t)` 淡掉。
+
+      三条判据分开量，因为它们会在**不同的地方**断：
+        · 指头没碰到 ⇒ `contacts` 永远是 0（碰撞分组 / 指头没开碰撞）；
+        · 碰到了但没挤 ⇒ 挤压目标没接上（还是「到点就播动画」）；
+        · 算了但没画 ⇒ `physSquash` 有值、`drawnSquash` 是 0（uniform 没喂）。
+    */
+    const grips = pileFrames.map((f) => f.grip).filter(Boolean)
+    /*
+      ★ 用**锁存值**（`peakContacts`），不是采样最大值：
+        「三根指头都压住」只持续几帧，headless 采样会漏（tablet 实测漏了）。
+    */
+    const peakContacts = grips.length ? Math.max(...grips.map((g) => g.peakContacts ?? g.contacts)) : 0
+    const minSquash = grips.length ? Math.min(...grips.map((g) => g.drawnSquash)) : 0
+    const peakDent = grips.length ? Math.max(...grips.map((g) => g.dentW)) : 0
+    /*
+      ★ 「会淡掉」只能量**最后一次接触之后**的尾巴。
+        整段取 min 的话，下爪之前那几帧本来就是 0 —— 那条断言会恒真。
+      ★ 判「还在捏着」用 `contacts > 0 || dentW > 0.002`：压痕比接触点活得久
+        （`exp(-12t)`），采样漏掉接触帧时它还能兜住。
+    */
+    let lastContact = -1
+    for (let i = 0; i < grips.length; i++) if (grips[i].contacts > 0 || grips[i].dentW > 0.002) lastContact = i
+    const tailDent = lastContact >= 0 && lastContact < grips.length - 1 ? Math.min(...grips.slice(lastContact + 1).map((g) => g.dentW)) : peakDent
+    // 同一帧里「物理算出来的」和「喂给着色器的」必须**逐位相同**（同一帧同一个值）
+    const mismatch = grips.filter((g) => Math.abs(g.drawnSquash - g.physSquash) > 1e-6 || Math.abs(g.dentW - g.dentPhys) > 1e-6)
+    check(
+      '★★ 合爪时娃娃真的被指头捏住（≥2 根指头 + 整只被挤）',
+      peakContacts >= 2 && minSquash <= -0.04,
+      `最多 ${peakContacts} 根指头 / 挤压最负 ${minSquash.toFixed(3)}（目标 −0.07）`,
+    )
+    check(
+      '★ 指头在娃娃身上压出手印，松爪后会淡掉',
+      peakDent > 0.002 && tailDent < peakDent * 0.25,
+      `最深 ${(peakDent * 1000).toFixed(1)}mm → 松爪后 ${(tailDent * 1000).toFixed(1)}mm`,
+    )
+    check(
+      '★★ 挤压 / 压痕真的传到了着色器（不是「算了但没画」）',
+      grips.length > 0 && mismatch.length === 0,
+      mismatch.length ? `${mismatch.length}/${grips.length} 帧对不上` : `${grips.length} 帧逐位一致`,
+    )
+    check(
+      '★ 对照组：还没下爪时没有任何指头接触（否则上面两条恒真）',
+      /*
+        ★ 判「可以忽略」，不是判「恰好是 0」：弹簧和压痕都是指数衰减，
+          永远剩一点浮点残渣（实测 squash 1.2e-8 / dent 5.6e-15）。
+          写 `=== 0` 会红，而那是**数学**没错 —— 不是产品有问题。
+      */
+      !!idleGrip && idleGrip.contacts === 0 && idleGrip.dentW < 1e-4 && Math.abs(idleGrip.drawnSquash) < 1e-3,
+      idleGrip ? `contacts=${idleGrip.contacts} dent=${idleGrip.dentW.toExponential(1)} squash=${idleGrip.drawnSquash.toExponential(1)}` : '拿不到 debugGrip()',
+    )
+
+    /*
+      ⚠️ 这里本来还有一条「一局演完、爪子回到瞄准点之后是竖直的」。
+
+      写完之后做变异验证（把 `ClawPage` 的瞬移守卫关掉），**它照样绿**
+      —— 因为 `clawCarriageAccel` 每帧都把 `s.x` 归位，跳变只影响一帧，
+      给摆动的是「正反各一下、净冲量≈0」的双脉冲（1.8°，半秒就衰减没了）。
+      ➜ 一条**不可能红**的判据没有价值，删掉。守卫本身保留（瞬移不该有加速度）。
+    */
 
     /* ---- ★ 切走再切回：不许双跑 ---- */
     const snapA = await page.evaluate(() => {
