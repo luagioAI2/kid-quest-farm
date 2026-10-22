@@ -5,6 +5,13 @@
 >
 > 契约的**唯一事实源**是 `src/games/plugin.ts`（类型）+ `src/games/loader.ts`（校验）。
 > 本文和它冲突时，**以代码为准**。
+>
+> ★ **2026-10-22 起分了两份**：
+> - **本文 = 怎么写一个包**（尺寸 / 画布 / DOM 锚点 / 观感 / 清单）
+> - **`docs/plugin-architecture.md` = 规则与架构**（本地/远程两种来源、安装链路、
+>   数据桥、货币三段、`mount` 契约、卸载、五层验收）
+>
+> 换一款新扒的游戏，**先读架构那份的 §9 五步**，再回来看本文的画布与排版。
 
 ---
 
@@ -303,16 +310,21 @@ emoji 的粗细 / 配色 / 基线由**系统 emoji 字体**决定，永远调不
   ➜ **要 React 就自己打进去**（或干脆不用 —— 样板游戏「许愿池」就是零依赖的）。
 - 所有能力都从 `host: HostApi` 拿。**这是插件唯一能碰外面的口子。**
 
-### 2.2 `mount` 必须**同步**返回卸载函数
+### 2.2 `mount` 可以同步返回卸载函数，**也可以返回 Promise**（v3）
 
 ```ts
-mount(container: HTMLElement, host: HostApi): () => void
+mount(container: HTMLElement, host: HostApi, ctx: MountContext): Unmount | Promise<Unmount>
 ```
 
-- 「读存档」这类异步动作**不能** `await` 在 `mount` 顶层 ——
-  写成 `async mount` 会让宿主在「还没拿到卸载函数」的那一小段里**丢掉卸载**。
-  ➜ 正确姿势：先同步建好 DOM 和卸载函数，再让内部的 `async init()` 去填内容，
-  并用 `disposed` 标志挡住「卸载之后才回来的异步结果」。
+- **推荐同步**：先建好 DOM 和卸载函数，再让内部的 `async init()` 去填内容，
+  用 `disposed` 标志挡住「卸载之后才回来的异步结果」。
+- **异步也合法**（2026-10-22 起）：3D 游戏要 `await` 纹理 / 物理 wasm，
+  宿主 `mountBundle` 会 `await` 你返回的 Promise。
+  ⚠️ 代价：卸载函数落地之前容器是空的，而且 `unmount` 必须能在
+  「刚建好就被调用」时安全执行（孩子秒切 tab）。
+- **`ctx` 的第三个参数必须用**：资源路径只能从 `ctx.assetUrl(rel)` 拿。
+  自己拼相对路径会以 `blob:` 为基准解析 ⇒ 全 404，报错是
+  `could not load texture`，看着像打包坏了。
 - **卸载必须清掉自己注册的定时器 / 监听。**
   ⚠️ `removeEventListener` 要传**同一个函数**：写成
   `addEventListener('click', () => void play())` 的话，
@@ -322,11 +334,62 @@ mount(container: HTMLElement, host: HostApi): () => void
   （家长去加了个分），`HostApi` 上**没有**「余额变了通知我」的订阅 ——
   所以你只能自己定时重绘。**不清掉的话，切走再切回来就有两个。**
 
-### 2.3 体积预算
+> 这条规则**改过一次**，原因值得记住：旧版写的是「必须同步返回」，
+> 而第一个真插件（3D 娃娃机）做不到 —— 它要 await 纹理。结果宿主拿到
+> Promise 就当成「没有卸载函数」，只 warn 然后返回空函数，
+> `destroy()` **永远不跑**。而当时的测试自己 `await mount()`，所以全绿。
+> ➜ **契约如果逼着实现者违反它，那是契约的问题，不是实现的问题。**
 
-**一个新游戏插件的增量 ≤ +15 KB gzip**（纯 SVG + 逻辑，不含位图）。
+### 2.3 容器是**定高盒子**：`height:100%` 一定解析得到
+
+宿主给你的 `container` 是一个**高度确定**的盒子 —— 正好等于「顶栏和底栏之间那块」
+（390×844 上量到 698px，834×1112 上是 966px）。所以：
+
+```css
+/* 推荐：一屏游戏的根节点就这么写 */
+.pp-root { position: relative; width: 100%; height: 100%; overflow: hidden }
+```
+
+- **别写 `min-height:100vh` / `100dvh`** —— 那会算上宿主的顶栏和底栏，
+  在手机上正好把底栏盖掉一截。
+- **容器不会随内容长高**。内容超过一屏就得**自己滚**（`overflow-y:auto` 放在
+  你自己的滚动区里，不是放在根节点上 —— 根节点还要装绝对定位的层）。
+- 高度变化（转屏、平板）宿主会重新布局，`height:100%` 自动跟着走；
+  **画布游戏的绘制缓冲要监听 `ResizeObserver`**（见 §0.4 ②）。
+
+> ⚠️ **这一条是用一次「整屏空白」换来的**（2026-10-22，接入奖品公园时）。
+>
+> 当时宿主给的是 `min-h-0 flex-1`（靠 flex-grow 撑到 698px）。量出来：
+> **容器 698px、插件根节点 0px** —— 整屏空白，而 `canvas` 在、
+> `__gpPlayable` 是 true、所有功能断言全绿。只有走查截图能看出来。
+>
+> 原因：插件根节点写的是 `height:100%`，它对着**父节点的 `height` 属性**解析；
+> 而父节点是靠 `flex:1 1 0%` 撑出来的，`height` 属性仍是 `auto`。
+> 在**多层嵌套**的 flex 链里，浏览器不把「靠 flex-grow 得到的 used height」
+> 当成 definite，于是 `height:100%` 退化成 `auto`，而插件的子元素又全是绝对定位 ⇒ 0。
+>
+> 现在宿主改成「`relative` 父 + `absolute inset-0` 子」：绝对定位盒子的高度由
+> `inset` 定死，与 `height` 属性无关，`height:100%` 必然解析得到。
+>
+> **验收判据必须写成「等于」而不是「大于 0」**：
+> `Math.abs(rootHeight - containerHeight) <= 1`。
+> 「h > 0」这条断言在 0px 那次是**唯一**能抓到它的，但它当时写的是 `> 0`，
+> 于是抓不到 —— 改成等于之后，`scripts/e2e-plugin-local.mjs` 才真的拦住这一类。
+
+### 2.4 体积预算
+
+**纯 DOM 游戏（内联 SVG + 逻辑）的增量 ≤ +15 KB gzip。**
 确实需要位图（照片级奖品图）时走 `site/app/` 那套资源链路，
 并且**必须 `loading="lazy"` + 明确宽高**（避免布局抖动）。（spec §6.5）
+
+**3D / 引擎类游戏不受这条约束**，因为它们必然要带 three.js（最小 135 KB gzip）
+甚至 Rapier（+ 1.8MB base64 wasm）。替代口径：
+
+- **不进主包**：包是运行时下载的，所以**首装体积不变**；
+- **单文件包 ≤ 4 MB**（gzip ≤ 1.2 MB）是实测可接受的上限（奖品公园 3.24MB / 1.06MB）；
+- **资源另发**，不进 JS（base64 会让体积 +33%，而且 blob 模块解析几十 MB 字符串会卡死）；
+- 资源必须**转 WebP** 并出 `assets/manifest.json`（每张 sha256）。
+  奖品公园实测：41 张 PNG 63.7MB → 5.2MB（12.7×）。
 
 ---
 
@@ -337,27 +400,46 @@ manifest: {
   id: string          // ★ 不许占用内置游戏的 id（会被判为劫持，spec §12.5.1）
   name: string
   emoji: string
-  tabLabel: string    // 底部导航文字，≤3 字，多了会挤
+  tabLabel: string    // 底部导航文字，≤3 字，多了会挤；**也不能和内置游戏同名**
   version: string     // 语义化版本，用来判断「可更新」
-  minHostApi: number  // 要求的最低宿主 API 版本，现在是 1
+  minHostApi: number  // 要求的最低宿主 API 版本，现在是 3
   coin: { id, name, emoji }                        // 自己的币
-  economy: { playCost, expectedPayout, capPerPrize }
+  economy: {
+    playCost, expectedPayout, capPerPrize,
+    voucherPerCoin?,   // 1 币换几张兑换券；不写 = 不开放兑换
+  }
 }
 ```
 
-**四条铁律**
+**五条铁律**
 
-1. **`expectedPayout < playCost`** —— 不能有正期望。这不是平衡问题，
+1. **`expectedPayout ≤ 0.8 × playCost`** —— 不能有正期望。这不是平衡问题，
    是「积分不能被游戏刷出来」的地基（spec §5.4）。
-2. **币是「算出来的」，不是「存出来的」** —— 余额 = 账本里全部 delta 之和。
+2. **`expectedPayout × voucherPerCoin < playCost`** —— 兑换券 ≡ 1 积分，
+   所以「一局期望换出多少积分」才是真正要守的数。第 1 条只保证**币**不超发。
+3. **币是「算出来的」，不是「存出来的」** —— 余额 = 账本里全部 delta 之和。
    存一个 `balance` 字段就会出现「余额和流水对不上」，而且**不报错**。
    ➜ 用 `host.mintGameCoin()` 进，用 `host.gameCoinBalance()` 读。
-3. **币只进不出，且换不回积分**（spec §2.2）。出口只有兑换商城。
-4. **扣分只有一个入口**：`host.spendPoints()` —— 守卫和扣款在**同一个事务**里，
+4. **币只进不出，且换不回积分**（spec §2.2）。出口只有兑换商城。
+5. **扣分只有一个入口**：`host.spendPoints()` —— 守卫和扣款在**同一个事务**里，
    余额不够返回 `false` 且一分不扣。**别自己去算余额再扣。**
 
+**四条钱路，各管一段**（详见 `plugin-architecture.md` §4）
+
+```
+积分 ──buyGameCoin──▶ 币 ──redeemGameCoin──▶ 兑换券
+                        ▲
+                        └── mintGameCoin（抓到奖品）
+```
+
+- 买币用 `buyGameCoin(count, rate, memo)`，**不要**自己写「先 spendPoints 再 mint」
+  —— 那是两个独立事务，中间崩一下就是「积分扣了、币没到」。
+- 换券用 `redeemGameCoin(count, memo)`，**汇率不归你传**：宿主从
+  已安装的 manifest 里读 `voucherPerCoin`。所以界面显示的是**返回值**，
+  不是自己乘出来的数。
+
 **`storage` 上以 `__` 开头的键是宿主保留的**
-（`__bundle` 存包代码 / `__coin` 存币账本）：
+（`__bundle` 存包代码 / `__coin` 存币账本 / `__assets` 存资源根）：
 
 | 方法 | 对 `__` 开头的键 |
 | --- | --- |
@@ -430,58 +512,127 @@ manifest: {
 **写的时候**
 
 - [ ] 单文件零依赖，无裸模块名
-- [ ] `mount` 同步返回卸载函数；异步初始化放在内部 + `disposed` 闸
-- [ ] handler 具名；卸载时清定时器 / 监听
-- [ ] 能力只走 `host.*`；币只用 `mintGameCoin` / `gameCoinBalance`
+- [ ] `mount(container, host, ctx)`：同步返回卸载函数，**或**返回 Promise（宿主会 await）
+- [ ] 根节点 `height:100%`（容器是定高盒子，§2.3）；内容超一屏**自己滚**，别用 `100vh`
+- [ ] 资源**只**走 `ctx.assetUrl('assets/x.webp')`，不自己拼相对路径
+- [ ] 样式全部收进自己的根类（`@media` 递归收），不写全局 `.grid` / `.card`
+- [ ] handler 具名；卸载时清定时器 / 监听 / rAF / WebGL context / 物理 world
+- [ ] 能力只走 `host.*`；币只用 `mintGameCoin` / `spendGameCoin` / `gameCoinBalance`
+- [ ] 买币走 `buyGameCoin`、换券走 `redeemGameCoin`（不要自己拆成两步事务）
+- [ ] 存档在 `mount` 里先读快照再建游戏；写入 400ms 防抖 + 卸载时 flush
 - [ ] 容器加 `data-*` 锚点，不用下标定位
 
 **交之前**
 
 - [ ] `npm run lint` 干净
 - [ ] `npm test` 全绿（新逻辑要有单测）
+- [ ] `node scripts/check-plugin.mjs <包> --assets=<资源目录>` 通过
+- [ ] 假宿主挂载：`prize-park-local/scripts/plugin-test.cjs <port>` 通过（含**样式对照**与卸载）
+- [ ] 真 App 里装一次：设为当前 → 玩一局 → 换券 → 切走切回 → 卸载
+      （`node scripts/e2e-plugin-local.mjs <url> phone|tablet`，**两档都跑**）
 - [ ] 走查脚本：**390×844 和 834×1112 两档**，量过几何，有遮挡探针 + 自检
-- [ ] 整包增量 ≤ +15 KB gzip
+- [ ] 整包体积：纯 DOM ≤ +15 KB gzip；3D 单文件 ≤ 4 MB（gzip ≤ 1.2 MB），资源另发
+
+> 最后那条「真 App 里装一次」**不是可选项**。`plugin-test.cjs` 用的是假宿主，
+> `npm test` 跑在 jsdom 里 —— 两者都**不做布局**，也都**不经过真宿主**。
+> 2026-10-22 那次「容器 698px / 根节点 0px / 整屏空白」在假宿主里是全绿的
+> （假宿主给的是一个 `100vh` 的绝对定位盒子，`height:100%` 恰好解析得到）。
+> 只有真宿主 + 截图能看见它。
 
 ---
 
 ## 7. 最小骨架
 
-照抄 `games-src/demo/index.ts`（「许愿池」，零依赖样板，注释把每个坑都写了）。
+`games-src/demo/index.ts`（「许愿池」）是**纯 DOM 的最小样板**：零依赖、同步 `mount`、
+只用 `spendPoints` / `mintGameCoin` / `storage` 三类能力，`minHostApi: 1` 也照样能跑。
+
+下面这份是**带 `ctx` / 兑换券 / 定高容器**的 v3 版骨架（3D 游戏和要接兑换的游戏照这个写）。
+字段和签名与 `src/games/plugin.ts`（契约的事实源）逐字对应。
 
 ```ts
-import type { GameBundle, HostApi } from '../../src/games/plugin'
+import type { GameBundle, HostApi, MountContext, Unmount } from '../../src/games/plugin'
 
-const PLAY_COST = 5      // 必须和 manifest.economy.playCost 一致
-const PAYOUT = 3         // 必须 < PLAY_COST
-const KEY = 'draws'      // 存在自己的命名空间里（宿主自动加 `<gameId>:` 前缀）
+const PLAY_COST = 5          // 必须和 manifest.economy.playCost 一致
+const PAYOUT = 3             // 必须 < PLAY_COST
+const VOUCHER_PER_COIN = 1   // 1 币换几张兑换券；宿主会验 PAYOUT × 它 < PLAY_COST
+const DRAWS_KEY = 'draws'    // 自己的键（宿主自动加 `<gameId>:` 前缀；`__` 开头是保留的）
 
-function mount(container: HTMLElement, host: HostApi): () => void {
-  container.innerHTML = ''
-  // ... 同步建 DOM ...
+async function mount(
+  container: HTMLElement,
+  host: HostApi,
+  ctx: MountContext,          // ★ v3：资源只能从 ctx.assetUrl() 拿
+): Promise<Unmount> {
+  container.replaceChildren()
+
+  const root = document.createElement('div')
+  root.className = 'wish-root'
+  // ★ 容器是**定高盒子**（见 §2.3），所以 height:100% 一定解析得到
+  root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden'
+  container.append(root)
+
   let disposed = false
+  const draws = (await host.storage.get<number>(DRAWS_KEY)) ?? 0
+  if (disposed) return () => {}          // 读存档期间就被切走了
+
+  // ... 建 DOM（图片一律 ctx.assetUrl('assets/x.webp')）...
+
   const btn = document.createElement('button')
   const onClick = (): void => void play()   // ★ 具名，否则 removeEventListener 删不掉
   btn.addEventListener('click', onClick)
   const timer = setInterval(() => void paint(), 1500)  // 余额会在挂载后变，得自己重绘
+
+  async function play(): Promise<void> {
+    // 钱只走这三扇门（详见 §3）：
+    //   host.buyGameCoin(1, 1, memo)        积分 → 币（一个事务）
+    //   host.spendGameCoin(1, memo)         玩一局
+    //   host.redeemGameCoin(n, memo)        币 → 兑换券（汇率由宿主从 manifest 读）
+    const paid = await host.spendPoints(PLAY_COST, '许愿池抽一次')
+    if (!paid || disposed) return
+    await host.mintGameCoin(PAYOUT, '许愿池中奖')
+    await host.storage.set(DRAWS_KEY, draws + 1)
+  }
+
   return () => {
     disposed = true
     clearInterval(timer)
     btn.removeEventListener('click', onClick)
-    container.innerHTML = ''
+    // 自己塞进 document.head 的 <style>、WebGL context、物理 world 也要在这里收掉
+    container.replaceChildren()
   }
 }
 
 const bundle: GameBundle = {
   manifest: {
-    id: 'demo', name: '许愿池', emoji: '🌟', tabLabel: '许愿池',
-    version: '1.0.0', minHostApi: 1,
+    id: 'demo', name: '许愿池', emoji: '🌟',
+    tabLabel: '许愿池',      // ★ 底部导航用的是**这个**（≤3 字），不是 name
+    version: '1.0.0',
+    minHostApi: 3,          // 3 = 有 ctx / 异步 mount / redeemGameCoin
     coin: { id: 'star', name: '星币', emoji: '⭐' },
-    economy: { playCost: PLAY_COST, expectedPayout: PAYOUT, capPerPrize: 9 },
+    economy: {
+      playCost: PLAY_COST,
+      expectedPayout: PAYOUT,
+      capPerPrize: 9,
+      voucherPerCoin: VOUCHER_PER_COIN,
+    },
   },
   mount,
 }
 export default bundle
 ```
+
+**几处容易抄错的**（每一条都对应一次真事故）
+
+| 抄成 | 会怎样 |
+| --- | --- |
+| `minHostApi: 1` 却用了 `ctx` / `redeemGameCoin` | 老宿主照样加载，运行到那一步抛 TypeError，症状是「点了没反应」 |
+| `mount` 里 `await` 之后才建 DOM，却不给加载态 | 3D 包要 2~5 秒，孩子看到的是**空白** |
+| 根节点写 `min-height:100vh` | 算上宿主顶栏 / 底栏，把底栏盖掉一截 |
+| 卸载时只清 `container.innerHTML` | 定时器 / `<style>` / WebGL context 全留着，切回来「跑两遍」 |
+| `tabLabel` 写成 `name` | 4 个字的游戏名挤进底栏（导航格只按 3 个字设计） |
+
+> ⚠️ `demo` 那份**故意不写** `voucherPerCoin`：它没有兑换入口，
+> 写了就等于在家长栏承诺「这游戏能换券」，而孩子找不到那颗按钮。
+> 你的游戏**接了 `redeemGameCoin` 再写**它 —— 那才是一条走得通的链。
 
 **独立构建**：`games-src/vite.config.ts`（`npm run build:games`）。
 注意三件事：`publicDir: false`（否则 `public/` 会被复制进产物）、
@@ -499,11 +650,14 @@ export default bundle
 
 | 想知道 | 去哪 |
 | --- | --- |
-| 契约全文、货币体系、定价公式 | `docs/game-plugin-spec.md` §2 / §3 / §4 / §5 |
+| **现在是怎么跑的 / 新游戏怎么接（先读这个）** | `docs/plugin-architecture.md` |
+| 契约全文、货币体系、定价公式 | `docs/game-plugin-spec.md` §2 / §3 / §4 / §5（**v1 规范：看理由，签名以 `plugin.ts` 为准**） |
 | UI / 美术契约原文 | 同上 §6 |
 | 测试与验收原文、DOM 锚点 | 同上 §7 |
 | 参考实现（农场）拆解 | 同上 §8 |
 | 第二个游戏的骨架示例（娃娃机） | 同上 §9 |
-| 平台化 / 独立分发（P2 下载、签名） | 同上 §12 |
+| 平台化 / 独立分发（P2 下载、签名） | 同上 §12（**落地细节见 `plugin-architecture.md` §2**） |
 | 契约的**代码**事实源 | `src/games/plugin.ts`、`src/games/loader.ts` |
 | 零依赖样板 | `games-src/demo/index.ts` |
+| 真 App 全链路验收 | `scripts/e2e-plugin-local.mjs` |
+| 接入方案的历史决策（为什么不走 iframe、资源怎么压） | `docs/prizepark-integration.md` |

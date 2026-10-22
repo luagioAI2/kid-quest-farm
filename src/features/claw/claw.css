@@ -7,7 +7,7 @@
   浏览器的滚动接管：孩子的手指一动，页面跟着滚，爪子纹丝不动。
   这是 canvas 游戏在 WebView 里最常见的一条「代码全对但就是不能用」。
 
-  ⚠️ 背景色**逐字等于** `clawScene.ts` 里 `scene.background = 0xe9e6f2`。
+  ⚠️ 背景色**逐字等于** `clawScene.ts` 里 `scene.background = 0xe8e4de`。
   不一样的话，WebGL 起来之前那几帧（或者取景留白处）会闪一下白，
   看着像页面闪了一下。
 */
@@ -28,11 +28,20 @@
   flex: 1 1 0;
   min-height: 15rem;
   overflow: hidden;
-  border-radius: 1.25rem;
-  background: #e9e6f2;
+  /*
+    ★★ 2026-10-21：圆角**去掉了**。
+
+    以前画布是页面里的一张卡片（左右各留 12px），圆角是卡片的一部分。
+    现在它铺满整页（和原版一样：3D 整屏，UI 浮在上面），四角再圆就会在
+    屏幕边缘露出页面底色 —— 变成「一张贴纸」，而不是「站在柜子前」。
+    横屏例外：那时画布夹在两侧控件列中间，仍然是卡片，圆角在媒体查询里加回来。
+  */
+  border-radius: 0;
+  background: #e8e4de;
   touch-action: none;
   cursor: grab;
 }
+
 
 .kqf-claw-stage:active {
   cursor: grabbing;
@@ -55,6 +64,82 @@
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* ============================================================
+   浮动在画面上的两行 UI
+   ------------------------------------------------------------
+   ★★ 2026-10-21：画布铺满整页之后，页面本身**没有内边距**了
+     （有内边距就铺不满），所以两行的内边距各自负责。
+
+   币条：绝对定位浮在画面上沿（原版就是「3D 整屏 + 浮一层 HUD」）。
+     ⚠️ `pointer-events: none` **必须有** —— 不写的话，「按住画面上半部分
+        拖动瞄准」会被这条币条挡住，手指在灯箱上怎么拖爪子都不动。
+        里面的按钮自己开回 `auto`（见 `ClawPage.tsx` 的 `pointer-events-auto`）。
+   结果行：留在文档流里（画布下面）。它承载「下爪」按钮，孩子每次都要点，
+     压在 3D 上会挡住取物口，而且文字落在粉色柜身上读不清。
+   ============================================================ */
+.kqf-claw-coins {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 20;
+  /*
+    右侧留出 7rem：配色那三颗色块也浮在画面右上角（`[data-claw-themes]`，96px + 边距）。
+    不留的话，宽屏上「抓到一只 = N 商城币」那行（`ml-auto` 顶到最右）会压在色块底下。
+    窄屏上那行本来就不显示（`hidden md:block`），这段留白等于没有。
+  */
+  padding: 0.75rem 7rem 0 0.75rem;
+  pointer-events: none;
+}
+
+.kqf-claw-foot {
+  padding: 0.5rem 0.75rem 0.75rem;
+}
+
+/* ============================================================
+   虚拟摇杆（模拟量）
+   ------------------------------------------------------------
+   参考实现是一个圆盘 + 一个可拖的小圆钮（`main.ts` 的 `joyMove()`），
+   我们以前是四个方向键。差别在手感：方向键只有「全速」一档，
+   想微调 1cm 得点一下、等它走、再点一下；摇杆推多少走多快。
+
+   ★ 尺寸按 390px 宽的手机定：底座 88px（约 22% 宽），圆钮 46px。
+     底座再大就会盖住娃娃堆的下缘；再小手指按不准。
+   ★ `touch-action: none` 和画布同一个理由 —— 拖动不能被浏览器当滚动接管。
+   ============================================================ */
+.kqf-claw-joy {
+  width: 5.5rem;
+  height: 5.5rem;
+  touch-action: none;
+  /* 手指按上去时整个盘微微压实，给一点「被按住」的反馈 */
+  transition: background-color 0.15s ease;
+}
+
+.kqf-claw-joy.drag {
+  background-color: rgb(255 255 255 / 0.9);
+}
+
+.kqf-claw-knob {
+  width: 2.875rem;
+  height: 2.875rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 34% 30%, #ffffff 0%, #f3d9e6 55%, #e2b8cd 100%);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.9) inset,
+    0 3px 8px rgb(120 70 95 / 0.25);
+  /* 回中要有过渡（松手时弹回去），拖动时不能有 —— 有的话会「拖不动」 */
+  transition: transform 0.18s ease-out;
+  will-change: transform;
+}
+
+.kqf-claw-joy.drag .kqf-claw-knob {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kqf-claw-knob {
+    transition: none;
+  }
 }
 
 /* ============================================================
@@ -93,16 +178,34 @@
   /* 15rem 的兜底在这一档会**把页面顶出屏幕**（它正是「必须一屏放下」的反面） */
   .kqf-claw-stage {
     min-height: 0;
+    /* 横屏画布夹在两侧控件列中间，仍然是卡片 —— 圆角在这里加回来 */
+    border-radius: 1.25rem;
   }
 
-  /* 两侧控件列：竖排、定宽 */
+  /* 横屏画布只有 244px 高，88px 的摇杆会盖掉娃娃堆；缩到 68px 刚好能按 */
+  .kqf-claw-joy {
+    width: 4.25rem;
+    height: 4.25rem;
+  }
+
+  .kqf-claw-knob {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  /* 两侧控件列：竖排、定宽。
+     ★ 必须把竖屏那套「浮动」清掉：这一档两列是**排版的一部分**，
+       留在 `absolute` 里会叠在画布上，`pointer-events: none` 还会让按钮点不到。 */
   .kqf-claw-coins,
   .kqf-claw-foot {
     order: 1;
+    position: static;
     flex: 0 0 auto;
     flex-direction: column;
     align-items: stretch;
     gap: 0.5rem;
+    padding: 0;
+    pointer-events: auto;
   }
 
   .kqf-claw-coins {

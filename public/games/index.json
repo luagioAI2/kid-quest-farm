@@ -1,0 +1,11 @@
+{
+  "games": [
+    {
+      "id": "prizepark",
+      "name": "奖品公园",
+      "version": "1.2.0",
+      "file": "prizepark/prizepark.plugin.mjs",
+      "assetBase": "prizepark/"
+    }
+  ]
+}

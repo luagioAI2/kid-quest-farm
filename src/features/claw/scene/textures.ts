@@ -503,3 +503,21 @@ export function glassReflection(): CanvasTexture {
   g.filter = 'none'
   return tex(c)
 }
+
+/**
+ * 瞄准点底下那块**软接触阴影**（64×64 径向渐变）。
+ *
+ * ★ 逐字抄参考实现（`main.ts` 里那段内联 IIFE）。它不是一个「影子」，
+ *   是**人眼判断高度用的那个暗斑** —— 没有它，浮在娃娃上方的圆环
+ *   会像贴在玻璃上，孩子分不出爪子到底在娃娃上面还是后面。
+ */
+export function aimShadow(): CanvasTexture {
+  const { c, g } = canvas(64, 64)
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32)
+  gr.addColorStop(0, 'rgba(0,0,0,.42)')
+  gr.addColorStop(0.6, 'rgba(0,0,0,.16)')
+  gr.addColorStop(1, 'rgba(0,0,0,0)')
+  g.fillStyle = gr
+  g.fillRect(0, 0, 64, 64)
+  return tex(c)
+}

@@ -304,8 +304,9 @@ for (const vp of SELECTED) {
     const st = window.__kqfClawStage
     const t0 = performance.now()
     const tick = () => {
-      if (st) window.__sway.push(st.debugSwing())
-      if (performance.now() - t0 < 3600) requestAnimationFrame(tick)
+      /* ★ 带上时间戳：判定「停了没有」要看**最后一段窗口的峰值**，不是最后一帧 */
+      if (st) window.__sway.push({ ...st.debugSwing(), t: performance.now() })
+      if (performance.now() - t0 < 9000) requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
   })
@@ -313,24 +314,62 @@ for (const vp of SELECTED) {
     ★ 按 **900ms** 不是 300ms：`clawCarriageAccel` 有 0.7 m/s² 的加速度上限，
       巡航速度 0.52 m/s 要 0.74 秒才到。按太短的话爪子根本没加速完，
       摆只有 2°（实测），判据会误报成「不晃」——量的是「按得短」不是「不会晃」。
+
+    ★★ 2026-10-21：但**光按时长不够** —— 五档连跑时 phone 这一档偶尔一次
+      `ArrowRight` 量出来 12 帧 dx 全是 0.000、tilt 0.0°。查下来不是「不晃」，
+      而是**爪子已经贴在右限位上**（`LIMITS.x1 = 0.34`），按同一个方向是空操作。
+      判据量到的是「没得动」，不是「动起来不晃」。
+
+      ➜ 先读爪子的位置，**往有空间的那一侧**推，并且推到它真的动了 0.15 世界单位
+        为止（最多 3 秒）。这样判据量的是「动起来会不会晃」，不再依赖上一次
+        交互把它留在哪儿。
+
+      ⚠️ 别改成「点一下画布再按右键」：那会把瞄准点挪到池子中间，
+        而后面「影子真的投影了」是拿**整块画布**算变亮像素占比的 ——
+        爪子的影子从左上挪到娃娃堆后面，占比直接从 2.0% 掉到 1.2%，
+        影子判据会假红。（实测踩过。）
   */
-  await page.keyboard.down('ArrowRight')
-  await new Promise((r) => setTimeout(r, 900))
-  await page.keyboard.up('ArrowRight')
-  await new Promise((r) => setTimeout(r, 2600))
+  const clawX0 = await page.evaluate(() => window.__kqfClawStage?.debugVisual?.()?.clawX ?? 0)
+  const swayKey = clawX0 > 0 ? 'ArrowLeft' : 'ArrowRight'
+  await page.keyboard.down(swayKey)
+  let clawMoved = 0
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 100))
+    const x = await page.evaluate(() => window.__kqfClawStage?.debugVisual?.()?.clawX ?? null)
+    if (x !== null) clawMoved = Math.abs(x - clawX0)
+    if (clawMoved > 0.15) break
+  }
+  await page.keyboard.up(swayKey)
+  await new Promise((r) => setTimeout(r, 3200))
   const sway = await page.evaluate(() => window.__sway ?? [])
   const peakDx = sway.length ? Math.max(...sway.map((s) => Math.abs(s.dx))) : 0
   const peakTilt = sway.length ? Math.max(...sway.map((s) => s.tilt)) : 0
-  const settle = sway.length ? Math.abs(sway[sway.length - 1].x) : 1
+  /*
+    ★★ 2026-10-21：「停了没有」量的是**最后 1 秒的峰值**，不是最后一帧。
+
+    原来取 `sway[sway.length - 1].x` —— 摆动周期约 0.7 秒（绳 0.12m ⇒ ω≈9），
+    最后一帧落在周期的哪个相位纯看运气：**过零点**量出 0.005（假绿），
+    **波峰**量出 0.066（假红）。五档连跑时掉帧更明显，实测同一个视口
+    两次跑出 0.066 / 0.005 —— 判据在测「采样相位」，不是在测「会不会停」。
+
+    ➜ 取最后 1000ms 内所有采样的 `max|x|`：真的还在摆就一定有一帧在波峰，
+      真的停了则每一帧都接近 0。这个口径**比原来更严**，也不再依赖相位。
+      （1000ms ≥ 1.4 个周期，低帧率下也至少能盖住一个完整波峰。）
+  */
+  const lastT = sway.length ? Math.max(...sway.map((s) => s.t)) : 0
+  const tail = sway.filter((s) => s.t >= lastT - 1000)
+  const settle = tail.length ? Math.max(...tail.map((s) => Math.abs(s.x))) : 1
   check(
     '★★ 移动爪子时它会摆（hub 偏出去 + 整只爪子沿绳倾斜）',
     sway.length > 10 && peakDx > 0.004 && peakTilt > 0.03,
-    `采样 ${sway.length} 帧 · peak dx=${peakDx.toFixed(3)}m · tilt=${((peakTilt * 180) / Math.PI).toFixed(1)}°`,
+    `采样 ${sway.length} 帧 · peak dx=${peakDx.toFixed(3)}m · tilt=${((peakTilt * 180) / Math.PI).toFixed(1)}°` +
+      ` · 爪子移动 ${clawMoved.toFixed(3)}` +
+      (clawMoved <= 0.15 ? '（⚠️ 爪子没动起来，先查限位/焦点，别当成「不会晃」）' : ''),
   )
   check(
-    '★ 摆会停（不是钟摆：松手 2.6 秒后回到竖直）',
+    '★ 摆会停（不是钟摆：松手后最后 1 秒的摆动峰值 < 0.06 rad）',
     sway.length > 10 && settle < 0.06,
-    `2.6s 后 |swingX|=${settle.toFixed(3)} rad（${((settle * 180) / Math.PI).toFixed(1)}°）`,
+    `最后 1 秒峰值 |swingX|=${settle.toFixed(3)} rad（${((settle * 180) / Math.PI).toFixed(1)}°）· 取 ${tail.length} 帧`,
   )
 
   const { glass: gl, frame: fr, cabinet: cb, canvas: cv } = geo.frame
@@ -657,7 +696,7 @@ for (const vp of SELECTED) {
     return { x: r.x, y: r.y, width: r.width, height: r.height }
   })
   const withCanvas = await shotStats(page, clip)
-  // 对照组：把 canvas 藏起来 —— 剩下的是容器那层纯色背景（`#e9e6f2`）
+  // 对照组：把 canvas 藏起来 —— 剩下的是容器那层纯色背景（`#e8e4de`）
   await page.evaluate(() => {
     const c = document.querySelector('[data-claw-stage] canvas')
     if (c) c.style.visibility = 'hidden'

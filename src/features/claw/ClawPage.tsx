@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/store/useApp'
-import { hapticLight, playTone } from '@/platform/files'
+import { hapticLight } from '@/platform/files'
 import {
   CLAW_COIN_EMOJI,
   CLAW_COIN_NAME,
@@ -32,6 +32,7 @@ import {
   type ClawCarriage,
   type ClawSwing,
 } from './clawTimeline'
+import { ClawSfx } from './clawAudio'
 import './claw.css'
 
 /* ============================================================
@@ -148,12 +149,17 @@ const MOVE_KEYS = new Set([
  * 所以「上」是 `z: -1`。写成 +1 的话上下会颠倒，而拖动瞄准又是对的 ——
  * 这种「两种输入方向相反」的 bug 只有真按一次才发现。
  */
-const DPAD = [
-  { x: 0, z: -1, label: '上', glyph: '▲', cls: 'col-start-2 row-start-1' },
-  { x: -1, z: 0, label: '左', glyph: '◀', cls: 'col-start-1 row-start-2' },
-  { x: 1, z: 0, label: '右', glyph: '▶', cls: 'col-start-3 row-start-2' },
-  { x: 0, z: 1, label: '下', glyph: '▼', cls: 'col-start-2 row-start-3' },
-] as const
+/**
+ * 虚拟摇杆的几何（比例，不是像素）。
+ *
+ * ★ 逐条抄参考实现（`main.ts` 的 `joyMove()`）：
+ *   · `MAX = 底座半径 × 0.72` —— 小圆钮最多偏到这里；
+ *   · `DEAD = 0.12` —— 12% 的死区，手指刚放上去的抖动不该让爪子动；
+ *   · 出死区之后把 (0..1) 重新拉伸到 (0..1)，所以「刚出死区」= 最慢，
+ *     「推到底」= 最快，中间是连续的 —— 这就是模拟量比四个方向键细腻的地方。
+ */
+const JOY_MAX = 0.36
+const JOY_DEAD = 0.12
 
 /** 一局的完整状态。`startedAt` 是 `performance.now()`。 */
 interface Round {
@@ -244,6 +250,10 @@ export default function ClawPage() {
   const carriageRef = useRef<ClawCarriage | null>(null)
   /** 摇杆是否正被按住（按住才移动；抬起立刻停） */
   const joyRef = useRef({ x: 0, z: 0, active: false })
+  /** 摇杆的小圆钮 —— 直接改 `style.transform`，不走 state（每帧一次 setState 太重） */
+  const joyKnobRef = useRef<HTMLSpanElement>(null)
+  /** 正按着摇杆的那个 pointerId；−1 = 没按 */
+  const joyIdRef = useRef(-1)
   /**
    * 键盘「按了一下」的**锁存**：`keydown` 里置位，每帧循环消费一次。
    *
@@ -266,6 +276,20 @@ export default function ClawPage() {
   const playRef = useRef<() => void>(() => {})
   const buyRef = useRef<() => void>(() => {})
 
+  /**
+   * 声音引擎（移植参考实现的 `Sfx`，见 `clawAudio.ts`）。
+   *
+   * ★ 和 `playTone()` 的区别：那边是「一次性短音」，这边有**常驻马达音**，
+   *   音高跟着小车速度走。爪子在动的时候必须是**有声音的**，
+   *   否则孩子只能靠看 —— 参考实现的手感有一半在这里。
+   */
+  const sfxRef = useRef<ClawSfx | null>(null)
+  /** 上一帧小车是否在动 —— 用来抓「起 / 停」那个沿（`gantry` 只在沿上响一次） */
+  const wasMovingRef = useRef(false)
+  /** 上一帧的时段 —— 合爪那一刻只响一次 `clank` */
+  const lastPhaseRef = useRef<string>('idle')
+  const soundOn = useApp((s) => s.settings.soundEnabled)
+
   const [busy, setBusy] = useState(false)
   const [noWebgl, setNoWebgl] = useState(false)
   const [result, setResult] = useState<{ text: string; won: boolean } | null>(null)
@@ -278,6 +302,58 @@ export default function ClawPage() {
   /** 建场景的 effect 依赖是 `[]`，闭包里读不到最新的 `themeIdx` ⇒ 用 ref 过渡 */
   const themeRef = useRef(themeIdx)
   themeRef.current = themeIdx
+
+  /* ---------------- 声音 ---------------- */
+
+  /**
+   * 建一个声音引擎，卸载时拆掉。
+   *
+   * ⚠️ 必须 `dispose()`：马达是**常驻振荡器**，切走之后不关会一直嗡嗡响
+   *   （而且 `AudioContext` 数量有上限）。
+   */
+  useEffect(() => {
+    const sfx = new ClawSfx()
+    sfxRef.current = sfx
+    return () => {
+      sfxRef.current = null
+      sfx.dispose()
+    }
+  }, [])
+
+  /** 音效开关跟着设置走（家长一关就立刻静音，不用等下一局） */
+  useEffect(() => {
+    sfxRef.current?.setEnabled(soundOn)
+  }, [soundOn])
+
+  /**
+   * 第一次交互时解锁音频。
+   *
+   * 浏览器要求「用户手势之后」才能出声，所以在页面容器上挂一次性的
+   * `pointerdown` / `keydown`。用 `capture` 是为了赶在按钮自己的处理之前 ——
+   * 投币那一声必须响，不能等到下一次点击。
+   */
+  useEffect(() => {
+    const unlock = () => sfxRef.current?.unlock()
+    document.addEventListener('pointerdown', unlock, { once: true, capture: true })
+    document.addEventListener('keydown', unlock, { once: true, capture: true })
+    return () => {
+      document.removeEventListener('pointerdown', unlock, { capture: true })
+      document.removeEventListener('keydown', unlock, { capture: true })
+    }
+  }, [])
+
+  /**
+   * 切到后台就静音、回来再恢复（和参考实现的 `visibilitychange` 一样）。
+   * 不这么做的话，锁屏之后马达音还会在后台响。
+   */
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden) sfxRef.current?.suspend()
+      else sfxRef.current?.resume()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
 
   /* ---------------- 动效偏好 ---------------- */
 
@@ -319,13 +395,26 @@ export default function ClawPage() {
       kind: r.won ? 'success' : 'info',
       title: text,
       detail: r.won
-        ? `换到 ${r.coupons} 商城币`
+        ? `换到 ${r.coupons} 兑换券`
         : r.hadPrize
           ? '夹住了又滑掉了，再试一次'
           : '爪子底下没有娃娃',
       emoji: r.won ? '🎉' : '🙂',
     })
-    void playTone(st.settings.soundEnabled, r.won ? 'success' : 'fail')
+    /*
+      声音：和参考实现同一套顺序 ——
+        中了：娃娃顺通道掉进托盘（`chute`）→ 机器两声风铃（`win`）
+        没中：一声下滑的短音（`lose`）
+      ⚠️ 不再用 `playTone('success'/'fail')`：那是「手机提示音」，
+        和柜子里发出来的声音不是一回事，叠在一起还会打架。
+    */
+    const sfx = sfxRef.current
+    if (r.won) {
+      sfx?.chute()
+      sfx?.win()
+    } else {
+      sfx?.lose()
+    }
     void hapticLight(st.settings.hapticsEnabled)
   }, [])
 
@@ -478,6 +567,34 @@ export default function ClawPage() {
       const flash = flashRef.current > now ? 1 : 0
       const r = roundRef.current
 
+      /*
+        马达音：**每帧**把「这一帧机器在干什么」喂给声音层（参考实现同一个口径）。
+          · 下爪 / 提爪 —— 电机全速，音高各差一点（下爪 1.05、提爪 1.25）
+          · 平移 —— 音高跟速度走（`0.8 + spd*2.2`），停下就归 0
+          · 起 / 停那一刻额外一声摩擦（`gantry`），只在**沿**上响
+        ★ 不能「一局开始时放一段马达循环」：速度是会变的，固定循环听着像磁带。
+      */
+      const audio = (spd: number, phase: string) => {
+        const sfx = sfxRef.current
+        if (!sfx) return
+        const moving = spd > 0.02
+        if (moving !== wasMovingRef.current) {
+          wasMovingRef.current = moving
+          sfx.gantry(moving)
+        }
+        if (phase === 'drop' || phase === 'lift') {
+          sfx.motorLevel(0.9, phase === 'lift' ? 1.25 : 1.05)
+        } else {
+          sfx.motorLevel(Math.min(1, spd / 0.18), 0.8 + spd * 2.2)
+        }
+      }
+      /** 时段变了就看要不要响一声（合爪是电磁铁，只在开始那一帧响） */
+      const audioPhase = (phase: string) => {
+        if (phase === lastPhaseRef.current) return
+        lastPhaseRef.current = phase
+        if (phase === 'close') sfxRef.current?.clank()
+      }
+
       /* ---------------- ① 合成输入 ---------------- */
       const k = keysRef.current
       let dx = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0)
@@ -580,6 +697,9 @@ export default function ClawPage() {
         // 空闲：爪子停在瞄准位；刚演完那一局先停在取物口一会儿
         const at = holdRef.current > now ? CLAW_HOLE_CENTER : aim.current
         stepSwing(at.x, at.z, HUB_TOP)
+        const c0 = carriageRef.current
+        audio(c0 ? Math.hypot(c0.vx, c0.vz) : 0, 'idle')
+        audioPhase('idle')
         s.render(now / 1000, {
           clawX: at.x,
           clawZ: at.z,
@@ -614,6 +734,9 @@ export default function ClawPage() {
       */
       const spread =
         m.phase === 'drop' || m.phase === 'close' || m.phase === 'release' ? 1 : CLAW_PRONG_IDLE
+      const cNow = carriageRef.current
+      audio(cNow ? Math.hypot(cNow.vx, cNow.vz) : 0, m.phase)
+      audioPhase(m.phase)
       s.render(now / 1000, {
         clawX: pos.x,
         clawZ: pos.z,
@@ -656,7 +779,7 @@ export default function ClawPage() {
         ? { kind: 'success', title: '换好了', detail: `多了 1 个${CLAW_COIN_NAME}`, emoji: '✅' }
         : { kind: 'warn', title: '没换成', detail: '积分不够', emoji: '⚠️' },
     )
-    if (ok) void playTone(st.settings.soundEnabled, 'coin')
+    if (ok) sfxRef.current?.coin()
   }, [])
 
   /* ---------------- 投币下爪 ---------------- */
@@ -671,7 +794,7 @@ export default function ClawPage() {
         detail: `先花 ${CLAW_PLAY_COST} 积分换一个`,
         emoji: '🪙',
       })
-      void playTone(st.settings.soundEnabled, 'fail')
+      sfxRef.current?.click()
       return
     }
 
@@ -723,8 +846,8 @@ export default function ClawPage() {
       if (p) from = { x: p.x, z: p.z }
     }
 
-    void playTone(st.settings.soundEnabled, 'coin')
     void hapticLight(st.settings.hapticsEnabled)
+    sfxRef.current?.coin()
 
     const round: Round = {
       won: res.won,
@@ -770,6 +893,42 @@ export default function ClawPage() {
   const pickTheme = useCallback((i: number) => {
     void useApp.getState().updateSettings({ clawTheme: i })
     void hapticLight(useApp.getState().settings.hapticsEnabled)
+    sfxRef.current?.click()
+  }, [])
+
+  /* ---------------- 虚拟摇杆 ---------------- */
+
+  /**
+   * 手指在摇杆上的位置 → 方向（模拟量）。
+   *
+   * 坐标系：屏幕 y 向下为正，而池子的 `+z` 是**朝向镜头**（也就是屏幕下方），
+   * 所以 `z` 直接用 `dy` 的正负号，不需要翻 —— 推「下」爪子就往画面下方走。
+   * （键盘那边是 `S` → `dz = +1`，同一个方向。）
+   */
+  const joyFromPointer = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    let dx = e.clientX - (r.left + r.width / 2)
+    let dy = e.clientY - (r.top + r.height / 2)
+    const max = r.width * JOY_MAX
+    const l = Math.hypot(dx, dy)
+    if (l > max && l > 0) {
+      dx *= max / l
+      dy *= max / l
+    }
+    if (joyKnobRef.current) joyKnobRef.current.style.transform = `translate(${dx}px, ${dy}px)`
+    const nx = max > 0 ? dx / max : 0
+    const nz = max > 0 ? dy / max : 0
+    const m = Math.hypot(nx, nz)
+    // 死区外重新拉伸到 0..1：刚出死区最慢，推到底最快
+    const k = m < JOY_DEAD ? 0 : (m - JOY_DEAD) / (1 - JOY_DEAD) / m
+    joyRef.current = { x: nx * k, z: nz * k, active: m >= JOY_DEAD }
+  }, [])
+
+  /** 松手（含取消 / 丢捕获）：圆钮回中，方向清零 —— 松手了爪子必须停 */
+  const joyEnd = useCallback(() => {
+    joyIdRef.current = -1
+    joyRef.current = { x: 0, z: 0, active: false }
+    if (joyKnobRef.current) joyKnobRef.current.style.transform = ''
   }, [])
 
   /* ---------------- 界面 ---------------- */
@@ -778,10 +937,19 @@ export default function ClawPage() {
   const canBuy = !busy && points >= CLAW_PLAY_COST
 
   return (
-    <div className="kqf-claw-page page-col flex flex-1 flex-col gap-2.5 px-3 pb-3 pt-3">
+    <div className="kqf-claw-page page-col relative flex flex-1 flex-col">
       {/* 币条：还有几个币 + 换币入口。
           ⚠️ 这里**不再显示 🪙 积分** —— 顶栏（`App.tsx`）常驻显示着，
-          同一屏里同一件事出现两次。只在「换币」按钮上写要花几个积分。 */}
+          同一屏里同一件事出现两次。只在「换币」按钮上写要花几个积分。
+
+          ★★ 2026-10-21：币条**浮在画面上**（绝对定位，见 `claw.css`），不再占纵向流。
+          原版的 3D 是整屏铺满、UI 浮在上面；我们原来是「币条 + 画布 + 结果行」
+          三行竖着排，390×844 里画布只剩 554px 高（量过：顶栏 63 / 币条 44 /
+          间距 20 / 结果行 56 / 底栏 83），机器只能看到玻璃柜那一截。
+          改成浮动之后画布拿到 630px —— 机顶灯箱、操作台、取物口一起进画面。
+          ⚠️ 定位写在 CSS 里（不是 Tailwind 的 `absolute`），因为横屏那一档
+             要把它改回 `static` 排进左侧控件列，同优先级的两条规则谁赢
+             取决于打包顺序 —— 那种「有时候对」的写法不能留。 */}
       <div className="kqf-claw-coins flex items-center gap-2">
         <span
           data-claw-coins
@@ -798,12 +966,12 @@ export default function ClawPage() {
           onClick={() => void buy()}
           disabled={!canBuy}
           data-claw-buy
-          className="btn h-11 shrink-0 rounded-full bg-sun-300 px-3 text-sm font-extrabold text-ink-900 shadow-flat active:btn-press disabled:opacity-50"
+          className="btn pointer-events-auto h-11 shrink-0 rounded-full bg-sun-300 px-3 text-sm font-extrabold text-ink-900 shadow-flat active:btn-press disabled:opacity-50"
         >
           🪙 {CLAW_PLAY_COST} 换 1 个
         </button>
         <span className="kqf-claw-rate ml-auto hidden shrink-0 text-xs font-bold text-ink-500 md:block">
-          抓到一只 = {econ.exchangePerPrize} 商城币
+          抓到一只 = {econ.exchangePerPrize} 兑换券
         </span>
       </div>
 
@@ -829,7 +997,7 @@ export default function ClawPage() {
             ref={stageRef}
             data-claw-stage
             role="img"
-            aria-label="娃娃机：拖动可以移动爪子，也可以用右下角的方向键"
+            aria-label="娃娃机：拖动画面可以移动爪子，也可以用右下角的摇杆"
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId)
               aimAt(e.clientX, e.clientY)
@@ -866,48 +1034,37 @@ export default function ClawPage() {
             ))}
           </div>
 
-          {/* 虚拟摇杆：触屏上的「移动爪子」，和拖动瞄准写同一个 `aim`。
+          {/* 虚拟摇杆：原版是**模拟量**的圆摇杆（拖动小圆钮），不是四个方向键。
               ⚠️ 放**右下**不是左下：左下正好压着取物口（那个黑色圆洞），
-              白按钮压在黑洞上既难看，又把「奖品从这里出来」这件事遮掉了。 */}
+              白按钮压在黑洞上既难看，又把「奖品从这里出来」这件事遮掉了。
+              ⚠️ `touch-none` + `setPointerCapture` 缺一不可：前者防浏览器把拖动
+              当滚动接管，后者保证手指滑出圆盘之后还能继续拖、抬起时一定能收到。 */}
           <div
-            data-claw-dpad
-            className="absolute bottom-2 right-2 grid grid-cols-3 grid-rows-3 gap-0.5"
+            data-claw-joy
             role="group"
-            aria-label="移动爪子"
+            aria-label="移动爪子：按住圆盘拖动"
+            className="kqf-claw-joy absolute bottom-2 right-2 grid touch-none place-items-center rounded-full border border-white/70 bg-white/70 shadow-flat"
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              joyIdRef.current = e.pointerId
+              e.currentTarget.setPointerCapture(e.pointerId)
+              e.currentTarget.classList.add('drag')
+              joyFromPointer(e)
+              void hapticLight(useApp.getState().settings.hapticsEnabled)
+            }}
+            onPointerMove={(e) => {
+              if (e.pointerId !== joyIdRef.current) return
+              joyFromPointer(e)
+            }}
+            onPointerUp={(e) => {
+              if (e.pointerId !== joyIdRef.current) return
+              e.currentTarget.classList.remove('drag')
+              joyEnd()
+            }}
+            onPointerCancel={joyEnd}
+            onLostPointerCapture={joyEnd}
           >
-            {DPAD.map((d) => (
-              <button
-                key={d.label}
-                type="button"
-                aria-label={`把爪子往${d.label}移`}
-                data-claw-dir={d.label}
-                // ⚠️ 按下沿开始移动、抬起/取消/丢捕获都要停。
-                //   少一个就会「松手了还在走」——而那是孩子最常遇到的手势
-                //   （手指滑出按钮范围）。
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  e.currentTarget.setPointerCapture(e.pointerId)
-                  joyRef.current = { x: d.x, z: d.z, active: true }
-                }}
-                onPointerUp={() => {
-                  joyRef.current = { x: 0, z: 0, active: false }
-                }}
-                onPointerCancel={() => {
-                  joyRef.current = { x: 0, z: 0, active: false }
-                }}
-                onLostPointerCapture={() => {
-                  joyRef.current = { x: 0, z: 0, active: false }
-                }}
-                className={
-                  'grid size-9 place-items-center rounded-xl border border-white/70 ' +
-                  'bg-white/75 text-xs font-extrabold text-ink-700 shadow-flat ' +
-                  'active:bg-white ' +
-                  d.cls
-                }
-              >
-                {d.glyph}
-              </button>
-            ))}
+            <span ref={joyKnobRef} data-claw-knob className="kqf-claw-knob" />
           </div>
         </div>
       )}
@@ -929,7 +1086,7 @@ export default function ClawPage() {
               {result.text}
               {result.won ? (
                 <span className="ml-1 text-sm font-bold text-ink-700">
-                  +{econ.exchangePerPrize} 商城币
+                  +{econ.exchangePerPrize} 兑换券
                 </span>
               ) : null}
             </span>

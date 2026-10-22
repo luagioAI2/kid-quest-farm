@@ -41,17 +41,21 @@ export interface CurrencyDef {
  * ★★ **三套币互不相通**（spec §2.2）：
  *
  * ```
- *   积分  ⇸  商城币      商城币  ⇸  积分      钻石  ⇸  任何别的币
+ *   积分  ⇸  兑换券      兑换券  ⇸  积分      钻石  ⇸  任何别的币
  * ```
  *
- * 唯一的例外是**兑换商城的付款口**：那里 `1 商城币 ≡ 1 积分`
- * （`planRedeemPayment`：先用光商城币，差额用积分补）。
- * 所以「商城币」的产出速率必须受控 —— 见 `domain/clawEconomy.ts` 的期望值不变量。
+ * 唯一的例外是**兑换商城的付款口**：那里 `1 兑换券 ≡ 1 积分`
+ * （`planRedeemPayment`：先用光兑换券，差额用积分补）。
+ * 所以「兑换券」的产出速率必须受控 —— 见 `domain/clawEconomy.ts` 的期望值不变量。
  */
 export const CURRENCY: Record<CurrencyId, CurrencyDef> = {
   points: { name: '积分', emoji: '🪙', tone: 'sun' },
-  // 2026-10-17：coupon（原「点券」）→「商城币」。持久化键 `harvestLedger` / `HarvestEntry` 一律不动。
-  coupon: { name: '商城币', emoji: '🎟️', tone: 'grass' },
+  // 2026-10-22：coupon 的显示名「商城币」→「兑换券」。
+  // 理由：它的唯一用途就是**在兑换商城付款**（`planRedeemPayment`），
+  // 叫「兑换券」会让人以为能在商城里买别的东西。经济链是
+  // 积分 → 娃娃机币 →（兑换商城）→ 兑换券，名字要跟终点一致。
+  // 持久化键 `harvestLedger` / `HarvestEntry` 一律不动。
+  coupon: { name: '兑换券', emoji: '🎟️', tone: 'grass' },
   // 2026-10-17：mall（原「商城币」）→「钻石」。持久化键 `mallLedger` / `MallEntry` 一律不动。
   mall: { name: '钻石', emoji: '💎', tone: 'sky' },
 }
@@ -75,6 +79,6 @@ export const CURRENCY: Record<CurrencyId, CurrencyDef> = {
  * 都是**持久化键**（Dexie 表字段 + 备份 JSON 的字段名），改它们要写数据迁移，
  * 而且旧备份导入会静默丢账。所以：**显示名改了，键名不动。**
  *
- * 看到 `harvest*` 一律理解成「商城币」。
+ * 看到 `harvest*` 一律理解成「兑换券」。
  */
 export const COUPON_WAS_RENAMED_FROM = '丰收币'

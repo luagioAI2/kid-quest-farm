@@ -170,6 +170,35 @@
 卖多少钱；家长栏「游戏」页可以购买、切换「当前游戏」；游戏格与底部导航跟着当前游戏变。
 契约见 `docs/game-plugin-spec.md`，写新游戏看 `docs/game-authoring-guide.md`。
 
+#### 第三方游戏（运行时装配，两条来源）
+
+内置游戏是编译进 App 的 React 组件；**第三方游戏是一段运行时取回来的 ESM**，
+按 `mount(container, host, ctx)` 契约装配（`src/games/PluginGameHost.tsx`）。两条来源：
+
+| 来源 | 从哪来 | 凭什么信 | 什么时候能用 |
+| --- | --- | --- | --- |
+| **本地**（`public/games/`） | 随 App 发布，不联网 | SHA-256 烧进 `src/games/localGames.ts`（脚本生成） | 一直可用 |
+| **远程**（`catalog.json`） | 发布方托管 | Ed25519 签名目录 → 目录里的 SHA-256 | 配了托管地址才显示入口 |
+
+两条路最后都走**同一个落库口** `commitPluginBundle`（拦内置 id / 校验经济 / 写
+`__bundle` + `__assets`），所以「本地能装、远程装不上」这种走散不会悄悄发生。
+
+**货币三段**（唯一正确的流向，改它就是印钞机）：
+
+```
+积分 🪙 ──buyGameCoin──▶ 游戏币（每款自己的）──redeemGameCoin──▶ 兑换券 🎟️
+                            ▲
+                            └── mintGameCoin（抓到奖品）
+```
+
+- 币是**账本**（`gameKv` 的 `__coin`，一串 delta），余额是算出来的，没有 `balance` 字段；
+- 兑换汇率写在**已安装的 manifest** 里（`economy.voucherPerCoin`），插件传不进来；
+- 三道闸门：`expectedPayout ≤ 0.8 × playCost`、`expectedPayout × voucherPerCoin < playCost`、
+  `voucherPerCoin` 缺省 = 不开放兑换。
+
+完整规则 / 数据结构 / 验收层 / 接新游戏的五步：
+**`docs/plugin-architecture.md`**（这是规则书，改插件体系前先读它）。
+
 #### 农场（首款，免费，默认拥有，离线可用）
 
 - **种地**：12 块地，前 4 块免费。**15 种作物**，生长周期从 3 分钟到 6 小时。
@@ -542,7 +571,14 @@ node scripts/e2e-upgrade.mjs             # 12 项：老库升级路径（不丢�
 node scripts/e2e-bag-sell.mjs            # 23 项：收进背包 → 市场卖出整条链（含点券到账、卖压、空背包空状态）
 node scripts/e2e-regressions.mjs         # 35 项：**回归守卫** —— 已经修过的具体 bug 别再改回去
 node scripts/e2e-wipe.mjs                # 18 项：全量清空（内存 + IndexedDB 都要清干净，清完重新播种）
+node scripts/e2e-plugin-local.mjs <url> phone    # 本地包：装 → 设为当前 → 买币 → 玩一局 → 换券 → 切走切回 → 卸载
+node scripts/e2e-plugin-local.mjs <url> tablet   # 同上，平板档（容器高度 / 底栏文案在这一档不一样）
 ```
+
+> **`e2e-plugin-local.mjs` 里有一条断言值得单独说**：它量「插件根节点高度**等于**宿主容器高度」。
+> 2026-10-22 接入奖品公园时，容器 698px、根节点 **0px** —— 整屏空白，
+> 而 `canvas` 在、`__gpPlayable` 是 true、其余断言全绿，只有截图看得出来。
+> 判据写成「大于 0」抓不到它（0 也是「不大于 0 的另一种写法」的另一半），必须写「等于」。
 
 > ⚠️ **别把预览服务起在默认的 4180。** 这台机器上 4180 / 4190 / 5190 常年被**别的项目**占着，
 > 而 `vite preview --strictPort` 绑不上时 **`curl` 照样返回 200** ⇒ 整套 e2e 会跑在**别人的 App** 上

@@ -1,0 +1,667 @@
+{
+ "generated": "convert-webp.py",
+ "note": "uvLocked=true 的图尺寸不可改：game.js 用像素坐标算 UV 窗口",
+ "total": {
+  "srcBytes": 66812527,
+  "webpBytes": 5256706,
+  "ratio": 12.71
+ },
+ "assets": [
+  {
+   "file": "arcade-backdrop.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 101928,
+   "sha256": "51efed76ff6d14ad37b3f57acf607e52857d2546fe0f516789880fbb936c847c",
+   "src": {
+    "file": "arcade-backdrop.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1391922
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.69
+  },
+  {
+   "file": "bg-arcade.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 24826,
+   "sha256": "5df8acfb500c8f2d98863f4657b5b84ea68ec11f83356e03f2629f94893b0b89",
+   "src": {
+    "file": "bg-arcade.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1128957
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 43.61
+  },
+  {
+   "file": "bg-home.webp",
+   "w": 1024,
+   "h": 553,
+   "bytes": 136110,
+   "sha256": "df99b66840b31b7fe3ec6d3bac4eccbe80111939a7f792b4e481829a8fe1b9ae",
+   "src": {
+    "file": "bg-home.png",
+    "w": 1706,
+    "h": 922,
+    "bytes": 2227056
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 34.96
+  },
+  {
+   "file": "bigbear-plush.webp",
+   "w": 588,
+   "h": 686,
+   "bytes": 102392,
+   "sha256": "c528ec98021dccb87a6c44a3e8d77ed1236a64a4397bd1689a2454c45c8f163e",
+   "src": {
+    "file": "bigbear-plush.png",
+    "w": 588,
+    "h": 686,
+    "bytes": 799838
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.74
+  },
+  {
+   "file": "cake-parfait-box-sheet.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 287098,
+   "sha256": "03fbc696b59a40bb467549188f4dfe12960ddd74889a2c6ef1fa7c5eee9a5077",
+   "src": {
+    "file": "cake-parfait-box-sheet.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2423240
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 37.42
+  },
+  {
+   "file": "cake-parfait-front.webp",
+   "w": 560,
+   "h": 622,
+   "bytes": 52736,
+   "sha256": "9ec556df9acd26807225103d2f819d4f44a47f1000ab7d1ed0ea71a8e9968096",
+   "src": {
+    "file": "cake-parfait-front.png",
+    "w": 560,
+    "h": 622,
+    "bytes": 764286
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.69
+  },
+  {
+   "file": "cake-plate-box-sheet.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 283104,
+   "sha256": "ea162618c756329b4ed4c65f89759deabd778005ece0f445cf9c63dfdd405993",
+   "src": {
+    "file": "cake-plate-box-sheet.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2497184
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 38.1
+  },
+  {
+   "file": "cake-plate-front.webp",
+   "w": 885,
+   "h": 1024,
+   "bytes": 132562,
+   "sha256": "ef1f346ceb75259ef3bc353fa44c4b7251d5b4d69dd818af46969a3bc57cc1a7",
+   "src": {
+    "file": "cake-plate-front.png",
+    "w": 1166,
+    "h": 1349,
+    "bytes": 2201517
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.57
+  },
+  {
+   "file": "chute-art.webp",
+   "w": 1672,
+   "h": 941,
+   "bytes": 137608,
+   "sha256": "be1ec8d04daf2260ac259e981295af04644ec892708d01a54e472cdc34f1fda6",
+   "src": {
+    "file": "chute-art.png",
+    "w": 1672,
+    "h": 941,
+    "bytes": 1335077
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 41.22
+  },
+  {
+   "file": "figure-box-sheet.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 247040,
+   "sha256": "8ba3541aabe01e14563e0c2a169ef3eea9284e4fdcd1ba648bce6459a4d31d21",
+   "src": {
+    "file": "figure-box-sheet.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2347858
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 35.73
+  },
+  {
+   "file": "logo-prizepark.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 66920,
+   "sha256": "538cf0bf11001a5524c1fd10216c3566d7fbe45b6c45f3726bd384dd02bda9ec",
+   "src": {
+    "file": "logo-prizepark.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 692785
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 40.16
+  },
+  {
+   "file": "lumiere-figure.webp",
+   "w": 561,
+   "h": 950,
+   "bytes": 115522,
+   "sha256": "fe4622c5f0b9b34a988498ddd6f14b2d27eea5a4117732d54dd612628c5371bc",
+   "src": {
+    "file": "lumiere-figure.png",
+    "w": 561,
+    "h": 950,
+    "bytes": 887942
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.95
+  },
+  {
+   "file": "mascot-bear.webp",
+   "w": 750,
+   "h": 878,
+   "bytes": 122234,
+   "sha256": "38bf6fa9bccbed74de523e5a49d1c192c3c60deb840e2cc459e64288e097a701",
+   "src": {
+    "file": "mascot-bear.png",
+    "w": 750,
+    "h": 878,
+    "bytes": 1193223
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.22
+  },
+  {
+   "file": "mascot-cat.webp",
+   "w": 679,
+   "h": 792,
+   "bytes": 86946,
+   "sha256": "27b1db700268a2023821eee218164359c27b491de9723cb077960c5babb5f01c",
+   "src": {
+    "file": "mascot-cat.png",
+    "w": 679,
+    "h": 792,
+    "bytes": 902345
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.04
+  },
+  {
+   "file": "mascot-chick.webp",
+   "w": 714,
+   "h": 807,
+   "bytes": 64804,
+   "sha256": "ed6f62b87134d1c0389124c6ceb6122313be55342be93d54eaee310f3126ed89",
+   "src": {
+    "file": "mascot-chick.png",
+    "w": 714,
+    "h": 807,
+    "bytes": 892849
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.02
+  },
+  {
+   "file": "mascot-dog.webp",
+   "w": 817,
+   "h": 829,
+   "bytes": 103522,
+   "sha256": "a7e475052f0e821038a491027e869907862bf604407573d850613937e42aa740",
+   "src": {
+    "file": "mascot-dog.png",
+    "w": 817,
+    "h": 829,
+    "bytes": 1082018
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.06
+  },
+  {
+   "file": "mascot-panda.webp",
+   "w": 686,
+   "h": 817,
+   "bytes": 95530,
+   "sha256": "6bc72c4050faaf4c0f3096a2a58562fcd453b94f90cc88cca0faa991a68dd772",
+   "src": {
+    "file": "mascot-panda.png",
+    "w": 686,
+    "h": 817,
+    "bytes": 956223
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.01
+  },
+  {
+   "file": "mascot-rabbit.webp",
+   "w": 868,
+   "h": 809,
+   "bytes": 65692,
+   "sha256": "67355a399edbfe6eb36a951848b3a8812142403b9b2b8d4f49d4fd4007661cef",
+   "src": {
+    "file": "mascot-rabbit.png",
+    "w": 868,
+    "h": 809,
+    "bytes": 951813
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 40.1
+  },
+  {
+   "file": "noctis-box-sheet.webp",
+   "w": 1223,
+   "h": 1286,
+   "bytes": 356820,
+   "sha256": "76f39b7ac09bfad91e8986e7c54ea5186c3f1b30314108cab13b565272f5d198",
+   "src": {
+    "file": "noctis-box-sheet.png",
+    "w": 1223,
+    "h": 1286,
+    "bytes": 2758889
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 37.48
+  },
+  {
+   "file": "noctis-figure.webp",
+   "w": 750,
+   "h": 934,
+   "bytes": 109538,
+   "sha256": "f3e3a80db7b2cd87ee5a955983892c88b13bd04ac7cce89473ad8f1223cd1a15",
+   "src": {
+    "file": "noctis-figure.png",
+    "w": 750,
+    "h": 934,
+    "bytes": 1025931
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.85
+  },
+  {
+   "file": "pillow-dog.webp",
+   "w": 1024,
+   "h": 683,
+   "bytes": 126066,
+   "sha256": "4f1fac400006ccf35aea23d5ab8364bd05004979f8b4335b7ed59242b45d448c",
+   "src": {
+    "file": "pillow-dog.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2447540
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.3
+  },
+  {
+   "file": "pillow-pig.webp",
+   "w": 1024,
+   "h": 683,
+   "bytes": 112786,
+   "sha256": "9ee667fa5d81474ba9695386be74a57c8e57e728d9bb158217cdaef591c429b7",
+   "src": {
+    "file": "pillow-pig.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2217216
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.53
+  },
+  {
+   "file": "pillow-rabbit.webp",
+   "w": 1024,
+   "h": 683,
+   "bytes": 110682,
+   "sha256": "6924fe9086f8cad9fdb9f8fb448d5730c73ad699d703469150417f8d098839fb",
+   "src": {
+    "file": "pillow-rabbit.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2152489
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.88
+  },
+  {
+   "file": "pop-badge-hot.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 38634,
+   "sha256": "cb1566b2d8c290f6b822874d8ea9d6f6861c26691838b30ebfb5bfb1ed8f9b13",
+   "src": {
+    "file": "pop-badge-hot.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 471404
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 42.61
+  },
+  {
+   "file": "pop-badge-new.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 47062,
+   "sha256": "c8280a548fcf90cc3eb34b84970c7d092353f5bdf18a7e2944358ab370ca81f0",
+   "src": {
+    "file": "pop-badge-new.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 536039
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 40.57
+  },
+  {
+   "file": "pop-bigbear-main.webp",
+   "w": 1024,
+   "h": 683,
+   "bytes": 233512,
+   "sha256": "1751445f845af6a7ae9fae2721b49273f8668ad0752865f3a1c1c387801b67b0",
+   "src": {
+    "file": "pop-bigbear-main.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2595310
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 34.55
+  },
+  {
+   "file": "pop-bigbear.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 59210,
+   "sha256": "05ef7ef1c4a0cc26a37a0dc58b345ab0c59e1c8b7e6b0d46651d6f788e3b94ab",
+   "src": {
+    "file": "pop-bigbear.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1251345
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.77
+  },
+  {
+   "file": "pop-bridge.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 93490,
+   "sha256": "6925ea6710bfdc1d59746f03c474ee6db85f9ea1859a03e3493ab9702f3d00df",
+   "src": {
+    "file": "pop-bridge.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1338376
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.27
+  },
+  {
+   "file": "pop-cake-plate.webp",
+   "w": 1024,
+   "h": 768,
+   "bytes": 235758,
+   "sha256": "1b313528085fdb0a2fc10ddcba254e306c9fd8d564aa903284abe77bcc0576a6",
+   "src": {
+    "file": "pop-cake-plate.png",
+    "w": 1448,
+    "h": 1086,
+    "bytes": 2730445
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 34.85
+  },
+  {
+   "file": "pop-lumiere.webp",
+   "w": 1024,
+   "h": 683,
+   "bytes": 72534,
+   "sha256": "6b21d5880c6d777f6598341a73fd77fb4e367f3f73eae19b11a61fd00fd4b5aa",
+   "src": {
+    "file": "pop-lumiere.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2276910
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.71
+  },
+  {
+   "file": "pop-mascot.webp",
+   "w": 1024,
+   "h": 683,
+   "bytes": 76570,
+   "sha256": "8a543addc065ac7a29b20a53c0e0528f738489b4cccb3e0d9a669ca6fce305e3",
+   "src": {
+    "file": "pop-mascot.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2454667
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.5
+  },
+  {
+   "file": "pop-neighbor-a.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 104472,
+   "sha256": "5386a31688458a88bc6ce298f6e29b18906a1b6d692c393409af0f073ebe020c",
+   "src": {
+    "file": "pop-neighbor-a.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1404757
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.21
+  },
+  {
+   "file": "pop-neighbor-b.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 93280,
+   "sha256": "efaf8ea48b26bbeff33b4396b91b8e5af24fc95b415eb413a861a7b888ad4a22",
+   "src": {
+    "file": "pop-neighbor-b.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1391002
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.01
+  },
+  {
+   "file": "pop-noctis.webp",
+   "w": 1024,
+   "h": 683,
+   "bytes": 135166,
+   "sha256": "2dd8f2732261efaef4ccec532e083be28e7277e07518549d927eee54480d196a",
+   "src": {
+    "file": "pop-noctis.png",
+    "w": 1536,
+    "h": 1024,
+    "bytes": 2758186
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.75
+  },
+  {
+   "file": "pop-pillow.webp",
+   "w": 1024,
+   "h": 768,
+   "bytes": 123448,
+   "sha256": "5d2fa624394d2fa0b6ea8cf577993ff592e256942b1151373afa7eb21d5c6460",
+   "src": {
+    "file": "pop-pillow.png",
+    "w": 1448,
+    "h": 1086,
+    "bytes": 2469663
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.63
+  },
+  {
+   "file": "pop-sweets.webp",
+   "w": 1672,
+   "h": 941,
+   "bytes": 395900,
+   "sha256": "966816ad5d6459db899c3acdb4b6de7aa997545f8e41619a13e41abcf71ccbf6",
+   "src": {
+    "file": "pop-sweets.png",
+    "w": 1672,
+    "h": 941,
+    "bytes": 2676440
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 34.21
+  },
+  {
+   "file": "pop-takoyaki.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 89956,
+   "sha256": "8d2d82091d79e17ff83222d50498a025996117818ac2d099115541b5139da6f4",
+   "src": {
+    "file": "pop-takoyaki.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1386019
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.44
+  },
+  {
+   "file": "sweet-chips.webp",
+   "w": 943,
+   "h": 1024,
+   "bytes": 135122,
+   "sha256": "ba702685392dbf5555d68d98b6e5016dd5f7483e0512cbed4e839f60c5d3d0b3",
+   "src": {
+    "file": "sweet-chips.png",
+    "w": 1025,
+    "h": 1113,
+    "bytes": 1980825
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.02
+  },
+  {
+   "file": "sweet-choco.webp",
+   "w": 702,
+   "h": 564,
+   "bytes": 64898,
+   "sha256": "55b07239868b8cd17559ed76d162a218603c93238b15af201b5d1d71a391c59b",
+   "src": {
+    "file": "sweet-choco.png",
+    "w": 702,
+    "h": 564,
+    "bytes": 665531
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.58
+  },
+  {
+   "file": "sweet-cookie.webp",
+   "w": 690,
+   "h": 588,
+   "bytes": 73704,
+   "sha256": "782549bcc06a7b66bed5f3121a1ad5e8599190c009f576216311d7ce1e0c6a1d",
+   "src": {
+    "file": "sweet-cookie.png",
+    "w": 690,
+    "h": 588,
+    "bytes": 706616
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.04
+  },
+  {
+   "file": "sweet-gummy.webp",
+   "w": 879,
+   "h": 1024,
+   "bytes": 141524,
+   "sha256": "76e243267a8f64e3f985052d8e0a5a1e827c2bc98ab838500505b88080621081",
+   "src": {
+    "file": "sweet-gummy.png",
+    "w": 1039,
+    "h": 1210,
+    "bytes": 2440794
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.1
+  }
+ ]
+}

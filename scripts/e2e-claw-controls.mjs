@@ -185,19 +185,30 @@ check(
   `${still1?.x.toFixed(3)},${still1?.z.toFixed(3)}`,
 )
 
-/* ================= ③ 虚拟摇杆（方向键） ================= */
+/* ================= ③ 虚拟摇杆（模拟量） ================= */
 
-/** 按住某个方向键 `ms` 毫秒再抬起 */
-async function holdPad(dir, ms) {
-  const box = await page.evaluate((d) => {
-    const b = document.querySelector(`[data-claw-dir="${d}"]`)
+/**
+ * 按住摇杆往某个方向拖 `ms` 毫秒再松手。
+ *
+ * ★ 摇杆是**模拟量**（原版那种圆盘 + 小圆钮），不是四个方向键 ——
+ *   所以这里必须走真实的拖动：按下圆盘中心 → 移到「中心 + 半径×0.7」→ 停 → 松手。
+ *   点一下就松等于「手指刚放上去」，那时方向还在死区里（`JOY_DEAD = 0.12`），
+ *   爪子一步都不会走 —— 而这正是正确行为，不是 bug。
+ */
+async function holdJoy(dx, dy, ms) {
+  const box = await page.evaluate(() => {
+    const b = document.querySelector('[data-claw-joy]')
     if (!b) return null
     const r = b.getBoundingClientRect()
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
-  }, dir)
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2, r: r.width / 2 }
+  })
   if (!box) return false
+  const d = box.r * 0.7
   await page.mouse.move(box.x, box.y)
   await page.mouse.down()
+  // 分两步移动：一步到位在真实设备上会被当成「跳跃」，拿不到中间帧
+  await page.mouse.move(box.x + dx * d * 0.5, box.y + dy * d * 0.5)
+  await page.mouse.move(box.x + dx * d, box.y + dy * d)
   await wait(ms)
   await page.mouse.up()
   await wait(150)
@@ -205,22 +216,41 @@ async function holdPad(dir, ms) {
 }
 
 const p0 = await readAim()
-const padFound = await holdPad('右', 420)
-check('摇杆上有「右」这颗方向键', padFound)
+const joyFound = await holdJoy(1, 0, 420)
+check('右下角有虚拟摇杆（`[data-claw-joy]`）', joyFound)
 const pRight = await readAim()
 check(
-  '★ 摇杆「右」：爪子往右',
+  '★ 摇杆往右推：爪子往右',
   (pRight?.x ?? 0) > (p0?.x ?? 0) + 0.05,
   `${p0?.x.toFixed(3)} → ${pRight?.x.toFixed(3)}`,
 )
 
 const p1 = await readAim()
-await holdPad('下', 420)
+await holdJoy(0, 1, 420)
 const pDown = await readAim()
 check(
-  '★★ 摇杆「下」：z 变大（方向没颠倒）',
+  '★★ 摇杆往下推：z 变大（方向没颠倒）',
   (pDown?.z ?? 0) > (p1?.z ?? 0) + 0.05,
   `${p1?.z.toFixed(3)} → ${pDown?.z.toFixed(3)}`,
+)
+
+/*
+  ★ 模拟量：推一半应该比推到底慢。
+  这是「摇杆」和「四个方向键」唯一的行为差别 —— 没有这一条，
+  换成摇杆只是换了个外观（按下去还是全速），手感一点没变。
+*/
+const halfA = await readAim()
+await holdJoy(1, 0, 260) // 先推到边
+const fullA = await readAim()
+const fullDx = (fullA?.x ?? 0) - (halfA?.x ?? 0)
+const halfB = await readAim()
+await holdJoy(0.45, 0, 260) // 只推 45%
+const partA = await readAim()
+const partDx = (partA?.x ?? 0) - (halfB?.x ?? 0)
+check(
+  '★ 推一半比推到底慢（模拟量，不是「一按就全速」）',
+  fullDx > 0 && partDx > 0 && partDx < fullDx * 0.85,
+  `推到底 ${fullDx.toFixed(3)} / 推一半 ${partDx.toFixed(3)}`,
 )
 
 // ★ 松手就停（capture 那条路的回归）

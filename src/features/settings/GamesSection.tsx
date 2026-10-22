@@ -13,7 +13,7 @@ import { CURRENCY } from '../../domain/currency'
  * 六块，各回答一个问题：
  *   ① **钻石** —— 有多少、从哪来（含手动发放）；
  *   ② **已购买** —— 内置游戏里我有哪些、现在玩的是哪一个（可切换）；
- *   ②′ **娃娃机** —— 买了才显示：中奖率 / 每只换多少商城币（`ClawEconomyCard`）；
+ *   ②′ **娃娃机** —— 买了才显示：中奖率 / 每只换多少兑换券（`ClawEconomyCard`）；
  *   ②″ **游戏商店** —— 从已签名目录装第三方游戏（`PluginStoreCard`，没配地址时只有一句说明）；
  *   ③ **已下载** —— 运行时装进来的游戏（装了才显示，见那边的注释）；
  *   ④ **敬请期待** —— 还没做的。
@@ -108,7 +108,7 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
           <span className="text-sm font-bold text-ink-500">用来买游戏</span>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-ink-500">
-          和积分、商城币是三套不同的账，互相不能换。
+          和积分、兑换券是三套不同的账，互相不能换。
         </p>
 
         {/*
@@ -232,6 +232,7 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
               return (
                 <li
                   key={m.id}
+                  data-plugin-installed-row={m.id}
                   className="flex items-center gap-3 rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-3 py-2.5"
                 >
                   <span className="text-2xl">{m.emoji}</span>
@@ -248,6 +249,7 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
                     <>
                       <button
                         disabled={!gateOpen}
+                        data-plugin-uninstall-confirm={m.id}
                         onClick={() => {
                           setConfirmingId(null)
                           void uninstallGame(m.id)
@@ -272,6 +274,7 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
                       ) : (
                         <button
                           disabled={!gateOpen}
+                          data-plugin-set-current={m.id}
                           onClick={() => void setActiveGame(m.id)}
                           className="btn shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press disabled:opacity-50"
                         >
@@ -280,6 +283,7 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
                       )}
                       <button
                         disabled={!gateOpen}
+                        data-plugin-uninstall={m.id}
                         onClick={() => setConfirmingId(m.id)}
                         aria-label={`卸载 ${m.name}`}
                         className="btn shrink-0 rounded-full bg-white px-2.5 py-1.5 text-xs font-extrabold text-ink-500 shadow-flat active:btn-press disabled:opacity-50"

@@ -46,6 +46,16 @@ export interface CatalogGame {
   sha256: string
   /** 可选：字节数。用来在下载前给出体积提示，**不是**校验依据。 */
   size?: number
+  /**
+   * 可选：**资源根**（以 `/` 结尾）。缺省 = 包所在目录。
+   *
+   * 为什么要能单独指定：包本体可能放 GitHub Release（体积小、更新频繁），
+   * 而几十 MB 的贴图放在 CDN 或对象存储上。两者不在同一个目录，
+   * 所以「资源根 = 包地址的目录」不能当默认假设硬编码。
+   *
+   * 挂载时会作为 `ctx.assetBase` 交给插件（见 `plugin.ts` 的 `MountContext`）。
+   */
+  assetBase?: string
 }
 
 export interface Catalog {
@@ -230,6 +240,21 @@ export function parseCatalog(bytes: Bytes, base: string | null = null): Catalog 
       throw new Error(`${where}(${id}) 的 size 必须是非负数字`)
     }
 
+    /*
+     * `assetBase` 也要过 https 白名单 —— 它是**目录里写的地址**，
+     * 和包地址一样会变成「运行时去取的 URL」。只校验包地址、放过资源根，
+     * 等于留了一个「用 http 加载贴图」的口子（混合内容在 Capacitor 里是硬失败）。
+     */
+    const rawAsset = g.assetBase
+    let assetBase: string | undefined
+    if (rawAsset !== undefined) {
+      const s = requireString(g, 'assetBase', `${where}(${id})`)
+      const abs = assertAllowedPackageUrl(s, base)
+      // 统一补尾斜杠：拼资源时是 `assetBase + rel`，少一个斜杠就变成
+      // `https://cdn/x.webp` → `https://cdn/x.webpassets/a.webp`，404 且报错像打包坏了。
+      assetBase = abs.endsWith('/') ? abs : abs + '/'
+    }
+
     return {
       id,
       name: requireString(g, 'name', `${where}(${id})`),
@@ -237,6 +262,7 @@ export function parseCatalog(bytes: Bytes, base: string | null = null): Catalog 
       url: assertAllowedPackageUrl(url, base),
       sha256: sha,
       ...(size === undefined ? {} : { size: size as number }),
+      ...(assetBase === undefined ? {} : { assetBase }),
     }
   })
 

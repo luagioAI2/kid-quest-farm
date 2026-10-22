@@ -20,14 +20,16 @@
  * gameCoinBalance）、存储（storage）、反馈（pushToast / tone / haptic）、
  * 只读（balance）。
  *
- * ## ⚠️ `mount` 是**同步**的，异步初始化放在里面自己跑
+ * ## `mount` 这里是**同步**的 —— 但契约从 v3 起也允许返回 Promise
  *
- * 契约是 `mount(container, host): () => void` —— 同步返回卸载函数。
- * 所以「读存档」这类异步动作**不能** await 在 mount 的顶层：
- * 那样卸载函数要等 promise 才有值，中间那一小段里**卸载会被丢掉**
- * （切走 → 存档还没读完 → 卸载函数还不存在 → 定时器/监听留了下来）。
- * 正确写法见下面：先同步建好 DOM 和卸载函数，再让 async 的 `init()` 去填内容，
- * 并且用 `disposed` 挡住「卸载之后才回来的异步结果」。
+ * `HOST_API = 3` 之后 `mount` 的返回值是 `Unmount | Promise<Unmount>`，
+ * 宿主 `mountBundle` 两种都收（`typeof r === 'function' ? r : await r`）。
+ *
+ * **这个样板仍然同步**，因为它是纯 DOM 的、没有要 await 的东西；
+ * 而「先同步建好 DOM 和卸载函数，再让 async 的 `init()` 去填内容」这套写法
+ * 在任何情况下都最稳 —— 卸载函数**立刻**就位，中间那一小段里不会丢卸载。
+ * 3D 游戏（纹理 / 物理 wasm 必须 await）直接返回 Promise 就行，
+ * 但要自己给加载态，并且 `unmount` 要能在「刚建好就被调用」时安全执行。
  */
 
 import type { GameBundle, HostApi } from '../../src/games/plugin'

@@ -3,7 +3,7 @@
  *
  * ## 这里最重要的一条：插件的币也要「算出来」，不能「存出来」
  *
- * 宿主的三套币（积分 / 商城币 / 钻石）都是「余额 = 账本 delta 之和」，
+ * 宿主的三套币（积分 / 兑换券 / 钻石）都是「余额 = 账本 delta 之和」，
  * 从来不存 `balance` 字段。插件的币**必须照这个模式**，否则会出现
  * 「余额和流水对不上」—— 而且**不报错**（本项目在 `Task`/`TaskInstance`
  * 上已经吃过一次「同一个事实存两份」的亏）。
@@ -20,10 +20,13 @@
 
 import {
   addGameCoin,
+  buyGameCoins,
   gameCoinBalanceOf,
   getGameKv,
   listGameKv,
+  redeemGameCoins,
   setGameKv,
+  spendGameCoin,
   spendPoints,
 } from '../db/db'
 import { hapticLight, playTone } from '../platform/files'
@@ -89,6 +92,14 @@ export function makeHostApi(deps: {
   }) => void
   soundEnabled: () => boolean
   hapticsEnabled: () => boolean
+  /**
+   * 这款游戏「1 个币换几张兑换券」。**现读已安装的 manifest**，不由插件传。
+   *
+   * 返回 0 = 不开放兑换（manifest 没写 `voucherPerCoin`）。
+   * 为什么不做成常量快照：家长在设置页里看到的汇率和这里必须是同一份 ——
+   * 包升级后汇率会变，快照就成了「插件按旧汇率算、宿主按新汇率发」。
+   */
+  voucherPerCoin: () => number
 }): (gameId: string) => HostApi {
   return (gameId: string): HostApi => ({
     balance: () => deps.getBalance(),
@@ -109,6 +120,44 @@ export function makeHostApi(deps: {
       // 负数 / 0 一律不写（`addGameCoin` 里也是这个守卫 —— 币只进不出）。
       await addGameCoin(gameId, amount, memo)
       if (Math.round(amount) > 0) await deps.refresh()
+    },
+
+    /**
+     * 花掉自己的币（玩一局）。走 `db.spendGameCoin` —— 那个函数是
+     * **唯一**允许往币账本写负数的入口，且守卫在事务里（余额不够一个币不扣）。
+     *
+     * ⚠️ 不要在这里改成「先读余额再 mint 一笔负数」：守卫就跑到事务外面了，
+     * 两次并发各自读到同一个「够」，于是都扣 —— 超支，而且每条流水都自洽、不报错。
+     */
+    spendGameCoin: async (amount, memo) => {
+      const ok = await spendGameCoin(gameId, amount, memo)
+      if (ok) await deps.refresh()
+      return ok
+    },
+
+    /**
+     * 游戏币 → 兑换券。汇率**从 manifest 现读**，调用方传不进来。
+     *
+     * ⚠️ 这里刻意不接「插件传 rate」的重载：那等于把印钞机的旋钮交给插件。
+     * 汇率没配（0）就直接返回 0，不抛 —— 「这款游戏不开放兑换」是正常状态，
+     * 不是错误（抛了会让插件在 catch 里静默吞掉，反而更难查）。
+     */
+    redeemGameCoin: async (count, memo) => {
+      const rate = deps.voucherPerCoin()
+      if (!(rate > 0)) return 0
+      const got = await redeemGameCoins(gameId, count, rate, memo)
+      if (got > 0) await deps.refresh()
+      return got
+    },
+
+    /**
+     * 用积分买币。走 `db.buyGameCoins` —— 扣积分和记币在**同一个事务**里。
+     * 拆成 `spendPoints` + `mintGameCoin` 两步的话，中间崩一下就是「积分扣了、币没到」。
+     */
+    buyGameCoin: async (count, pointsPerCoin, memo) => {
+      const ok = await buyGameCoins(gameId, count, pointsPerCoin, memo)
+      if (ok) await deps.refresh()
+      return ok
     },
 
     gameCoinBalance: () => gameCoinBalanceOf(gameId),

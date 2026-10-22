@@ -56,7 +56,7 @@ class KidQuestFarmDB extends Dexie {
   tasks!: Table<Task, string>
   taskInstances!: Table<TaskInstance, string>
   ledger!: Table<LedgerEntry, string>
-  /** 商城币账本。与 `ledger` 物理隔离，见 `HarvestEntry` 的注释。 */
+  /** 兑换券账本。与 `ledger` 物理隔离，见 `HarvestEntry` 的注释。 */
   harvestLedger!: Table<HarvestEntry, string>
   /** 钻石账本。第三套币，同样物理隔离，见 `MallEntry` 的注释。 */
   mallLedger!: Table<MallEntry, string>
@@ -114,10 +114,10 @@ class KidQuestFarmDB extends Dexie {
       taskInstances:
         'id, taskId, periodKey, date, status, [date+status], [status+submittedAt], &[taskId+periodKey+date]',
     })
-    // v5：商城币独立账本。
+    // v5：兑换券独立账本。
     //
     // 为什么单开一张表，而不是给 ledger 加个 currency 字段 —— 见 `HarvestEntry` 的注释。
-    // 一句话：**要让「商城币不算进积分」由表结构保证，而不是靠每个读余额的地方
+    // 一句话：**要让「兑换券不算进积分」由表结构保证，而不是靠每个读余额的地方
     // 都记得加过滤**。漏一个 filter 就静默算错，而且不报错。
     this.version(5).stores({
       harvestLedger: 'id, source, createdAt, refId',
@@ -125,7 +125,7 @@ class KidQuestFarmDB extends Dexie {
     // v6：钻石独立账本（第三套币，2026-10-14）。
     //
     // 家长原话：「钻石 跟积分 和 商城币都不一样。」同样是**单开一张表**
-    // 而不是给 ledger 加 currency 字段 —— 理由与 v5 的商城币一字不差：
+    // 而不是给 ledger 加 currency 字段 —— 理由与 v5 的兑换券一字不差：
     // 让「钻石不算进任何别的余额」由表结构保证，而不是靠每个读余额的
     // 地方都记得加过滤（漏一个就静默算错，且不报错）。
     //
@@ -201,6 +201,22 @@ export async function clearGameKv(gameId: string): Promise<number> {
  * 不是存储位置 —— 而多一个存储层会让「存档到底丢了没有」更难判断。
  */
 export const BUNDLE_KEY = '__bundle'
+
+/**
+ * 插件**资源根**在 `gameKv` 里的保留键（2026-10-22 起）。
+ *
+ * 装的时候就知道资源在哪了（本地包 = `/games/<id>/`；远程包 = 目录条目给的
+ * CDN 前缀），把它记下来，挂载时作为 `ctx.assetBase` 交给插件。
+ *
+ * ## 为什么不「挂载时现算」
+ *
+ * 现算就必须知道「这个包是本地装的还是远程装的」，而那个信息只能再存一份
+ * 标记 —— 又是一份会和事实走散的状态。存一个「资源根」既回答了
+ * 「从哪加载」，也隐含了「它当初从哪来」，一份就够。
+ *
+ * ⚠️ 和 `__bundle` 一样是宿主保留键：插件的 `storage.get/set` 碰到会抛。
+ */
+export const ASSET_BASE_KEY = '__assets'
 
 /**
  * 列出所有**已安装**的游戏包。
@@ -608,7 +624,8 @@ export async function spendGameCoin(
 }
 
 /**
- * **用积分买一个游戏币** —— 扣积分和记币在**同一个事务**里。
+ * **用积分买 `count` 个游戏币** —— 扣积分和记币在**同一个事务**里。
+ * 每个币 `pointsPerCoin` 积分。
  *
  * ## 为什么不能「先 `spendPoints()`，再 `addGameCoin()`」
  *
@@ -624,36 +641,110 @@ export async function spendGameCoin(
  * 不必在这里再抄一遍。
  *
  * 返回 `false` = 积分不够，**一分不扣、一个币不发**。
+ *
+ * 2026-10-22：从「一次一个」扩成「一次 n 个」。原因是插件游戏
+ * （奖品公园）要一次买 5 个，而分 5 次调就是 5 个独立事务 —— 见上。
+ */
+export async function buyGameCoins(
+  gameId: string,
+  count: number,
+  pointsPerCoin: number,
+  memo: string,
+): Promise<boolean> {
+  const n = Math.round(count)
+  const rate = Math.round(pointsPerCoin)
+  if (!(n > 0) || !(rate > 0)) return false
+  return db.transaction('rw', db.ledger, db.gameKv, async () => {
+    const ok = await spendPoints(n * rate, { source: 'game_spend', refId: gameId, memo })
+    if (!ok) return false
+    await addGameCoin(gameId, n, memo)
+    return true
+  })
+}
+
+/**
+ * 买 **1 个**币（老签名）。内置娃娃机在用，保持不动。
+ *
+ * 为什么不直接把它改成多币版本：`useApp.ts` 那边传的第二个参数是 `CLAW_PLAY_COST`，
+ * 语义是「1 个币值多少积分」；改成 `(gameId, count, cost)` 会让那个调用点
+ * **静默**变成「买 CLAW_PLAY_COST 个币、每个 0 积分」—— 白送币，而且不报错。
+ * 所以加新函数、老函数委托过去。
  */
 export async function buyGameCoin(
   gameId: string,
   cost: number,
   memo: string,
 ): Promise<boolean> {
-  const c = Math.round(cost)
-  if (c <= 0) return false
-  return db.transaction('rw', db.ledger, db.gameKv, async () => {
-    const ok = await spendPoints(c, { source: 'game_spend', refId: gameId, memo })
-    if (!ok) return false
-    await addGameCoin(gameId, 1, memo)
-    return true
+  return buyGameCoins(gameId, 1, cost, memo)
+}
+
+/**
+ * **把游戏币换成兑换券** —— 「积分 → 游戏币 → 兑换券」这条链的最后一跳。
+ *
+ * ## 三件事必须在一个事务里
+ *
+ *   ① 读币账本并判余额够不够（守卫在事务里，不在外面）
+ *   ② 写一笔负数（烧掉 `count` 个币）
+ *   ③ 往 `harvestLedger` 记一笔 `count × voucherPerCoin`
+ *
+ * 拆开的话，中间崩一下就是「币扣了、券没发」—— 玩家白丢币，而且**不报错**
+ * （`buyGameCoins` 的注释里记过同一类事故）。
+ *
+ * ## 汇率为什么是参数、而且必须由宿主读 manifest 后传
+ *
+ * `HostApi.redeemGameCoin` 只收「换几个」。汇率从**已安装的 manifest**
+ * 里读（`pluginHostApi` 现读 store），不由插件传 —— 否则一个写错的插件
+ * 传 1000 就能静默印券。见 `plugin.ts` 的 `GameEconomy.voucherPerCoin`。
+ *
+ * ## 为什么这条不算印钞机
+ *
+ * 兑换券 ≡ 1 积分（兑换商城口径），但**兑换券换不回积分**
+ * （`HarvestSource` 那张表的注释、`domain/types.ts` 的两条不可逆约束）。
+ * 所以这条链的价值上限是「一局期望产出 × 汇率 < 一局成本」，
+ * 由 `domain/pluginEconomy.ts` 的 `checkPluginEconomy` 在安装时把关。
+ *
+ * @returns 实际发出的兑换券数量；`0` = 没换（币不够 / 汇率非法）。
+ */
+export async function redeemGameCoins(
+  gameId: string,
+  count: number,
+  voucherPerCoin: number,
+  memo: string,
+): Promise<number> {
+  const n = Math.round(count)
+  const rate = Math.round(voucherPerCoin)
+  if (!(n > 0) || !(rate > 0)) return 0
+
+  return db.transaction('rw', db.gameKv, db.harvestLedger, async () => {
+    const rows = await readGameCoinLedger(gameId)
+    const bal = rows.reduce((sum, r) => sum + r.delta, 0)
+    if (bal < n) return 0
+
+    rows.push({ delta: -n, memo, at: Date.now() })
+    await setGameKv(gameId, GAME_COIN_KEY, rows)
+
+    const vouchers = n * rate
+    // 走 `postHarvest` —— 和农场卖东西、娃娃机兑奖是**同一个入口**，
+    // 账目只有一套口径（`balanceAfter` 也由它算）。
+    await postHarvest({ delta: vouchers, source: 'game_redeem', refId: gameId, memo })
+    return vouchers
   })
 }
 
-/* ---------------- 商城币账本 ---------------- */
+/* ---------------- 兑换券账本 ---------------- */
 
 /**
- * 商城币余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
+ * 兑换券余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
  *
  * **只读 `db.harvestLedger`，永远不碰 `db.ledger`** ——
- * 这里就是「商城币 ⇸ 积分」这条约束的落点。
+ * 这里就是「兑换券 ⇸ 积分」这条约束的落点。
  */
 export async function currentHarvestBalance(): Promise<number> {
   const rows = await db.harvestLedger.toArray()
   return rows.reduce((sum, r) => sum + r.delta, 0)
 }
 
-/** 取「下一笔商城币账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
+/** 取「下一笔兑换券账」该用的时间戳与当前余额。理由同 `ledgerTip`。 */
 export async function harvestTip(): Promise<{ createdAt: number; balance: number }> {
   const rows = await db.harvestLedger.toArray()
   const maxAt = rows.reduce((m, r) => (r.createdAt > m ? r.createdAt : m), 0)
@@ -664,10 +755,10 @@ export async function harvestTip(): Promise<{ createdAt: number; balance: number
 }
 
 /**
- * 记一笔商城币。**唯一**允许改动商城币余额的入口。
+ * 记一笔兑换券。**唯一**允许改动兑换券余额的入口。
  *
  * 与 `postLedger` 完全对称，只是换了张表。
- * **刻意不提供「商城币 → 积分」的反向函数** —— 没有这个函数，就没有那条路。
+ * **刻意不提供「兑换券 → 积分」的反向函数** —— 没有这个函数，就没有那条路。
  */
 export async function postHarvest(
   entry: Omit<HarvestEntry, 'id' | 'balanceAfter' | 'createdAt'> & {
@@ -697,7 +788,7 @@ export async function postHarvest(
 /**
  * 钻石余额 = 所有 delta 之和。口径与 `currentBalance` 一致，理由也一样。
  *
- * **只读 `db.mallLedger`** —— 这就是「钻石不算进积分、也不算进商城币」
+ * **只读 `db.mallLedger`** —— 这就是「钻石不算进积分、也不算进兑换券」
  * 这条约束的落点。
  */
 export async function currentMallBalance(): Promise<number> {
@@ -831,10 +922,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   /**
    * 娃娃机的两个家长可调参数（2026-10-16）。
    *
-   * 默认 1/3 中奖率 × 每只 2 商城币 ⇒ 每局期望 **0.67 商城币**。
+   * 默认 1/3 中奖率 × 每只 2 兑换券 ⇒ 每局期望 **0.67 兑换券**。
    * 上限是 0.8（`CLAW_MAX_EXPECTED`），所以默认档留了余量。
    *
-   * ⚠️ 为什么默认就低于上限而不是贴着上限：兑换商城里 `1 商城币 ≡ 1 积分`，
+   * ⚠️ 为什么默认就低于上限而不是贴着上限：兑换商城里 `1 兑换券 ≡ 1 积分`，
    * 而一局只花 1 积分 ⇒ 期望产出只要 ≥ 1，娃娃机就变成一台
    * 「坐着玩就能把积分刷上去」的机器。**0.67 是消费，1.0 是漏洞。**
    * 口径与夹紧见 `domain/clawEconomy.ts`（有全参数空间单测钉着）。

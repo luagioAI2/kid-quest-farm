@@ -2,37 +2,37 @@ import { describe, expect, it } from 'vitest'
 import { describeRedeemPayment, paidOf, planRedeemPayment } from './redeem'
 
 /* ============================================================
-   兑换分账：商城币优先 + 可混合
+   兑换分账：兑换券优先 + 可混合
    ------------------------------------------------------------
    用户 2026-09-30：「优先用商城币兑换。价值和积分等价的。
-   用完商城币再用积分，可混合。」
+   用完兑换券再用积分，可混合。」
 
    这组测试钉的是**分账规则本身**。store 层的 `redeem()` 和兑换页的
    预览都调同一个函数，所以规则改了这里会红，而不是让界面和账本各算各的。
    ============================================================ */
 
-describe('兑换分账：商城币优先', () => {
-  it('商城币够 —— 全用商城币，积分一分不动', () => {
+describe('兑换分账：兑换券优先', () => {
+  it('兑换券够 —— 全用兑换券，积分一分不动', () => {
     const p = planRedeemPayment(50, 80, 300)
     expect(p).toMatchObject({ harvestPaid: 50, pointsPaid: 0, affordable: true, shortfall: 0 })
   })
 
-  it('商城币刚好够 —— 边界，不要多扣一枚', () => {
+  it('兑换券刚好够 —— 边界，不要多扣一枚', () => {
     const p = planRedeemPayment(50, 50, 300)
     expect(p).toMatchObject({ harvestPaid: 50, pointsPaid: 0, affordable: true })
   })
 
-  it('商城币差 1 —— 剩下那 1 从积分补，这就是「可混合」', () => {
+  it('兑换券差 1 —— 剩下那 1 从积分补，这就是「可混合」', () => {
     const p = planRedeemPayment(50, 49, 300)
     expect(p).toMatchObject({ harvestPaid: 49, pointsPaid: 1, affordable: true })
   })
 
-  it('商城币花光还不够 —— 剩余全走积分', () => {
+  it('兑换券花光还不够 —— 剩余全走积分', () => {
     const p = planRedeemPayment(50, 20, 300)
     expect(p).toMatchObject({ harvestPaid: 20, pointsPaid: 30, affordable: true })
   })
 
-  it('商城币为 0 —— 退回「纯积分」的老行为', () => {
+  it('兑换券为 0 —— 退回「纯积分」的老行为', () => {
     const p = planRedeemPayment(50, 0, 300)
     expect(p).toMatchObject({ harvestPaid: 0, pointsPaid: 50, affordable: true })
   })
@@ -77,17 +77,17 @@ describe('兑换分账：商城币优先', () => {
 })
 
 describe('兑换分账：文案', () => {
-  it('纯积分不写「+0 商城币」', () => {
+  it('纯积分不写「+0 兑换券」', () => {
     expect(describeRedeemPayment({ harvestPaid: 0, pointsPaid: 50, cost: 50 })).toBe('50 积分')
   })
 
-  it('纯商城币不写「+0 积分」', () => {
-    expect(describeRedeemPayment({ harvestPaid: 50, pointsPaid: 0, cost: 50 })).toBe('50 商城币')
+  it('纯兑换券不写「+0 积分」', () => {
+    expect(describeRedeemPayment({ harvestPaid: 50, pointsPaid: 0, cost: 50 })).toBe('50 兑换券')
   })
 
   it('混合时两种都写出来', () => {
     expect(describeRedeemPayment({ harvestPaid: 20, pointsPaid: 30, cost: 50 })).toBe(
-      '20 商城币 + 30 积分',
+      '20 兑换券 + 30 积分',
     )
   })
 
@@ -112,13 +112,13 @@ describe('兑换记录的分账读取：两个字段缺省方向是反的', () =
     expect(paidOf({ cost: 50, harvestPaid: 20 })).toEqual({ harvestPaid: 20, pointsPaid: 30 })
   })
 
-  it('纯商城币的新记录：pointsPaid 显式是 0，不能被 `??` 改写成 cost', () => {
+  it('纯兑换券的新记录：pointsPaid 显式是 0，不能被 `??` 改写成 cost', () => {
     // 这是最容易写错的一处：`pointsPaid ?? cost` 会把 0 当成"没填"，
-    // 于是「全用商城币」的记录显示成「还花了 50 积分」。
+    // 于是「全用兑换券」的记录显示成「还花了 50 积分」。
     expect(paidOf({ cost: 50, harvestPaid: 50, pointsPaid: 0 })).toEqual({
       harvestPaid: 50,
       pointsPaid: 0,
     })
-    expect(describeRedeemPayment({ cost: 50, harvestPaid: 50, pointsPaid: 0 })).toBe('50 商城币')
+    expect(describeRedeemPayment({ cost: 50, harvestPaid: 50, pointsPaid: 0 })).toBe('50 兑换券')
   })
 })

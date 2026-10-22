@@ -47,7 +47,7 @@ const SPLASH_MIN_MS = 1900
 export default function App() {
   const ready = useApp((s) => s.ready)
   const balance = useApp((s) => s.balance)
-  /** 商城币：农场产出的结算币。和积分是两套账，见 store 里 postHarvest 的注释。 */
+  /** 兑换券：农场产出的结算币。和积分是两套账，见 store 里 postHarvest 的注释。 */
   const harvestBalance = useApp((s) => s.harvestBalance)
   const toasts = useApp((s) => s.toasts)
   const dismissToast = useApp((s) => s.dismissToast)
@@ -165,13 +165,21 @@ export default function App() {
    * 游戏格是**运行时算**的 —— 图标、名字、`data-tour` 全都来自当前游戏。
    * 农场是首款且默认拥有，所以默认状态下这一格就是原来的「🌾 农场 / tab-farm」，
    * 观感和锚点零变化。
+   *
+   * ★ 下载来的游戏用 **`tabLabel`**，不是 `name`（2026-10-22 补）。
+   *
+   * 契约里 `tabLabel` 是「底部导航上的文字，≤3 字」，`check-plugin.mjs` 也在卡这个
+   * 上限 —— 但这里原来读的是 `activePlugin.name`，于是那个字段**从来没被用过**：
+   * 「奖品公园」（4 字）直接上了导航格，而它自己的 `tabLabel` 是「奖品园」。
+   * 一个被校验、被写进文档、却没人读的字段，比没有这个字段更糟 ——
+   * 插件作者会按 3 个字去起名，然后发现宿主根本不在乎。
    */
   const tabs = useMemo(
     () => [
       STATIC_TABS[0],
       {
         key: 'game' as const,
-        label: activeGame?.name ?? activePlugin?.name ?? '游戏',
+        label: activeGame?.name ?? activePlugin?.tabLabel ?? activePlugin?.name ?? '游戏',
         emoji: activeGame?.emoji ?? activePlugin?.emoji ?? '🎮',
         tour: `tab-${activeGameId}`,
       },
@@ -266,7 +274,7 @@ export default function App() {
               {/*
                 两个币种并排。**图标和底色必须能区分开**：
                   🪙 积分 = 奖励色（sun），能买种子/幼崽/地块，也能进兑换商城
-                  🎟️ 商城币 = 草色（grass），只能进兑换商城的丰收档，买不了农场投入
+                  🎟️ 兑换券 = 草色（grass），只能进兑换商城的丰收档，买不了农场投入
                 用农场页同一个色（bg-grass-100 / text-grass-700），
                 孩子从农场切到任务页时不会觉得是两个东西。
               */}
@@ -280,7 +288,7 @@ export default function App() {
                 </span>
               </div>
               {/*
-                商城币是**农场这一款游戏**的币，不是全局的 —— 每款游戏有自己的
+                兑换券是**农场这一款游戏**的币，不是全局的 —— 每款游戏有自己的
                 账本和自己的余额（见 `games/registry.ts`）。
                 所以只有当前游戏是农场时才渲染这枚币；否则会显示一枚跟眼前
                 这个游戏毫无关系的币，等于界面在说一件不成立的事。
@@ -290,7 +298,7 @@ export default function App() {
               {activeGameId === GAME_FARM && (
                 <div
                   className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
-                  aria-label={`商城币 ${harvestBalance}`}
+                  aria-label={`兑换券 ${harvestBalance}`}
                 >
                   <span className="text-base leading-none">🎟️</span>
                   <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">

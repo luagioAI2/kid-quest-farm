@@ -44,18 +44,24 @@
  */
 import {
   ACESFilmicToneMapping,
+  CircleGeometry,
   Color,
   DirectionalLight,
+  Fog,
   Group,
   HalfFloatType,
   HemisphereLight,
   MathUtils,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
+  PlaneGeometry,
   PMREMGenerator,
+  PointLight,
   Quaternion,
+  RingGeometry,
   Scene,
   SpotLight,
   SRGBColorSpace,
@@ -82,6 +88,7 @@ import {
 import { buildMachine, buildRoom, buildEnvScene, disposeMachine, M, applyTheme } from './scene/machine'
 import { buildPrize, disposePlush, setFurShells, type PlushModel } from './scene/plush'
 import { PRIZE_TYPES, type PrizeType } from './scene/prizeTypes'
+import { aimShadow } from './scene/textures'
 import { CLAW_THEMES } from './scene/themes'
 
 export { CLAW_THEMES }
@@ -702,16 +709,29 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     阴影 —— 2026-10-17 补上。
 
     ★ 这一条是「看着不 3D」的最大单一原因：没有接触阴影时，娃娃之间、
-      娃娃和底板之间全是悬空的，大脑会把「没有落地感」读成「像贴纸」。
+      娃娃和底板之间全是悬空的，大脑会把「没有落地感」读成「贴纸」。
       之前只有直射光造成的明暗，没有投影。
 
-    ⚠️ 用 `PCFSoftShadowMap` 不是 `PCFShadowMap`：后者边缘是硬锯齿，
-      在这么小的柜子里（1.16 × 1.0 世界单位）尤其明显。
+    ★★★ 2026-10-21：`PCFSoftShadowMap` → **`PCFShadowMap`**，照原版。
+
+    这不是「换一种软硬度」，而是**那一种已经不存在了**：three 0.186 里
+    `WebGLShadowMap.render()` 开头就是
+
+        if ( this.type === PCFSoftShadowMap ) {
+          warn( 'WebGLShadowMap: PCFSoftShadowMap has been removed. Using PCFShadowMap instead.' );
+          this.type = PCFShadowMap;
+        }
+
+    也就是说我们写 `PCFSoftShadowMap` 时，控制台每帧报一次警告、实际用的是
+    `PCFShadowMap`，而 `shadow.radius` 一直是**生效**的（新版 PCF 用 Vogel 盘
+    采样，见 `shadowmap_pars_fragment.glsl.js`）。原版直接写 `PCFShadowMap`，
+    同一个结论，只是不报警告。
+
     ⚠️ 阴影贴图**只有一张**（key light），别给每个灯都开 —— 手机上每多一张
       就是一次完整的额外渲染。
   */
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = PCFSoftShadowMap
+  renderer.shadowMap.type = PCFShadowMap
 
   /*
     毛壳层数（娃娃身上那层「毛」）按设备分档。
@@ -724,7 +744,18 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
   setFurShells((navigator.hardwareConcurrency || 4) > 4 ? 6 : 3)
 
   const scene = new Scene()
-  scene.background = new Color(0xe9e6f2)
+  /*
+    ★ 背景色 / 雾都照原版（`0xe8e4de` + `Fog(6, 14)`）。
+
+    我们之前是 `0xe9e6f2`（带一点紫粉），因为它「和 App 的浅色主题更配」。
+    但柜子是**半透的玻璃**：背景色会透过玻璃、透过取物口的黑面边缘渗进来，
+    整台机器的白壳因此偏冷偏紫，和原版那种暖米白不是同一个颜色。
+
+    ★ 雾只在有房间的时候起作用（横屏两侧露地板/墙），竖屏时最近的物体也在
+      2.5 个单位内，`near = 6` 完全不影响画面 —— 和原版同一个口径。
+  */
+  scene.background = new Color(0xe8e4de)
+  scene.fog = new Fog(0xe8e4de, 6, 14)
 
   /*
     环境贴图 —— 2026-10-17 补上。
@@ -767,7 +798,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     照抄参考实现的 0.65 —— 环境光在这里负责的是「玻璃和镀铬的反射」，
     往低压只会让柜子发脏，对影子没有帮助。
   */
-  scene.environmentIntensity = 0.4
+  scene.environmentIntensity = 0.65
 
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 40)
   camera.position.set(0, LOOK_Y, 4)
@@ -927,33 +958,25 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
 
   /* ---------------- 灯光：暖顶光 + 柜内冷白 ---------------- */
   /*
-    光照按参考实现的量级重调过（2026-10-17）。
+    ★★★ 2026-10-21：**四个数全部回到原版**（0.55 / 1.5 / 0.9 / 2.8）。
 
-    ★ 之前环境光是 **1.5**，参考实现是 **0.55**。环境光不是「越亮越清楚」——
-      它会把所有阴影**填平**，柜子就没有体积感了，看着发灰。
-      加了阴影之后这一点尤其明显：环境光一高，影子淡到看不见。
+    中间有一轮（10-18 ~ 10-19）我把主光推到 2.0、柜内灯压到 1.5、半球压到 0.35，
+    理由是「让会投影的那盏在总量里占大头，影子才看得见」。方向不算错，
+    但**代价是把整台机器的亮度关系改了**：柜内变暗、柜顶发白、娃娃的高光变硬，
+    于是「看着还是不像原版」—— 因为原版本来就不是这个亮度关系。
+
+    现在尺寸、模型、阴影投射体（只有爪子和娃娃）都已经和原版一致了，
+    那组「补偿」就没有存在的理由了：平光多的根因是**投射体错了**，不是灯错了。
+    ➜ 照抄 0.55 / 1.5 / 0.9 / 2.8；要调影子先看 `capture-claw.mjs` 的影子 A/B，
+      别再从灯上找补。
   */
-  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 0.35))
-  /*
-    ★★ 四盏灯是**一组比例**，单独改任何一个都会把「投影光 : 平光」弄丢。
-    当前生效（2026-10-19 实测校准，改前先看 `capture-claw.mjs` 的影子 A/B）：
-
-        半球 0.35 · 主光 2.0（唯一投影）· 补光 0.9 · 柜内 Spot 1.5
-
-    为什么不是照抄参考实现的 0.55 / 1.5 / 0.9 / 2.8：我们多了一层
-    `scene.environment`（PMREM，见 `makeEnvScene`），那是一层**不投影的平光**，
-    参考实现没有。照抄的绝对值会让平光总量偏大 ⇒ 影子被填平（实测玻璃区里
-    关掉阴影只有 2.6% 的像素变亮）。现在这组数让「会投影的那盏」在总量里占大头。
-
-    ⚠️ 2026-10-18 那轮曾把主光推到 2.6（当时 `key.target` 没进场景、影子全歪出画面，
-      只能靠加亮补偿）。根因修掉后 2.6 会把柜顶烤成死白，所以停在 2.0。
-  */
-  const key = new DirectionalLight(0xfff8f2, 2.0)
+  scene.add(new HemisphereLight(0xfff5f0, 0xc8c0b8, 0.55))
   /*
     ★ 主光放**正上方**（参考实现是 0.05, 3.2, 0.35），不是斜前方。
     影子垂直落在娃娃正下方 ⇒ 看得出「一层层堆起来」；
     侧光会把影子拉成长条，堆叠关系反而糊。
   */
+  const key = new DirectionalLight(0xfff8f2, 1.5)
   key.position.set(0.05, 3.2, 0.35)
   /*
     ★★★ `key.target` **必须一起进场景**，否则整片阴影是歪的 —— 而且完全不报错。
@@ -975,33 +998,38 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     只让主光投影。正交阴影相机要**刚好裹住柜子**：
 
     ★★ 2026-10-18：这里原来是 `±1.35 / ±1.7`（2.7 × 3.4 的范围），而柜子只有
-       **1.24 × 1.1** —— 等于把 1024² 的贴图摊到 5 倍的面积上，一个 texel 覆盖
-       2.6mm，娃娃（0.15 宽）只有 57 个 texel。后果不是「影子糊一点」，
+       **1.24 × 1.1** —— 等于把贴图摊到 5 倍的面积上，一个 texel 覆盖 2.6mm，
+       娃娃（0.15 宽）只有 57 个 texel。后果不是「影子糊一点」，
        而是**娃娃之间根本没有可辨认的接触阴影**，整池娃娃看着像漂着。
-       参考实现是 `±0.62 / ±0.55` + 2048²（texel 密度是我们的 **4.4 倍**）。
 
-    ➜ 现在收紧到 `±0.8`（外框 + 一点余量）+ 2048² ⇒ texel 从 2.6mm 降到 0.8mm。
-      **别再放大范围**：范围一大，同一张 map 摊得更薄，接触阴影立刻消失，
-      而画面整体亮度几乎不变 —— 这种退化在截图上是「看不出哪里变了」。
-    near / far 只包住柜子在光轴上的跨度（光在 y=3.2，柜顶 1.5、柜底 -1.0）。
+    ★★★ 2026-10-21：**范围、near/far、bias 全部照抄原版**
+    （`±0.62 / ±0.55`、`near 1.6 / far 4`、`bias −0.0004`、`normalBias 0.012`、`radius 4`）。
+
+    之前我们写 `±0.8` 是因为「爪子在 x = ±0.5 的轨道上跑，要连爪子一起罩住」——
+    但那是**按我们旧尺寸**（爪子跑满 ±0.5）算的。现在尺寸照原版，
+    `LIMITS = ±0.34`，爪子最远只到 `x = ±0.34`，`±0.62` 足够罩住，
+    而且 texel 更细（0.62/2048 = 0.30mm/texel）。
+
+    **别再放大范围**：范围一大，同一张 map 摊得更薄，接触阴影立刻消失，
+    而画面整体亮度几乎不变 —— 这种退化在截图上是「看不出哪里变了」。
   */
   key.castShadow = true
   key.shadow.mapSize.set(2048, 2048)
-  // 参考实现：`{ left: -0.62, right: 0.62, top: 0.55, bottom: -0.55, near: 1.6, far: 4 }`
-  // 我们这里比它宽一圈（±0.8），因为爪子在 `x = ±0.5` 的轨道上跑，要连爪子一起罩住
-  key.shadow.camera.near = 1.2
-  key.shadow.camera.far = 5.2
-  key.shadow.camera.left = -0.8
-  key.shadow.camera.right = 0.8
-  key.shadow.camera.top = 0.8
-  key.shadow.camera.bottom = -0.8
+  key.shadow.camera.near = 1.6
+  key.shadow.camera.far = 4
+  key.shadow.camera.left = -0.62
+  key.shadow.camera.right = 0.62
+  key.shadow.camera.top = 0.55
+  key.shadow.camera.bottom = -0.55
   // bias 处理自阴影（acne）；normalBias 处理薄面（灯带 / 玻璃框）上的漏光
-  key.shadow.bias = -0.0006
-  // 0.012（参考实现的数）：texel 变细之后，normalBias 给大了会让影子**整体离开物体**
-  key.shadow.normalBias = 0.003
+  key.shadow.bias = -0.0004
+  key.shadow.normalBias = 0.012
   /*
-    `radius = 4`（参考实现的数）。`PCFSoftShadowMap` 会**忽略**这个值，
-    所以它是「以后换成 PCFShadowMap 时不用回来调」的预留 —— 我们目前用 Soft，看不到效果。
+    `radius = 4`（参考实现的数）。
+
+    ★ 它在**新版 PCF 里是真的生效的**：`shadowmap_pars_fragment.glsl.js` 里
+      `radius` 会被换成 Vogel 盘的采样半径（5 个样本 × 4 次硬件 PCF ≈ 20 次过滤）。
+      旧版 `PCFSoftShadowMap` 才忽略它 —— 而那个类型已经不存在了（见文件上方）。
   */
   key.shadow.radius = 4
   /*
@@ -1027,18 +1055,24 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       `SpotLight(0xfff5fa, 2.8, 2.2, 1.0, 0.8, 1.5)`，角度 1.0rad ≈ 57°、
       penumbra 0.8（池边是渐变不是硬圈）。
 
-    ★★ 但**换成 SpotLight 只挪了一点点**：娃娃堆 p5 从 0.545 到 0.533。
-      原因不是灯的形状，是**光比** —— 全场景只有主光投影，其余四盏
-      （柜内灯 / 半球 / 环境 / 补光）都是**不投影的平光**：
-      影子里的娃娃照样能收到约 70% 的光，影子当然看不见。
-      ➜ 所以柜内灯从参考实现的 2.8 降到 **1.5**（其余三盏的当前值见主光上方那段），
-        让「会投影的那盏」在总量里占大头。
-      **别只盯着单盏灯的绝对值** —— 决定层次的是投影光 : 平光的比例。
+    ★★★ 2026-10-21：**2.8 照抄原版**（我们一度压到 1.5，理由见上面灯光那段）。
   */
-  const inner = new SpotLight(0xfff5fa, 1.5, 2.2, 1.0, 0.8, 1.5)
+  const inner = new SpotLight(0xfff5fa, 2.8, 2.2, 1.0, 0.8, 1.5)
   inner.position.set(0, GLASS_H - 0.03, 0.3)
   // target 必须一起进场景，否则它的世界矩阵不更新，光会一直朝原点外的默认方向打
   scene.add(inner, inner.target)
+  /*
+    取物口的暖光 —— 原版有，我们一直没有。
+
+    ★ 它不投影（`intensity` 只有 0.4 量级），作用是把**取物口的黑面**照出一圈暖色，
+      让孩子一眼看出「奖品从这里出来」。没有它，那个圆洞是一块死黑，
+      在暖白的机身上像贴了一张黑纸。
+
+    ★ 强度由 `drawFrame()` 按中奖状态驱动（`blinkOn`），这里只给位置。
+  */
+  const doorLight = new PointLight(0xffb060, 0, 0.5, 2)
+  doorLight.position.set(PICKUP.x, PICKUP.y, 0.44)
+  scene.add(doorLight)
 
   /* ============================ 机器（照搬原版） ============================ */
 
@@ -1064,6 +1098,56 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
    * 只有 `applyProngs()` 一个事实源，物理那边不重算角度。
    */
   const prongInners = machine.prongs as unknown as Group[]
+
+  /* ---------------- 瞄准指示（原版的 `aim`）----------------
+     三个东西叠在池面 / 娃娃顶面上：
+
+       · 一块**软接触阴影**（0.11 见方）—— 让人看出「爪子离这个面多高」
+       · 一个**主题色圆环**（外径 0.042）—— 瞄准点
+       · 中心一个小点 —— 圆环正好被娃娃挡住时还能看见
+
+     ★ 为什么这个必须补：原版**有**它，我们一直没有。它只在「可以动爪子」的
+       时候出现，是「现在能操作」这件事唯一的视觉提示。少了它，孩子不知道
+       什么时候可以拖、什么时候在动画里。
+
+     ★ 位置每帧按 `surfaceAt(爪子底下)` 抬 4mm —— 所以它会**贴着娃娃的头顶**
+       走，而不是固定贴在池底（那样会穿进娃娃身体里）。
+
+     ⚠️ `depthWrite: false` + `renderOrder: 5`：它是「贴纸」，不能写深度，
+       否则会把下面那块娃娃的面剔掉，看起来像挖了个洞。
+     ⚠️ `toneMapped: false`：主题色要**原色**出现，被 ACES 压一道会发灰。
+  */
+  const aim = new Group()
+  aim.visible = false
+  scene.add(aim)
+  const aimRingMat = new MeshBasicMaterial({
+    color: CLAW_THEMES[0].led,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    toneMapped: false,
+  })
+  /** 瞄准指示占的几何 / 贴图 / 材质 —— `dispose()` 里要逐个放掉 */
+  const aimOwned: { dispose(): void }[] = [aimRingMat]
+  {
+    const blobTex = aimShadow()
+    const blobMat = new MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false })
+    const blobGeo = new PlaneGeometry(0.11, 0.11)
+    const ringGeo = new RingGeometry(0.017, 0.021, 32)
+    const dotGeo = new CircleGeometry(0.0045, 16)
+    const blob = new Mesh(blobGeo, blobMat)
+    const ring = new Mesh(ringGeo, aimRingMat)
+    const dot = new Mesh(dotGeo, aimRingMat)
+    for (const m of [blob, ring, dot]) {
+      m.rotation.x = -Math.PI / 2
+      m.renderOrder = 5
+      aim.add(m)
+    }
+    // 抬 1mm 避免和池底 / 娃娃顶面 z-fighting
+    ring.position.y = 0.001
+    dot.position.y = 0.001
+    aimOwned.push(blobTex, blobMat, blobGeo, ringGeo, dotGeo)
+  }
 
   /**
    * 爪子的开合。
@@ -1771,6 +1855,17 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       u.uFloorY.value = 0
     }
 
+    /* ---- 瞄准指示：只在「可以动爪子」的时候出现（原版 `state === 'play'`） ---- */
+    aim.visible = !v.busy
+    if (aim.visible) {
+      /*
+        ★ 高度必须**探**出来，不能写 0：写 0 的话圆环会埋进娃娃堆里，
+          孩子以为爪子还在池底。原版是 `game.probeSurface()`，我们同一个口径。
+      */
+      const sy = phys ? phys.surfaceAt(v.clawX, v.clawZ) : 0
+      aim.position.set(v.clawX, sy + 0.004, v.clawZ)
+    }
+
     /* ---- 中奖演出：奖品从取物口探出来（纯视觉，见 `winPrize` 的注释） ---- */
 
     const camDt = lastCamT ? Math.min(0.1, t - lastCamT) : 1 / 60
@@ -1864,7 +1959,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     }
     if (winPrize >= 0 && winGone >= 0.999) winPrize = -1
 
-    // ---- 灯：呼吸 + 中奖闪烁 ----
+    // ---- 灯：呼吸 + 中奖闪烁（波形照抄原版 `syncVisuals`）----
     /*
       ★★ 关键：**影子 A/B 的两个相位必须看见同一套灯**。
 
@@ -1875,11 +1970,21 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
 
       ➜ 所以这里改成用 `t` 算（`t` 就是上一帧那个，两相位相同），
         `reducedMotion` 只挡「闪烁」这种**额外**的脉冲，不改基值。
+
+      ★★★ 2026-10-21 波形也对齐原版：
+
+          中奖后 3.2 秒：`doorLamp` **6Hz 硬闪**（1 / 0.1 两档跳，不是渐变）
+          之后到镜头回来：`0.7` 常亮
+          平时：`0.2 + 0.15·sin(2.2t)` 轻微呼吸
+
+        我们以前是「中奖时 ×4 常亮」—— 那看着像**灯变亮了**，不是**在闪**。
+        真机中奖时取物口的灯是「哒、哒、哒」跳的，这一条是那台机器的招牌动作。
     */
-    const breathe = 1.5 + 0.6 * Math.sin(t * 2.6)
-    const flash = v.winFlash > 0 && !reducedMotion ? 1.6 * Math.abs(Math.sin(t * 14)) : 0
-    M.ledStrip.emissiveIntensity = breathe + flash
-    M.doorLamp.emissiveIntensity = (0.4 + 0.2 * Math.sin(t * 2.2)) * (v.winFlash > 0 ? 4 : 1)
+    const blinkOn = v.winFlash > 0 ? (Math.floor(t * 6) % 2 ? 1 : 0.1) : doorHold > 0 ? 0.7 : 0.2 + 0.15 * Math.sin(t * 2.2)
+    M.doorLamp.emissiveIntensity = blinkOn * 2.8
+    doorLight.intensity = blinkOn * 0.4
+    const chase = 1.4 + 0.7 * Math.sin(t * 3.5) + (v.winFlash > 0 && !reducedMotion ? 1.5 * Math.abs(Math.sin(t * 12)) : 0)
+    M.ledStrip.emissiveIntensity = chase
     M.tube.emissiveIntensity = 2.8 + Math.sin(t * 13.1) * 0.03
 
     // 颗粒每帧换一次种子（静态颗粒像屏幕脏了，动起来才像胶片）
@@ -1906,17 +2011,26 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       camera.updateMatrixWorld(true)
     } else if (!reducedMotion) {
       /*
-        默认机位 + 待机「呼吸」微动。
+        默认机位 + 待机「手持」微动。
 
-        az / pol 的扰动幅度和参考实现同量级（±5.7° / ±1°）——
-        这是「有人在柜子前面站着」而不是「三脚架」的来源。
-        手持晃动再小一档（0.008 / 0.006 世界单位）：再大就会看出画面在飘。
+        ★★★ 2026-10-21：**去掉绕轴转，只留手持抖**。这一条是「跟原版不一样」里
+        最刺眼的一处，而且一直没人说破：
+
+          原来这里是 `az = sin(t*0.19)*0.1`（**±5.7°**）+ `pol ±1°` ——
+          机器会以 33 秒为周期**左右缓缓转**。放在「展示页」上也许好看，
+          但它不是原版：原版只在**启动页那几秒**绕轴转（`intro` 分支），
+          进入游戏后方位角是**死的 0**。
+
+          于是孩子看到的画面是「机器一直在晃」，而原版是「站在机器前面不动」。
+          ➜ 方位角固定 0；只保留原版那点手持抖动。
+
+        ★ 抖动幅度也照原版：`0.0025 / 0.0018` 世界单位（≈2.5mm / 1.8mm）。
+          我们原来是 `0.008 / 0.006` —— 3 倍多，在 2.5 个单位远的机位上
+          相当于画面每天在动 2~3 个像素，看久了会晕。
       */
-      const az = Math.sin(t * 0.19) * 0.1
-      const pol = CAM_POL + Math.sin(t * 0.27) * 0.018
-      viewPose(cameraDist, az, pol)
-      const sx = (Math.sin(t * 0.71) + Math.sin(t * 1.37 + 1) * 0.5) * 0.008
-      const sy = (Math.sin(t * 0.53 + 2) + Math.sin(t * 1.13) * 0.4) * 0.006
+      viewPose(cameraDist)
+      const sx = (Math.sin(t * 0.71) + Math.sin(t * 1.37 + 1) * 0.5) * 0.0025
+      const sy = (Math.sin(t * 0.53 + 2) + Math.sin(t * 1.13) * 0.4) * 0.0018
       camera.position.set(poseP.x + sx, poseP.y + sy, poseP.z)
       curLook.copy(poseT)
       camera.lookAt(curLook)
@@ -2007,6 +2121,12 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       ⚠️ 旧贴图由 `applyTheme` 内部 `dispose()`（换色可以来回点，不释放就是每点一次漏一张）。
     */
     applyTheme(machine, CLAW_THEMES[idx])
+    /*
+      ★ 瞄准圆环也要换色（原版 `aimRingMat.color.setHex(t.led)`）。
+        漏掉这一条的话，换成青色配色之后圆环还是粉的 —— 它是**唯一**一个
+        不挂在 `machine` 上的染色物体，所以 `applyTheme` 管不到它。
+    */
+    aimRingMat.color.setHex(CLAW_THEMES[idx].led)
   }
 
   /* ============================ 收尾 ============================ */
@@ -2038,6 +2158,8 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
     */
     disposeMachine(machine)
     for (const m of prizeModels) disposePlush(m)
+    /* 瞄准指示那几个小对象（3 个几何 / 2 个材质 / 1 张贴图）不在上面两套里 */
+    for (const o of aimOwned) o.dispose()
     renderer.dispose()
     canvas.remove()
   }
@@ -2344,7 +2466,7 @@ export function createClawStage(container: HTMLElement): ClawStage | null {
       if (phys) return phys.surfaceAt(x, z)
       /*
         物理没起来（还在加载 / 加载失败）：用 three 里那几只的当前位置估一个顶面。
-        娃娃顶 ≈ 中心 + 0.16（耳朵 `y=0.128` + 半径 0.028，见 `PRIZE_PARTS`），
+        娃娃顶 ≈ 中心 + 0.16（耳朵 `y=0.128` + 半径 0.028，见 `scene/prizeTypes.ts` 的 `parts`），
         水平方向只认「爪子正下方」那一圈，别把隔壁那只算进来。
       */
       let best = 0

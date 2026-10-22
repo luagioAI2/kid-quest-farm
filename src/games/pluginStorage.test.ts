@@ -151,13 +151,14 @@ describe('备份带上 gameKv', () => {
    ③ HostApi —— 插件的币是「算出来」的
    ============================================================ */
 
-function hostFor(gameId: string) {
+function hostFor(gameId: string, voucherPerCoin = 0) {
   return makeHostApi({
     getBalance: () => useApp.getState().balance,
     refresh: () => useApp.getState().refresh(),
     pushToast: () => {},
     soundEnabled: () => false,
     hapticsEnabled: () => false,
+    voucherPerCoin: () => voucherPerCoin,
   })(gameId)
 }
 

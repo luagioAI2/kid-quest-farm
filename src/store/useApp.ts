@@ -25,6 +25,7 @@ import type {
 import {
   addGameCoin,
   addItem,
+  ASSET_BASE_KEY,
   BUNDLE_KEY,
   buyGameCoin,
   clearGameKv,
@@ -80,8 +81,12 @@ import { makeHostApi } from '../games/hostApi'
 import { importBundle, mountBundle } from '../games/loader'
 import { catalogPublicKeyRaw } from '../games/catalogKey'
 import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
+import { localGameById } from '../games/localGames'
+import type { Bytes } from '../games/bytes'
+import { assertSha256, type CatalogGame } from '../games/verify'
+import { checkPluginEconomy } from '../domain/pluginEconomy'
 import { HOST_API } from '../games/plugin'
-import type { GameBundle, GameManifestV2, HostApi } from '../games/plugin'
+import type { GameBundle, GameManifestV2, HostApi, MountContext } from '../games/plugin'
 import { hapticLight, playTone, type ToneKind } from '../platform/files'
 import { settleInstance, type SettleParams } from '../domain/settlement'
 import {
@@ -187,8 +192,8 @@ interface AppState {
   instances: TaskInstance[]
   ledger: LedgerEntry[]
   /**
-   * 商城币流水。与 `ledger` 分开放 —— 见 `HarvestEntry` 的两条不可逆约束。
-   * 界面上「积分」页只看 `ledger`，「商城币」页只看 `harvestLedger`，两边不串。
+   * 兑换券流水。与 `ledger` 分开放 —— 见 `HarvestEntry` 的两条不可逆约束。
+   * 界面上「积分」页只看 `ledger`，「兑换券」页只看 `harvestLedger`，两边不串。
    */
   harvestLedger: HarvestEntry[]
   inventory: InventorySlot[]
@@ -207,7 +212,7 @@ interface AppState {
   market: MarketState
   /** 积分余额 —— **农场投入只认它**（`plant` / 买幼崽 / 开地块） */
   balance: number
-  /** 商城币余额 —— 只能花在兑换商城的丰收档，**不能回流农场、不能换积分** */
+  /** 兑换券余额 —— 只能花在兑换商城的丰收档，**不能回流农场、不能换积分** */
   harvestBalance: number
   /**
    * 钻石流水 / 余额（第三套币，2026-10-14 起）。
@@ -244,7 +249,7 @@ interface AppState {
    *
    * ⚠️ 这是**游戏自己的币**，不是第四套宿主币 —— 它只能靠花积分买
    * （`buyClawCoin`），而且**永远换不回积分**（`addGameCoin` 只进不出）。
-   * 币的出口是「玩一局」，玩出来的商城币才进 `harvestLedger`。
+   * 币的出口是「玩一局」，玩出来的兑换券才进 `harvestLedger`。
    */
   clawCoins: number
 
@@ -282,6 +287,17 @@ interface AppState {
   tick: () => Promise<void>
 
   /* ---- 插件游戏（spec §12） ---- */
+  /**
+   * ★ **本地包**：随 App 一起发布、不联网就能装（`src/games/localGames.ts`）。
+   *
+   * 校验方式和远程**不同、但一样硬**：远程靠 Ed25519 目录签名，
+   * 本地靠**烧进代码里的 SHA-256**（`localGames.ts` 由
+   * `scripts/make-local-catalog.mjs` 生成）。两者都是「先验哈希、再执行」。
+   *
+   * ⚠️ 不要因为「本地」就跳过校验：`public/` 里的文件在打包后仍然可以被替换，
+   * 跳过校验等于给「换掉 public 里的 js」开了一条执行任意代码的后门。
+   */
+  installLocalGame: (gameId: string) => Promise<{ ok: boolean; message: string }>
   /**
    * ★ **生产路径**：从**已签名的游戏目录**装一款游戏（spec §12.4）。
    *
@@ -385,7 +401,7 @@ interface AppState {
    *
    * @param mode `'sell'` = 立刻按当日市价卖掉；`'store'` = 只收进背包，等好价再卖。
    *             用户 2026-09-15：「可以直接卖出，也可以存储自己市场卖出。提供选择。」
-   * @returns 本次到手的商城币（`'store'` 时为 0）
+   * @returns 本次到手的兑换券（`'store'` 时为 0）
    */
   harvest: (plotIndex: number, mode?: HarvestMode) => Promise<number>
   unlockPlot: (plotIndex: number) => Promise<boolean>
@@ -403,7 +419,7 @@ interface AppState {
   /** 当前现价（用于 UI 预览） */
   priceFor: (itemId: string) => number
   /**
-   * 卖出 n 个能拿多少商城币。
+   * 卖出 n 个能拿多少兑换券。
    *
    * ⚠️ **线性：现价 × 个数，不含卖压。** 卖压只在卖出**之后**压行情
    * （见 `applySell` / `SELL_IMPACT_PER_UNIT`），所以同一批货当天再卖，
@@ -489,7 +505,7 @@ interface AppState {
    * 中不中由 `domain/clawEconomy.ts` 的 `clawResolveRound(index, ...)` 定
    * —— 幂等伪随机，同一次投币刷不刷新都是同一个结果。
    *
-   * 中了就 `postHarvest` 发商城币（走商城币账本，和农场卖东西同一个入口）。
+   * 中了就 `postHarvest` 发兑换券（走兑换券账本，和农场卖东西同一个入口）。
    *
    * ⚠️ `index` 必须是**这一局是第几局**（从 0 开始、只在结算后 +1）。
    * 传时间戳或者随机数进来，就等于把「刷新不能重掷」这条保证拆了。
@@ -893,7 +909,99 @@ function pluginHostApi(gameId: string): HostApi {
     pushToast: (t) => useApp.getState().pushToast(t),
     soundEnabled: () => useApp.getState().settings.soundEnabled,
     hapticsEnabled: () => useApp.getState().settings.hapticsEnabled,
+    /*
+     * 兑换率**从已安装的 manifest 现读**（不是快照）。
+     * 插件升级后汇率会变，快照就会变成「插件按新汇率算、宿主按旧汇率发」。
+     * 没装 / 没写 = 0 = 不开放兑换。
+     */
+    voucherPerCoin: () => useApp.getState().installedGames[gameId]?.economy.voucherPerCoin ?? 0,
   })(gameId)
+}
+
+/**
+ * 拼资源地址。**插件唯一该用的拼法**（`ctx.assetUrl`）。
+ *
+ * 三条规则，每条都有对应的翻车形态：
+ *   ① `assetBase` 空 ⇒ 原样返回相对路径。空串 ≠ 安全，只是「没配」，
+ *      所以这里**不补前导 `/`** —— 补了会变成站点根，可能反而错。
+ *   ② 去掉 `rel` 的前导 `./`。包里的代码常写 `./assets/x.webp`
+ *      （相对包文件），拼起来会变成 `/games/x/./assets/x.webp` ——
+ *      浏览器能解析，但缓存键和日志里会多一段，排查时容易看错。
+ *   ③ **不做 URL 解码 / 编码**。文件名里有中文时，`fetch` 自己会编码；
+ *      这里编一遍会变成双重编码（`%25E4…`），404 且报错像文件不存在。
+ */
+function assetUrlFor(assetBase: string, rel: string): string {
+  const clean = String(rel).replace(/^\.\//, '').replace(/^\/+/, '')
+  if (!assetBase) return clean
+  return assetBase.endsWith('/') ? assetBase + clean : assetBase + '/' + clean
+}
+
+/**
+ * 目录条目 → 资源根。
+ *
+ * 缺省是「包所在目录」——这是最常见的发布形态（包和 assets 同级）。
+ * 单独写 `assetBase` 的场景是「包在 Release、贴图在 CDN」。
+ */
+function assetBaseOf(g: CatalogGame): string {
+  if (g.assetBase) return g.assetBase
+  try {
+    return new URL('./', g.url).toString()
+  } catch {
+    // `url` 已经在 `parseCatalog` 里过了 https 白名单，理论上到不了这里。
+    // 真到了也**不能抛** —— 抛在这里会变成「装不了，但没有原因」。
+    return ''
+  }
+}
+
+/**
+ * 把「已验过哈希的代码」真正落库 —— **本地包和远程包共用这一段**。
+ *
+ * 两条安装路径只在「怎么拿到可信代码」上不同：
+ *
+ * ```
+ *   本地：/games/<id>/x.mjs ──► 比对烧进代码的 sha256 ──┐
+ *   远程：catalog+sig ──► 取包 ──► 比对目录里的 sha256 ──┴─► 这里
+ * ```
+ *
+ * 所以「拦内置 id / 校验经济 / 写 __bundle 和 __assets」只写一份。
+ * 抄两份的后果是必然的：总有一天只改了其中一条，而另一条静默放行。
+ *
+ * ⚠️ 顺序：**先校验、再写库**。写进去就等于「这个包已被信任」。
+ */
+async function commitPluginBundle(
+  bundle: GameBundle,
+  code: string,
+  assetBase: string,
+  /**
+   * 显示用的名字 / 版本。**远程包必须传目录里的**（目录才是已验签的显示来源），
+   * 本地包传清单里的。不传就用包自己说的 —— 那是最后手段，不是默认。
+   */
+  shown?: { name: string; version: string },
+): Promise<{ ok: boolean; message: string }> {
+  const id = bundle.manifest.id
+
+  // ① 不许占用内置游戏的 id（否则 = 劫持，理由见 installGameFromUrl 的注释）
+  if (gameById(id)) {
+    return { ok: false, message: `安装包用了内置游戏的 id「${id}」，已拒绝` }
+  }
+
+  // ② 经济闸门：一局期望产出不能接近成本，兑换券也不能刷
+  const issue = checkPluginEconomy(bundle.manifest.economy)
+  if (issue) {
+    return { ok: false, message: `经济参数不合法（${issue.code}）：${issue.message}` }
+  }
+
+  await setGameKv(id, BUNDLE_KEY, code)
+  /*
+   * 资源根**必须**记下来。空串也记 —— 「没配资源」是一个事实，
+   * 不记的话挂载时只能猜，而猜错的症状是「场景全是白模」（404 纹理）。
+   */
+  await setGameKv(id, ASSET_BASE_KEY, assetBase)
+  await useApp.getState().refresh()
+
+  const name = shown?.name ?? bundle.manifest.name
+  const version = shown?.version ?? bundle.manifest.version
+  return { ok: true, message: `已安装「${name}」v${version}` }
 }
 
 /**
@@ -1050,7 +1158,7 @@ async function doRefresh(
     // 早期的记录从「积分」页凭空消失，而导出却还在 —— 对不上账。
     // 单机场景下流水量级很小（一年也就几千条），全量读没有压力。
     db.ledger.orderBy('createdAt').reverse().toArray(),
-    // 商城币流水同理，全量读。
+    // 兑换券流水同理，全量读。
     db.harvestLedger.orderBy('createdAt').reverse().toArray(),
     // 钻石流水同理。这一轮它通常是空的（没有发币入口）。
     db.mallLedger.orderBy('createdAt').reverse().toArray(),
@@ -2274,7 +2382,7 @@ export const useApp = create<AppState>((set, get) => ({
         title: `收获 ${def.name} +${amount} ${produceUnitOf(def.produceItemId)}`,
         detail:
           mode === 'sell'
-            ? `当场卖掉，+${earned} 商城币`
+            ? `当场卖掉，+${earned} 兑换券`
             : '已经放进背包，去市场卖个好价钱吧',
         emoji: def.emoji,
       })
@@ -2494,8 +2602,8 @@ export const useApp = create<AppState>((set, get) => ({
           : '这批没收到',
       // 有事件就把事件原文说出来（「这批只剩 70%」就在里面），
       // 没有事件（中性档）才退回原来的提示。
-      // 卖产出结的是**商城币**，不是积分 —— 别写回「换积分」。
-      detail: roll.event?.message ?? '去市场卖掉就能换商城币啦',
+      // 卖产出结的是**兑换券**，不是积分 —— 别写回「换积分」。
+      detail: roll.event?.message ?? '去市场卖掉就能换兑换券啦',
       emoji: gained > 0 ? def.produceEmoji : '🪹',
     })
     await get().refresh()
@@ -2628,7 +2736,7 @@ export const useApp = create<AppState>((set, get) => ({
       return 0
     }
 
-    // 市场是农场产出的唯一出口，结的是**商城币**，不是积分。
+    // 市场是农场产出的唯一出口，结的是**兑换券**，不是积分。
     await postHarvest({
       delta: total,
       source: 'farm_market',
@@ -2669,13 +2777,13 @@ export const useApp = create<AppState>((set, get) => ({
     if (!opts?.quiet) {
       get().pushToast({
         kind: 'reward',
-        title: `卖出 ${sellCount} ${produceUnitOf(itemId)}${name}，+${total} 商城币`,
+        title: `卖出 ${sellCount} ${produceUnitOf(itemId)}${name}，+${total} 兑换券`,
         detail:
           sellCount < want
-            ? `这一轮只剩 ${Math.round(remaining)} 商城币的额度了，先卖了 ${sellCount} ${produceUnitOf(itemId)}`
+            ? `这一轮只剩 ${Math.round(remaining)} 兑换券的额度了，先卖了 ${sellCount} ${produceUnitOf(itemId)}`
             : dropPct < -1
-              ? `卖得多了，价格跌到 ${newPrice} 商城币（${dropPct}%）`
-              : `当前单价 ${current} 商城币`,
+              ? `卖得多了，价格跌到 ${newPrice} 兑换券（${dropPct}%）`
+              : `当前单价 ${current} 兑换券`,
         emoji: '🎟️',
       })
     }
@@ -2743,15 +2851,15 @@ export const useApp = create<AppState>((set, get) => ({
    *
    * ## 分账：商城币优先（用户 2026-09-30）
    *
-   * 「优先用商城币兑换。价值和积分等价的。用完商城币再用积分，可混合。」
+   * 「优先用兑换券兑换。价值和积分等价的。用完兑换券再用积分，可混合。」
    *
-   * 于是这里最多要动**三张表**：`harvestLedger`（商城币那笔）、
+   * 于是这里最多要动**三张表**：`harvestLedger`（兑换券那笔）、
    * `ledger`（积分那笔）、`redeemRecords`（记录）。三张必须同一个事务 ——
-   * 只扣了商城币却没写记录，孩子的东西就凭空没了。
+   * 只扣了兑换券却没写记录，孩子的东西就凭空没了。
    *
    * ⚠️ **分账要在事务内用实时余额重算一遍**，不能用外面那份。
    * 外面那份只是给 UI 看的预览；两个标签页同时点「换」时，
-   * 用旧余额算出的分账会把已经花掉的商城币又花一次。
+   * 用旧余额算出的分账会把已经花掉的兑换券又花一次。
    */
   redeem: async (itemId) => {
     const { balance, harvestBalance, settings, redeemItems } = get()
@@ -2768,7 +2876,7 @@ export const useApp = create<AppState>((set, get) => ({
       get().pushToast({
         kind: 'warn',
         title: '还差一点点',
-        detail: `商城币和积分加起来还差 ${preview.shortfall}，加油攒一攒`,
+        detail: `兑换券和积分加起来还差 ${preview.shortfall}，加油攒一攒`,
         emoji: '🎟️',
       })
       return false
@@ -2816,7 +2924,7 @@ export const useApp = create<AppState>((set, get) => ({
       balanceAfter = pTip.balance - live.pointsPaid
       harvestAfter = hTip.balance - live.harvestPaid
 
-      // 商城币那笔。`harvest_redeem` 这个 source 从 09-15 定义起就一直空着，
+      // 兑换券那笔。`harvest_redeem` 这个 source 从 09-15 定义起就一直空着，
       // 就是留给这条路的 —— 见 types.ts 的 HarvestSource。
       if (live.harvestPaid > 0) {
         await db.harvestLedger.put({
@@ -2865,7 +2973,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!ok || !paid) {
       get().pushToast({
         kind: 'warn',
-        title: '商城币和积分不够啦',
+        title: '兑换券和积分不够啦',
         detail: '再攒一攒吧',
         emoji: '🎟️',
       })
@@ -2990,7 +3098,7 @@ export const useApp = create<AppState>((set, get) => ({
     })
     const round = clawResolveRound(index, econ)
 
-    // ★ 三件事必须在**同一个事务**里：扣一个币、发商城币、局数 +1。
+    // ★ 三件事必须在**同一个事务**里：扣一个币、发兑换券、局数 +1。
     //   拆开的话中间崩一下就变成「币扣了、券没发」或者「券发了、局数没走」，
     //   而且**都不报错**。Dexie 的嵌套事务会复用外层事务，所以内层那两个
     //   函数仍然只有一份实现，守卫也还都在它们自己里面。
@@ -3014,12 +3122,12 @@ export const useApp = create<AppState>((set, get) => ({
       const paid = await spendGameCoin(GAME_CLAW, CLAW_PLAY_COST, '玩一局娃娃机')
       if (!paid) return false
       if (round.coupons > 0) {
-        // 发商城币走**和农场卖东西同一个入口**（`postHarvest`）——
+        // 发兑换券走**和农场卖东西同一个入口**（`postHarvest`）——
         // 不另开一条通路，账目才只有一套口径。
         await postHarvest({
           delta: round.coupons,
           source: 'claw_prize',
-          memo: `娃娃机抓到 1 只，兑换 ${round.coupons} 商城币`,
+          memo: `娃娃机抓到 1 只，兑换 ${round.coupons} 兑换券`,
         })
       }
       // ★ 局数只在**结算之后** +1。中途刷新时它没变 ⇒ 结果一样（不会重掷）。
@@ -3063,18 +3171,58 @@ export const useApp = create<AppState>((set, get) => ({
       }
     }
 
-    // ④ 下载来的包不许占用内置游戏的 id（否则 = 劫持，理由见下面 installGameFromUrl）。
-    if (gameById(bundle.manifest.id)) {
-      return { ok: false, message: `安装包用了内置游戏的 id「${bundle.manifest.id}」，已拒绝` }
+    // ④ 落库（拦内置 id / 校验经济 / 写 __bundle + __assets 都在那里面）
+    //    名字用**目录**里的（它才是已验签的显示来源），不用包自己说的
+    return commitPluginBundle(bundle, resolved.code, assetBaseOf(resolved.game), {
+      name: resolved.game.name,
+      version: resolved.game.version,
+    })
+  },
+
+  installLocalGame: async (gameId) => {
+    const entry = localGameById(gameId)
+    if (!entry) return { ok: false, message: `这个版本里没有本地游戏「${gameId}」` }
+
+    // ① 取包。本地包走同源 fetch —— 仍然是**网络栈**（dev / Capacitor 都如此），
+    //    所以「本地」只省掉了「目录 + 签名」这一步，不省「取字节」。
+    let bytes: Bytes
+    try {
+      const res = await fetch(entry.url)
+      if (!res.ok) return { ok: false, message: `读取本地包失败：HTTP ${res.status}` }
+      bytes = new Uint8Array(await res.arrayBuffer())
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { ok: false, message: `读取本地包失败：${msg}` }
     }
 
-    await setGameKv(bundle.manifest.id, BUNDLE_KEY, resolved.code)
-    await get().refresh()
-    return {
-      ok: true,
-      // 名字用**目录**里的（它才是已验签的显示来源），不用包自己说的
-      message: `已安装「${resolved.game.name}」v${resolved.game.version}`,
+    // ② 先验哈希，**再**执行。哈希来自 `localGames.ts`（编译进 JS），
+    //    不是来自 `public/` —— 发布物不能自证。
+    try {
+      await assertSha256(bytes, entry.sha256, `本地包「${entry.id}」`)
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
     }
+
+    // ③ 执行 + 形状校验
+    let bundle: GameBundle
+    try {
+      bundle = await importBundle(new TextDecoder().decode(bytes))
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+
+    // ④ 清单说 id X、包里写 Y ⇒ 生成清单时就把包弄错了，拒绝
+    if (bundle.manifest.id !== entry.id) {
+      return {
+        ok: false,
+        message: `本地清单里这款是「${entry.id}」，但包里写的是「${bundle.manifest.id}」—— 拒绝安装`,
+      }
+    }
+
+    return commitPluginBundle(bundle, new TextDecoder().decode(bytes), entry.assetBase, {
+      name: entry.name,
+      version: entry.version,
+    })
   },
 
   installGameFromUrl: async (url) => {
@@ -3105,19 +3253,15 @@ export const useApp = create<AppState>((set, get) => ({
     //    于是家长看到的是「农场」，玩到的却是别人的代码；卸载它又会把
     //    内置游戏一起带下水（`uninstallGame` 会 `clearGameKv` 并回落当前游戏）。
     //    这不是「重名」，这是**劫持**，所以放在这里硬拦。
-    if (gameById(bundle.manifest.id)) {
-      return {
-        ok: false,
-        message: `安装包用了内置游戏的 id「${bundle.manifest.id}」，已拒绝`,
-      }
+    //
+    //    这条守卫现在在 `commitPluginBundle` 里（本地 / 远程 / 走查三条路共用一份）。
+    let assetBase = ''
+    try {
+      assetBase = new URL('./', url).toString()
+    } catch {
+      /* url 不合法时留空：资源加载会 404，但游戏本体还能起来 */
     }
-
-    await setGameKv(bundle.manifest.id, BUNDLE_KEY, code)
-    await get().refresh()
-    return {
-      ok: true,
-      message: `已安装「${bundle.manifest.name}」v${bundle.manifest.version}`,
-    }
+    return commitPluginBundle(bundle, code, assetBase)
   },
 
   uninstallGame: async (gameId) => {
@@ -3135,7 +3279,25 @@ export const useApp = create<AppState>((set, get) => ({
     const code = await getGameKv<string>(gameId, BUNDLE_KEY)
     if (typeof code !== 'string') throw new Error(`游戏「${gameId}」没有安装`)
     const bundle = await importBundle(code)
-    return mountBundle(container, bundle, pluginHostApi(gameId))
+
+    /*
+     * 资源根：装的时候记下来的那个（`ASSET_BASE_KEY`）。
+     *
+     * ⚠️ **不能不给**。插件在 `blob:` 模块里跑，相对路径会以 blob: 为基准
+     * 解析 ⇒ 纹理全 404，而报错是一堆 "could not load texture"，
+     * 看着像打包坏了（`prize-park-local` 的 README 记过这次事故）。
+     */
+    const assetBase = (await getGameKv<string>(gameId, ASSET_BASE_KEY)) ?? ''
+
+    const ctx: MountContext = {
+      assetBase,
+      assetUrl: (rel) => assetUrlFor(assetBase, rel),
+      // 宿主目前只有中文。给个值，是为了让插件不必自己猜 navigator.language
+      // （那在 Android WebView 里跟着系统走，孩子会把游戏看成日文）。
+      locale: 'zh',
+    }
+
+    return mountBundle(container, bundle, pluginHostApi(gameId), ctx)
   },
 
   /* ================= 设置与数据 ================= */
@@ -3689,7 +3851,7 @@ declare global {
         cropSeedCost: (cropId: string) => number | undefined
         animalCost: (animalId: string) => number | undefined
         /**
-         * 闸门：这个产出物现在还能卖出多少商城币。
+         * 闸门：这个产出物现在还能卖出多少兑换券。
          * 给 E2E 对账用 —— 断言「界面上显示的数 == 领域函数算出来的数」，
          * 比在脚本里手算「成本 × 1.6 × 地块数」稳得多。
          */
@@ -4015,7 +4177,7 @@ if (typeof window !== 'undefined') {
     /**
      * 娃娃机的调试句柄（2026-10-16）。
      *
-     * ★ 为什么需要它：走查脚本要验「中一局会发商城币」，而**结果是由局数算出来的**
+     * ★ 为什么需要它：走查脚本要验「中一局会发兑换券」，而**结果是由局数算出来的**
      * （幂等伪随机，见 `domain/clawEconomy.ts`）。脚本没法「多试几次直到中」——
      * 那既慢又不确定。所以这里把**结算时用的同一个函数**暴露出来，
      * 让脚本能先问「第几局会中」，再精确地走到那一局。

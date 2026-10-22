@@ -56,7 +56,7 @@ export const GAMES: GameDef[] = [
     id: GAME_FARM,
     name: '农场',
     emoji: '🌾',
-    tagline: '买种子种地、养动物、看行情。收成能换成商城币。',
+    tagline: '买种子种地、养动物、看行情。收成能换成兑换券。',
     status: 'available',
     // 首款免费并且默认已拥有 —— 家长 2026-10-14 拍板。
     priceMall: 0,
@@ -66,7 +66,7 @@ export const GAMES: GameDef[] = [
     id: GAME_CLAW,
     name: '娃娃机',
     emoji: '🕹️',
-    tagline: '花积分换币投币，抓到的娃娃换成商城币。',
+    tagline: '花积分换币投币，抓到的娃娃换成兑换券。',
     // 2026-10-16 上线：页面挂在 `pages.ts` 里，走 `React.lazy`
     // —— three.js 只在这款游戏被切到时才下载（见那边的注释）。
     status: 'available',

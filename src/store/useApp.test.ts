@@ -1283,8 +1283,8 @@ describe('任务隐藏', () => {
 /* ============================================================
    兑换分账：商城币优先 + 可混合（用户 2026-09-30）
    ------------------------------------------------------------
-   用户要求：「兑换页面，优先用商城币兑换。价值和积分等价的。
-   用完商城币再用积分，可混合。」
+   用户要求：「兑换页面，优先用兑换券兑换。价值和积分等价的。
+   用完兑换券再用积分，可混合。」
 
    规则本身在 `domain/redeem.test.ts` 里逐条钉过（纯函数）。这一层要证的是
    **它真的落到了账本上**：该扣哪张表、扣多少、记录里留没留痕、
@@ -1295,7 +1295,7 @@ describe('任务隐藏', () => {
    多写一笔积分账，就是**多扣**。纯函数测试看不见这两件事。
    ============================================================ */
 
-describe('兑换：商城币优先，可混合', () => {
+describe('兑换：兑换券优先，可混合', () => {
   /** 取一个种子兑换品并改价，返回改完之后的它 */
   async function itemAtCost(cost: number) {
     await useApp.getState().updateSettings({ redeemEnabled: true })
@@ -1308,7 +1308,7 @@ describe('兑换：商城币优先，可混合', () => {
   async function setHarvestTo(target: number) {
     const cur = await currentHarvestBalance()
     if (cur !== target) {
-      await postHarvest({ delta: target - cur, source: 'manual_adjust', memo: '测试校准商城币' })
+      await postHarvest({ delta: target - cur, source: 'manual_adjust', memo: '测试校准兑换券' })
     }
     await useApp.getState().refresh()
   }
@@ -1326,28 +1326,28 @@ describe('兑换：商城币优先，可混合', () => {
   const pointSpendRows = async () =>
     (await db.ledger.toArray()).filter((r) => r.source === 'redeem')
 
-  it('商城币够 —— 全用商城币，积分一分不动', async () => {
+  it('兑换券够 —— 全用兑换券，积分一分不动', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(80)
     await setPointsTo(300)
 
     await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
 
-    expect(useApp.getState().harvestBalance, '商城币扣 50').toBe(30)
+    expect(useApp.getState().harvestBalance, '兑换券扣 50').toBe(30)
     expect(useApp.getState().balance, '积分一分都不该动').toBe(300)
 
     const rec = useApp.getState().redeemRecords[0]
     expect(rec).toMatchObject({ cost: 50, harvestPaid: 50, pointsPaid: 0, harvestBalanceAfter: 30 })
   })
 
-  it('商城币不够 —— 差额用积分补（这就是「可混合」）', async () => {
+  it('兑换券不够 —— 差额用积分补（这就是「可混合」）', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(20)
     await setPointsTo(300)
 
     await expect(useApp.getState().redeem(item.id)).resolves.toBe(true)
 
-    expect(useApp.getState().harvestBalance, '商城币花光').toBe(0)
+    expect(useApp.getState().harvestBalance, '兑换券花光').toBe(0)
     expect(useApp.getState().balance, '只补差额 30').toBe(270)
 
     const rec = useApp.getState().redeemRecords[0]
@@ -1355,7 +1355,7 @@ describe('兑换：商城币优先，可混合', () => {
     expect(rec.harvestBalanceAfter).toBe(0)
   })
 
-  it('没有商城币 —— 退回纯积分，跟改动前的行为一模一样', async () => {
+  it('没有兑换券 —— 退回纯积分，跟改动前的行为一模一样', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(0)
     await setPointsTo(300)
@@ -1387,14 +1387,14 @@ describe('兑换：商城币优先，可混合', () => {
 
     await expect(useApp.getState().redeem(item.id)).resolves.toBe(false)
 
-    expect(useApp.getState().harvestBalance, '商城币不能被扣').toBe(20)
+    expect(useApp.getState().harvestBalance, '兑换券不能被扣').toBe(20)
     expect(useApp.getState().balance, '积分不能被扣').toBe(29)
     expect(useApp.getState().redeemRecords, '不该留下记录').toHaveLength(0)
     expect(await harvestSpendRows()).toHaveLength(0)
     expect(await pointSpendRows()).toHaveLength(0)
   })
 
-  it('商城币那笔走 harvest_redeem —— 这个 source 定义了半个月，终于用上了', async () => {
+  it('兑换券那笔走 harvest_redeem —— 这个 source 定义了半个月，终于用上了', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(80)
     await setPointsTo(300)
@@ -1407,7 +1407,7 @@ describe('兑换：商城币优先，可混合', () => {
     expect(rows[0].balanceAfter).toBe(30)
   })
 
-  it('纯商城币付账时**不写**积分流水（不能凭空多一条「兑换 0 分」）', async () => {
+  it('纯兑换券付账时**不写**积分流水（不能凭空多一条「兑换 0 分」）', async () => {
     const item = await itemAtCost(50)
     await setHarvestTo(80)
     await setPointsTo(300)
@@ -1456,7 +1456,7 @@ describe('兑换：商城币优先，可混合', () => {
     }
   })
 
-  it('商城币够但今天换满了 —— 还是换不了（次数闸门不受分账影响）', async () => {
+  it('兑换券够但今天换满了 —— 还是换不了（次数闸门不受分账影响）', async () => {
     await useApp.getState().updateSettings({ redeemEnabled: true })
     const seed = useApp.getState().allRedeemItems[0]
     await useApp.getState().updateRedeemItem(seed.id, { cost: 50, limitPerDay: 1 })
@@ -1902,9 +1902,9 @@ describe('编辑任务：改动要落到还没结算的实例上', () => {
 })
 
 /* ============================================================
-   商城币：不可逆约束 + 每轮闸门
+   兑换券：不可逆约束 + 每轮闸门
    ------------------------------------------------------------
-   ① 地基是「农场产出只能变成商城币，商城币再也回不去」。
+   ① 地基是「农场产出只能变成兑换券，兑换券再也回不去」。
       哪天有人把 postHarvest 改回 postLedger，或者写了
       `balance + harvestBalance` 去买种子，积分经济立刻变成闭环印钞机：
       10 → 16 → 26 → 41 → 66 …（每轮 2 分钟，1 小时能滚出上千万）。
@@ -1917,7 +1917,7 @@ describe('编辑任务：改动要落到还没结算的实例上', () => {
    这组用例把这两件事一起钉住。
    ============================================================ */
 
-describe('商城币：不可逆约束 + 每轮闸门', () => {
+describe('兑换券：不可逆约束 + 每轮闸门', () => {
   /**
    * 把积分余额校准到指定值（测试专用）。
    *
@@ -1947,7 +1947,7 @@ describe('商城币：不可逆约束 + 每轮闸门', () => {
     await useApp.getState().refresh()
   }
 
-  it('① 商城币不进积分余额 —— 两张表物理隔离', async () => {
+  it('① 兑换券不进积分余额 —— 两张表物理隔离', async () => {
     const pointsBefore = await currentBalance()
 
     await postHarvest({ delta: 500, source: 'farm_harvest', memo: '测试注入' })
@@ -1959,7 +1959,7 @@ describe('商城币：不可逆约束 + 每轮闸门', () => {
     expect(useApp.getState().harvestBalance).toBe(500)
   })
 
-  it('① 商城币流水不会混进积分流水', async () => {
+  it('① 兑换券流水不会混进积分流水', async () => {
     const pointsRowsBefore = useApp.getState().ledger.length
 
     await postHarvest({ delta: 30, source: 'farm_market', memo: '测试注入' })
@@ -1969,7 +1969,7 @@ describe('商城币：不可逆约束 + 每轮闸门', () => {
     expect(useApp.getState().harvestLedger).toHaveLength(1)
   })
 
-  it('② 积分 0 时，商城币再多也种不了地', async () => {
+  it('② 积分 0 时，兑换券再多也种不了地', async () => {
     await setBalanceTo(0)
     await postHarvest({ delta: 9999, source: 'farm_harvest', memo: '测试注入' })
     await useApp.getState().refresh()
@@ -1979,7 +1979,7 @@ describe('商城币：不可逆约束 + 每轮闸门', () => {
     const ok = await useApp.getState().plant(0, 'radish')
 
     expect(ok).toBe(false)
-    // 一个商城币都不许花出去
+    // 一个兑换券都不许花出去
     expect(await currentHarvestBalance()).toBe(9999)
     expect(useApp.getState().plots.find((p) => p.index === 0)?.crop).toBeUndefined()
   })
@@ -2010,7 +2010,7 @@ describe('商城币：不可逆约束 + 每轮闸门', () => {
     expect(await currentHarvestBalance()).toBe(9999)
   })
 
-  it('③ 收获默认「存进背包」—— 不发积分，也不立刻结算商城币', async () => {
+  it('③ 收获默认「存进背包」—— 不发积分，也不立刻结算兑换券', async () => {
     // 关掉随机事件：否则「绝收」分支会让这条用例偶尔变红
     await useApp.getState().updateSettings({ farmEventsEnabled: false })
     await setBalanceTo(50)
@@ -2026,14 +2026,14 @@ describe('商城币：不可逆约束 + 每轮闸门', () => {
     expect(useApp.getState().balance, '收获不该发积分').toBe(
       50 - CROP_BY_ID.get('radish')!.seedCost,
     )
-    expect(useApp.getState().harvestBalance, '还没卖，商城币不该动').toBe(0)
+    expect(useApp.getState().harvestBalance, '还没卖，兑换券不该动').toBe(0)
     expect(
       useApp.getState().inventory.find((s) => s.itemId === 'produce-radish')?.count ?? 0,
       '产出应该进了背包',
     ).toBeGreaterThan(0)
   })
 
-  it('③ 「直接卖」当场结算商城币 —— 和存背包走同一个闸门', async () => {
+  it('③ 「直接卖」当场结算兑换券 —— 和存背包走同一个闸门', async () => {
     await useApp.getState().updateSettings({ farmEventsEnabled: false })
     await setBalanceTo(50)
 
@@ -2047,7 +2047,7 @@ describe('商城币：不可逆约束 + 每轮闸门', () => {
     expect(useApp.getState().harvestBalance).toBe(earned)
   })
 
-  it('③ 市场卖出结的是商城币，不是积分', async () => {
+  it('③ 市场卖出结的是兑换券，不是积分', async () => {
     // 闸门挂在「标的」上，所以必须真的种着东西才卖得出去
     await setBalanceTo(50)
     await plantAndMature('radish', 0)
@@ -2363,7 +2363,7 @@ describe('商城币：不可逆约束 + 每轮闸门', () => {
       '卖得比额度允许的还少 = 提前收手了（报价是线性的，所以这是个下界）',
     ).toBeGreaterThanOrEqual(Math.floor(cap / price))
     // 钱和「少掉的个数」要对得上：不能扣了货不给钱，也不能给了钱不扣货。
-    // ⚠️ 商城币是**整数** —— `postHarvest` 里写着 `Math.round(entry.delta)`，
+    // ⚠️ 兑换券是**整数** —— `postHarvest` 里写着 `Math.round(entry.delta)`，
     //    所以上界必须留 0.5 的四舍五入余量（实测 2 个 × 1.285 = 2.57 → 记账 3）。
     //    下界的 6% 余量留着 —— 报价是线性的（现价 × 个数），本来就不该少，
     //    余量只是防将来给 `sellQuote` 加卖压衰减时这条断言变假失败。

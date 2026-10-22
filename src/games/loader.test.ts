@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { BundleLoadError, validateBundle } from './loader'
-import { HOST_API, type GameManifestV2 } from './plugin'
+import { describe, expect, it, vi } from 'vitest'
+import { BundleLoadError, mountBundle, validateBundle } from './loader'
+import { HOST_API, type GameBundle, type GameManifestV2, type HostApi, type MountContext } from './plugin'
 
 /* ============================================================
    游戏包的准入校验 —— **三道门**（spec §12.5）
@@ -135,5 +135,84 @@ describe('validateBundle —— 第三道门：宿主 API 版本', () => {
 
   it('包要求**更低或相等**的宿主 → 放行（老包在新宿主上照常跑）', () => {
     expect(() => validateBundle({ default: goodBundle({ minHostApi: 1 }) })).not.toThrow()
+  })
+})
+
+/* ============================================================
+   mountBundle —— 同步 / 异步 mount **都收**（HOST_API 3 起）
+
+   这一组是为了钉住一个真实事故：契约原来只允许同步返回卸载函数，
+   而第一个真插件（3D 娃娃机）是 `async mount`。宿主拿到 Promise 就
+   判「没有卸载函数」→ 只 warn → 返回空函数 ⇒ **destroy() 永远不跑**
+   （WebGL context / Rapier world / 4 个 setInterval 全留着）。
+   而当时的测试脚本自己 `await mount()`，所以四层验收全绿也照不出来。
+   ============================================================ */
+
+const CTX: MountContext = {
+  assetBase: '/games/demo/',
+  assetUrl: (rel) => '/games/demo/' + rel,
+  locale: 'zh',
+}
+
+function bundleWith(mount: GameBundle['mount']): GameBundle {
+  return { manifest: goodManifest(), mount }
+}
+
+describe('mountBundle：卸载函数怎么拿', () => {
+  it('同步返回：原样透传，并把 ctx 交给插件', async () => {
+    let got: MountContext | undefined
+    const inner = (): void => {}
+    const unmount = await mountBundle(
+      document.createElement('div'),
+      bundleWith((_c, _h, ctx) => {
+        got = ctx
+        return inner
+      }),
+      {} as HostApi,
+      CTX,
+    )
+    expect(unmount).toBe(inner)
+    expect(got).toBe(CTX)
+  })
+
+  it('★ 返回 Promise：await 之后拿到**真的**卸载函数（不是兜底空函数）', async () => {
+    let destroyed = 0
+    const unmount = await mountBundle(
+      document.createElement('div'),
+      bundleWith(async () => () => {
+        destroyed++
+      }),
+      {} as HostApi,
+      CTX,
+    )
+    expect(typeof unmount).toBe('function')
+    await unmount()
+    expect(destroyed).toBe(1)
+  })
+
+  it('异步 mount 抛错：错误要冒出来（调用方才能显示「打不开」）', async () => {
+    await expect(
+      mountBundle(
+        document.createElement('div'),
+        bundleWith(async () => {
+          throw new Error('纹理加载失败')
+        }),
+        {} as HostApi,
+        CTX,
+      ),
+    ).rejects.toThrow('纹理加载失败')
+  })
+
+  it('没返回卸载函数：只 warn，不抛（游戏还能玩，走查脚本数这个）', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const unmount = await mountBundle(
+      document.createElement('div'),
+      bundleWith((() => undefined) as unknown as GameBundle['mount']),
+      {} as HostApi,
+      CTX,
+    )
+    expect(typeof unmount).toBe('function')
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
   })
 })

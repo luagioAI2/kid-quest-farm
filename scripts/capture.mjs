@@ -547,6 +547,57 @@ try {
   await wait(800)
   await shot('12c-cash-ratio')
 
+  /* 11b / 11c. 设置 · 游戏 tab：游戏商店（2026-10-22 新增）
+     ------------------------------------------------------------
+     这一屏是**家长真的会点**的地方，三块内容全是新的：
+       · ①「随 App 附带」—— 本地包，不联网就能装
+       · ②「在线商店」—— 没配托管地址时只有一句说明，**不摆按钮**
+       · ③「已安装游戏的经济参数」—— 一局几分、期望产出多少、几币换一张券
+     不把它们放进图集，第 4 层走查对这一屏就等于没验（§12b / §13 同一个坑）。
+
+     ★ 两张图，不是一张：**装之前**和**装之后**是两种界面。
+       只拍装之前会漏掉 ③ 整块（它「装了才渲染」），
+       而 ③ 正是这次改动里唯一给家长看数字的地方。
+     ★ 走的是家长那条路（点「安装」按钮），不是 `plugin.installFromUrl` ——
+       截图脚本要拍的是**界面**，用调试句柄绕过去就拍不到「正在装…」这些状态。
+     ★ 拍完**卸掉**：后面的图不该带着一个装进来的游戏。
+       （底栏和当前游戏不受影响 —— 安装不会自动切成当前。） */
+  await clickByText('游戏')
+  await wait(900)
+  await page.evaluate(() => {
+    document.querySelector('[data-local-row]')?.scrollIntoView({ block: 'center' })
+  })
+  await wait(400)
+  await shot('11b-games-store')
+
+  const localInstallClicked = await page.evaluate(() => {
+    const b = document.querySelector('[data-local-install]')
+    if (!b) return false
+    b.scrollIntoView({ block: 'center' })
+    b.click()
+    return true
+  })
+  // 找不到就**炸掉**，别静默拍一张「没装成」的图（静默的错图比缺图更糟）
+  if (!localInstallClicked) {
+    throw new Error('截图脚本找不到「随 App 附带」里的安装按钮（本地包清单是空的？）')
+  }
+  await page.waitForFunction(() => !!document.querySelector('[data-local-installed]'), {
+    timeout: 25000,
+  })
+  await page.evaluate(() => {
+    document.querySelector('[data-plugin-economy]')?.scrollIntoView({ block: 'center' })
+  })
+  await wait(600)
+  await shot('11c-games-installed')
+
+  const installedId = await page.evaluate(
+    () => document.querySelector('[data-local-installed]')?.getAttribute('data-local-installed') ?? '',
+  )
+  if (installedId) {
+    await page.evaluate((id) => window.__kqf__.plugin.uninstall(id), installedId)
+    await wait(700)
+  }
+
   /* 12f ~ 12h. 任务编辑 →「单独设奖励」（2026-10-12 新增）
      ------------------------------------------------------------
      家长 2026-10-12 拍板：

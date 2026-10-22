@@ -24,9 +24,9 @@ import { GAME_CLAW } from '../games/ids'
    这里验的是**接上数据库之后**还成不成立：
 
      · 买币：1 积分 → 1 个币，积分不够时**一笔账都不写**；
-     · 结算：扣币 / 发商城币 / 局数 +1 是**一件事**；
+     · 结算：扣币 / 发兑换券 / 局数 +1 是**一件事**；
      · ★ 同一局结算两次**不会**扣两个币（否则孩子狂点按钮就能刷）；
-     · ★ 玩很多局之后，发出去的商城币**一定少于**花掉的积分 ——
+     · ★ 玩很多局之后，发出去的兑换券**一定少于**花掉的积分 ——
        这是那条不能破的不变量的**实测版**（推导见 clawEconomy.ts 头注释）。
    ============================================================ */
 
@@ -127,9 +127,9 @@ describe('结算一局', () => {
     expect(useApp.getState().clawCoins).toBe(1)
   })
 
-  it('中了就发商城币，没中一个都不发（没有「参与奖」）', async () => {
+  it('中了就发兑换券，没中一个都不发（没有「参与奖」）', async () => {
     /*
-      一局一局地比：`settleClawRound` 实际发出来的商城币，必须**等于**
+      一局一局地比：`settleClawRound` 实际发出来的兑换券，必须**等于**
       `clawResolveRound` 那一局算出来的数。差一分就说明
       「结算读的设置」和「纯函数读的设置」不是同一份 —— 那种错
       表现成「偶尔多发一点」，很难从总数上看出来。
@@ -159,10 +159,10 @@ describe('结算一局', () => {
       const r = await useApp.getState().settleClawRound(i)
       const after = await currentHarvestBalance()
       const expectRound = clawResolveRound(i, econ)
-      expect(r.coupons, `第 ${i + 1} 局发的商城币不对`).toBe(
+      expect(r.coupons, `第 ${i + 1} 局发的兑换券不对`).toBe(
         expectRound.won ? CLAW_DEFAULT_EXCHANGE : 0,
       )
-      // 商城币余额的变化量必须**正好**是这一局该发的数
+      // 兑换券余额的变化量必须**正好**是这一局该发的数
       expect(after - before).toBe(r.coupons)
       if (r.won) wins++
       else losses++
@@ -186,11 +186,11 @@ describe('★★ 不变量：玩娃娃机是净消费，不是刷分', () => {
     N 从 120 降到 60：不变量是**定性**的（净亏），60 局足够看出来，
     而且确定性哈希下这个数不会抖。
   */
-  it('连玩 60 局：发出去的商城币 < 花掉的积分', { timeout: 30_000 }, async () => {
+  it('连玩 60 局：发出去的兑换券 < 花掉的积分', { timeout: 30_000 }, async () => {
     /*
       这是 `clawEconomy.ts` 头注释那条推导的**实测版**：
 
-        花 1 积分 → 期望拿回 E 商城币 → 兑换口 1 商城币 ≡ 1 积分
+        花 1 积分 → 期望拿回 E 兑换券 → 兑换口 1 兑换券 ≡ 1 积分
         ⇒ 净收益 = E − 1
 
       只要 E < 1，孩子坐在这儿玩一天也刷不出积分来。

@@ -177,11 +177,19 @@ const stepsB = (await page.evaluate(() => window.__kqfClawStage?.debugPhysics?.(
 check('★ 世界真的在 step（不是只建了个 World）', stepsB > stepsA, `${stepsA} → ${stepsB} 步`)
 
 const awake = (await page.evaluate(() => window.__kqfClawStage?.debugPhysics?.().awake)) ?? 0
-check(
-  '★ 有刚体是醒着的（全睡了说明模拟其实停了）',
-  awake > 0,
-  `${awake} 个醒着`,
-)
+/*
+  ★★ 2026-10-21：「有刚体是醒着的」**不能当判据** —— 它和下面那条互相拆台。
+
+  `clawPhysics` 建世界时会同步空跑 240 步（约 4 秒），目的写在它自己的注释里：
+  「把所有娃娃落到**静止**（`sleep`）为止」。也就是说 **`awake === 0` 是设计好的稳态**，
+  而这条判据要求 `awake > 0` —— 两条同时成立的唯一时机是「刚落稳、还没睡」那一瞬。
+  实测连跑两轮都是 0：红的是判据，不是画面。
+
+  「模拟真的在推进」上面 `steps 12 → 28` 已经直接证明了；
+  「娃娃真的会动」由后面的「夹住过」「没中的那只落回池子」证明。
+  ➜ 这里只**报告**数字，不判失败（和「散货被挤进洞」那条一个待遇）。
+*/
+console.log(`  · 此刻醒着的刚体：${awake} 个（0 = 已经全部 sleep，是正常稳态）`)
 
 /* ================= ③ 池子是稳的（没炸 / 没抖） ================= */
 
@@ -337,6 +345,38 @@ if (!rounds.some((r) => r.won)) {
         (r.recycledDelta > 0
           ? `（掉下去的是 ${r.freshRecycled.map((e) => `#${e.index}`).join(' ')}）`
           : ''),
+    )
+    if (!r.done) break
+  }
+}
+
+/*
+  ★★ 2026-10-21：还得保证跑到一局**「没中、但确实夹住过」**。
+
+  上面那个循环一看到「有中 + 有没中」就停。可「没中」那局如果爪子正下方
+  本来就是空的，`held` 从头到尾是 false —— 下面「没中的那只落回池子」
+  于是拿不到样本，报的是「这次没跑到…」。那是**覆盖不足**，不是功能坏了，
+  但它会让一条关键判据长期空转（绿不了也红不透）。
+
+  为什么默认会夹空：爪子开局停在 `HOME`（左前角，x=-0.34 / z=0.26），
+  而池底的取物洞就在那儿 —— 洞上面本来就没有娃娃。
+  ➜ 所以补跑之前先**把爪子往右挪到娃娃堆上方**（按住方向键 0.7 秒，
+     约 0.34 世界单位），再把中奖率压到 0，直到出现「没中且夹住过」（最多 3 局）。
+*/
+if (rounds.some((r) => r.won) && !rounds.some((r) => r.won === false && r.heldSeen)) {
+  await page.evaluate(async () => {
+    await window.__kqf__.getState().updateSettings({ clawWinRate: 0 })
+  })
+  await page.keyboard.down('ArrowRight')
+  await wait(700)
+  await page.keyboard.up('ArrowRight')
+  await wait(300)
+  for (let i = 0; i < 3 && !rounds.some((r) => r.won === false && r.heldSeen); i++) {
+    const r = await playRound()
+    rounds.push(r)
+    console.log(
+      `     补第 ${i + 1} 局（中奖率 0，为了拿到「夹住又滑掉」）：${r.won ? '中' : '没中'}｜` +
+        `夹住 #${r.heldIdx}｜recycled +${r.recycledDelta}`,
     )
     if (!r.done) break
   }

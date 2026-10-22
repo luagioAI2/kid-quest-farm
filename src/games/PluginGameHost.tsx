@@ -96,11 +96,29 @@ export function PluginGameHost({ gameId }: { gameId: string }) {
          * 容器**必须留在这里、由宿主渲染** —— 插件不该自己往 `document.body`
          * 上挂东西，那样宿主就没法在切 tab 时把它一起收走。
          *
+         * ★★ 2026-10-22：**必须是「定高盒子」**（`relative` 父 + `absolute inset-0` 子）。
+         *
+         * 原来写的是 `min-h-0 flex-1`，量出来**父容器 698px、插件根节点 0px** ——
+         * 整屏空白，而 `__gpPlayable` / canvas / 断言全都在（走查图才看得出来）。
+         *
+         * 原因是 CSS 的百分比高度：插件根节点写的是 `height:100%`，它要对着
+         * **父节点的 `height` 属性**解析。而父节点是靠 `flex:1 1 0%` 撑到 698 的，
+         * `height` 属性仍是 `auto` —— 在这条**多层嵌套**的 flex 链里，
+         * 浏览器不把「靠 flex-grow 得到的 used height」当成 definite，
+         * 于是 `height:100%` 退化成 `auto`，而插件的子元素又全是绝对定位 ⇒ 0。
+         *
+         * （同一结构在**一层** flex 里能量出 698 —— 所以这个坑只在深链上出现，
+         *   单测量不出来，`jsdom` 更是完全不做布局。）
+         *
+         * 绝对定位的盒子高度由 `inset:0` 直接定死，与 `height` 属性无关，
+         * 所以插件的 `height:100%` 一定解析得到。代价是**容器不再随内容长高**：
+         * 插件要装下一屏以上的内容，得自己 `overflow-y:auto`（契约里已写明）。
+         *
          * `min-h-0` 是关键：少了它，子元素的 `overflow` 撑不住，
          * 插件内部滚动会变成整页滚动。
          */
-        <div className="page-col flex w-full min-h-0 flex-1 flex-col">
-          <div ref={boxRef} data-plugin-host={gameId} className="min-h-0 flex-1" />
+        <div className="page-col relative flex w-full min-h-0 flex-1 flex-col">
+          <div ref={boxRef} data-plugin-host={gameId} className="absolute inset-0" />
         </div>
       )}
     </div>

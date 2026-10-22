@@ -25,7 +25,14 @@
  * 一律带上**字段名 + 实际值**。
  */
 
-import { HOST_API, describeManifestProblem, type GameBundle, type HostApi } from './plugin'
+import {
+  HOST_API,
+  describeManifestProblem,
+  type GameBundle,
+  type HostApi,
+  type MountContext,
+  type Unmount,
+} from './plugin'
 
 /** 加载失败的分类。调用方据此决定「重试」还是「标记为损坏」。 */
 export type LoadFailure =
@@ -123,13 +130,31 @@ export function validateBundle(mod: unknown): GameBundle {
  * ⚠️ 卸载必须真的被调用（切走 / 卸载游戏时）。插件在里面注册的
  * 定时器 / 事件监听不会自己消失 —— 症状是「切回来以后跑了两遍」。
  * 所以调用方**不要**自己 try/finally 忘掉它，见 `PluginGameHost`。
+ *
+ * ## 为什么这里要 `await`（2026-10-22 改）
+ *
+ * 契约从「同步返回卸载函数」放宽成 `Unmount | Promise<Unmount>`
+ * （见 `plugin.ts` 的 `GameBundle.mount`）。原来这里直接
+ * `const unmount = bundle.mount(...)`，拿到 Promise 就判 `typeof !== 'function'`
+ * → 打印一句 warn → 返回一个空卸载函数。**结果是插件的 destroy() 永远不跑**：
+ * WebGL context、Rapier world、4 个 setInterval 全留着，切走再回来跑两遍。
+ *
+ * 而当时的测试脚本写的是 `await mod.mount(...)` —— 它自己 await 了，
+ * 所以**结构上照不出这个错**。这就是「契约靠人守」的代价：
+ * 第一个真插件就违反了，而四层验收全绿。
+ *
+ * 现在两种都收，并且「没返回卸载函数」仍然只 warn 不抛 ——
+ * 游戏还能玩，但走查脚本会数这个（`scripts/check-plugin.mjs`）。
  */
-export function mountBundle(
+export async function mountBundle(
   container: HTMLElement,
   bundle: GameBundle,
   host: HostApi,
-): () => void {
-  const unmount = bundle.mount(container, host)
+  ctx: MountContext,
+): Promise<Unmount> {
+  const result = bundle.mount(container, host, ctx)
+  const unmount = typeof result === 'function' ? result : await result
+
   if (typeof unmount !== 'function') {
     // 包忘了返回卸载函数 —— 不当成致命错误（游戏还能玩），
     // 但要能查出来：这属于「契约没守」，走查脚本会数这个。
