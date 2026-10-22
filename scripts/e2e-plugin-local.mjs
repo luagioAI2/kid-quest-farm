@@ -44,14 +44,26 @@
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir, SCRATCH_BASE } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4393/'
 const VIEWPORT = process.argv[3] ?? 'phone'
 
 const GAME_ID = 'prizepark'
-const GAME_VERSION = '1.3.0'
+/**
+ * 版本号**从清单里读**，不写死。
+ *
+ * 写死的后果实测过一次：包升到 1.4.0，这里还是 1.3.0 ⇒
+ * 「装上的版本是 v1.3.0」这条红，而界面完全正常 —— 红的原因和产品无关。
+ * 一条只会因为「忘了改脚本」而红的断言，等于给自己加了个假报警。
+ */
+const GAME_VERSION = (() => {
+  const src = readFileSync(new URL('../src/games/localGames.ts', import.meta.url), 'utf8')
+  const m = src.match(/"id":\s*"prizepark"[\s\S]{0,200}?"version":\s*"([^"]+)"/)
+  if (!m) throw new Error('在 localGames.ts 里找不到 prizepark 的 version —— 清单没生成？')
+  return m[1]
+})()
 /** 一局买几个币（`openBuySheet` 里写死 `Math.min(5, affordable)`，这里跟着它） */
 const BUY_COINS = 5
 /** 1 币 = 1 积分（`wallet.js` 的 POINTS_PER_COIN；打包脚本会核对） */
@@ -424,6 +436,45 @@ let coinsAfterPlay = 0
   const inPlay = await waitFor('#play:not(.hidden)', 15000)
   check('进了机台画面', inPlay)
   await wait(1200) // 建场景 + 相机落位
+
+  /* ---- 机台页新布局（换币上顶栏 / 拆右侧竖栏 / 底部动作条）----
+     只在假宿主里量是不够的：真宿主的插件容器高度只有 ~698（假宿主给 780），
+     而且这里才有宿主自己的标题栏和 TabBar 抢位置。 */
+  const playGeo = await page.evaluate(() => {
+    const r = (s) => {
+      const el = document.querySelector(s)
+      if (!el) return null
+      const b = el.getBoundingClientRect()
+      return { l: Math.round(b.left), t: Math.round(b.top), r: Math.round(b.right), b: Math.round(b.bottom), w: Math.round(b.width), h: Math.round(b.height) }
+    }
+    const vp = r('#viewport')
+    const coin = document.querySelector('#pCoinsBtn')
+    const cb = coin?.getBoundingClientRect()
+    const coinTop = cb ? document.elementFromPoint(cb.left + cb.width / 2, cb.top + cb.height / 2) : null
+    const px = vp ? vp.r - 14 : 0
+    const py = vp ? vp.t + vp.h * 0.35 : 0
+    const atRight = vp ? document.elementFromPoint(px, py) : null
+    return {
+      vp, hud: r('#hud'), ctrl: r('#controls'), bar: r('#play > .ppBar'), host: r('#host') ?? r('#play'),
+      sideBtns: !!document.querySelector('#sideBtns'),
+      camInHud: !!document.querySelector('#hud #camBtns'),
+      barTiles: [...document.querySelectorAll('#play > .ppBar .barTile b')].map((b) => b.textContent),
+      coinHit: !!(coinTop && (coinTop === coin || coin.contains(coinTop))),
+      coinText: document.querySelector('#pCoins')?.textContent ?? null,
+      rightFree: atRight ? atRight.tagName : null,
+      overflowX: (document.querySelector('#play')?.scrollWidth ?? 0) - (document.querySelector('#play')?.clientWidth ?? 0),
+    }
+  })
+  check('★ 机台页右侧竖栏 `#sideBtns` 已拆掉（画面不再被压掉一列）', !playGeo.sideBtns)
+  check('视角 / 店员挪进了顶栏', playGeo.camInHud)
+  check('★ 顶栏那颗币可点（换币入口），没被别的层盖住', playGeo.coinHit, playGeo.coinText)
+  check('★ 3D 画面右侧 35% 高度处是画布，没有按钮压着', playGeo.rightFree === 'CANVAS', playGeo.rightFree)
+  check('★ 娃娃界面底部也有动作条（背包 / 回收 / 排行）', playGeo.barTiles.join('/') === '背包/回收/排行', playGeo.barTiles.join('/'))
+  check('顶栏 / 画面 / 操作区 / 动作条 四段不重叠',
+    playGeo.hud.b <= playGeo.vp.t + 1 && playGeo.vp.b <= playGeo.ctrl.t + 1 && playGeo.ctrl.b <= playGeo.bar.t + 1,
+    `hud↓${playGeo.hud.b} vp↓${playGeo.vp.b} ctrl↓${playGeo.ctrl.b} bar↓${playGeo.bar.b}`)
+  check('机台页没有横向溢出', playGeo.overflowX <= 1, playGeo.overflowX)
+  await page.screenshot({ path: join(OUT, `${VIEWPORT}-play.png`) })
 
   /* ---- 买币：0 币时点「开局」会进买币面板 ---- */
   const beforeBuy = await snap()

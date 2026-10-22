@@ -3,7 +3,7 @@
     {
       "id": "prizepark",
       "name": "奖品公园",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "file": "prizepark/prizepark.plugin.mjs",
       "assetBase": "prizepark/"
     }
