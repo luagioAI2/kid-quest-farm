@@ -514,7 +514,11 @@ manifest: {
 - [ ] 单文件零依赖，无裸模块名
 - [ ] `mount(container, host, ctx)`：同步返回卸载函数，**或**返回 Promise（宿主会 await）
 - [ ] 根节点 `height:100%`（容器是定高盒子，§2.3）；内容超一屏**自己滚**，别用 `100vh`
-- [ ] 资源**只**走 `ctx.assetUrl('assets/x.webp')`，不自己拼相对路径
+- [ ] 资源**只**走 `ctx.assetUrl('assets/x.webp')`，不自己拼相对路径 ——
+      **拼进 `innerHTML` 的 `<img src>` 也算**（`<img src="assets/x.webp">` 在假宿主里是对的、
+      在真宿主里 404，因为假宿主把游戏目录当站点根；判据只能是 `naturalWidth > 0`）
+- [ ] **不要再挂自己的底部导航**（`.bnav` 那类）—— 宿主 TabBar 就是导航，两条叠着白吃 60px；
+      页面内的入口照农场写成底部一排动作磁贴
 - [ ] 样式全部收进自己的根类（`@media` 递归收），不写全局 `.grid` / `.card`
 - [ ] handler 具名；卸载时清定时器 / 监听 / rAF / WebGL context / 物理 world
 - [ ] 能力只走 `host.*`；币只用 `mintGameCoin` / `spendGameCoin` / `gameCoinBalance`
@@ -538,6 +542,10 @@ manifest: {
 > 2026-10-22 那次「容器 698px / 根节点 0px / 整屏空白」在假宿主里是全绿的
 > （假宿主给的是一个 `100vh` 的绝对定位盒子，`height:100%` 恰好解析得到）。
 > 只有真宿主 + 截图能看见它。
+>
+> 同一次还抓到另一条同源的：机台卡片上的奖品图**全是空白**，而「点得动 / 进得去 / 扣钱对」
+> 全绿。原因是 `<img src="assets/…">` 没走 `assetUrl()`；假宿主的站点根**恰好**就是游戏目录，
+> 所以那边永远是对的。现在真宿主 e2e 里有一条「奖品图全部解码（`naturalWidth > 0`）」。
 
 ---
 

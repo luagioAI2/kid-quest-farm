@@ -36,10 +36,10 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
   {
     "id": "prizepark",
     "name": "奖品公园",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "url": "/games/prizepark/prizepark.plugin.mjs",
-    "sha256": "4274bac8ca2a19471de48abf02e892d2b8f21a4e0da75f122923005d94f13795",
-    "bytes": 3402072,
+    "sha256": "4c002f338bbed8f0c56dc3c943f5f5dc1149021007e7ec19f1f5d38385d951b6",
+    "bytes": 3387944,
     "assetBase": "/games/prizepark/"
   }
 ]

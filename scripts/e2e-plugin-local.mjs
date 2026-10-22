@@ -51,7 +51,7 @@ const TARGET = process.argv[2] ?? 'http://127.0.0.1:4393/'
 const VIEWPORT = process.argv[3] ?? 'phone'
 
 const GAME_ID = 'prizepark'
-const GAME_VERSION = '1.2.0'
+const GAME_VERSION = '1.3.0'
 /** 一局买几个币（`openBuySheet` 里写死 `Math.min(5, affordable)`，这里跟着它） */
 const BUY_COINS = 5
 /** 1 币 = 1 积分（`wallet.js` 的 POINTS_PER_COIN；打包脚本会核对） */
@@ -357,14 +357,15 @@ let coinsAfterPlay = 0
     const box = document.querySelector(`[data-plugin-host="${id}"]`)
     const root = box?.querySelector('.pp-root')
     const boxRect = box?.getBoundingClientRect()
-    const title = box?.querySelector('#title')
+    // 首页 = 机台列表（`#list`）。原来这里是 `#title`（标题页），2026-10-22 改版删了
+    const home = box?.querySelector('#list')
     return {
       roots: box?.querySelectorAll('.pp-root').length ?? 0,
       canvas: box?.querySelectorAll('canvas').length ?? 0,
       hostH: Math.round(boxRect?.height ?? 0),
       w: Math.round(root?.getBoundingClientRect().width ?? 0),
       h: Math.round(root?.getBoundingClientRect().height ?? 0),
-      titleH: Math.round(title?.getBoundingClientRect().height ?? 0),
+      homeH: Math.round(home?.getBoundingClientRect().height ?? 0),
       error: (document.body.innerText ?? '').includes('打不开'),
     }
   }, GAME_ID)
@@ -382,7 +383,7 @@ let coinsAfterPlay = 0
     shape.h > 100 && Math.abs(shape.h - shape.hostH) <= 1,
     `容器 ${shape.hostH} · 根节点 ${shape.h}`,
   )
-  check('首页画面有实际高度（不是空白）', shape.titleH > 100, `#title ${shape.titleH}px`)
+  check('首页画面有实际高度（不是空白）', shape.homeH > 100, `#list ${shape.homeH}px`)
   check('不是「打不开」那一支', shape.error === false)
 
   /*
@@ -401,10 +402,18 @@ let coinsAfterPlay = 0
   })
   check('★ 插件的样式被收进了根类（宿主 `.grid` 没被污染）', gridOk === 'grid', `display=${gridOk}`)
 
-  /* ---- 进机台：首页 → 机台列表 → 第一台 ---- */
-  await clickSel('#playBtn')
+  /* ---- 进机台：首页**就是**机台列表（2026-10-22 改版去掉了标题页那一道门） ---- */
   const listUp = await waitFor('#list:not(.hidden)', 10000)
-  check('进了机台列表', listUp)
+  check('★ 落地页直接就是机台列表（不再有「大 logo + 开始游戏」的标题页）', listUp)
+
+  const shell = await page.evaluate(() => ({
+    title: !!document.querySelector('#title'),
+    bnav: !!document.querySelector('.bnav'),
+    bar: !!document.querySelector('.ppBar'),
+  }))
+  check('旧标题页 `#title` 已经删掉', !shell.title)
+  check('插件自己那条 5 格底部导航 `.bnav` 已经删掉（不跟宿主 TabBar 叠着）', !shell.bnav)
+  check('首页底部是农场那种动作条 `.ppBar`（背包 / 回收 / 排行）', shell.bar)
   const entered = await page.evaluate(() => {
     const cell = document.querySelector('#mGrid .mcell:not(.wip)')
     if (!cell) return false
@@ -474,14 +483,15 @@ let vouchersBefore = 0
   const before = await snap()
   vouchersBefore = before.vouchers
 
-  // 底部导航切到回收页（`data-nav="sell"`）；它会先退出机台
-  const navOk = await page.evaluate(() => {
-    const b = document.querySelector('#bnav [data-nav="sell"]')
-    if (!b) return false
-    b.click()
-    return true
-  })
-  check('切到游戏内的「回收」页', navOk)
+  // 2026-10-22 改版后插件内**没有底部导航**了（`.bnav` 删了，不跟宿主 TabBar 叠着）。
+  // 所以路径变成：机台里按「← 返回」回列表 → 点首页底部动作条上的「回收」。
+  // 这条比原来那条更接近玩家真实操作，也顺手证明「返回键真的能退出机台」。
+  const leftPlay = await clickSel('#backBtn')
+  check('从机台退回列表（返回键）', leftPlay)
+  check('列表又出来了', await waitFor('#list:not(.hidden)', 8000))
+
+  const navOk = await clickSel('#sellBtn')
+  check('点首页底部动作条上的「回收」', navOk)
   const sellUp = await waitFor('#sell:not(.hidden)', 10000)
   check('回收页出来了', sellUp)
 
@@ -570,6 +580,30 @@ console.log('\n【⑤ 切走 → 切回】')
   )
   const coinsNow = await page.evaluate(() => window.__debug?.coins ?? -1)
   check('游戏币仍是 0（换券之后不该「长回来」）', coinsNow === 0, `${coinsNow} 个`)
+
+  // 图真的解码了。宿主里的 `assetBase` 一旦接错，卡片就是**一片空白**，
+  // 而功能断言（点得动、进得去）全绿 —— 假宿主测不到这条，因为它的 assetBase 是写死的。
+  const imgs = await page
+    .waitForFunction(
+      (id) => {
+        const box = document.querySelector(`[data-plugin-host="${id}"]`)
+        const all = [...box.querySelectorAll('#mGrid .mcell .img img')]
+        return all.length > 0 && all.every((i) => i.complete && i.naturalWidth > 0)
+      },
+      { timeout: 20000 },
+      GAME_ID,
+    )
+    .then(() => true, () => false)
+  if (!imgs) {
+    const bad = await page.evaluate((id) => {
+      const box = document.querySelector(`[data-plugin-host="${id}"]`)
+      return [...box.querySelectorAll('#mGrid .mcell .img img')]
+        .map((i) => `${i.getAttribute('src')} → ${i.complete ? i.naturalWidth : 'pending'}`)
+        .slice(0, 4)
+    }, GAME_ID)
+    console.log(`    ↳ 失败的图：${bad.join(' | ') || '(一个 img 都没有)'}`)
+  }
+  check('★ 机台卡片上的奖品图全部解码成功（宿主给的 assetBase 是对的）', imgs)
 
   await page.screenshot({ path: join(OUT, `${VIEWPORT}-plugin-local.png`) })
 }
