@@ -252,9 +252,15 @@ async function leaveSettings() {
 console.log('【⓪ 基线】')
 {
   const hostApi = await page.evaluate(() => window.__kqf__.plugin.hostApiVersion)
-  // 契约版本：本地包 manifest 写的是 minHostApi 3（它要 redeemGameCoin）。
-  // 宿主比它老 ⇒ 装得上也跑不了，所以这条先钉住。
-  check('宿主契约版本是 3（有 redeemGameCoin / ctx / 异步 mount）', hostApi === 3, `HOST_API=${hostApi}`)
+  /*
+   * 契约版本：**只判「够不够」，不判「等于几」**。
+   *
+   * 写死 `=== 3` 的后果实测过一次：宿主升到 4（加了 mintVoucher），
+   * 这条红，而界面完全正常 —— 红的原因和产品无关，纯属脚本没跟上。
+   * 要钉的是「宿主至少得有这个包要的那一代」，那正是 `>=` 的语义；
+   * 「包要哪一代」由 `plugin-test.cjs` 拿 manifest 的 minHostApi 去比。
+   */
+  check('宿主契约版本 ≥ 4（有 mintVoucher / redeemGameCoin / ctx / 异步 mount）', hostApi >= 4, `HOST_API=${hostApi}`)
 
   const before = await snap()
   check('动手前一款插件游戏都没装', before.installed.length === 0, before.installed.join(',') || '(空)')
@@ -523,6 +529,71 @@ let coinsAfterPlay = 0
   check('吊爪进入了运行状态（这一局真的开了）', /^(idle_x|moving_x|idle_z|moving_z|catchgo)$/.test(phase), phase)
 
   coinsAfterPlay = await page.evaluate(() => window.__debug?.coins ?? 0)
+}
+
+/* ============================================================
+   ③b 娃娃 → 兑换券（**不经过币**）
+   ------------------------------------------------------------
+   2026-10-23 起：币只能用积分买（入场券），娃娃直接发兑换券（战利品）。
+   这一节要钉住的恰恰是「**币一分没变**」—— 卖娃娃如果能回币，
+   抓娃娃本身就能续玩，那条「坐着玩就能刷」的回路就又接回来了。
+   假宿主那边（`plugin-test.cjs`）也验了同一条，但那条走的是假账本；
+   这里走的是真宿主的 `db.mintGameVouchers` → `postHarvest`。
+   ============================================================ */
+console.log('\n【③b 卖娃娃 → 兑换券（币不动）】')
+{
+  const before = await snap()
+  const coinsBefore = await page.evaluate(() => window.__debug?.coins ?? -1)
+
+  // 直接让物理层判一次中奖（省掉抓取动画；判定和真抓走的是同一条 `onGet`）
+  await page.evaluate(() => window.__debug.forceGet(0))
+  const caught = await page
+    .waitForFunction(
+      () => {
+        const s = window.__debug?.save?.stock
+        return !!s && Object.values(s).some((n) => n > 0)
+      },
+      { timeout: 15000 },
+    )
+    .then(() => true, () => false)
+  check('抓到一只娃娃（stock 里有了）', caught)
+
+  // 中奖那层盖住整个 #play：`.click()` 绕得过，截图会花
+  await page.evaluate(() => document.querySelector('#getOverlay')?.classList.add('hidden'))
+  await wait(500)
+
+  check('从机台退回列表', await clickSel('#backBtn'))
+  check('点动作条上的「回收」', await clickSel('#sellBtn'))
+  check('回收页出来了', await waitFor('#sell:not(.hidden)', 10000))
+
+  const cellText = await page.evaluate(() => {
+    const c = document.querySelector('#sellGrid .cell')
+    return c ? c.textContent.replace(/\s+/g, ' ').trim() : ''
+  })
+  check('回收格子上标的是 🎟️ 兑换券（不是 🧸 币）', cellText.includes('🎟️'), cellText)
+
+  check('点开娃娃', await clickSel('#sellGrid .cell'))
+  check('卖 1 个', await clickSel('#rcOne'))
+
+  const credited = await page
+    .waitForFunction(
+      (want) => window.__kqf__.getState().harvestBalance === want,
+      { timeout: 15000 },
+      before.vouchers + 2,
+    )
+    .then(() => true, () => false)
+  const after = await snap()
+  const coinsAfter = await page.evaluate(() => window.__debug?.coins ?? -1)
+  check(`★ 兑换券 +2（${before.vouchers} → ${after.vouchers}）`, credited, `${before.vouchers} → ${after.vouchers}`)
+  check('★★ 卖娃娃**不给币**（币一分没变）', coinsAfter === coinsBefore, `${coinsBefore} → ${coinsAfter}`)
+  await page.screenshot({ path: join(OUT, `${VIEWPORT}-sell.png`) })
+
+  // ④ 是从「机台里按返回」开始的，这里把状态还回去
+  check('回到列表', await clickSel('#sellBack'))
+  await waitFor('#list:not(.hidden)', 8000)
+  check('重新进机台（④ 要从这里开始）', await clickSel('#mGrid .mcell:not(.wip)'))
+  check('又进机台画面了', await waitFor('#play:not(.hidden)', 15000))
+  await wait(900)
 }
 
 /* ============================================================

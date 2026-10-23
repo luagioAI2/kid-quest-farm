@@ -145,7 +145,7 @@ interface MountContext {
 > jsdom 完全不做布局，假宿主又恰好给了绝对定位盒子 ⇒ **只有真 App + 截图看得见**。
 > 验收判据因此写成「根节点高度 **等于** 容器高度」（不是 `> 0`）。
 
-### 3.4 `HostApi`（9 个方法）
+### 3.4 `HostApi`（10 个方法）
 
 | 方法 | 语义 | 关键约束 |
 | --- | --- | --- |
@@ -154,7 +154,8 @@ interface MountContext {
 | `mintGameCoin(n, memo)` | 铸自己的币 | 只接受正数（币只进不出） |
 | `spendGameCoin(n, memo)` | 花自己的币（玩一局） | 余额不够返回 `false`，一个不扣 |
 | `buyGameCoin(count, rate, memo)` | 积分 → 币 | 扣分与记币在**同一个事务** |
-| `redeemGameCoin(count, memo)` | 币 → **兑换券** | 汇率由宿主从 manifest 读，调用方传不进来 |
+| `redeemGameCoin(count, memo)` | 币 → **兑换券**（没用完的币） | 汇率由宿主从 manifest 读，调用方传不进来 |
+| `mintVoucher(count, memo)` | **奖品 → 兑换券**（不经过币） | 2026-10-23 加（HOST_API 4）。娃娃不许产币 |
 | `gameCoinBalance()` | 币余额 | **算出来的**（Σdelta），不存 balance |
 | `storage.get/set/list` | 自己的命名空间 | `__` 开头抛错 |
 | `pushToast/haptic/tone` | 反馈 | 别自己画浮层 |
@@ -163,11 +164,15 @@ interface MountContext {
 
 ```
    积分 🪙 ──buyGameCoin──▶ 游戏币（每款游戏自己的）──redeemGameCoin──▶ 兑换券 🎟️
-     ▲                          ▲                                        │
-     │                          └──── mintGameCoin（抓到奖品）             │
-  任务/签到                                                               ▼
+     ▲                                                                     │
+     │                    奖品 ──mintVoucher──▶ 兑换券（不经过币）           │
+  任务/签到                                                                ▼
                                                                    兑换商城
 ```
+
+★ **币只有一个来源：买。奖品不产币**（2026-10-23 改）。
+币是「入场券」，券是「战利品」。奖品如果能变回币，而币能直接开局，
+那就是「抓娃娃本身能续玩」—— 一条不花积分的刷券路径。
 
 **三条不可逆约束**（改了就是印钞机）：
 
@@ -204,6 +209,24 @@ expectedPayout × voucherPerCoin < playCost ← 真正的印钞机闸门
 只有 `mintGameCoin` 的话，币**只进不出**：玩家抓着抓着币越来越多，
 却永远花不掉，那个"币"就没有意义。只有 `spendGameCoin` 的话，
 币没有来源。两扇门是一对反向门，**都不是"币能换回积分"那条路**。
+
+### 4.3 奖品 → 兑换券：为什么不能用 `mintGameCoin` + `redeemGameCoin` 凑
+
+奖品公园第一版就是「娃娃 → 币」，于是币有了**第二个来源**。用两个门凑成
+「铸币再烧掉」看着等价，其实有两个洞：
+
+1. **两个事务**。中间崩一下（或玩家在这几毫秒里关掉 App）就留下**真实的币**，
+   而币能直接开局 —— 正好是要堵的那条回路；
+2. 每卖一只娃娃，账本上留一对 `+2 / -2`，家长看到的流水没法读。
+
+所以 2026-10-23 加了 `mintVoucher`（HOST_API 4），实现是
+`db.mintGameVouchers` → `postHarvest({ source: 'claw_prize', refId: gameId })`
+—— 和**内置娃娃机**同一个入口、同一套口径（内置那台一直是「扣 1 币 + 当场发券」，
+在 `useApp.settleClawRound` 里同一个事务）。
+
+> 判据：**看币账本**。卖完娃娃如果 `__coin` 里多了一行，就是写错了。
+> `src/db/gameCoin.test.ts` 的 `mintGameVouchers` 那组第一条断言就是
+> 「币账本一行都不写」。
 
 ## 5. 数据桥：存档怎么过
 

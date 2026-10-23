@@ -26425,7 +26425,7 @@ var Yb = {
 		navSell: "売る",
 		sell: "リサイクル",
 		sellTitle: "リサイクル",
-		sellSub: "景品を売ってコインにできます",
+		sellSub: "景品を売ってクーポンにできます",
 		recycleEach: "1個あたり",
 		sellOne: "1個売る",
 		sellAll: "まとめて売る",
@@ -26445,7 +26445,7 @@ var Yb = {
 		navSell: "Sell",
 		sell: "Recycle",
 		sellTitle: "Recycle prizes",
-		sellSub: "Sell prizes to get coins back",
+		sellSub: "Sell prizes for coupons",
 		recycleEach: "each",
 		sellOne: "Sell 1",
 		sellAll: "Sell all",
@@ -26465,7 +26465,7 @@ var Yb = {
 		navSell: "回收",
 		sell: "回收娃娃",
 		sellTitle: "回收站",
-		sellSub: "把娃娃卖掉，换回娃娃机币",
+		sellSub: "把娃娃卖掉，换成兑换券",
 		recycleEach: "每个回收",
 		sellOne: "卖 1 个",
 		sellAll: "全部卖掉",
@@ -26553,16 +26553,18 @@ function ux({ host: e, coins: t = 0, points: n = 0, onChange: r = () => {} } = {
 				return i -= n, r(), !0;
 			});
 		},
-		async earn(t, n = "回收娃娃") {
-			let a = lx(t);
-			return a <= 0 ? !1 : s(async () => {
+		async redeemPrize(t, n = "回收娃娃") {
+			let i = lx(t);
+			if (i <= 0) return 0;
+			let a = 0;
+			return await s(async () => {
 				try {
-					await e.mintGameCoin(a, n);
+					a = await e.mintVoucher(i, n);
 				} catch (e) {
-					return console.warn("[pp] 铸币失败", e), await c(), !1;
+					return console.warn("[pp] 发兑换券失败", e), await c(), !1;
 				}
-				return i += a, r(), !0;
-			});
+				return !0;
+			}) ? (r(), typeof a == "number" && a > 0 ? a : 0) : 0;
 		},
 		refresh: c
 	};
@@ -26648,7 +26650,11 @@ function _x(e, t) {
 }
 //#endregion
 //#region game.js
-async function vx(e) {
+var vx = Object.freeze({
+	name: "兑换券",
+	emoji: "🎟️"
+});
+async function yx(e) {
 	let { container: n, host: r, save: i = null, wallet: a = null, assetBase: o = "", resolveAsset: c = null, voucherPerCoin: l = 0 } = e, u = vy({
 		host: r,
 		initialSave: i
@@ -29755,7 +29761,7 @@ async function vx(e) {
 			tip: "コイン",
 			rate: "枚でクーポン1枚",
 			btn: "クーポンに交換",
-			empty: "先にコインを集めよう",
+			empty: "ポイントでコインを買おう",
 			ok: "クーポン +{n}",
 			fail: "交換できませんでした"
 		},
@@ -29763,7 +29769,7 @@ async function vx(e) {
 			tip: "coins",
 			rate: "coins = 1 coupon",
 			btn: "Convert to coupons",
-			empty: "Collect some coins first",
+			empty: "Buy some coins with points first",
 			ok: "Coupons +{n}",
 			fail: "Couldn't convert"
 		},
@@ -29771,7 +29777,7 @@ async function vx(e) {
 			tip: "币",
 			rate: "币 = 1 张兑换券",
 			btn: "换成兑换券",
-			empty: "先去抓娃娃换几个币吧",
+			empty: "先用积分换几个币吧",
 			ok: "兑换券 +{n}",
 			fail: "没能换成兑换券"
 		}
@@ -29829,7 +29835,7 @@ async function vx(e) {
 		let r = document.createElement("div");
 		if (r.style.cssText = "grid-column:1/-1;font-weight:800;font-size:13px;color:#6f6889;line-height:1.6;text-align:center", r.textContent = n.length ? y("sellSub") : y("nothingToSell"), e.appendChild(r), n.length) for (let t of n) {
 			let n = document.createElement("button");
-			n.className = "cell", n.innerHTML = `<div class="ico">${Er(t.id, 64)}</div><div>${O(t.id)}</div><div style="color:#8b84a3;font-size:12px">×${t.n}</div><div style="color:${b(Xb.pink)};font-size:14px;font-weight:900">${cx.emoji} ${t.each}</div>`, n.addEventListener("click", () => {
+			n.className = "cell", n.innerHTML = `<div class="ico">${Er(t.id, 64)}</div><div>${O(t.id)}</div><div style="color:#8b84a3;font-size:12px">×${t.n}</div><div style="color:${b(Xb.pink)};font-size:14px;font-weight:900">${vx.emoji} ${t.each}</div>`, n.addEventListener("click", () => {
 				U("ui.tap"), Ei(t.id);
 			}), e.appendChild(n);
 		}
@@ -29843,24 +29849,26 @@ async function vx(e) {
 			t && (t.quantity = Math.max(0, t.quantity - i));
 		} else x.stock[e] = Math.max(0, yi(e) - i);
 		x.soldCount = (x.soldCount ?? 0) + i, C();
-		let o = await d.earn(a, `回收 ${O(e)} ×${i}`);
+		let o = await d.redeemPrize(a, `回收 ${O(e)} ×${i}`);
 		return H = "", m && (ce(), wi()), o;
 	}
 	function Ei(e) {
 		let t = e.startsWith("sweet_") ? x.snacks?.[e]?.quantity ?? 0 : yi(e), n = mx(e), r = j("sellSheet");
 		r.className = "sheet", r.innerHTML = `<div class="big">${Er(e, 110)}</div><h3>${O(e)}</h3>
-    <div class="dim">${y("recycleEach")} ${cx.emoji} <b>${n}</b> · ${y("owned")} ×${t}</div>
-    <div class="calc"><div class="tot"><span>${y("sellTotal")} ×${t}</span><span>${cx.emoji} ${n * t}</span></div></div>
-    <div class="row"><button class="pill" id="rcCancel">${y("cancel")}</button><button class="pill pink" id="rcOne">${y("sellOne")} · ${cx.emoji}${n}</button></div>
-    <button class="pill mint" id="rcAll" style="width:100%">${y("sellAll")} ×${t} · ${cx.emoji}${n * t}</button>`, j("sellModal").classList.remove("hidden"), j("rcCancel").addEventListener("click", () => {
+    <div class="dim">${y("recycleEach")} ${vx.emoji} <b>${n}</b> · ${y("owned")} ×${t}</div>
+    <div class="calc"><div class="tot"><span>${y("sellTotal")} ×${t}</span><span>${vx.emoji} ${n * t}</span></div></div>
+    <div class="row"><button class="pill" id="rcCancel">${y("cancel")}</button><button class="pill pink" id="rcOne">${y("sellOne")} · ${vx.emoji}${n}</button></div>
+    <button class="pill mint" id="rcAll" style="width:100%">${y("sellAll")} ×${t} · ${vx.emoji}${n * t}</button>`, j("sellModal").classList.remove("hidden"), j("rcCancel").addEventListener("click", () => {
 			U("ui.tap"), j("sellModal").classList.add("hidden");
 		});
 		let i = async (t) => {
-			if (U("crane.confirm"), !await Ti(e, t)) {
+			U("crane.confirm");
+			let n = await Ti(e, t);
+			if (!(n > 0)) {
 				se(y("recycleFail")), j("sellModal").classList.add("hidden");
 				return;
 			}
-			m && (r.innerHTML = `<h3 style="font-size:26px">✓ ${y("recycled")}</h3><div style="font-size:34px;font-weight:900;color:${b(Xb.pink)}">${cx.emoji} +${n * t}</div>`, U("prize.get"), Di(j("sellModal")), setTimeout(() => {
+			m && (r.innerHTML = `<h3 style="font-size:26px">✓ ${y("recycled")}</h3><div style="font-size:34px;font-weight:900;color:${b(Xb.pink)}">${vx.emoji} +${n}</div>`, U("prize.get"), Di(j("sellModal")), setTimeout(() => {
 				m && j("sellModal").classList.add("hidden");
 			}, 900));
 		};
@@ -30684,13 +30692,13 @@ async function vx(e) {
 }
 //#endregion
 //#region plugin.js
-var yx = {
+var bx = {
 	id: "prizepark",
 	name: "奖品公园",
 	emoji: "🧸",
 	tabLabel: "奖品园",
-	version: "1.4.0",
-	minHostApi: 3,
+	version: "1.5.0",
+	minHostApi: 4,
 	coin: {
 		id: "prizepark",
 		name: cx.name,
@@ -30702,18 +30710,18 @@ var yx = {
 		capPerPrize: 5,
 		voucherPerCoin: 1
 	}
-}, bx = {
+}, xx = {
 	maxBuy: 20,
 	playCost: 1
 };
-async function xx(e, t, n = {}) {
+async function Sx(e, t, n = {}) {
 	if (!e) throw Error("mount: 需要一个容器元素");
 	if (!t) throw Error("mount: 需要 host API");
 	let r = typeof n.assetUrl == "function" ? "" : n.assetBase ?? "", i = (e) => typeof n.assetUrl == "function" ? n.assetUrl(e) : r + String(e).replace(/^\.\//, ""), a = await yy(t), o = await dx(t, a), s = document.createElement("div");
 	s.className = "pp-root", s.style.cssText = "position:relative;width:100%;height:100%;overflow:hidden", e.replaceChildren(s);
 	let c;
 	try {
-		c = await vx({
+		c = await yx({
 			container: s,
 			host: t,
 			save: a,
@@ -30743,4 +30751,4 @@ async function xx(e, t, n = {}) {
 	};
 }
 //#endregion
-export { bx as ECONOMY_CHECK, yx as manifest, xx as mount };
+export { xx as ECONOMY_CHECK, bx as manifest, Sx as mount };

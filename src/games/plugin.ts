@@ -55,8 +55,13 @@
  * ⚠️ 加参数（②）和放宽返回类型（①）本身不破坏老插件：老插件不读第三个
  * 参数、同步返回函数，照样跑。**但 ③ 是真新增**，声明了 `minHostApi: 3`
  * 的插件才敢调它。所以这次 +1 的实际作用是「给新插件一个版本号可用」。
+ *
+ * 2026-10-23 → **4**：新增 `mintVoucher()`（抓到奖品直接发兑换券）。
+ * 同样是「加方法」，同样不算破坏 —— 但奖品公园 1.5.0 起要靠它结算回收，
+ * 它必须能声明「宿主至少得有这么一扇门」，否则在老宿主上
+ * `host.mintVoucher` 是 undefined → TypeError → 卖娃娃点了没反应。
  */
-export const HOST_API = 3
+export const HOST_API = 4
 
 /** 一款游戏的钱包参数 —— 家长要能看见（spec §4.4）。 */
 export interface GameCoinDef {
@@ -153,7 +158,7 @@ export interface HostApi {
    * ```
    *   积分 ──buyGameCoin──▶ 游戏币 ──redeemGameCoin──▶ 兑换券
    *                            ▲
-   *                            └──mintGameCoin── 抓到奖品
+   *                            └──mintVoucher── 抓到奖品（直接发券，不经过币）
    * ```
    *
    * `count` 个币被**烧掉**（写一笔负数），按 manifest 的
@@ -167,6 +172,24 @@ export interface HostApi {
    * ⚠️ 兑换券 ⇸ 积分，所以这条链**有去无回**：不能拿兑换券买币。
    */
   redeemGameCoin(count: number, memo: string): Promise<number>
+
+  /**
+   * **抓到奖品直接发兑换券** —— 不经过游戏币（HOST_API 4）。
+   *
+   * 内置娃娃机就是这么结算的（`useApp.settleClawRound`：扣 1 币 + 发券在同一个
+   * 事务里）。插件里「娃娃 → 币 → 券」那种写法会让币多一个来源，而币能直接开局
+   * ⇒ 抓娃娃本身能续玩，等于把「坐着玩」那条回路又接回来。
+   *
+   * 所以：**币是入场券（买来的），券是战利品（抓来的）**，两者不互通。
+   * 玩家手里剩下的币仍然可以 `redeemGameCoin` 换成券（那是「没用完的入场券」）。
+   *
+   * @returns 实际发出的兑换券数量。`0` = 没发（数量非法）。
+   *
+   * ⚠️ 为什么不让插件「自己 mint 币再 redeem」：两个事务，中间崩一下就是
+   *   「币还在」—— 而币能开局，正好是要堵的那条回路。
+   * ⚠️ 兑换券 ⇸ 积分（spec §2.2），所以这条也只是「有去无回」的终点。
+   */
+  mintVoucher(count: number, memo: string): Promise<number>
 
   /**
    * **用积分买这款游戏的币** —— 扣积分和记币在**同一个事务**里。

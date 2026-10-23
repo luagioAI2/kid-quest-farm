@@ -731,6 +731,45 @@ export async function redeemGameCoins(
   })
 }
 
+/**
+ * **抓到奖品直接发兑换券** —— 不经过游戏币。
+ *
+ * ## 为什么需要这扇门（而不是复用 `mintGameCoin` + `redeemGameCoins`）
+ *
+ * 两只娃娃机的玩法不同：
+ *   · **内置那台**：玩一局扣 1 币，抓到娃娃**当场发券**（`useApp.settleClawRound`
+ *     里和扣币在同一个事务）—— 币永远是「入场券」，不是「战利品」。
+ *   · **插件那台（奖品公园）**：原来的回收是「娃娃 → 币」，于是币有了第二个来源。
+ *     而币能直接开局 ⇒ 抓娃娃本身能续玩 = 那条「坐着玩」的回路又回来了。
+ *
+ * 用 `mintGameCoin(n)` + `redeemGameCoins(n)` 凑出来是不行的，两个原因：
+ *   ① 两个事务。中间崩一下（或玩家在这几毫秒里关掉 App）就留下**真实的币**，
+ *      而币能开局 —— 正是要堵的那条回路；
+ *   ② 每卖一只娃娃账本上留一对 `+2 / -2`，家长看到的流水没法读。
+ *
+ * ## 为什么这条不算印钞机
+ *
+ * 和内置那台同一个口径：`postHarvest` 是兑换券的**唯一入口**，兑换券 ⇸ 积分
+ * （见 `HarvestEntry` 的两条不可逆约束）。一局能出多少券由
+ * `economy.expectedPayout`（安装时 `checkPluginEconomy` 把关）钉住。
+ *
+ * @returns 实际发出的兑换券数量；`0` = 没发（数量非法）。
+ */
+export async function mintGameVouchers(
+  gameId: string,
+  count: number,
+  memo: string,
+): Promise<number> {
+  const n = Math.round(count)
+  if (!(n > 0)) return 0
+  // 走 `postHarvest` —— 和农场卖东西、内置娃娃机兑奖是**同一个入口**，
+  // 账目只有一套口径（`balanceAfter` 也由它算）。
+  // `source` 复用 `claw_prize`（「娃娃机抓到娃娃兑换」），
+  // `refId` 记游戏 id，将来要分「哪台机器发的」也分得开。
+  const row = await postHarvest({ delta: n, source: 'claw_prize', refId: gameId, memo })
+  return row.delta
+}
+
 /* ---------------- 兑换券账本 ---------------- */
 
 /**

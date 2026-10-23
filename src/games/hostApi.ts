@@ -24,6 +24,7 @@ import {
   gameCoinBalanceOf,
   getGameKv,
   listGameKv,
+  mintGameVouchers,
   redeemGameCoins,
   setGameKv,
   spendGameCoin,
@@ -146,6 +147,18 @@ export function makeHostApi(deps: {
       const rate = deps.voucherPerCoin()
       if (!(rate > 0)) return 0
       const got = await redeemGameCoins(gameId, count, rate, memo)
+      if (got > 0) await deps.refresh()
+      return got
+    },
+
+    /**
+     * 抓到奖品直接发兑换券（HOST_API 4）。走 `db.mintGameVouchers` → `postHarvest`。
+     *
+     * 不经过币：币是「买来的入场券」，券是「抓来的战利品」。混起来的话
+     * 娃娃就能变回币、币又能直接开局 —— 抓娃娃本身能续玩。
+     */
+    mintVoucher: async (count, memo) => {
+      const got = await mintGameVouchers(gameId, count, memo)
       if (got > 0) await deps.refresh()
       return got
     },
