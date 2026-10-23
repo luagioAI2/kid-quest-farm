@@ -480,7 +480,7 @@ let coinsAfterPlay = 0
   check('视角 / 店员挪进了顶栏', playGeo.camInHud)
   check('★ 顶栏那颗币可点（换币入口），没被别的层盖住', playGeo.coinHit, playGeo.coinText)
   check('★ 3D 画面右侧 35% 高度处是画布，没有按钮压着', playGeo.rightFree === 'CANVAS', playGeo.rightFree)
-  check('★ 娃娃界面底部也有动作条（背包 / 回收 / 排行）', playGeo.barTiles.join('/') === '背包/回收/排行', playGeo.barTiles.join('/'))
+  check('★ 娃娃界面底部也有动作条（背包 / 排行）', playGeo.barTiles.join('/') === '背包/排行', playGeo.barTiles.join('/'))
   check('顶栏 / 画面 / 操作区 / 动作条 四段不重叠',
     playGeo.hud.b <= playGeo.vp.t + 1 && playGeo.vp.b <= playGeo.ctrl.t + 1 && playGeo.ctrl.b <= playGeo.bar.t + 1,
     `hud↓${playGeo.hud.b} vp↓${playGeo.vp.b} ctrl↓${playGeo.ctrl.b} bar↓${playGeo.bar.b}`)
@@ -568,16 +568,30 @@ console.log('\n【③b 卖娃娃 → 兑换券（币不动）】')
   await wait(500)
 
   check('从机台退回列表', await clickSel('#backBtn'))
-  check('点动作条上的「回收」', await clickSel('#sellBtn'))
-  check('回收页出来了', await waitFor('#sell:not(.hidden)', 10000))
+  check('点动作条上的「背包」', await clickSel('#colBtn'))
+  check('背包页出来了', await waitFor('#collection:not(.hidden)', 10000))
 
-  const cellText = await page.evaluate(() => {
-    const c = document.querySelector('#sellGrid .cell')
+  // 2026-10-23：回收屏删了，卖娃娃是点背包里**有货的那一格**。
+  // 用 `data-owned` 过滤，不能取第一个 `.cell` —— 图鉴的 `???` 也占格子。
+  const OWN = '#colGrid .cell[data-owned]:not([data-owned="0"])'
+  const bagShape = await page.evaluate((sel) => ({
+    own: document.querySelectorAll(sel).length,
+    cells: document.querySelectorAll('#colGrid .cell').length,
+    combos: document.querySelectorAll('#comboWrap .comboCard').length,
+    sellBtn: document.querySelectorAll('#sellBtn').length,
+    sellScreen: document.querySelectorAll('#sell').length,
+  }), OWN)
+  check('★ 回收按钮 / 回收屏都删掉了（只剩背包）', bagShape.sellBtn === 0 && bagShape.sellScreen === 0, JSON.stringify(bagShape))
+  check('背包里有 1 个可卖的格子', bagShape.own === 1, JSON.stringify(bagShape))
+  check('背包顶部有 5 个组合', bagShape.combos === 5, String(bagShape.combos))
+
+  const cellText = await page.evaluate((sel) => {
+    const c = document.querySelector(sel)
     return c ? c.textContent.replace(/\s+/g, ' ').trim() : ''
-  })
-  check('回收格子上标的是 🎟️ 兑换券（不是 🧸 币）', cellText.includes('🎟️'), cellText)
+  }, OWN)
+  check('背包格子上标的是 🎟️ 兑换券（不是 🧸 币）', cellText.includes('🎟️'), cellText)
 
-  check('点开娃娃', await clickSel('#sellGrid .cell'))
+  check('点开娃娃', await clickSel(OWN))
   check('卖 1 个', await clickSel('#rcOne'))
 
   const credited = await page
@@ -593,8 +607,54 @@ console.log('\n【③b 卖娃娃 → 兑换券（币不动）】')
   check('★★ 卖娃娃**不给币**（币一分没变）', coinsAfter === coinsBefore, `${coinsBefore} → ${coinsAfter}`)
   await page.screenshot({ path: join(OUT, `${VIEWPORT}-sell.png`) })
 
+  // ③c 组合兑换：凑齐三只抱枕 → 一起换 7 张（单卖是 6 张）
+  //
+  // 为什么在真宿主里也要验一次：组合只调 `host.mintVoucher`，但**一次要发 7 张**，
+  // 而单件是 2 张。宿主那边如果对单笔金额有隐含上限（或者把 memo 当 key 去重），
+  // 只有真账本能暴露出来。
+  await page.evaluate(() => {
+    window.__debug.grant('pillow_pig', 1)
+    window.__debug.grant('pillow_rabbit', 1)
+    window.__debug.grant('pillow_dog', 1)
+  })
+  check('回到列表（组合条要重画）', await clickSel('#colBack'))
+  await waitFor('#list:not(.hidden)', 8000)
+  check('再进背包', await clickSel('#colBtn'))
+  check('背包又出来了', await waitFor('#collection:not(.hidden)', 10000))
+
+  const comboBefore = await snap()
+  const comboReady = await page.evaluate(() => document.querySelector('#comboWrap .comboCard[data-combo="pillow3"]')?.dataset.ready)
+  check('凑齐三只抱枕 → 组合卡变「可兑换」', comboReady === '1', String(comboReady))
+
+  check('点组合卡', await clickSel('#comboWrap .comboCard[data-combo="pillow3"]'))
+  check('兑换面板弹出来了', await waitFor('#sellModal:not(.hidden)', 5000))
+  const sheetText = await page.evaluate(() => document.querySelector('#sellSheet')?.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+  check('面板上写清了「基础 6 + 加成 1」', sheetText.includes('6') && sheetText.includes('1'), sheetText.slice(0, 80))
+
+  check('一起兑换', await clickSel('#cbGo'))
+  const comboCredited = await page
+    .waitForFunction(
+      (want) => window.__kqf__.getState().harvestBalance === want,
+      { timeout: 15000 },
+      comboBefore.vouchers + 7,
+    )
+    .then(() => true, () => false)
+  const comboAfter = await snap()
+  check(
+    `★ 组合兑换 +7（${comboBefore.vouchers} → ${comboAfter.vouchers}）—— 比单卖三只的 6 张多 1 张`,
+    comboCredited,
+    `${comboBefore.vouchers} → ${comboAfter.vouchers}`,
+  )
+  const comboStock = await page.evaluate(() => {
+    const s = window.__debug?.stock ?? {}
+    return { pig: s.pillow_pig ?? 0, rabbit: s.pillow_rabbit ?? 0, dog: s.pillow_dog ?? 0 }
+  })
+  check('★ 每样消耗 1 个（三只都清零）', comboStock.pig === 0 && comboStock.rabbit === 0 && comboStock.dog === 0, JSON.stringify(comboStock))
+  const comboCoins = await page.evaluate(() => window.__debug?.coins ?? -1)
+  check('★ 组合兑换**不动币**（还是 ' + coinsBefore + ' 个）', comboCoins === coinsBefore, `${coinsBefore} → ${comboCoins}`)
+
   // ④ 是从「机台里按返回」开始的，这里把状态还回去
-  check('回到列表', await clickSel('#sellBack'))
+  check('回到列表', await clickSel('#colBack'))
   await waitFor('#list:not(.hidden)', 8000)
   check('重新进机台（④ 要从这里开始）', await clickSel('#mGrid .mcell:not(.wip)'))
   check('又进机台画面了', await waitFor('#play:not(.hidden)', 15000))
@@ -617,10 +677,10 @@ let vouchersBefore = 0
   check('从机台退回列表（返回键）', leftPlay)
   check('列表又出来了', await waitFor('#list:not(.hidden)', 8000))
 
-  const navOk = await clickSel('#sellBtn')
-  check('点首页底部动作条上的「回收」', navOk)
-  const sellUp = await waitFor('#sell:not(.hidden)', 10000)
-  check('回收页出来了', sellUp)
+  const navOk = await clickSel('#colBtn')
+  check('点首页底部动作条上的「背包」', navOk)
+  const sellUp = await waitFor('#collection:not(.hidden)', 10000)
+  check('背包页出来了（换券条在底部）', sellUp)
 
   const bar = await page.evaluate(() => {
     const btn = document.querySelector('#rcVoucher')

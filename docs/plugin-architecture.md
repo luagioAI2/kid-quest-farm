@@ -79,7 +79,7 @@ public/games/<id>/<包>                 catalog.json + catalog.json.sig
 `__` 开头是**宿主保留**：`storage.get/set` 撞上会**抛**，`list()` 会滤掉。
 这条是堵后门 —— 否则 `storage.set('__coin', [])` 能把自己的币账本清空。
 
-## 3. 契约 v3（`HOST_API = 3`）
+## 3. 契约 v4（`HOST_API = 4`）
 
 ```ts
 export interface GameBundle {
@@ -145,7 +145,7 @@ interface MountContext {
 > jsdom 完全不做布局，假宿主又恰好给了绝对定位盒子 ⇒ **只有真 App + 截图看得见**。
 > 验收判据因此写成「根节点高度 **等于** 容器高度」（不是 `> 0`）。
 
-### 3.4 `HostApi`（10 个方法）
+### 3.4 `HostApi`（以 `src/games/plugin.ts` 的 `HostApi` 为准）
 
 | 方法 | 语义 | 关键约束 |
 | --- | --- | --- |
@@ -185,11 +185,17 @@ interface MountContext {
 ```ts
 economy: {
   playCost: 1,            // 一局花多少积分（= 币价，1 币 = 1 积分）
-  expectedPayout: 0.6,    // 一局期望产出多少币（**申报值**）
-  capPerPrize: 5,         // 单件最多回收多少币
+  expectedPayout: 0.75,   // 一局期望产出多少币（**申报值**）
+  capPerPrize: 6,         // 单件最多回收多少币
   voucherPerCoin: 1,      // 1 币换几张兑换券；不写 = 不开放兑换
 }
 ```
+
+> 这两个数（`0.75` / `6`）是 prizepark 加了「组合兑换」之后的值，别照抄。
+> 它的基础期望是 0.6，组合凑齐能多给 25% 加成，所以**实际**期望是
+> `0.6 × 1.25 = 0.75`；`capPerPrize` 也按组合里「总价 ÷ 件数」的最大值（12/2 = 6）取。
+> 只要产品里存在**任何**让单次产出变高的机制（组合、连击、暴击、活动倍率），
+> 申报的 `expectedPayout` 就必须是**加成之后**的数 —— 按基础值申报等于漏报。
 
 `src/domain/pluginEconomy.ts` 的 `checkPluginEconomy` 在**安装时**把关：
 
