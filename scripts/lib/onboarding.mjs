@@ -33,6 +33,28 @@ function waitFor(page, sel, timeout = 8000) {
 }
 
 /**
+ * 等引导**决定要不要弹**（`App.tsx` 的 `entered` 闸门）。
+ *
+ * ⚠️ ★ 这一步不能省，也不只是「多等一会儿」。实测（390×844，SwiftShader）：
+ *   - `__kqf__` 就绪后约 1.5s 还在启动页（`header` 没有、`[data-step]` 没有）
+ *   - 约 4s 时主界面出来，`useLayoutEffect` 同一帧盖上向导
+ *   ⇒ 在 `__kqf__` 一就绪就查一次 `[data-step]`，读到的是 **`false`**，
+ *     函数按「老 profile，本来就不弹」返回，脚本继续跑。
+ *     **引导随后才弹出来**，于是后面每一次截图都是引导页、每一次点击都点在它后面。
+ *
+ *   这条 bug 特别阴：`.click()` 绕过命中测试，断言照样全绿；只有**看图**才发现。
+ *   所以这里主动等主界面出现，再给 `useLayoutEffect` 一帧的余量。
+ */
+async function waitForGate(page, timeout = 20000) {
+  const entered = await page
+    .waitForFunction(() => !!document.querySelector('header') || !!document.querySelector('[data-step]'), { timeout })
+    .then(() => true, () => false)
+  // 主界面已经画出来了但向导还没盖上 —— layoutEffect 在同一帧，这里只是保险
+  await new Promise((r) => setTimeout(r, 350))
+  return entered
+}
+
+/**
  * 把新手引导整条走完（含给孩子的四步导览）。
  *
  * 走的是「以后再说」而不是真设家长密码 —— 免得把 `parentPin` 改掉，
@@ -41,6 +63,7 @@ function waitFor(page, sel, timeout = 8000) {
  * @returns {Promise<boolean>} 本来有没有弹引导（false = 没弹，可能是老 profile）
  */
 export async function dismissOnboarding(page) {
+  await waitForGate(page)
   if (!(await page.evaluate(() => !!document.querySelector('[data-step]')))) {
     return false
   }

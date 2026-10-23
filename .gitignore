@@ -56,6 +56,12 @@ android/app/src/main/assets/capacitor.plugins.json
 # 端到端截图
 screenshots/
 
+# 临时走查 / 调试图（`scripts/_xxx.mjs` 产出）。要留的进 screenshots/。
+# ⚠️ 写成 `scripts/_` 是**无效**的（它要求整段路径就叫 `scripts/_`）；
+#    前缀匹配要带 `*`。
+shots/
+scripts/_*
+
 # e2e 跑起来时 Chrome 的 profile 目录（IndexedDB 就住在这里面）。
 # 特意放在项目同盘、而不是系统临时目录 —— 系统盘满会让 Chrome 抛
 # FILE_ERROR_NO_SPACE，症状是 e2e 随机挂在任意一条用例上。

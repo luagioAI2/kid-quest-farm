@@ -10,7 +10,7 @@ var e = {
 	PAN: 1,
 	DOLLY_PAN: 2,
 	DOLLY_ROTATE: 3
-}, n = 1e3, r = 1001, i = 1002, a = 1003, o = 1004, s = 1005, c = 1006, l = 1007, u = 1008, d = 1009, f = 1010, p = 1011, m = 1012, h = 1013, g = 1014, _ = 1015, v = 1016, y = 1017, b = 1018, x = 1020, S = 35902, C = 35899, w = 1021, T = 1022, E = 1023, D = 1026, ee = 1027, O = 1028, k = 1029, te = 1030, ne = 1031, re = 1033, A = 33776, ie = 33777, j = 33778, ae = 33779, oe = 35840, se = 35841, ce = 35842, le = 35843, ue = 36196, de = 37492, fe = 37496, pe = 37488, me = 37489, he = 37490, ge = 37491, _e = 37808, ve = 37809, ye = 37810, be = 37811, xe = 37812, Se = 37813, Ce = 37814, we = 37815, Te = 37816, Ee = 37817, De = 37818, Oe = 37819, ke = 37820, Ae = 37821, je = 36492, Me = 36494, Ne = 36495, Pe = 36283, Fe = 36284, Ie = 36285, M = 36286, Le = 2300, Re = 2301, ze = 2302, N = 2303, P = 2400, F = 2401, Be = 2402, Ve = 3200, He = "srgb", Ue = "srgb-linear", We = "linear", Ge = "srgb", Ke = 7680, qe = 35044, Je = 2e3;
+}, n = 1e3, r = 1001, i = 1002, a = 1003, o = 1004, s = 1005, c = 1006, l = 1007, u = 1008, d = 1009, f = 1010, p = 1011, m = 1012, h = 1013, g = 1014, _ = 1015, v = 1016, y = 1017, b = 1018, x = 1020, S = 35902, C = 35899, w = 1021, T = 1022, E = 1023, D = 1026, ee = 1027, O = 1028, k = 1029, te = 1030, ne = 1031, re = 1033, A = 33776, ie = 33777, j = 33778, ae = 33779, oe = 35840, se = 35841, ce = 35842, le = 35843, ue = 36196, de = 37492, fe = 37496, pe = 37488, me = 37489, he = 37490, ge = 37491, _e = 37808, ve = 37809, ye = 37810, be = 37811, xe = 37812, Se = 37813, Ce = 37814, we = 37815, Te = 37816, Ee = 37817, De = 37818, Oe = 37819, ke = 37820, Ae = 37821, je = 36492, Me = 36494, Ne = 36495, Pe = 36283, Fe = 36284, Ie = 36285, M = 36286, Le = 2300, Re = 2301, ze = 2302, N = 2303, Be = 2400, Ve = 2401, He = 2402, Ue = 3200, We = "srgb", Ge = "srgb-linear", Ke = "linear", P = "srgb", F = 7680, qe = 35044, Je = 2e3;
 function Ye(e) {
 	for (let t = e.length - 1; t >= 0; --t) if (e[t] >= 65535) return !0;
 	return !1;
@@ -1005,7 +1005,7 @@ var Mt = {
 function Bt() {
 	let e = {
 		enabled: !0,
-		workingColorSpace: Ue,
+		workingColorSpace: Ge,
 		spaces: {},
 		convert: function(e, t, n) {
 			return this.enabled === !1 || t === n || !t || !n ? e : (this.spaces[t].transfer === "srgb" && (e.r = Ht(e.r), e.g = Ht(e.g), e.b = Ht(e.b)), this.spaces[t].primaries !== this.spaces[n].primaries && (e.applyMatrix3(this.spaces[t].toXYZ), e.applyMatrix3(this.spaces[n].fromXYZ)), this.spaces[n].transfer === "srgb" && (e.r = Ut(e.r), e.g = Ut(e.g), e.b = Ut(e.b)), e);
@@ -1020,7 +1020,7 @@ function Bt() {
 			return this.spaces[e].primaries;
 		},
 		getTransfer: function(e) {
-			return e === "" ? We : this.spaces[e].transfer;
+			return e === "" ? Ke : this.spaces[e].transfer;
 		},
 		getToneMappingMode: function(e) {
 			return this.spaces[e].outputColorSpaceConfig.toneMappingMode || "standard";
@@ -1059,24 +1059,24 @@ function Bt() {
 		.0722
 	], r = [.3127, .329];
 	return e.define({
-		[Ue]: {
+		[Ge]: {
 			primaries: t,
 			whitePoint: r,
-			transfer: We,
+			transfer: Ke,
 			toXYZ: Rt,
 			fromXYZ: zt,
 			luminanceCoefficients: n,
-			workingColorSpaceConfig: { unpackColorSpace: He },
-			outputColorSpaceConfig: { drawingBufferColorSpace: He }
+			workingColorSpaceConfig: { unpackColorSpace: We },
+			outputColorSpaceConfig: { drawingBufferColorSpace: We }
 		},
-		[He]: {
+		[We]: {
 			primaries: t,
 			whitePoint: r,
-			transfer: Ge,
+			transfer: P,
 			toXYZ: Rt,
 			fromXYZ: zt,
 			luminanceCoefficients: n,
-			outputColorSpaceConfig: { drawingBufferColorSpace: He }
+			outputColorSpaceConfig: { drawingBufferColorSpace: We }
 		}
 	}), e;
 }
@@ -2434,7 +2434,7 @@ var zn = class {
 	setScalar(e) {
 		return this.r = e, this.g = e, this.b = e, this;
 	}
-	setHex(e, t = He) {
+	setHex(e, t = We) {
 		return e = Math.floor(e), this.r = (e >> 16 & 255) / 255, this.g = (e >> 8 & 255) / 255, this.b = (e & 255) / 255, Vt.colorSpaceToWorking(this, t), this;
 	}
 	setRGB(e, t, n, r = Vt.workingColorSpace) {
@@ -2448,7 +2448,7 @@ var zn = class {
 		}
 		return Vt.colorSpaceToWorking(this, r), this;
 	}
-	setStyle(e, t = He) {
+	setStyle(e, t = We) {
 		function n(t) {
 			t !== void 0 && parseFloat(t) < 1 && I("Color: Alpha component of " + e + " will be ignored.");
 		}
@@ -2475,7 +2475,7 @@ var zn = class {
 		} else if (e && e.length > 0) return this.setColorName(e, t);
 		return this;
 	}
-	setColorName(e, t = He) {
+	setColorName(e, t = We) {
 		let n = Fn[e.toLowerCase()];
 		return n === void 0 ? I("Color: Unknown color " + e) : this.setHex(n, t), this;
 	}
@@ -2497,10 +2497,10 @@ var zn = class {
 	convertLinearToSRGB() {
 		return this.copyLinearToSRGB(this), this;
 	}
-	getHex(e = He) {
+	getHex(e = We) {
 		return Vt.workingToColorSpace(Bn.copy(this), e), Math.round(dt(Bn.r * 255, 0, 255)) * 65536 + Math.round(dt(Bn.g * 255, 0, 255)) * 256 + Math.round(dt(Bn.b * 255, 0, 255));
 	}
-	getHexString(e = He) {
+	getHexString(e = We) {
 		return ("000000" + this.getHex(e).toString(16)).slice(-6);
 	}
 	getHSL(e, t = Vt.workingColorSpace) {
@@ -2525,7 +2525,7 @@ var zn = class {
 	getRGB(e, t = Vt.workingColorSpace) {
 		return Vt.workingToColorSpace(Bn.copy(this), t), e.r = Bn.r, e.g = Bn.g, e.b = Bn.b, e;
 	}
-	getStyle(e = He) {
+	getStyle(e = We) {
 		Vt.workingToColorSpace(Bn.copy(this), e);
 		let t = Bn.r, n = Bn.g, r = Bn.b;
 		return e === "srgb" ? `rgb(${Math.round(t * 255)},${Math.round(n * 255)},${Math.round(r * 255)})` : `color(${e} ${t.toFixed(3)} ${n.toFixed(3)} ${r.toFixed(3)})`;
@@ -3477,7 +3477,7 @@ var vr = /*@__PURE__*/ new z(), yr = /*@__PURE__*/ new R(), br = 0, xr = class e
 	}
 }, Vr = 0, Hr = class extends at {
 	constructor() {
-		super(), this.isMaterial = !0, Object.defineProperty(this, "id", { value: Vr++ }), this.uuid = ut(), this.name = "", this.type = "Material", this.blending = 1, this.side = 0, this.vertexColors = !1, this.opacity = 1, this.transparent = !1, this.alphaHash = !1, this.blendSrc = 204, this.blendDst = 205, this.blendEquation = 100, this.blendSrcAlpha = null, this.blendDstAlpha = null, this.blendEquationAlpha = null, this.blendColor = new zn(0, 0, 0), this.blendAlpha = 0, this.depthFunc = 3, this.depthTest = !0, this.depthWrite = !0, this.stencilWriteMask = 255, this.stencilFunc = 519, this.stencilRef = 0, this.stencilFuncMask = 255, this.stencilFail = Ke, this.stencilZFail = Ke, this.stencilZPass = Ke, this.stencilWrite = !1, this.clippingPlanes = null, this.clipIntersection = !1, this.clipShadows = !1, this.shadowSide = null, this.colorWrite = !0, this.precision = null, this.polygonOffset = !1, this.polygonOffsetFactor = 0, this.polygonOffsetUnits = 0, this.dithering = !1, this.alphaToCoverage = !1, this.premultipliedAlpha = !1, this.forceSinglePass = !1, this.allowOverride = !0, this.visible = !0, this.toneMapped = !0, this.userData = {}, this.version = 0, this._alphaTest = 0;
+		super(), this.isMaterial = !0, Object.defineProperty(this, "id", { value: Vr++ }), this.uuid = ut(), this.name = "", this.type = "Material", this.blending = 1, this.side = 0, this.vertexColors = !1, this.opacity = 1, this.transparent = !1, this.alphaHash = !1, this.blendSrc = 204, this.blendDst = 205, this.blendEquation = 100, this.blendSrcAlpha = null, this.blendDstAlpha = null, this.blendEquationAlpha = null, this.blendColor = new zn(0, 0, 0), this.blendAlpha = 0, this.depthFunc = 3, this.depthTest = !0, this.depthWrite = !0, this.stencilWriteMask = 255, this.stencilFunc = 519, this.stencilRef = 0, this.stencilFuncMask = 255, this.stencilFail = F, this.stencilZFail = F, this.stencilZPass = F, this.stencilWrite = !1, this.clippingPlanes = null, this.clipIntersection = !1, this.clipShadows = !1, this.shadowSide = null, this.colorWrite = !0, this.precision = null, this.polygonOffset = !1, this.polygonOffsetFactor = 0, this.polygonOffsetUnits = 0, this.dithering = !1, this.alphaToCoverage = !1, this.premultipliedAlpha = !1, this.forceSinglePass = !1, this.allowOverride = !0, this.visible = !0, this.toneMapped = !0, this.userData = {}, this.version = 0, this._alphaTest = 0;
 	}
 	get alphaTest() {
 		return this._alphaTest;
@@ -5425,7 +5425,7 @@ var ao = {
 	}
 }, po = class extends Hr {
 	constructor(e) {
-		super(), this.isMeshDepthMaterial = !0, this.type = "MeshDepthMaterial", this.depthPacking = Ve, this.map = null, this.alphaMap = null, this.displacementMap = null, this.displacementScale = 1, this.displacementBias = 0, this.wireframe = !1, this.wireframeLinewidth = 1, this.setValues(e);
+		super(), this.isMeshDepthMaterial = !0, this.type = "MeshDepthMaterial", this.depthPacking = Ue, this.map = null, this.alphaMap = null, this.displacementMap = null, this.displacementScale = 1, this.displacementBias = 0, this.wireframe = !1, this.wireframeLinewidth = 1, this.setValues(e);
 	}
 	copy(e) {
 		return super.copy(e), this.depthPacking = e.depthPacking, this.map = e.map, this.alphaMap = e.alphaMap, this.displacementMap = e.displacementMap, this.displacementScale = e.displacementScale, this.displacementBias = e.displacementBias, this.wireframe = e.wireframe, this.wireframeLinewidth = e.wireframeLinewidth, this;
@@ -5505,26 +5505,26 @@ var _o = class {
 }, vo = class extends _o {
 	constructor(e, t, n, r) {
 		super(e, t, n, r), this._weightPrev = -0, this._offsetPrev = -0, this._weightNext = -0, this._offsetNext = -0, this.DefaultSettings_ = {
-			endingStart: P,
-			endingEnd: P
+			endingStart: Be,
+			endingEnd: Be
 		};
 	}
 	intervalChanged_(e, t, n) {
 		let r = this.parameterPositions, i = e - 2, a = e + 1, o = r[i], s = r[a];
 		if (o === void 0) switch (this.getSettings_().endingStart) {
-			case F:
+			case Ve:
 				i = e, o = 2 * t - n;
 				break;
-			case Be:
+			case He:
 				i = r.length - 2, o = t + r[i] - r[i + 1];
 				break;
 			default: i = e, o = n;
 		}
 		if (s === void 0) switch (this.getSettings_().endingEnd) {
-			case F:
+			case Ve:
 				a = e, s = 2 * n - t;
 				break;
-			case Be:
+			case He:
 				a = 1, s = n + r[1] - r[0];
 				break;
 			default: a = e - 1, s = t;
@@ -7278,7 +7278,7 @@ function As(e, t, n, r, i, a) {
 			this.matrixWorld.copyPosition(n.matrixWorld);
 		}, Object.defineProperty(l.material, "envMap", { get: function() {
 			return this.uniforms.envMap.value;
-		} }), r.update(l)), l.material.uniforms.envMap.value = i, l.material.uniforms.backgroundBlurriness.value = n.backgroundBlurriness, l.material.uniforms.backgroundIntensity.value = n.backgroundIntensity, l.material.uniforms.backgroundRotation.value.setFromMatrix4(Os.makeRotationFromEuler(n.backgroundRotation)).transpose(), i.isCubeTexture && i.isRenderTargetTexture === !1 && l.material.uniforms.backgroundRotation.value.premultiply(ks), l.material.toneMapped = Vt.getTransfer(i.colorSpace) !== Ge, (u !== i || d !== i.version || f !== e.toneMapping) && (l.material.needsUpdate = !0, u = i, d = i.version, f = e.toneMapping), l.layers.enableAll(), t.unshift(l, l.geometry, l.material, 0, 0, null)) : i && i.isTexture && (c === void 0 && (c = new oi(new qa(2, 2), new co({
+		} }), r.update(l)), l.material.uniforms.envMap.value = i, l.material.uniforms.backgroundBlurriness.value = n.backgroundBlurriness, l.material.uniforms.backgroundIntensity.value = n.backgroundIntensity, l.material.uniforms.backgroundRotation.value.setFromMatrix4(Os.makeRotationFromEuler(n.backgroundRotation)).transpose(), i.isCubeTexture && i.isRenderTargetTexture === !1 && l.material.uniforms.backgroundRotation.value.premultiply(ks), l.material.toneMapped = Vt.getTransfer(i.colorSpace) !== P, (u !== i || d !== i.version || f !== e.toneMapping) && (l.material.needsUpdate = !0, u = i, d = i.version, f = e.toneMapping), l.layers.enableAll(), t.unshift(l, l.geometry, l.material, 0, 0, null)) : i && i.isTexture && (c === void 0 && (c = new oi(new qa(2, 2), new co({
 			name: "BackgroundMaterial",
 			uniforms: eo(Es.background.uniforms),
 			vertexShader: Es.background.vertexShader,
@@ -7290,7 +7290,7 @@ function As(e, t, n, r, i, a) {
 			allowOverride: !1
 		})), c.geometry.deleteAttribute("normal"), Object.defineProperty(c.material, "map", { get: function() {
 			return this.uniforms.t2D.value;
-		} }), r.update(c)), c.material.uniforms.t2D.value = i, c.material.uniforms.backgroundIntensity.value = n.backgroundIntensity, c.material.toneMapped = Vt.getTransfer(i.colorSpace) !== Ge, i.matrixAutoUpdate === !0 && i.updateMatrix(), c.material.uniforms.uvTransform.value.copy(i.matrix), (u !== i || d !== i.version || f !== e.toneMapping) && (c.material.needsUpdate = !0, u = i, d = i.version, f = e.toneMapping), c.layers.enableAll(), t.unshift(c, c.geometry, c.material, 0, 0, null));
+		} }), r.update(c)), c.material.uniforms.t2D.value = i, c.material.uniforms.backgroundIntensity.value = n.backgroundIntensity, c.material.toneMapped = Vt.getTransfer(i.colorSpace) !== P, i.matrixAutoUpdate === !0 && i.updateMatrix(), c.material.uniforms.uvTransform.value.copy(i.matrix), (u !== i || d !== i.version || f !== e.toneMapping) && (c.material.needsUpdate = !0, u = i, d = i.version, f = e.toneMapping), c.layers.enableAll(), t.unshift(c, c.geometry, c.material, 0, 0, null));
 	}
 	function g(t, r) {
 		t.getRGB(Ds, io(e)), n.buffers.color.setClear(Ds.r, Ds.g, Ds.b, r, a);
@@ -7668,7 +7668,7 @@ var Fs = 4, Is = 6, Ls = 20, Rs = 256, zs = /*@__PURE__*/ new Qo(), Bs = /*@__PU
 			generateMipmaps: !1,
 			type: v,
 			format: E,
-			colorSpace: Ue,
+			colorSpace: Ge,
 			depthBuffer: !1
 		}, r = Ys(e, t, n);
 		if (this._pingPongRenderTarget === null || this._pingPongRenderTarget.width !== e || this._pingPongRenderTarget.height !== t) {
@@ -8688,8 +8688,8 @@ function wl(e) {
 	Vt._getMatrix(Cl, Vt.workingColorSpace, e);
 	let t = `mat3( ${Cl.elements.map((e) => e.toFixed(4))} )`;
 	switch (Vt.getTransfer(e)) {
-		case We: return [t, "LinearTransferOETF"];
-		case Ge: return [t, "sRGBTransferOETF"];
+		case Ke: return [t, "LinearTransferOETF"];
+		case P: return [t, "sRGBTransferOETF"];
 		default: return I("WebGLProgram: Unsupported color space: ", e), [t, "LinearTransferOETF"];
 	}
 }
@@ -10250,20 +10250,20 @@ function Eu(e, t) {
 	function N(t) {
 		ce.equals(t) === !1 && (e.scissor(t.x, t.y, t.z, t.w), ce.copy(t));
 	}
-	function P(t) {
+	function Be(t) {
 		le.equals(t) === !1 && (e.viewport(t.x, t.y, t.z, t.w), le.copy(t));
 	}
-	function F(t, n) {
+	function Ve(t, n) {
 		let r = l.get(n);
 		r === void 0 && (r = /* @__PURE__ */ new WeakMap(), l.set(n, r));
 		let i = r.get(t);
 		i === void 0 && (i = e.getUniformBlockIndex(n, t.name), r.set(t, i));
 	}
-	function Be(t, n) {
+	function He(t, n) {
 		let r = l.get(n).get(t);
 		c.get(n) !== r && (e.uniformBlockBinding(n, r, t.__bindingPointIndex), c.set(n, r));
 	}
-	function Ve() {
+	function Ue() {
 		e.disable(e.BLEND), e.disable(e.CULL_FACE), e.disable(e.DEPTH_TEST), e.disable(e.POLYGON_OFFSET_FILL), e.disable(e.SCISSOR_TEST), e.disable(e.STENCIL_TEST), e.disable(e.SAMPLE_ALPHA_TO_COVERAGE), e.blendEquation(e.FUNC_ADD), e.blendFunc(e.ONE, e.ZERO), e.blendFuncSeparate(e.ONE, e.ZERO, e.ONE, e.ZERO), e.blendColor(0, 0, 0, 0), e.colorMask(!0, !0, !0, !0), e.clearColor(0, 0, 0, 0), e.depthMask(!0), e.depthFunc(e.LESS), o.setReversed(!1), e.clearDepth(1), e.stencilMask(4294967295), e.stencilFunc(e.ALWAYS, 0, 4294967295), e.stencilOp(e.KEEP, e.KEEP, e.KEEP), e.clearStencil(0), e.cullFace(e.BACK), e.frontFace(e.CCW), e.polygonOffset(0, 0), e.activeTexture(e.TEXTURE0), e.bindFramebuffer(e.FRAMEBUFFER, null), e.bindFramebuffer(e.DRAW_FRAMEBUFFER, null), e.bindFramebuffer(e.READ_FRAMEBUFFER, null), e.useProgram(null), e.lineWidth(1), e.scissor(0, 0, e.canvas.width, e.canvas.height), e.viewport(0, 0, e.canvas.width, e.canvas.height), e.pixelStorei(e.PACK_ALIGNMENT, 4), e.pixelStorei(e.UNPACK_ALIGNMENT, 4), e.pixelStorei(e.UNPACK_FLIP_Y_WEBGL, !1), e.pixelStorei(e.UNPACK_PREMULTIPLY_ALPHA_WEBGL, !1), e.pixelStorei(e.UNPACK_COLORSPACE_CONVERSION_WEBGL, e.BROWSER_DEFAULT_WEBGL), e.pixelStorei(e.PACK_ROW_LENGTH, 0), e.pixelStorei(e.PACK_SKIP_PIXELS, 0), e.pixelStorei(e.PACK_SKIP_ROWS, 0), e.pixelStorei(e.UNPACK_ROW_LENGTH, 0), e.pixelStorei(e.UNPACK_IMAGE_HEIGHT, 0), e.pixelStorei(e.UNPACK_SKIP_PIXELS, 0), e.pixelStorei(e.UNPACK_SKIP_ROWS, 0), e.pixelStorei(e.UNPACK_SKIP_IMAGES, 0), u = {}, d = {}, j = null, ae = {}, f = {}, p = /* @__PURE__ */ new WeakMap(), m = [], h = null, g = !1, _ = null, v = null, y = null, b = null, x = null, S = null, C = null, w = new zn(0, 0, 0), T = 0, E = !1, D = null, ee = null, O = null, k = null, te = null, ce.set(0, 0, e.canvas.width, e.canvas.height), le.set(0, 0, e.canvas.width, e.canvas.height), a.reset(), o.reset(), s.reset();
 	}
 	return {
@@ -10293,8 +10293,8 @@ function Eu(e, t) {
 		texImage3D: Le,
 		pixelStorei: ze,
 		getParameter: Re,
-		updateUBOMapping: F,
-		uniformBlockBinding: Be,
+		updateUBOMapping: Ve,
+		uniformBlockBinding: He,
 		texStorage2D: Fe,
 		texStorage3D: Ie,
 		texSubImage2D: je,
@@ -10302,8 +10302,8 @@ function Eu(e, t) {
 		compressedTexSubImage2D: Ne,
 		compressedTexSubImage3D: Pe,
 		scissor: N,
-		viewport: P,
-		reset: Ve
+		viewport: Be,
+		reset: Ue
 	};
 }
 function Du(e, t, d, f, p, m, h) {
@@ -10345,7 +10345,7 @@ function Du(e, t, d, f, p, m, h) {
 		a && (c = t.get("EXT_texture_norm16"), c || I("WebGLRenderer: Unable to use normalized textures without EXT_texture_norm16 extension"));
 		let l = r;
 		if (r === e.RED && (i === e.FLOAT && (l = e.R32F), i === e.HALF_FLOAT && (l = e.R16F), i === e.UNSIGNED_BYTE && (l = e.R8), i === e.UNSIGNED_SHORT && c && (l = c.R16_EXT), i === e.SHORT && c && (l = c.R16_SNORM_EXT)), r === e.RED_INTEGER && (i === e.UNSIGNED_BYTE && (l = e.R8UI), i === e.UNSIGNED_SHORT && (l = e.R16UI), i === e.UNSIGNED_INT && (l = e.R32UI), i === e.BYTE && (l = e.R8I), i === e.SHORT && (l = e.R16I), i === e.INT && (l = e.R32I)), r === e.RG && (i === e.FLOAT && (l = e.RG32F), i === e.HALF_FLOAT && (l = e.RG16F), i === e.UNSIGNED_BYTE && (l = e.RG8), i === e.UNSIGNED_SHORT && c && (l = c.RG16_EXT), i === e.SHORT && c && (l = c.RG16_SNORM_EXT)), r === e.RG_INTEGER && (i === e.UNSIGNED_BYTE && (l = e.RG8UI), i === e.UNSIGNED_SHORT && (l = e.RG16UI), i === e.UNSIGNED_INT && (l = e.RG32UI), i === e.BYTE && (l = e.RG8I), i === e.SHORT && (l = e.RG16I), i === e.INT && (l = e.RG32I)), r === e.RGB_INTEGER && (i === e.UNSIGNED_BYTE && (l = e.RGB8UI), i === e.UNSIGNED_SHORT && (l = e.RGB16UI), i === e.UNSIGNED_INT && (l = e.RGB32UI), i === e.BYTE && (l = e.RGB8I), i === e.SHORT && (l = e.RGB16I), i === e.INT && (l = e.RGB32I)), r === e.RGBA_INTEGER && (i === e.UNSIGNED_BYTE && (l = e.RGBA8UI), i === e.UNSIGNED_SHORT && (l = e.RGBA16UI), i === e.UNSIGNED_INT && (l = e.RGBA32UI), i === e.BYTE && (l = e.RGBA8I), i === e.SHORT && (l = e.RGBA16I), i === e.INT && (l = e.RGBA32I)), r === e.RGB && (i === e.UNSIGNED_SHORT && c && (l = c.RGB16_EXT), i === e.SHORT && c && (l = c.RGB16_SNORM_EXT), i === e.UNSIGNED_INT_5_9_9_9_REV && (l = e.RGB9_E5), i === e.UNSIGNED_INT_10F_11F_11F_REV && (l = e.R11F_G11F_B10F)), r === e.RGBA) {
-			let t = s ? We : Vt.getTransfer(o);
+			let t = s ? Ke : Vt.getTransfer(o);
 			i === e.FLOAT && (l = e.RGBA32F), i === e.HALF_FLOAT && (l = e.RGBA16F), i === e.UNSIGNED_BYTE && (l = t === "srgb" ? e.SRGB8_ALPHA8 : e.RGBA8), i === e.UNSIGNED_SHORT && c && (l = c.RGBA16_EXT), i === e.SHORT && c && (l = c.RGBA16_SNORM_EXT), i === e.UNSIGNED_SHORT_4_4_4_4 && (l = e.RGBA4), i === e.UNSIGNED_SHORT_5_5_5_1 && (l = e.RGB5_A1);
 		}
 		return (l === e.R16F || l === e.R32F || l === e.RG16F || l === e.RG32F || l === e.RGBA16F || l === e.RGBA32F) && t.get("EXT_color_buffer_float"), l;
@@ -11907,7 +11907,7 @@ var Bu = class {
 			onShaderError: null
 		}, this.autoClear = !0, this.autoClearColor = !0, this.autoClearDepth = !0, this.autoClearStencil = !0, this.sortObjects = !0, this.clippingPlanes = [], this.localClippingEnabled = !1, this.toneMapping = 0, this.toneMappingExposure = 1, this.transmissionResolutionScale = 1;
 		let j = this, ae = !1, oe = null, se = null, ce = null, le = null;
-		this._outputColorSpace = He;
+		this._outputColorSpace = We;
 		let ue = 0, de = 0, fe = null, pe = -1, me = null, he = new Qt(), ge = new Qt(), _e = null, ve = new zn(0), ye = 0, be = t.width, xe = t.height, Se = 1, Ce = null, we = null, Te = new Qt(0, 0, be, xe), Ee = new Qt(0, 0, be, xe), De = !1, Oe = new Si(), ke = !1, Ae = !1, je = new rn(), Me = new z(), Ne = new Qt(), Pe = {
 			background: null,
 			fog: null,
@@ -11922,7 +11922,7 @@ var Bu = class {
 		function Le(e, n) {
 			return t.getContext(e, n);
 		}
-		let Re, ze, N, P, F, Be, Ve, Ue, We, Ge, Ke, qe, Ye, Xe, Ze, $e, tt, nt, it, at, ot, st, ct;
+		let Re, ze, N, Be, Ve, He, Ue, Ge, Ke, P, F, qe, Ye, Xe, Ze, $e, tt, nt, it, at, ot, st, ct;
 		try {
 			let e = {
 				alpha: !0,
@@ -11943,7 +11943,7 @@ var Bu = class {
 			throw t.removeEventListener("webglcontextlost", dt, !1), t.removeEventListener("webglcontextrestored", ft, !1), t.removeEventListener("webglcontextcreationerror", pt, !1), L("WebGLRenderer: " + e.message), e;
 		}
 		function lt() {
-			Re = new ic(M), Re.init(), ot = new Ou(M, Re), ze = new Ns(M, Re, e, ot), N = new Eu(M, Re), ze.reversedDepthBuffer && p && N.buffers.depth.setReversed(!0), se = M.createFramebuffer(), ce = M.createFramebuffer(), le = M.createFramebuffer(), P = new sc(M), F = new ou(), Be = new Du(M, Re, N, F, ze, ot, P), Ve = new rc(j), Ue = new ws(M), st = new js(M, Ue), We = new ac(M, Ue, P, st), Ge = new lc(M, We, Ue, st, P), nt = new cc(M, ze, Be), Ze = new Ps(F), Ke = new au(j, Ve, Re, ze, st, Ze), qe = new Fu(j, F), Ye = new uu(), Xe = new _u(Re), tt = new As(j, Ve, N, Ge, _, s), $e = new Tu(j, Ge, ze), ct = new Iu(M, P, ze, N), it = new Ms(M, Re, P), at = new oc(M, Re, P), P.programs = Ke.programs, j.capabilities = ze, j.extensions = Re, j.properties = F, j.renderLists = Ye, j.shadowMap = $e, j.state = N, j.info = P;
+			Re = new ic(M), Re.init(), ot = new Ou(M, Re), ze = new Ns(M, Re, e, ot), N = new Eu(M, Re), ze.reversedDepthBuffer && p && N.buffers.depth.setReversed(!0), se = M.createFramebuffer(), ce = M.createFramebuffer(), le = M.createFramebuffer(), Be = new sc(M), Ve = new ou(), He = new Du(M, Re, N, Ve, ze, ot, Be), Ue = new rc(j), Ge = new ws(M), st = new js(M, Ge), Ke = new ac(M, Ge, Be, st), P = new lc(M, Ke, Ge, st, Be), nt = new cc(M, ze, He), Ze = new Ps(Ve), F = new au(j, Ue, Re, ze, st, Ze), qe = new Fu(j, Ve), Ye = new uu(), Xe = new _u(Re), tt = new As(j, Ue, N, P, _, s), $e = new Tu(j, P, ze), ct = new Iu(M, Be, ze, N), it = new Ms(M, Re, Be), at = new oc(M, Re, Be), Be.programs = F.programs, j.capabilities = ze, j.extensions = Re, j.properties = Ve, j.renderLists = Ye, j.shadowMap = $e, j.state = N, j.info = Be;
 		}
 		S !== 1009 && (ie = new dc(S, t.width, t.height, o, r, i));
 		let ut = new Mu(j, M);
@@ -12034,15 +12034,15 @@ var Bu = class {
 		}, this.setNodesHandler = function(e) {
 			e.setRenderer(this), oe = e;
 		}, this.dispose = function() {
-			t.removeEventListener("webglcontextlost", dt, !1), t.removeEventListener("webglcontextrestored", ft, !1), t.removeEventListener("webglcontextcreationerror", pt, !1), tt.dispose(), Ye.dispose(), Xe.dispose(), F.dispose(), Ve.dispose(), Ge.dispose(), st.dispose(), ct.dispose(), Ke.dispose(), ut.dispose(), ut.removeEventListener("sessionstart", bt), ut.removeEventListener("sessionend", xt), St.stop();
+			t.removeEventListener("webglcontextlost", dt, !1), t.removeEventListener("webglcontextrestored", ft, !1), t.removeEventListener("webglcontextcreationerror", pt, !1), tt.dispose(), Ye.dispose(), Xe.dispose(), Ve.dispose(), Ue.dispose(), P.dispose(), st.dispose(), ct.dispose(), F.dispose(), ut.dispose(), ut.removeEventListener("sessionstart", bt), ut.removeEventListener("sessionend", xt), St.stop();
 		};
 		function dt(e) {
 			e.preventDefault(), et("WebGLRenderer: Context Lost."), ae = !0;
 		}
 		function ft() {
 			et("WebGLRenderer: Context Restored."), ae = !1;
-			let e = P.autoReset, t = $e.enabled, n = $e.autoUpdate, r = $e.needsUpdate, i = $e.type;
-			lt(), P.autoReset = e, $e.enabled = t, $e.autoUpdate = n, $e.needsUpdate = r, $e.type = i;
+			let e = Be.autoReset, t = $e.enabled, n = $e.autoUpdate, r = $e.needsUpdate, i = $e.type;
+			lt(), Be.autoReset = e, $e.enabled = t, $e.autoUpdate = n, $e.needsUpdate = r, $e.type = i;
 		}
 		function pt(e) {
 			L("WebGLRenderer: A WebGL context could not be created. Reason: ", e.statusMessage);
@@ -12052,13 +12052,13 @@ var Bu = class {
 			t.removeEventListener("dispose", mt), ht(t);
 		}
 		function ht(e) {
-			gt(e), F.remove(e);
+			gt(e), Ve.remove(e);
 		}
 		function gt(e) {
-			let t = F.get(e).programs;
+			let t = Ve.get(e).programs;
 			t !== void 0 && (t.forEach(function(e) {
-				Ke.releaseProgram(e);
-			}), e.isShaderMaterial && Ke.releaseShaderCache(e));
+				F.releaseProgram(e);
+			}), e.isShaderMaterial && F.releaseShaderCache(e));
 		}
 		this.renderBufferDirect = function(e, t, n, r, i, a) {
 			t === null && (t = Pe);
@@ -12066,7 +12066,7 @@ var Bu = class {
 			N.setMaterial(r, o);
 			let c = n.index, l = 1;
 			if (r.wireframe === !0) {
-				if (c = We.getWireframeAttribute(n), c === void 0) return;
+				if (c = Ke.getWireframeAttribute(n), c === void 0) return;
 				l = 2;
 			}
 			let u = n.drawRange, d = n.attributes.position, f = u.start * l, p = (u.start + u.count) * l;
@@ -12075,7 +12075,7 @@ var Bu = class {
 			if (m < 0 || m === Infinity) return;
 			st.setup(i, r, s, n, c);
 			let h, g = it;
-			if (c !== null && (h = Ue.get(c), g = at, g.setIndex(h)), i.isMesh) r.wireframe === !0 ? (N.setLineWidth(r.wireframeLinewidth * Ie()), g.setMode(M.LINES)) : g.setMode(M.TRIANGLES);
+			if (c !== null && (h = Ge.get(c), g = at, g.setIndex(h)), i.isMesh) r.wireframe === !0 ? (N.setLineWidth(r.wireframeLinewidth * Ie()), g.setMode(M.LINES)) : g.setMode(M.TRIANGLES);
 			else if (i.isLine) {
 				let e = r.linewidth;
 				e === void 0 && (e = 1), N.setLineWidth(e * Ie()), i.isLineSegments ? g.setMode(M.LINES) : i.isLineLoop ? g.setMode(M.LINE_LOOP) : g.setMode(M.LINE_STRIP);
@@ -12083,7 +12083,7 @@ var Bu = class {
 			if (i.isBatchedMesh) {
 				if (Re.get("WEBGL_multi_draw")) g.renderMultiDraw(i._multiDrawStarts, i._multiDrawCounts, i._multiDrawCount);
 				else {
-					let e = i._multiDrawStarts, t = i._multiDrawCounts, n = i._multiDrawCount, a = c ? Ue.get(c).bytesPerElement : 1, o = F.get(r).currentProgram.getUniforms();
+					let e = i._multiDrawStarts, t = i._multiDrawCounts, n = i._multiDrawCount, a = c ? Ge.get(c).bytesPerElement : 1, o = Ve.get(r).currentProgram.getUniforms();
 					for (let r = 0; r < n; r++) o.setValue(M, "_gl_DrawID", r), g.render(e[r] / a, t[r]);
 				}
 			} else if (i.isInstancedMesh) g.renderInstances(f, m, i.count);
@@ -12118,7 +12118,7 @@ var Bu = class {
 			return new Promise((t) => {
 				function n() {
 					if (r.forEach(function(e) {
-						let t = F.get(e).currentProgram;
+						let t = Ve.get(e).currentProgram;
 						(t === void 0 || t.isReady()) && r.delete(e);
 					}), r.size === 0) {
 						t(e);
@@ -12150,7 +12150,7 @@ var Bu = class {
 			if (ae === !0) return;
 			oe !== null && oe.renderStart(e, t);
 			let n = ut.enabled === !0 && ut.isPresenting === !0, r = ie !== null && (fe === null || n) && ie.begin(j, fe);
-			if (e.matrixWorldAutoUpdate === !0 && e.updateMatrixWorld(), t.parent === null && t.matrixWorldAutoUpdate === !0 && t.updateMatrixWorld(), ut.enabled === !0 && ut.isPresenting === !0 && (ie === null || ie.isCompositing() === !1) && (ut.cameraAutoUpdate === !0 && ut.updateCamera(t), t = ut.getCamera()), e.isScene === !0 && e.onBeforeRender(j, e, t, fe), O = Xe.get(e, A.length), O.init(t), O.state.textureUnits = Be.getTextureUnits(), A.push(O), je.multiplyMatrices(t.projectionMatrix, t.matrixWorldInverse), Oe.setFromProjectionMatrix(je, Je, t.reversedDepth), Ae = this.localClippingEnabled, ke = Ze.init(this.clippingPlanes, Ae), ee = Ye.get(e, te.length), ee.init(), te.push(ee), ut.enabled === !0 && ut.isPresenting === !0) {
+			if (e.matrixWorldAutoUpdate === !0 && e.updateMatrixWorld(), t.parent === null && t.matrixWorldAutoUpdate === !0 && t.updateMatrixWorld(), ut.enabled === !0 && ut.isPresenting === !0 && (ie === null || ie.isCompositing() === !1) && (ut.cameraAutoUpdate === !0 && ut.updateCamera(t), t = ut.getCamera()), e.isScene === !0 && e.onBeforeRender(j, e, t, fe), O = Xe.get(e, A.length), O.init(t), O.state.textureUnits = He.getTextureUnits(), A.push(O), je.multiplyMatrices(t.projectionMatrix, t.matrixWorldInverse), Oe.setFromProjectionMatrix(je, Je, t.reversedDepth), Ae = this.localClippingEnabled, ke = Ze.init(this.clippingPlanes, Ae), ee = Ye.get(e, te.length), ee.init(), te.push(ee), ut.enabled === !0 && ut.isPresenting === !0) {
 				let e = j.xr.getDepthSensingMesh();
 				e !== null && Ct(e, t, -Infinity, j.sortObjects);
 			}
@@ -12171,7 +12171,7 @@ var Bu = class {
 					}
 				} else r.length > 0 && Tt(n, r, e, t), Fe && tt.render(e), wt(ee, e, t);
 			}
-			fe !== null && de === 0 && (Be.updateMultisampleRenderTarget(fe), Be.updateRenderTargetMipmap(fe)), r && ie.end(j), e.isScene === !0 && e.onAfterRender(j, e, t), st.resetDefaultState(), pe = -1, me = null, A.pop(), A.length > 0 ? (O = A[A.length - 1], Be.setTextureUnits(O.state.textureUnits), ke === !0 && Ze.setGlobalState(j.clippingPlanes, O.state.camera)) : O = null, te.pop(), ee = te.length > 0 ? te[te.length - 1] : null, oe !== null && oe.renderEnd();
+			fe !== null && de === 0 && (He.updateMultisampleRenderTarget(fe), He.updateRenderTargetMipmap(fe)), r && ie.end(j), e.isScene === !0 && e.onAfterRender(j, e, t), st.resetDefaultState(), pe = -1, me = null, A.pop(), A.length > 0 ? (O = A[A.length - 1], He.setTextureUnits(O.state.textureUnits), ke === !0 && Ze.setGlobalState(j.clippingPlanes, O.state.camera)) : O = null, te.pop(), ee = te.length > 0 ? te[te.length - 1] : null, oe !== null && oe.renderEnd();
 		};
 		function Ct(e, t, n, r) {
 			if (e.visible === !1) return;
@@ -12183,11 +12183,11 @@ var Bu = class {
 				else if (e.isSprite) {
 					if (!e.frustumCulled || e.intersectsFrustum(Oe)) {
 						r && Ne.setFromMatrixPosition(e.matrixWorld).applyMatrix4(je);
-						let i = Ge.update(e), a = e.material;
+						let i = P.update(e), a = e.material;
 						a.visible && ee.push(e, i, a, n, Ne.z, null, t);
 					}
 				} else if ((e.isMesh || e.isLine || e.isPoints) && (!e.frustumCulled || e.intersectsFrustum(Oe))) {
-					let i = Ge.update(e), a = e.material;
+					let i = P.update(e), a = e.material;
 					if (r && (e.boundingSphere === void 0 ? (i.boundingSphere === null && i.computeBoundingSphere(), Ne.copy(i.boundingSphere.center)) : (e.boundingSphere === null && e.computeBoundingSphere(), Ne.copy(e.boundingSphere.center)), Ne.applyMatrix4(e.matrixWorld).applyMatrix4(je)), Array.isArray(a)) {
 						let r = i.groups;
 						for (let o = 0, s = r.length; o < s; o++) {
@@ -12228,7 +12228,7 @@ var Bu = class {
 			let f = j.toneMapping;
 			j.toneMapping = 0;
 			let p = r.viewport;
-			if (r.viewport !== void 0 && (r.viewport = void 0), O.setupLightsView(r), ke === !0 && Ze.setGlobalState(j.clippingPlanes, r), Et(e, n, r), Be.updateMultisampleRenderTarget(a), Be.updateRenderTargetMipmap(a), Re.has("WEBGL_multisampled_render_to_texture") === !1) {
+			if (r.viewport !== void 0 && (r.viewport = void 0), O.setupLightsView(r), ke === !0 && Ze.setGlobalState(j.clippingPlanes, r), Et(e, n, r), He.updateMultisampleRenderTarget(a), He.updateRenderTargetMipmap(a), Re.has("WEBGL_multisampled_render_to_texture") === !1) {
 				let e = !1;
 				for (let i = 0, a = t.length; i < a; i++) {
 					let { object: a, geometry: o, material: s, group: c } = t[i];
@@ -12237,7 +12237,7 @@ var Bu = class {
 						s.side = 1, s.needsUpdate = !0, Dt(a, n, r, o, s, c), s.side = t, s.needsUpdate = !0, e = !0;
 					}
 				}
-				e === !0 && (Be.updateMultisampleRenderTarget(a), Be.updateRenderTargetMipmap(a));
+				e === !0 && (He.updateMultisampleRenderTarget(a), He.updateRenderTargetMipmap(a));
 			}
 			j.setRenderTarget(s, c, l), j.setClearColor(ve, ye), p !== void 0 && (r.viewport = p), j.toneMapping = f;
 		}
@@ -12253,14 +12253,14 @@ var Bu = class {
 		}
 		function Ot(e, t, n) {
 			t.isScene !== !0 && (t = Pe);
-			let r = F.get(e), i = O.state.lights, a = O.state.shadowsArray, o = i.state.version, s = Ke.getParameters(e, i.state, a, t, n, O.state.lightProbeGridArray), c = Ke.getProgramCacheKey(s), l = r.programs;
+			let r = Ve.get(e), i = O.state.lights, a = O.state.shadowsArray, o = i.state.version, s = F.getParameters(e, i.state, a, t, n, O.state.lightProbeGridArray), c = F.getProgramCacheKey(s), l = r.programs;
 			r.environment = e.isMeshStandardMaterial || e.isMeshLambertMaterial || e.isMeshPhongMaterial ? t.environment : null, r.fog = t.fog;
 			let u = e.isMeshStandardMaterial || e.isMeshLambertMaterial && !e.envMap || e.isMeshPhongMaterial && !e.envMap;
-			r.envMap = Ve.get(e.envMap || r.environment, u), r.envMapRotation = r.environment !== null && e.envMap === null ? t.environmentRotation : e.envMapRotation, l === void 0 && (e.addEventListener("dispose", mt), l = /* @__PURE__ */ new Map(), r.programs = l);
+			r.envMap = Ue.get(e.envMap || r.environment, u), r.envMapRotation = r.environment !== null && e.envMap === null ? t.environmentRotation : e.envMapRotation, l === void 0 && (e.addEventListener("dispose", mt), l = /* @__PURE__ */ new Map(), r.programs = l);
 			let d = l.get(c);
 			if (d !== void 0) {
 				if (r.currentProgram === d && r.lightsStateVersion === o) return At(e, s), d;
-			} else s.uniforms = Ke.getUniforms(e), oe !== null && e.isNodeMaterial && oe.build(e, n, s), e.onBeforeCompile(s, j), d = Ke.acquireProgram(s, c), l.set(c, d), r.uniforms = s.uniforms;
+			} else s.uniforms = F.getUniforms(e), oe !== null && e.isNodeMaterial && oe.build(e, n, s), e.onBeforeCompile(s, j), d = F.acquireProgram(s, c), l.set(c, d), r.uniforms = s.uniforms;
 			let f = r.uniforms;
 			return (!e.isShaderMaterial && !e.isRawShaderMaterial || e.clipping === !0) && (f.clippingPlanes = Ze.uniform), At(e, s), r.needsLights = Nt(e), r.lightsStateVersion = o, r.needsLights && (f.ambientLightColor.value = i.state.ambient, f.lightProbe.value = i.state.probe, f.sunLights.value = i.state.sun, f.sunLightShadows.value = i.state.sunShadow, f.directionalLights.value = i.state.directional, f.directionalLightShadows.value = i.state.directionalShadow, f.spotLights.value = i.state.spot, f.spotLightShadows.value = i.state.spotShadow, f.rectAreaLights.value = i.state.rectArea, f.ltc_1.value = i.state.rectAreaLTC1, f.ltc_2.value = i.state.rectAreaLTC2, f.pointLights.value = i.state.point, f.pointLightShadows.value = i.state.pointShadow, f.hemisphereLights.value = i.state.hemi, f.sunShadowMatrix.value = i.state.sunShadowMatrix, f.sunShadowCascade.value = i.state.sunShadowCascade, f.directionalShadowMatrix.value = i.state.directionalShadowMatrix, f.spotLightMatrix.value = i.state.spotLightMatrix, f.spotLightMap.value = i.state.spotLightMap, f.pointShadowMatrix.value = i.state.pointShadowMatrix), r.lightProbeGrid = O.state.lightProbeGridArray.length > 0, r.currentProgram = d, r.uniformsList = null, d;
 		}
@@ -12272,7 +12272,7 @@ var Bu = class {
 			return e.uniformsList;
 		}
 		function At(e, t) {
-			let n = F.get(e);
+			let n = Ve.get(e);
 			n.outputColorSpace = t.outputColorSpace, n.batching = t.batching, n.batchingColor = t.batchingColor, n.instancing = t.instancing, n.instancingColor = t.instancingColor, n.instancingMorph = t.instancingMorph, n.skinning = t.skinning, n.morphTargets = t.morphTargets, n.morphNormals = t.morphNormals, n.morphColors = t.morphColors, n.morphTargetsCount = t.morphTargetsCount, n.numClippingPlanes = t.numClippingPlanes, n.numIntersection = t.numClipIntersection, n.vertexAlphas = t.vertexAlphas, n.vertexTangents = t.vertexTangents, n.toneMapping = t.toneMapping;
 		}
 		function jt(e, t) {
@@ -12286,10 +12286,10 @@ var Bu = class {
 			return null;
 		}
 		function Mt(e, t, n, r, i) {
-			t.isScene !== !0 && (t = Pe), Be.resetTextureUnits();
-			let a = t.fog, o = r.isMeshStandardMaterial || r.isMeshLambertMaterial || r.isMeshPhongMaterial ? t.environment : null, s = fe === null ? j.outputColorSpace : fe.isXRRenderTarget === !0 ? fe.texture.colorSpace : Vt.workingColorSpace, c = r.isMeshStandardMaterial || r.isMeshLambertMaterial && !r.envMap || r.isMeshPhongMaterial && !r.envMap, l = Ve.get(r.envMap || o, c), u = r.vertexColors === !0 && !!n.attributes.color && n.attributes.color.itemSize === 4, d = !!n.attributes.tangent && (!!r.normalMap || r.anisotropy > 0), f = !!n.morphAttributes.position, p = !!n.morphAttributes.normal, m = !!n.morphAttributes.color, h = 0;
+			t.isScene !== !0 && (t = Pe), He.resetTextureUnits();
+			let a = t.fog, o = r.isMeshStandardMaterial || r.isMeshLambertMaterial || r.isMeshPhongMaterial ? t.environment : null, s = fe === null ? j.outputColorSpace : fe.isXRRenderTarget === !0 ? fe.texture.colorSpace : Vt.workingColorSpace, c = r.isMeshStandardMaterial || r.isMeshLambertMaterial && !r.envMap || r.isMeshPhongMaterial && !r.envMap, l = Ue.get(r.envMap || o, c), u = r.vertexColors === !0 && !!n.attributes.color && n.attributes.color.itemSize === 4, d = !!n.attributes.tangent && (!!r.normalMap || r.anisotropy > 0), f = !!n.morphAttributes.position, p = !!n.morphAttributes.normal, m = !!n.morphAttributes.color, h = 0;
 			r.toneMapped && (fe === null || fe.isXRRenderTarget === !0) && (h = j.toneMapping);
-			let g = n.morphAttributes.position || n.morphAttributes.normal || n.morphAttributes.color, _ = g === void 0 ? 0 : g.length, v = F.get(r), y = O.state.lights;
+			let g = n.morphAttributes.position || n.morphAttributes.normal || n.morphAttributes.color, _ = g === void 0 ? 0 : g.length, v = Ve.get(r), y = O.state.lights;
 			if (ke === !0 && (Ae === !0 || e !== me)) {
 				let t = e === me && r.id === pe;
 				Ze.setState(r, e, t);
@@ -12308,21 +12308,21 @@ var Bu = class {
 				let t = T.map.cameraPosition;
 				t !== void 0 && t.setValue(M, Me.setFromMatrixPosition(e.matrixWorld)), ze.logarithmicDepthBuffer && T.setValue(M, "logDepthBufFC", 2 / (Math.log(e.far + 1) / Math.LN2)), (r.isMeshPhongMaterial || r.isMeshToonMaterial || r.isMeshLambertMaterial || r.isMeshBasicMaterial || r.isMeshStandardMaterial || r.isShaderMaterial) && T.setValue(M, "isOrthographic", e.isOrthographicCamera === !0), me !== e && (me = e, C = !0, w = !0);
 			}
-			if (v.needsLights && (y.state.sunShadowMap.length > 0 && T.setValue(M, "sunShadowMap", y.state.sunShadowMap, Be), y.state.directionalShadowMap.length > 0 && T.setValue(M, "directionalShadowMap", y.state.directionalShadowMap, Be), y.state.spotShadowMap.length > 0 && T.setValue(M, "spotShadowMap", y.state.spotShadowMap, Be), y.state.pointShadowMap.length > 0 && T.setValue(M, "pointShadowMap", y.state.pointShadowMap, Be)), i.isSkinnedMesh) {
+			if (v.needsLights && (y.state.sunShadowMap.length > 0 && T.setValue(M, "sunShadowMap", y.state.sunShadowMap, He), y.state.directionalShadowMap.length > 0 && T.setValue(M, "directionalShadowMap", y.state.directionalShadowMap, He), y.state.spotShadowMap.length > 0 && T.setValue(M, "spotShadowMap", y.state.spotShadowMap, He), y.state.pointShadowMap.length > 0 && T.setValue(M, "pointShadowMap", y.state.pointShadowMap, He)), i.isSkinnedMesh) {
 				T.setOptional(M, i, "bindMatrix"), T.setOptional(M, i, "bindMatrixInverse");
 				let e = i.skeleton;
-				e && (e.boneTexture === null && e.computeBoneTexture(), T.setValue(M, "boneTexture", e.boneTexture, Be));
+				e && (e.boneTexture === null && e.computeBoneTexture(), T.setValue(M, "boneTexture", e.boneTexture, He));
 			}
-			i.isBatchedMesh && (T.setOptional(M, i, "batchingTexture"), T.setValue(M, "batchingTexture", i._matricesTexture, Be), T.setOptional(M, i, "batchingIdTexture"), T.setValue(M, "batchingIdTexture", i._indirectTexture, Be), T.setOptional(M, i, "batchingColorTexture"), i._colorsTexture !== null && T.setValue(M, "batchingColorTexture", i._colorsTexture, Be));
+			i.isBatchedMesh && (T.setOptional(M, i, "batchingTexture"), T.setValue(M, "batchingTexture", i._matricesTexture, He), T.setOptional(M, i, "batchingIdTexture"), T.setValue(M, "batchingIdTexture", i._indirectTexture, He), T.setOptional(M, i, "batchingColorTexture"), i._colorsTexture !== null && T.setValue(M, "batchingColorTexture", i._colorsTexture, He));
 			let D = n.morphAttributes;
 			if ((D.position !== void 0 || D.normal !== void 0 || D.color !== void 0) && nt.update(i, n, x), (C || v.receiveShadow !== i.receiveShadow) && (v.receiveShadow = i.receiveShadow, T.setValue(M, "receiveShadow", i.receiveShadow)), (r.isMeshStandardMaterial || r.isMeshLambertMaterial || r.isMeshPhongMaterial) && r.envMap === null && t.environment !== null && (E.envMapIntensity.value = t.environmentIntensity), E.dfgLUT !== void 0 && (E.dfgLUT.value = zu()), C) {
 				if (T.setValue(M, "toneMappingExposure", j.toneMappingExposure), v.needsLights && R(E, w), a && r.fog === !0 && qe.refreshFogUniforms(E, a), qe.refreshMaterialUniforms(E, r, Se, xe, O.state.transmissionRenderTarget[e.id]), v.needsLights && v.lightProbeGrid) {
 					let e = v.lightProbeGrid;
 					E.probesSH.value = e.texture, E.probesMin.value.copy(e.boundingBox.min), E.probesMax.value.copy(e.boundingBox.max), E.probesResolution.value.copy(e.resolution);
 				}
-				vl.upload(M, kt(v), E, Be);
+				vl.upload(M, kt(v), E, He);
 			}
-			if (r.isShaderMaterial && r.uniformsNeedUpdate === !0 && (vl.upload(M, kt(v), E, Be), r.uniformsNeedUpdate = !1), r.isSpriteMaterial && T.setValue(M, "center", i.center), T.setValue(M, "modelViewMatrix", i.modelViewMatrix), T.setValue(M, "normalMatrix", i.normalMatrix), T.setValue(M, "modelMatrix", i.matrixWorld), r.uniformsGroups !== void 0) {
+			if (r.isShaderMaterial && r.uniformsNeedUpdate === !0 && (vl.upload(M, kt(v), E, He), r.uniformsNeedUpdate = !1), r.isSpriteMaterial && T.setValue(M, "center", i.center), T.setValue(M, "modelViewMatrix", i.modelViewMatrix), T.setValue(M, "normalMatrix", i.normalMatrix), T.setValue(M, "modelMatrix", i.matrixWorld), r.uniformsGroups !== void 0) {
 				let e = r.uniformsGroups;
 				for (let t = 0, n = e.length; t < n; t++) {
 					let n = e[t];
@@ -12344,51 +12344,51 @@ var Bu = class {
 		}, this.getRenderTarget = function() {
 			return fe;
 		}, this.setRenderTargetTextures = function(e, t, n) {
-			let r = F.get(e);
-			r.__autoAllocateDepthBuffer = e.resolveDepthBuffer === !1, r.__autoAllocateDepthBuffer === !1 && (r.__useRenderToTexture = !1), F.get(e.texture).__webglTexture = t, F.get(e.depthTexture).__webglTexture = r.__autoAllocateDepthBuffer ? void 0 : n, r.__hasExternalTextures = !0;
+			let r = Ve.get(e);
+			r.__autoAllocateDepthBuffer = e.resolveDepthBuffer === !1, r.__autoAllocateDepthBuffer === !1 && (r.__useRenderToTexture = !1), Ve.get(e.texture).__webglTexture = t, Ve.get(e.depthTexture).__webglTexture = r.__autoAllocateDepthBuffer ? void 0 : n, r.__hasExternalTextures = !0;
 		}, this.setRenderTargetFramebuffer = function(e, t) {
-			let n = F.get(e);
+			let n = Ve.get(e);
 			n.__webglFramebuffer = t, n.__useDefaultFramebuffer = t === void 0;
 		}, this.setRenderTarget = function(e, t = 0, n = 0) {
 			fe = e, ue = t, de = n;
 			let r = null, i = !1, a = !1;
 			if (e) {
-				let o = F.get(e);
+				let o = Ve.get(e);
 				if (o.__useDefaultFramebuffer !== void 0) {
 					N.bindFramebuffer(M.FRAMEBUFFER, o.__webglFramebuffer), he.copy(e.viewport), ge.copy(e.scissor), _e = e.scissorTest, N.viewport(he), N.scissor(ge), N.setScissorTest(_e), pe = -1;
 					return;
 				}
-				if (o.__webglFramebuffer === void 0) Be.setupRenderTarget(e);
-				else if (o.__hasExternalTextures) Be.rebindTextures(e, F.get(e.texture).__webglTexture, F.get(e.depthTexture).__webglTexture);
+				if (o.__webglFramebuffer === void 0) He.setupRenderTarget(e);
+				else if (o.__hasExternalTextures) He.rebindTextures(e, Ve.get(e.texture).__webglTexture, Ve.get(e.depthTexture).__webglTexture);
 				else if (e.depthBuffer) {
 					let t = e.depthTexture;
 					if (o.__boundDepthTexture !== t) {
-						if (t !== null && F.has(t) && (e.width !== t.image.width || e.height !== t.image.height)) throw Error("THREE.WebGLRenderer: Attached DepthTexture is initialized to the incorrect size.");
-						Be.setupDepthRenderbuffer(e);
+						if (t !== null && Ve.has(t) && (e.width !== t.image.width || e.height !== t.image.height)) throw Error("THREE.WebGLRenderer: Attached DepthTexture is initialized to the incorrect size.");
+						He.setupDepthRenderbuffer(e);
 					}
 				}
 				let s = e.texture;
 				(s.isData3DTexture || s.isDataArrayTexture || s.isCompressedArrayTexture) && (a = !0);
-				let c = F.get(e).__webglFramebuffer;
-				e.isWebGLCubeRenderTarget ? (r = Array.isArray(c[t]) ? c[t][n] : c[t], i = !0) : r = e.samples > 0 && Be.useMultisampledRTT(e) === !1 ? F.get(e).__webglMultisampledFramebuffer : Array.isArray(c) ? c[n] : c, he.copy(e.viewport), ge.copy(e.scissor), _e = e.scissorTest;
+				let c = Ve.get(e).__webglFramebuffer;
+				e.isWebGLCubeRenderTarget ? (r = Array.isArray(c[t]) ? c[t][n] : c[t], i = !0) : r = e.samples > 0 && He.useMultisampledRTT(e) === !1 ? Ve.get(e).__webglMultisampledFramebuffer : Array.isArray(c) ? c[n] : c, he.copy(e.viewport), ge.copy(e.scissor), _e = e.scissorTest;
 			} else he.copy(Te).multiplyScalar(Se).floor(), ge.copy(Ee).multiplyScalar(Se).floor(), _e = De;
 			if (n !== 0 && (r = se), N.bindFramebuffer(M.FRAMEBUFFER, r) && N.drawBuffers(e, r), N.viewport(he), N.scissor(ge), N.setScissorTest(_e), i) {
-				let r = F.get(e.texture);
+				let r = Ve.get(e.texture);
 				M.framebufferTexture2D(M.FRAMEBUFFER, M.COLOR_ATTACHMENT0, M.TEXTURE_CUBE_MAP_POSITIVE_X + t, r.__webglTexture, n);
 			} else if (a) {
 				let r = t;
 				for (let t = 0; t < e.textures.length; t++) {
-					let i = F.get(e.textures[t]);
+					let i = Ve.get(e.textures[t]);
 					M.framebufferTextureLayer(M.FRAMEBUFFER, M.COLOR_ATTACHMENT0 + t, i.__webglTexture, n, r);
 				}
 			} else if (e !== null && n !== 0) {
-				let t = F.get(e.texture);
+				let t = Ve.get(e.texture);
 				M.framebufferTexture2D(M.FRAMEBUFFER, M.COLOR_ATTACHMENT0, M.TEXTURE_2D, t.__webglTexture, n);
 			}
 			pe = -1;
 		};
 		function Pt(e) {
-			let t = F.get(e);
+			let t = Ve.get(e);
 			return (t.__readFormat !== e.format || t.__readType !== e.type) && (t.__readFormat = e.format, t.__readType = e.type, t.__formatReadable = ze.textureFormatReadable(e.format), t.__typeReadable = ze.textureTypeReadable(e.type)), t;
 		}
 		this.readRenderTargetPixels = function(e, t, n, r, i, a, o, s = 0) {
@@ -12396,7 +12396,7 @@ var Bu = class {
 				L("WebGLRenderer.readRenderTargetPixels: renderTarget is not THREE.WebGLRenderTarget.");
 				return;
 			}
-			let c = F.get(e).__webglFramebuffer;
+			let c = Ve.get(e).__webglFramebuffer;
 			if (e.isWebGLCubeRenderTarget && o !== void 0 && (c = c[o]), c) {
 				N.bindFramebuffer(M.FRAMEBUFFER, c);
 				try {
@@ -12413,13 +12413,13 @@ var Bu = class {
 					}
 					t >= 0 && t <= e.width - r && n >= 0 && n <= e.height - i && M.readPixels(t, n, r, i, ot.convert(c), ot.convert(l), a);
 				} finally {
-					let e = fe === null ? null : F.get(fe).__webglFramebuffer;
+					let e = fe === null ? null : Ve.get(fe).__webglFramebuffer;
 					N.bindFramebuffer(M.FRAMEBUFFER, e);
 				}
 			}
 		}, this.readRenderTargetPixelsAsync = async function(e, t, n, r, i, a, o, s = 0) {
 			if (!(e && e.isWebGLRenderTarget)) throw Error("THREE.WebGLRenderer.readRenderTargetPixels: renderTarget is not THREE.WebGLRenderTarget.");
-			let c = F.get(e).__webglFramebuffer;
+			let c = Ve.get(e).__webglFramebuffer;
 			if (e.isWebGLCubeRenderTarget && o !== void 0 && (c = c[o]), c) {
 				if (t >= 0 && t <= e.width - r && n >= 0 && n <= e.height - i) {
 					N.bindFramebuffer(M.FRAMEBUFFER, c);
@@ -12430,7 +12430,7 @@ var Bu = class {
 					if (d.__typeReadable === !1) throw Error("THREE.WebGLRenderer.readRenderTargetPixelsAsync: renderTarget is not in UnsignedByteType or implementation defined type.");
 					let f = M.createBuffer();
 					M.bindBuffer(M.PIXEL_PACK_BUFFER, f), M.bufferData(M.PIXEL_PACK_BUFFER, a.byteLength, M.STREAM_READ), M.readPixels(t, n, r, i, ot.convert(l), ot.convert(u), 0), M.bindBuffer(M.PIXEL_PACK_BUFFER, null);
-					let p = fe === null ? null : F.get(fe).__webglFramebuffer;
+					let p = fe === null ? null : Ve.get(fe).__webglFramebuffer;
 					N.bindFramebuffer(M.FRAMEBUFFER, p);
 					let m = M.fenceSync(M.SYNC_GPU_COMMANDS_COMPLETE, 0);
 					return M.flush(), await rt(M, m, 4), M.bindBuffer(M.PIXEL_PACK_BUFFER, f), M.getBufferSubData(M.PIXEL_PACK_BUFFER, 0, a), M.bindBuffer(M.PIXEL_PACK_BUFFER, null), M.deleteBuffer(f), M.deleteSync(m), a;
@@ -12439,7 +12439,7 @@ var Bu = class {
 			}
 		}, this.copyFramebufferToTexture = function(e, t = null, n = 0) {
 			let r = 2 ** -n, i = Math.floor(e.image.width * r), a = Math.floor(e.image.height * r), o = t === null ? 0 : t.x, s = t === null ? 0 : t.y;
-			Be.setTexture2D(e, 0), M.copyTexSubImage2D(M.TEXTURE_2D, n, 0, 0, o, s, i, a), N.unbindTexture();
+			He.setTexture2D(e, 0), M.copyTexSubImage2D(M.TEXTURE_2D, n, 0, 0, o, s, i, a), N.unbindTexture();
 		}, this.copyTextureToTexture = function(e, t, n = null, r = null, i = 0, a = 0) {
 			let o, s, c, l, u, d, f, p, m, h = e.isCompressedTexture ? e.mipmaps[a] : e.image;
 			if (n !== null) o = n.max.x - n.min.x, s = n.max.y - n.min.y, c = n.isBox3 ? n.max.z - n.min.z : 1, l = n.min.x, u = n.min.y, d = n.isBox3 ? n.min.z : 0;
@@ -12449,26 +12449,26 @@ var Bu = class {
 			}
 			r === null ? (f = 0, p = 0, m = 0) : (f = r.x, p = r.y, m = r.z);
 			let g = ot.convert(t.format), _ = ot.convert(t.type), v;
-			t.isData3DTexture ? (Be.setTexture3D(t, 0), v = M.TEXTURE_3D) : t.isDataArrayTexture || t.isCompressedArrayTexture ? (Be.setTexture2DArray(t, 0), v = M.TEXTURE_2D_ARRAY) : (Be.setTexture2D(t, 0), v = M.TEXTURE_2D), N.activeTexture(M.TEXTURE0), N.pixelStorei(M.UNPACK_FLIP_Y_WEBGL, t.flipY), N.pixelStorei(M.UNPACK_PREMULTIPLY_ALPHA_WEBGL, t.premultiplyAlpha), N.pixelStorei(M.UNPACK_ALIGNMENT, t.unpackAlignment);
+			t.isData3DTexture ? (He.setTexture3D(t, 0), v = M.TEXTURE_3D) : t.isDataArrayTexture || t.isCompressedArrayTexture ? (He.setTexture2DArray(t, 0), v = M.TEXTURE_2D_ARRAY) : (He.setTexture2D(t, 0), v = M.TEXTURE_2D), N.activeTexture(M.TEXTURE0), N.pixelStorei(M.UNPACK_FLIP_Y_WEBGL, t.flipY), N.pixelStorei(M.UNPACK_PREMULTIPLY_ALPHA_WEBGL, t.premultiplyAlpha), N.pixelStorei(M.UNPACK_ALIGNMENT, t.unpackAlignment);
 			let y = N.getParameter(M.UNPACK_ROW_LENGTH), b = N.getParameter(M.UNPACK_IMAGE_HEIGHT), x = N.getParameter(M.UNPACK_SKIP_PIXELS), S = N.getParameter(M.UNPACK_SKIP_ROWS), C = N.getParameter(M.UNPACK_SKIP_IMAGES);
 			N.pixelStorei(M.UNPACK_ROW_LENGTH, h.width), N.pixelStorei(M.UNPACK_IMAGE_HEIGHT, h.height), N.pixelStorei(M.UNPACK_SKIP_PIXELS, l), N.pixelStorei(M.UNPACK_SKIP_ROWS, u), N.pixelStorei(M.UNPACK_SKIP_IMAGES, d);
 			let w = e.isDataArrayTexture || e.isData3DTexture, T = t.isDataArrayTexture || t.isData3DTexture;
 			if (e.isDepthTexture) {
-				let n = F.get(e), r = F.get(t), h = F.get(n.__renderTarget), g = F.get(r.__renderTarget);
+				let n = Ve.get(e), r = Ve.get(t), h = Ve.get(n.__renderTarget), g = Ve.get(r.__renderTarget);
 				N.bindFramebuffer(M.READ_FRAMEBUFFER, h.__webglFramebuffer), N.bindFramebuffer(M.DRAW_FRAMEBUFFER, g.__webglFramebuffer);
-				for (let n = 0; n < c; n++) w && (M.framebufferTextureLayer(M.READ_FRAMEBUFFER, M.COLOR_ATTACHMENT0, F.get(e).__webglTexture, i, d + n), M.framebufferTextureLayer(M.DRAW_FRAMEBUFFER, M.COLOR_ATTACHMENT0, F.get(t).__webglTexture, a, m + n)), M.blitFramebuffer(l, u, o, s, f, p, o, s, M.DEPTH_BUFFER_BIT, M.NEAREST);
+				for (let n = 0; n < c; n++) w && (M.framebufferTextureLayer(M.READ_FRAMEBUFFER, M.COLOR_ATTACHMENT0, Ve.get(e).__webglTexture, i, d + n), M.framebufferTextureLayer(M.DRAW_FRAMEBUFFER, M.COLOR_ATTACHMENT0, Ve.get(t).__webglTexture, a, m + n)), M.blitFramebuffer(l, u, o, s, f, p, o, s, M.DEPTH_BUFFER_BIT, M.NEAREST);
 				N.bindFramebuffer(M.READ_FRAMEBUFFER, null), N.bindFramebuffer(M.DRAW_FRAMEBUFFER, null);
-			} else if (i !== 0 || e.isRenderTargetTexture || F.has(e)) {
-				let n = F.get(e), r = F.get(t);
+			} else if (i !== 0 || e.isRenderTargetTexture || Ve.has(e)) {
+				let n = Ve.get(e), r = Ve.get(t);
 				N.bindFramebuffer(M.READ_FRAMEBUFFER, ce), N.bindFramebuffer(M.DRAW_FRAMEBUFFER, le);
 				for (let e = 0; e < c; e++) w ? M.framebufferTextureLayer(M.READ_FRAMEBUFFER, M.COLOR_ATTACHMENT0, n.__webglTexture, i, d + e) : M.framebufferTexture2D(M.READ_FRAMEBUFFER, M.COLOR_ATTACHMENT0, M.TEXTURE_2D, n.__webglTexture, i), T ? M.framebufferTextureLayer(M.DRAW_FRAMEBUFFER, M.COLOR_ATTACHMENT0, r.__webglTexture, a, m + e) : M.framebufferTexture2D(M.DRAW_FRAMEBUFFER, M.COLOR_ATTACHMENT0, M.TEXTURE_2D, r.__webglTexture, a), i === 0 ? T ? M.copyTexSubImage3D(v, a, f, p, m + e, l, u, o, s) : M.copyTexSubImage2D(v, a, f, p, l, u, o, s) : M.blitFramebuffer(l, u, o, s, f, p, o, s, M.COLOR_BUFFER_BIT, M.NEAREST);
 				N.bindFramebuffer(M.READ_FRAMEBUFFER, null), N.bindFramebuffer(M.DRAW_FRAMEBUFFER, null);
 			} else T ? e.isDataTexture || e.isData3DTexture ? M.texSubImage3D(v, a, f, p, m, o, s, c, g, _, h.data) : t.isCompressedArrayTexture ? M.compressedTexSubImage3D(v, a, f, p, m, o, s, c, g, h.data) : M.texSubImage3D(v, a, f, p, m, o, s, c, g, _, h) : e.isDataTexture ? M.texSubImage2D(M.TEXTURE_2D, a, f, p, o, s, g, _, h.data) : e.isCompressedTexture ? M.compressedTexSubImage2D(M.TEXTURE_2D, a, f, p, h.width, h.height, g, h.data) : M.texSubImage2D(M.TEXTURE_2D, a, f, p, o, s, g, _, h);
 			N.pixelStorei(M.UNPACK_ROW_LENGTH, y), N.pixelStorei(M.UNPACK_IMAGE_HEIGHT, b), N.pixelStorei(M.UNPACK_SKIP_PIXELS, x), N.pixelStorei(M.UNPACK_SKIP_ROWS, S), N.pixelStorei(M.UNPACK_SKIP_IMAGES, C), a === 0 && t.generateMipmaps && M.generateMipmap(v), N.unbindTexture();
 		}, this.initRenderTarget = function(e) {
-			F.get(e).__webglFramebuffer === void 0 && Be.setupRenderTarget(e);
+			Ve.get(e).__webglFramebuffer === void 0 && He.setupRenderTarget(e);
 		}, this.initTexture = function(e) {
-			e.isCubeTexture ? Be.setTextureCube(e, 0) : e.isData3DTexture ? Be.setTexture3D(e, 0) : e.isDataArrayTexture || e.isCompressedArrayTexture ? Be.setTexture2DArray(e, 0) : Be.setTexture2D(e, 0), N.unbindTexture();
+			e.isCubeTexture ? He.setTextureCube(e, 0) : e.isData3DTexture ? He.setTexture3D(e, 0) : e.isDataArrayTexture || e.isCompressedArrayTexture ? He.setTexture2DArray(e, 0) : He.setTexture2D(e, 0), N.unbindTexture();
 		}, this.resetState = function() {
 			ue = 0, de = 0, fe = null, N.reset(), st.reset();
 		}, typeof __THREE_DEVTOOLS__ < "u" && __THREE_DEVTOOLS__.dispatchEvent(new CustomEvent("observe", { detail: this }));
@@ -21872,95 +21872,14 @@ var tg = [
 		let t = this.hubTarget();
 		this.hub.setNextKinematicTranslation(t.p), this.hub.setNextKinematicRotation(t.q), this.world.step(), this.checkPrizes();
 	}
-};
-//#endregion
-//#region node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
-function rg(e, t = !1) {
-	let n = e[0].index !== null, r = new Set(Object.keys(e[0].attributes)), i = new Set(Object.keys(e[0].morphAttributes)), a = {}, o = {}, s = e[0].morphTargetsRelative, c = new Ir(), l = 0;
-	for (let u = 0; u < e.length; ++u) {
-		let d = e[u], f = 0;
-		if (n !== (d.index !== null)) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them."), null;
-		for (let e in d.attributes) {
-			if (!r.has(e)) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". All geometries must have compatible attributes; make sure \"" + e + "\" attribute exists among all geometries, or in none of them."), null;
-			a[e] === void 0 && (a[e] = []), a[e].push(d.attributes[e]), f++;
-		}
-		if (f !== r.size) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". Make sure all geometries have the same number of attributes."), null;
-		if (s !== d.morphTargetsRelative) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". .morphTargetsRelative must be consistent throughout all geometries."), null;
-		for (let e in d.morphAttributes) {
-			if (!i.has(e)) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ".  .morphAttributes must be consistent throughout all geometries."), null;
-			o[e] === void 0 && (o[e] = []), o[e].push(d.morphAttributes[e]);
-		}
-		if (t) {
-			let e;
-			if (n) e = d.index.count;
-			else if (d.attributes.position !== void 0) e = d.attributes.position.count;
-			else return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". The geometry must have either an index or a position attribute"), null;
-			c.addGroup(l, e, u), l += e;
-		}
-	}
-	if (n) {
-		let t = 0, n = [];
-		for (let r = 0; r < e.length; ++r) {
-			let i = e[r].index;
-			for (let e = 0; e < i.count; ++e) n.push(i.getX(e) + t);
-			t += e[r].attributes.position.count;
-		}
-		c.setIndex(n);
-	}
-	for (let e in a) {
-		let t = ig(a[e]);
-		if (!t) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed while trying to merge the " + e + " attribute."), null;
-		c.setAttribute(e, t);
-	}
-	for (let e in o) {
-		let t = o[e][0].length;
-		if (t !== 0) {
-			c.morphAttributes = c.morphAttributes || {}, c.morphAttributes[e] = [];
-			for (let n = 0; n < t; ++n) {
-				let t = [];
-				for (let r = 0; r < o[e].length; ++r) t.push(o[e][r][n]);
-				let r = ig(t);
-				if (!r) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed while trying to merge the " + e + " morphAttribute."), null;
-				c.morphAttributes[e].push(r);
-			}
-		}
-	}
-	return c;
-}
-function ig(e) {
-	let t, n, r, i = -1, a = 0;
-	for (let o = 0; o < e.length; ++o) {
-		let s = e[o];
-		if (t === void 0 && (t = s.array.constructor), t !== s.array.constructor) return console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.array must be of consistent array types across matching attributes."), null;
-		if (n === void 0 && (n = s.itemSize), n !== s.itemSize) return console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.itemSize must be consistent across matching attributes."), null;
-		if (r === void 0 && (r = s.normalized), r !== s.normalized) return console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.normalized must be consistent across matching attributes."), null;
-		if (i === -1 && (i = s.gpuType), i !== s.gpuType) return console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.gpuType must be consistent across matching attributes."), null;
-		a += s.count * n;
-	}
-	let o = new t(a), s = new xr(o, n, r), c = 0;
-	for (let t = 0; t < e.length; ++t) {
-		let r = e[t];
-		if (r.isInterleavedBufferAttribute) {
-			let e = c / n;
-			for (let t = 0, i = r.count; t < i; t++) for (let i = 0; i < n; i++) {
-				let n = r.getComponent(t, i);
-				s.setComponent(t + e, i, n);
-			}
-		} else o.set(r.array, c);
-		c += r.count * n;
-	}
-	return i !== void 0 && (s.gpuType = i), s;
-}
-//#endregion
-//#region node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js
-var ag = new z();
-function og(e, t, n, r, i, a) {
+}, rg = new z();
+function ig(e, t, n, r, i, a) {
 	let o = 2 * Math.PI * i / 4, s = Math.max(a - 2 * i, 0), c = Math.PI / 4;
-	ag.copy(t), ag[r] = 0, ag.normalize();
-	let l = .5 * o / (o + s), u = 1 - ag.angleTo(e) / c;
-	return Math.sign(ag[n]) === 1 ? u * l : s / (o + s) + l + l * (1 - u);
+	rg.copy(t), rg[r] = 0, rg.normalize();
+	let l = .5 * o / (o + s), u = 1 - rg.angleTo(e) / c;
+	return Math.sign(rg[n]) === 1 ? u * l : s / (o + s) + l + l * (1 - u);
 }
-var sg = class e extends Oi {
+var ag = class e extends Oi {
 	constructor(e = 1, t = 1, n = 1, r = 2, i = .1) {
 		let a = r * 2 + 1;
 		if (i = Math.min(e / 2, t / 2, n / 2, i), super(1, 1, 1, a, a, a), this.type = "RoundedBoxGeometry", this.parameters = {
@@ -21975,21 +21894,21 @@ var sg = class e extends Oi {
 		let s = new z(), c = new z(), l = new z(e, t, n).divideScalar(2).subScalar(i), u = this.attributes.position.array, d = this.attributes.normal.array, f = this.attributes.uv.array, p = u.length / 6, m = new z(), h = .5 / a;
 		for (let r = 0, a = 0; r < u.length; r += 3, a += 2) switch (s.fromArray(u, r), c.copy(s), c.x -= Math.sign(c.x) * h, c.y -= Math.sign(c.y) * h, c.z -= Math.sign(c.z) * h, c.normalize(), u[r + 0] = l.x * Math.sign(s.x) + c.x * i, u[r + 1] = l.y * Math.sign(s.y) + c.y * i, u[r + 2] = l.z * Math.sign(s.z) + c.z * i, d[r + 0] = c.x, d[r + 1] = c.y, d[r + 2] = c.z, Math.floor(r / p)) {
 			case 0:
-				m.set(1, 0, 0), f[a + 0] = og(m, c, "z", "y", i, n), f[a + 1] = 1 - og(m, c, "y", "z", i, t);
+				m.set(1, 0, 0), f[a + 0] = ig(m, c, "z", "y", i, n), f[a + 1] = 1 - ig(m, c, "y", "z", i, t);
 				break;
 			case 1:
-				m.set(-1, 0, 0), f[a + 0] = 1 - og(m, c, "z", "y", i, n), f[a + 1] = 1 - og(m, c, "y", "z", i, t);
+				m.set(-1, 0, 0), f[a + 0] = 1 - ig(m, c, "z", "y", i, n), f[a + 1] = 1 - ig(m, c, "y", "z", i, t);
 				break;
 			case 2:
-				m.set(0, 1, 0), f[a + 0] = 1 - og(m, c, "x", "z", i, e), f[a + 1] = og(m, c, "z", "x", i, n);
+				m.set(0, 1, 0), f[a + 0] = 1 - ig(m, c, "x", "z", i, e), f[a + 1] = ig(m, c, "z", "x", i, n);
 				break;
 			case 3:
-				m.set(0, -1, 0), f[a + 0] = 1 - og(m, c, "x", "z", i, e), f[a + 1] = 1 - og(m, c, "z", "x", i, n);
+				m.set(0, -1, 0), f[a + 0] = 1 - ig(m, c, "x", "z", i, e), f[a + 1] = 1 - ig(m, c, "z", "x", i, n);
 				break;
 			case 4:
-				m.set(0, 0, 1), f[a + 0] = 1 - og(m, c, "x", "y", i, e), f[a + 1] = 1 - og(m, c, "y", "x", i, t);
+				m.set(0, 0, 1), f[a + 0] = 1 - ig(m, c, "x", "y", i, e), f[a + 1] = 1 - ig(m, c, "y", "x", i, t);
 				break;
-			case 5: m.set(0, 0, -1), f[a + 0] = og(m, c, "x", "y", i, e), f[a + 1] = 1 - og(m, c, "y", "x", i, t);
+			case 5: m.set(0, 0, -1), f[a + 0] = ig(m, c, "x", "y", i, e), f[a + 1] = 1 - ig(m, c, "y", "x", i, t);
 		}
 	}
 	static fromJSON(t) {
@@ -21998,15 +21917,15 @@ var sg = class e extends Oi {
 };
 //#endregion
 //#region src/textures.ts
-function cg(e, t) {
+function og(e, t) {
 	let n = document.createElement("canvas");
 	return n.width = e, n.height = t, {
 		c: n,
 		g: n.getContext("2d")
 	};
 }
-function lg(e, t) {
-	let r = e.width, i = e.height, a = e.getContext("2d").getImageData(0, 0, r, i).data, { c: o, g: s } = cg(r, i), c = s.createImageData(r, i), l = (e, t) => a[((t + i) % i * r + (e + r) % r) * 4] / 255;
+function sg(e, t) {
+	let r = e.width, i = e.height, a = e.getContext("2d").getImageData(0, 0, r, i).data, { c: o, g: s } = og(r, i), c = s.createImageData(r, i), l = (e, t) => a[((t + i) % i * r + (e + r) % r) * 4] / 255;
 	for (let e = 0; e < i; e++) for (let n = 0; n < r; n++) {
 		let i = (l(n + 1, e) - l(n - 1, e)) * t, a = (l(n, e + 1) - l(n, e - 1)) * t, o = Math.hypot(i, a, 1), s = (e * r + n) * 4;
 		c.data[s] = (-i / o * .5 + .5) * 255, c.data[s + 1] = (a / o * .5 + .5) * 255, c.data[s + 2] = (1 / o * .5 + .5) * 255, c.data[s + 3] = 255;
@@ -22015,10 +21934,10 @@ function lg(e, t) {
 	let u = new wi(o);
 	return u.wrapS = u.wrapT = n, u;
 }
-var ug = null;
-function dg() {
-	if (ug) return ug;
-	let { c: e, g: t } = cg(256, 256);
+var cg = null;
+function lg() {
+	if (cg) return cg;
+	let { c: e, g: t } = og(256, 256);
 	t.fillStyle = "#808080", t.fillRect(0, 0, 256, 256), t.lineCap = "round";
 	for (let e = 0; e < 5e3; e++) {
 		let e = Math.random() * 256, n = Math.random() * 256, r = Math.random() * Math.PI * 2, i = 2 + Math.random() * 6, a = Math.floor(90 + Math.random() * 90);
@@ -22033,18 +21952,18 @@ function dg() {
 			256
 		]) t.beginPath(), t.moveTo(e + a, n + o), t.lineTo(e + a + Math.cos(r) * i, n + o + Math.sin(r) * i), t.stroke();
 	}
-	return ug = lg(e, 2.2), ug.repeat.set(3, 3), ug;
+	return cg = sg(e, 2.2), cg.repeat.set(3, 3), cg;
 }
-function fg(e, t = "#fff", n = "rgba(0,0,0,0)", r = 256, i = 96, a = "bold 56px sans-serif") {
-	let { c: o, g: s } = cg(r, i);
+function ug(e, t = "#fff", n = "rgba(0,0,0,0)", r = 256, i = 96, a = "bold 56px sans-serif") {
+	let { c: o, g: s } = og(r, i);
 	s.fillStyle = n, s.fillRect(0, 0, r, i), s.font = a, s.textAlign = "center", s.textBaseline = "middle", s.fillStyle = t, s.shadowColor = t, s.shadowBlur = 14, s.fillText(e, r / 2, i / 2);
 	let c = new wi(o);
-	return c.colorSpace = He, c;
+	return c.colorSpace = We, c;
 }
-var pg = null;
-function mg() {
-	if (pg) return pg;
-	let { c: e, g: t } = cg(512, 256);
+var dg = null;
+function fg() {
+	if (dg) return dg;
+	let { c: e, g: t } = og(512, 256);
 	t.fillStyle = "#f4f4f4", t.fillRect(0, 0, 512, 256);
 	for (let e = 0; e < 14e3; e++) {
 		let e = 200 + Math.random() * 55;
@@ -22059,44 +21978,44 @@ function mg() {
 		r.addColorStop(0, "rgba(0,0,0,0)"), r.addColorStop(.5, "rgba(60,40,40,0.38)"), r.addColorStop(1, "rgba(0,0,0,0)"), t.fillStyle = r, t.fillRect(n - 6, 0, 12, 256), t.strokeStyle = "rgba(70,50,50,0.45)", t.lineWidth = 1.4;
 		for (let e = 6; e < 250; e += 7) t.beginPath(), t.moveTo(n - 3.5, e), t.lineTo(n + 3.5, e + 3), t.stroke();
 	}
-	return pg = new wi(e), pg.colorSpace = He, pg.anisotropy = 4, pg.wrapS = n, pg;
+	return dg = new wi(e), dg.colorSpace = We, dg.anisotropy = 4, dg.wrapS = n, dg;
 }
-var hg = null;
-function gg() {
-	if (hg) return hg;
-	let { c: e, g: t } = cg(128, 128), r = t.createImageData(128, 128);
+var pg = null;
+function mg() {
+	if (pg) return pg;
+	let { c: e, g: t } = og(128, 128), r = t.createImageData(128, 128);
 	for (let e = 0; e < 16384; e++) {
 		let t = Math.random() ** .6 * 255;
 		r.data[e * 4] = r.data[e * 4 + 1] = r.data[e * 4 + 2] = t, r.data[e * 4 + 3] = 255;
 	}
-	return t.putImageData(r, 0, 0), hg = new wi(e), hg.wrapS = hg.wrapT = n, hg.colorSpace = "", hg;
+	return t.putImageData(r, 0, 0), pg = new wi(e), pg.wrapS = pg.wrapT = n, pg.colorSpace = "", pg;
 }
-var _g = "\"PingFang SC\",\"Microsoft YaHei\",\"Noto Sans CJK SC\",\"Source Han Sans SC\",sans-serif", vg = (e, t) => e + Math.random() * (t - e);
-function yg(e, t = !0, r = !1) {
+var hg = "\"PingFang SC\",\"Microsoft YaHei\",\"Noto Sans CJK SC\",\"Source Han Sans SC\",sans-serif", gg = (e, t) => e + Math.random() * (t - e);
+function _g(e, t = !0, r = !1) {
 	let i = new wi(e);
-	return t && (i.colorSpace = He), i.anisotropy = 4, r && (i.wrapS = i.wrapT = n), i;
+	return t && (i.colorSpace = We), i.anisotropy = 4, r && (i.wrapS = i.wrapT = n), i;
 }
-function bg() {
-	let { c: e, g: t } = cg(512, 640);
+function vg() {
+	let { c: e, g: t } = og(512, 640);
 	t.clearRect(0, 0, 512, 640);
 	for (let e = 0; e < 4; e++) {
-		t.save(), t.translate(vg(80, 432), vg(352, 608)), t.rotate(vg(-.4, .4));
-		let e = vg(30, 70), n = t.createRadialGradient(0, 0, 0, 0, 0, e);
-		n.addColorStop(0, "rgba(255,255,255,0.1)"), n.addColorStop(1, "rgba(255,255,255,0)"), t.scale(1, vg(.3, .55)), t.fillStyle = n, t.fillRect(-e, -e, e * 2, e * 2), t.restore();
+		t.save(), t.translate(gg(80, 432), gg(352, 608)), t.rotate(gg(-.4, .4));
+		let e = gg(30, 70), n = t.createRadialGradient(0, 0, 0, 0, 0, e);
+		n.addColorStop(0, "rgba(255,255,255,0.1)"), n.addColorStop(1, "rgba(255,255,255,0)"), t.scale(1, gg(.3, .55)), t.fillStyle = n, t.fillRect(-e, -e, e * 2, e * 2), t.restore();
 	}
-	for (let e = 0; e < 120; e++) t.fillStyle = `rgba(255,255,255,${vg(.04, .14)})`, t.fillRect(Math.random() * 512, Math.random() * 640, 1, 1);
-	return yg(e);
+	for (let e = 0; e < 120; e++) t.fillStyle = `rgba(255,255,255,${gg(.04, .14)})`, t.fillRect(Math.random() * 512, Math.random() * 640, 1, 1);
+	return _g(e);
 }
-function xg() {
-	let { c: e, g: t } = cg(512, 512);
+function yg() {
+	let { c: e, g: t } = og(512, 512);
 	t.fillStyle = "#ffffff", t.fillRect(0, 0, 512, 512);
 	for (let e = 0; e < 800; e++) {
 		let e = 245 + Math.random() * 10;
-		t.fillStyle = `rgba(${e},${e},${e},0.4)`, t.fillRect(Math.random() * 512, Math.random() * 512, vg(1, 3), vg(1, 3));
+		t.fillStyle = `rgba(${e},${e},${e},0.4)`, t.fillRect(Math.random() * 512, Math.random() * 512, gg(1, 3), gg(1, 3));
 	}
-	return yg(e, !0, !0);
+	return _g(e, !0, !0);
 }
-function Sg(e, t, n, r, i, a) {
+function bg(e, t, n, r, i, a) {
 	e.save(), e.translate(t, n), e.scale(r, r), e.fillStyle = a, e.beginPath(), e.ellipse(0, 8, 38, 34, 0, 0, 7), e.fill(), e.fillStyle = "#fff", e.beginPath(), e.ellipse(0, 0, 34, 32, 0, 0, 7), e.fill(), e.strokeStyle = i, e.lineWidth = 3, e.beginPath(), e.moveTo(0, -32), e.lineTo(0, -48), e.stroke(), e.fillStyle = i, e.beginPath(), e.arc(0, -52, 6, 0, 7), e.fill(), e.fillStyle = "#2a2a2e";
 	for (let t of [-1, 1]) e.beginPath(), e.ellipse(t * 12, -4, 5, 7, 0, 0, 7), e.fill();
 	e.fillStyle = "#fff";
@@ -22105,14 +22024,14 @@ function Sg(e, t, n, r, i, a) {
 	for (let t of [-1, 1]) e.beginPath(), e.ellipse(t * 22, 6, 6, 4, 0, 0, 7), e.fill();
 	e.restore();
 }
-function Cg(e, t) {
-	let n = 1024, { c: r, g: i } = cg(n, 220), a = i.createLinearGradient(0, 0, 0, 220);
+function xg(e, t) {
+	let n = 1024, { c: r, g: i } = og(n, 220), a = i.createLinearGradient(0, 0, 0, 220);
 	a.addColorStop(0, t), a.addColorStop(1, "#ffffff"), i.fillStyle = a, i.fillRect(0, 0, n, 220), i.fillStyle = e, i.fillRect(0, 0, n, 10), i.fillRect(0, 210, n, 10);
 	for (let t = 0; t < 14; t++) i.fillStyle = t % 2 ? e : "#ffffff", i.fillRect(t * 18, 14, 16, 18), i.fillRect(t * 18, 188, 16, 18);
-	return Sg(i, 150, 114, 1.35, e, t), i.fillStyle = e, i.font = `900 96px ${_g}`, i.textBaseline = "middle", i.fillText("爪爪乐", 260, 104), i.fillStyle = "#3a3a40", i.font = `bold 28px ${_g}`, i.fillText("PAW PLAY", 270, 156), i.fillStyle = e, i.font = `bold 22px ${_g}`, i.fillText("HAPPY GAMES", 480, 156), yg(r);
+	return bg(i, 150, 114, 1.35, e, t), i.fillStyle = e, i.font = `900 96px ${hg}`, i.textBaseline = "middle", i.fillText("爪爪乐", 260, 104), i.fillStyle = "#3a3a40", i.font = `bold 28px ${hg}`, i.fillText("PAW PLAY", 270, 156), i.fillStyle = e, i.font = `bold 22px ${hg}`, i.fillText("HAPPY GAMES", 480, 156), _g(r);
 }
-function wg(e, t) {
-	let { c: n, g: r } = cg(512, 640), i = r.createLinearGradient(0, 0, 0, 640);
+function Sg(e, t) {
+	let { c: n, g: r } = og(512, 640), i = r.createLinearGradient(0, 0, 0, 640);
 	i.addColorStop(0, t), i.addColorStop(.55, "#ffffff"), i.addColorStop(1, e + "55"), r.fillStyle = i, r.fillRect(0, 0, 512, 640), r.fillStyle = e + "33";
 	for (let e = 20; e < 352; e += 28) for (let t = 20; t < 512; t += 28) r.beginPath(), r.arc(t + e % 56 * .15, e, 4, 0, 7), r.fill();
 	for (let t = 0; t < 10; t++) {
@@ -22121,25 +22040,25 @@ function wg(e, t) {
 			"#ffffffaa",
 			"#ffe08a88"
 		][t % 3];
-		let n = vg(30, 482), i = vg(40, 320), a = vg(10, 28);
+		let n = gg(30, 482), i = gg(40, 320), a = gg(10, 28);
 		t % 3 == 0 ? (r.beginPath(), r.arc(n, i, a, 0, 7), r.fill()) : t % 3 == 1 ? r.fillRect(n - a, i - a * .6, a * 2, a * 1.2) : (r.beginPath(), r.moveTo(n, i - a), r.lineTo(n + a, i + a * .6), r.lineTo(n - a, i + a * .6), r.fill());
 	}
-	return r.fillStyle = e + "40", r.beginPath(), r.ellipse(256, 640 * .78, 281.6, 70, 0, 0, 7), r.fill(), Sg(r, 163.84, 396.8, 2.2, e, t), r.fillStyle = "#fff", r.beginPath(), r.roundRect?.(266.24, 268.8, 180, 70, 16), r.roundRect ? r.fill() : r.fillRect(266.24, 268.8, 180, 70), r.beginPath(), r.moveTo(281.6, 332.8), r.lineTo(245.76, 371.2), r.lineTo(296.96, 352), r.fill(), r.fillStyle = e, r.font = `900 36px ${_g}`, r.textAlign = "center", r.textBaseline = "middle", r.fillText("好抓!", 356.24, 304.8), r.textAlign = "left", r.fillStyle = e, r.fillRect(0, 584, 512, 56), r.fillStyle = "#fff", r.font = `bold 28px ${_g}`, r.fillText("爪爪乐  ·  PAW PLAY", 24, 612), yg(n);
+	return r.fillStyle = e + "40", r.beginPath(), r.ellipse(256, 640 * .78, 281.6, 70, 0, 0, 7), r.fill(), bg(r, 163.84, 396.8, 2.2, e, t), r.fillStyle = "#fff", r.beginPath(), r.roundRect?.(266.24, 268.8, 180, 70, 16), r.roundRect ? r.fill() : r.fillRect(266.24, 268.8, 180, 70), r.beginPath(), r.moveTo(281.6, 332.8), r.lineTo(245.76, 371.2), r.lineTo(296.96, 352), r.fill(), r.fillStyle = e, r.font = `900 36px ${hg}`, r.textAlign = "center", r.textBaseline = "middle", r.fillText("好抓!", 356.24, 304.8), r.textAlign = "left", r.fillStyle = e, r.fillRect(0, 584, 512, 56), r.fillStyle = "#fff", r.font = `bold 28px ${hg}`, r.fillText("爪爪乐  ·  PAW PLAY", 24, 612), _g(n);
 }
-function Tg(e) {
-	let { c: t, g: n } = cg(512, 512);
-	return n.clearRect(0, 0, 512, 512), n.fillStyle = e, n.beginPath(), n.arc(256, 256, 252, 0, 7), n.arc(256, 256, 208, 0, 7, !0), n.fill(), n.fillStyle = "#1a1a1e", n.beginPath(), n.arc(256, 256, 204, 0, 7), n.fill(), n.fillStyle = "#fff", n.font = `900 52px ${_g}`, n.textAlign = "center", n.textBaseline = "middle", n.fillText("PRIZE OUT", 256, 248), n.font = `bold 28px ${_g}`, n.fillText("取物口", 256, 288), yg(t);
+function Cg(e) {
+	let { c: t, g: n } = og(512, 512);
+	return n.clearRect(0, 0, 512, 512), n.fillStyle = e, n.beginPath(), n.arc(256, 256, 252, 0, 7), n.arc(256, 256, 208, 0, 7, !0), n.fill(), n.fillStyle = "#1a1a1e", n.beginPath(), n.arc(256, 256, 204, 0, 7), n.fill(), n.fillStyle = "#fff", n.font = `900 52px ${hg}`, n.textAlign = "center", n.textBaseline = "middle", n.fillText("PRIZE OUT", 256, 248), n.font = `bold 28px ${hg}`, n.fillText("取物口", 256, 288), _g(t);
 }
-function Eg(e) {
-	let { c: t, g: n } = cg(512, 96);
-	return n.fillStyle = e, n.fillRect(0, 0, 512, 96), n.fillStyle = "#fff", n.font = `900 44px ${_g}`, n.textAlign = "center", n.textBaseline = "middle", n.fillText("爪爪乐  PAW PLAY", 256, 48), yg(t);
+function wg(e) {
+	let { c: t, g: n } = og(512, 96);
+	return n.fillStyle = e, n.fillRect(0, 0, 512, 96), n.fillStyle = "#fff", n.font = `900 44px ${hg}`, n.textAlign = "center", n.textBaseline = "middle", n.fillText("爪爪乐  PAW PLAY", 256, 48), _g(t);
 }
-function Dg(e, t) {
-	let { c: n, g: r } = cg(256, 320);
-	return r.fillStyle = "#ffffff", r.fillRect(0, 0, 256, 320), r.strokeStyle = e, r.lineWidth = 10, r.strokeRect(5, 5, 246, 310), Sg(r, 128, 134.4, 2, e, t), r.fillStyle = e, r.font = `bold 26px ${_g}`, r.textAlign = "center", r.fillText("爪爪乐", 128, 262.4), yg(n);
+function Tg(e, t) {
+	let { c: n, g: r } = og(256, 320);
+	return r.fillStyle = "#ffffff", r.fillRect(0, 0, 256, 320), r.strokeStyle = e, r.lineWidth = 10, r.strokeRect(5, 5, 246, 310), bg(r, 128, 134.4, 2, e, t), r.fillStyle = e, r.font = `bold 26px ${hg}`, r.textAlign = "center", r.fillText("爪爪乐", 128, 262.4), _g(n);
 }
-function Og() {
-	let { c: e, g: t } = cg(512, 512);
+function Eg() {
+	let { c: e, g: t } = og(512, 512);
 	t.fillStyle = "#e8e6e2", t.fillRect(0, 0, 512, 512);
 	for (let e = 0; e < 4; e++) for (let n = 0; n < 4; n++) {
 		let r = 225 + (n + e) % 2 * 8;
@@ -22147,21 +22066,21 @@ function Og() {
 	}
 	t.strokeStyle = "#cfcac3", t.lineWidth = 2;
 	for (let e = 0; e <= 4; e++) t.beginPath(), t.moveTo(e * 512 / 4, 0), t.lineTo(e * 512 / 4, 512), t.moveTo(0, e * 512 / 4), t.lineTo(512, e * 512 / 4), t.stroke();
-	let n = yg(e, !0, !0);
+	let n = _g(e, !0, !0);
 	return n.repeat.set(6, 6), n;
 }
-function kg() {
-	let { c: e, g: t } = cg(256, 256);
+function Dg() {
+	let { c: e, g: t } = og(256, 256);
 	t.fillStyle = "#3a4a62", t.fillRect(0, 0, 256, 256);
 	for (let e = 0; e < 4e3; e++) {
-		let e = vg(-10, 10);
+		let e = gg(-10, 10);
 		t.fillStyle = `rgba(${58 + e},${74 + e},${98 + e},0.55)`, t.fillRect(Math.random() * 256, Math.random() * 256, 1.4, 1.4);
 	}
-	let n = yg(e, !0, !0);
+	let n = _g(e, !0, !0);
 	return n.repeat.set(3, 3), n;
 }
-function Ag() {
-	let { c: e, g: t } = cg(256, 320);
+function Og() {
+	let { c: e, g: t } = og(256, 320);
 	t.fillStyle = "#000", t.fillRect(0, 0, 256, 320), t.filter = "blur(8px)";
 	for (let [e, n, r] of [
 		[
@@ -22180,11 +22099,11 @@ function Ag() {
 			8
 		]
 	]) for (let i of [71.68, 184.32]) t.fillStyle = "rgba(255,250,240,0.85)", t.fillRect(i - n / 2, e, n, r);
-	return t.filter = "none", yg(e);
+	return t.filter = "none", _g(e);
 }
 //#endregion
 //#region src/themes.ts
-var jg = [
+var kg = [
 	{
 		id: "pink",
 		name: "粉",
@@ -22218,26 +22137,26 @@ var jg = [
 		dark: 1739416,
 		title: "青"
 	}
-], Mg = (e = 0, t = 0, n = 0) => new z(e, t, n);
-function Ng() {
+], Ag = (e = 0, t = 0, n = 0) => new z(e, t, n);
+function jg() {
 	return {
 		body: new fo({
 			color: 16777215,
-			map: xg(),
+			map: yg(),
 			roughness: .22,
 			metalness: .05,
 			clearcoat: .85,
 			clearcoatRoughness: .18
 		}),
 		accent: new fo({
-			color: jg[0].accent,
+			color: kg[0].accent,
 			roughness: .28,
 			metalness: .08,
 			clearcoat: .7,
 			clearcoatRoughness: .25
 		}),
 		accentSoft: new uo({
-			color: jg[0].accentSoft,
+			color: kg[0].accentSoft,
 			roughness: .45
 		}),
 		alu: new uo({
@@ -22322,12 +22241,12 @@ function Ng() {
 		}),
 		doorLamp: new uo({
 			color: 546,
-			emissive: jg[0].led,
+			emissive: kg[0].led,
 			emissiveIntensity: .15
 		}),
 		ledStrip: new uo({
 			color: 273,
-			emissive: jg[0].led,
+			emissive: kg[0].led,
 			emissiveIntensity: 1.8
 		}),
 		wheel: new uo({
@@ -22336,23 +22255,23 @@ function Ng() {
 		})
 	};
 }
-var Pg = null;
-function Fg() {
-	return Pg = Ng(), Pg;
+var Mg = null;
+function Ng() {
+	return Mg = jg(), Mg;
 }
-var Ig = new Proxy({}, {
+var Pg = new Proxy({}, {
 	get(e, t) {
-		return Pg ||= Ng(), Pg[t];
+		return Mg ||= jg(), Mg[t];
 	},
 	set(e, t, n) {
-		return Pg ||= Ng(), Pg[t] = n, !0;
+		return Mg ||= jg(), Mg[t] = n, !0;
 	}
 });
 function Q(e, t, n, r, i, a, o = !0) {
 	let s = new oi(e, t);
 	return s.position.set(n, r, i), s.castShadow = o, s.receiveShadow = !0, a.add(s), s;
 }
-function Lg(e, t, n, r, i, a, o, s = .4) {
+function Fg(e, t, n, r, i, a, o, s = .4) {
 	let c = new oi(new qa(t, n), new uo({
 		map: e,
 		roughness: s,
@@ -22362,38 +22281,38 @@ function Lg(e, t, n, r, i, a, o, s = .4) {
 	}));
 	return c.position.set(r, i, a), c.receiveShadow = !0, o.add(c), c;
 }
-function Rg(e, t) {
+function Ig(e, t) {
 	for (let n of e.themeables) n.kind === "accent" ? n.mat.color.setHex(t.accent) : n.kind === "soft" ? n.mat.color.setHex(t.accentSoft) : n.mat.emissive.setHex(t.led);
-	Ig.accent.color.setHex(t.accent), Ig.accentSoft.color.setHex(t.accentSoft), Ig.ledStrip.emissive.setHex(t.led), Ig.doorLamp.emissive.setHex(t.led);
-	let n = "#" + t.accentSoft.toString(16).padStart(6, "0"), r = t.accentHex, i = Cg(r, n), a = wg(r, n), o = Tg(r), s = Eg(r), c = Dg(r, n), l = (e, t, n = !1) => {
+	Pg.accent.color.setHex(t.accent), Pg.accentSoft.color.setHex(t.accentSoft), Pg.ledStrip.emissive.setHex(t.led), Pg.doorLamp.emissive.setHex(t.led);
+	let n = "#" + t.accentSoft.toString(16).padStart(6, "0"), r = t.accentHex, i = xg(r, n), a = Sg(r, n), o = Cg(r), s = wg(r), c = Tg(r, n), l = (e, t, n = !1) => {
 		let r = e.material;
 		r.map?.dispose(), n && r.emissiveMap && r.emissiveMap.dispose(), r.map = t, n && (r.emissiveMap = t, r.emissive.setHex(16777215)), r.needsUpdate = !0;
 	};
 	l(e.signMesh, i, !0), l(e.backMesh, a, !0), l(e.ringDec, o), l(e.ledgeLbl, s), l(e.doorDec, c);
 }
-function zg(e = jg[0]) {
+function Lg(e = kg[0]) {
 	let t = new Mn(), { hx: n, hz: r, top: i } = Ph, a = .58, o = .5, s = [], c = (e, t) => (s.push({
 		mat: e,
 		kind: t
 	}), e);
-	Q(new sg(a * 2, .988, .72, 4, .02), Ig.body, 0, -1 / 2 - .006, -.14, t), Q(new sg(a * 2, .88, .28, 3, .015), Ig.body, 0, -.46, .36, t);
-	let l = c(Ig.accent, "accent");
+	Q(new ag(a * 2, .988, .72, 4, .02), Pg.body, 0, -1 / 2 - .006, -.14, t), Q(new ag(a * 2, .88, .28, 3, .015), Pg.body, 0, -.46, .36, t);
+	let l = c(Pg.accent, "accent");
 	Q(new Oi(1.164, .04, .012), l, 0, -.08, .505, t);
-	let u = Lg(Tg(e.accentHex), .48, .48, -.3, -.52, .505, t, .35);
-	Q(new Ai(.18, 32), Ig.dark, -.3, -.52, .49, t, !1);
-	let d = Q(new Qa(.22, .022, 12, 48), c(Ig.doorLamp, "led"), -.3, -.52, .502, t, !1);
-	Q(new sg(.38, .55, .02, 2, .01), Ig.body, .32, -.52, .495, t), Q(new Oi(.39, .02, .022), l, .32, -.25, .506, t), Q(new Oi(.39, .02, .022), l, .32, -.79, .506, t), Q(new Oi(.02, .55, .022), l, .13, -.52, .506, t), Q(new Oi(.02, .55, .022), l, .51, -.52, .506, t);
-	let f = Lg(Dg(e.accentHex, "#" + e.accentSoft.toString(16).padStart(6, "0")), .22, .28, .32, -.55, .508, t);
-	Q(new ji(.012, .012, .01, 16), Ig.chrome, .32, -.28, .51, t, !1).rotation.x = Math.PI / 2;
-	let p = Q(new sg(a * 2 * .72, .08, .22, 3, .03), l, 0, -.02, .58, t);
+	let u = Fg(Cg(e.accentHex), .48, .48, -.3, -.52, .505, t, .35);
+	Q(new Ai(.18, 32), Pg.dark, -.3, -.52, .49, t, !1);
+	let d = Q(new Qa(.22, .022, 12, 48), c(Pg.doorLamp, "led"), -.3, -.52, .502, t, !1);
+	Q(new ag(.38, .55, .02, 2, .01), Pg.body, .32, -.52, .495, t), Q(new Oi(.39, .02, .022), l, .32, -.25, .506, t), Q(new Oi(.39, .02, .022), l, .32, -.79, .506, t), Q(new Oi(.02, .55, .022), l, .13, -.52, .506, t), Q(new Oi(.02, .55, .022), l, .51, -.52, .506, t);
+	let f = Fg(Tg(e.accentHex, "#" + e.accentSoft.toString(16).padStart(6, "0")), .22, .28, .32, -.55, .508, t);
+	Q(new ji(.012, .012, .01, 16), Pg.chrome, .32, -.28, .51, t, !1).rotation.x = Math.PI / 2;
+	let p = Q(new ag(a * 2 * .72, .08, .22, 3, .03), l, 0, -.02, .58, t);
 	p.rotation.x = .12;
-	let m = Lg(Eg(e.accentHex), .5, .09, 0, .02, .695, t);
+	let m = Fg(wg(e.accentHex), .5, .09, 0, .02, .695, t);
 	m.rotation.x = -.12;
 	let h = new Mn();
-	h.position.set(-.18, .03, .58), h.rotation.x = .12, t.add(h), Q(new ji(.032, .034, .01, 28), Ig.chrome, 0, 0, 0, h), Q(new ji(.0055, .0055, .07, 10), Ig.steel, 0, .04, 0, h), Q(new Za(.02, 24, 16), Ig.ballRed, 0, .082, 0, h);
+	h.position.set(-.18, .03, .58), h.rotation.x = .12, t.add(h), Q(new ji(.032, .034, .01, 28), Pg.chrome, 0, 0, 0, h), Q(new ji(.0055, .0055, .07, 10), Pg.steel, 0, .04, 0, h), Q(new Za(.02, 24, 16), Pg.ballRed, 0, .082, 0, h);
 	let g = new Mn();
-	g.position.set(.18, .032, .58), g.rotation.x = .12, t.add(g), Q(new ji(.042, .044, .012, 32), Ig.chrome, 0, 0, 0, g), Q(new ji(.034, .036, .018, 32), Ig.buttonRed, 0, .012, 0, g);
-	let _ = Q(new Oi(.16, .07, .01), Ig.blackPlastic, 0, .028, .64, t);
+	g.position.set(.18, .032, .58), g.rotation.x = .12, t.add(g), Q(new ji(.042, .044, .012, 32), Pg.chrome, 0, 0, 0, g), Q(new ji(.034, .036, .018, 32), Pg.buttonRed, 0, .012, 0, g);
+	let _ = Q(new Oi(.16, .07, .01), Pg.blackPlastic, 0, .028, .64, t);
 	_.rotation.x = -.2;
 	let v = Q(new qa(.14, .055), new uo({
 		color: 924180,
@@ -22402,31 +22321,31 @@ function zg(e = jg[0]) {
 		roughness: .4
 	}), 0, .03, .646, t, !1);
 	v.rotation.x = -.2;
-	for (let e of [-1, 1]) for (let n of [-1, 1]) Q(new ji(.035, .035, .02, 16), Ig.wheel, e * .48, -.98, n * .28 - .05, t, !1).rotation.z = Math.PI / 2;
-	let y = new sg(.04, i + .02, .04, 2, .005);
-	for (let e of [-1, 1]) for (let a of [-1, 1]) Q(y, Ig.alu, e * (n + .02), i / 2, a * (r + .02), t);
-	Q(new Oi(n * 2 + .08, .025, .04), Ig.alu, 0, 0, r + .02, t);
-	let b = [], x = c(Ig.ledStrip, "led");
+	for (let e of [-1, 1]) for (let n of [-1, 1]) Q(new ji(.035, .035, .02, 16), Pg.wheel, e * .48, -.98, n * .28 - .05, t, !1).rotation.z = Math.PI / 2;
+	let y = new ag(.04, i + .02, .04, 2, .005);
+	for (let e of [-1, 1]) for (let a of [-1, 1]) Q(y, Pg.alu, e * (n + .02), i / 2, a * (r + .02), t);
+	Q(new Oi(n * 2 + .08, .025, .04), Pg.alu, 0, 0, r + .02, t);
+	let b = [], x = c(Pg.ledStrip, "led");
 	for (let e of [-1, 1]) {
 		let a = Q(new Oi(.012, i - .04, .012), x, e * (n + .005), i / 2, r + .008, t, !1);
 		b.push(a);
 	}
 	b.push(Q(new Oi(n * 2 - .04, .01, .01), x, 0, i - .02, r + .008, t, !1)), b.push(Q(new Oi(n * 2 - .04, .01, .01), x, 0, .02, r + .008, t, !1));
 	let S = new Jr({
-		map: bg(),
+		map: vg(),
 		transparent: !0,
 		opacity: .14,
 		depthWrite: !1
 	}), C = new Jr({
-		map: Ag(),
+		map: Og(),
 		transparent: !0,
 		opacity: .12,
 		blending: 2,
 		depthWrite: !1
 	}), w = (e, n, r, a, o) => {
-		let s = new qa(e, i), c = Q(s, Ig.glassTint, n, i / 2, r, t, !1);
+		let s = new qa(e, i), c = Q(s, Pg.glassTint, n, i / 2, r, t, !1);
 		c.rotation.y = a, c.renderOrder = 3;
-		let l = Q(s, Ig.glassRefl, n, i / 2, r, t, !1);
+		let l = Q(s, Pg.glassRefl, n, i / 2, r, t, !1);
 		if (l.rotation.y = a, l.renderOrder = 4, o) {
 			let e = Q(s, S, n, i / 2, r + .001, t, !1);
 			e.rotation.y = a, e.renderOrder = 5;
@@ -22436,13 +22355,13 @@ function zg(e = jg[0]) {
 	};
 	w(n * 2, 0, r + .01, 0, !0), w(r * 2, -n - .01, 0, -Math.PI / 2, !1), w(r * 2, n + .01, 0, Math.PI / 2, !1);
 	{
-		let a = fg("HAPPY GAMES  ·  PAW PLAY", "#ffffff", e.accentHex, 512, 64, "bold 36px sans-serif");
+		let a = ug("HAPPY GAMES  ·  PAW PLAY", "#ffffff", e.accentHex, 512, 64, "bold 36px sans-serif");
 		for (let e of [.18, i - .12]) {
-			let i = Lg(a, n * 1.7, .045, 0, e, -r + .01, t);
+			let i = Fg(a, n * 1.7, .045, 0, e, -r + .01, t);
 			i.material.emissiveMap = a, i.material.emissive.setHex(16777215), i.material.emissiveIntensity = .4;
 		}
 	}
-	let T = "#" + e.accentSoft.toString(16).padStart(6, "0"), E = wg(e.accentHex, T), D = Q(new qa(n * 2, i), new uo({
+	let T = "#" + e.accentSoft.toString(16).padStart(6, "0"), E = Sg(e.accentHex, T), D = Q(new qa(n * 2, i), new uo({
 		map: E,
 		roughness: .55,
 		emissive: 16777215,
@@ -22453,9 +22372,9 @@ function zg(e = jg[0]) {
 	let O = new Ya(ee);
 	O.rotateX(Math.PI / 2);
 	let k = new oi(O, new uo({
-		map: kg(),
+		map: Dg(),
 		roughness: .97,
-		normalMap: dg(),
+		normalMap: lg(),
 		normalScale: new R(.35, .35),
 		side: 2
 	}));
@@ -22466,11 +22385,11 @@ function zg(e = jg[0]) {
 		side: 1
 	}));
 	re.position.set((Fh.x0 + Fh.x1) / 2, -.4 / 2 - .002, (Fh.z0 + Fh.z1) / 2), t.add(re);
-	let A = .11, ie = Q(new qa(te, A), Ig.acrylic, (Fh.x0 + Fh.x1) / 2, A / 2, Fh.z0 - .004, t, !1);
+	let A = .11, ie = Q(new qa(te, A), Pg.acrylic, (Fh.x0 + Fh.x1) / 2, A / 2, Fh.z0 - .004, t, !1);
 	ie.renderOrder = 2;
-	let j = Q(new qa(ne, A), Ig.acrylic, Fh.x1 + .004, A / 2, (Fh.z0 + Fh.z1) / 2, t, !1);
-	j.rotation.y = Math.PI / 2, j.renderOrder = 2, Q(new Oi(te, .006, .006), Ig.alu, (Fh.x0 + Fh.x1) / 2, A, Fh.z0 - .004, t), Q(new Oi(.006, .006, ne), Ig.alu, Fh.x1 + .004, A, (Fh.z0 + Fh.z1) / 2, t), Lg(fg("出口", "#fff", e.accentHex, 160, 64, "bold 40px sans-serif"), .07, .028, (Fh.x0 + Fh.x1) / 2, A * .62, Fh.z0 - .0015, t), Q(new sg(a * 2, .32, o * 2 - .04, 3, .02), Ig.body, 0, i + .16, 0, t), Q(new Oi(1.164, .03, o * 2 - .036), l, 0, i + .01, 0, t);
-	let ae = Cg(e.accentHex, T), oe = new oi(new qa(1.08, .24), new uo({
+	let j = Q(new qa(ne, A), Pg.acrylic, Fh.x1 + .004, A / 2, (Fh.z0 + Fh.z1) / 2, t, !1);
+	j.rotation.y = Math.PI / 2, j.renderOrder = 2, Q(new Oi(te, .006, .006), Pg.alu, (Fh.x0 + Fh.x1) / 2, A, Fh.z0 - .004, t), Q(new Oi(.006, .006, ne), Pg.alu, Fh.x1 + .004, A, (Fh.z0 + Fh.z1) / 2, t), Fg(ug("出口", "#fff", e.accentHex, 160, 64, "bold 40px sans-serif"), .07, .028, (Fh.x0 + Fh.x1) / 2, A * .62, Fh.z0 - .0015, t), Q(new ag(a * 2, .32, o * 2 - .04, 3, .02), Pg.body, 0, i + .16, 0, t), Q(new Oi(1.164, .03, o * 2 - .036), l, 0, i + .01, 0, t);
+	let ae = xg(e.accentHex, T), oe = new oi(new qa(1.08, .24), new uo({
 		map: ae,
 		emissive: 16777215,
 		emissiveMap: ae,
@@ -22479,19 +22398,19 @@ function zg(e = jg[0]) {
 	}));
 	oe.position.set(0, i + .17, .486), t.add(oe);
 	let se = new ji(.009, .009, n * 2 - .1, 12);
-	se.rotateZ(Math.PI / 2), Q(se, Ig.tube, 0, i - .025, r - .04, t, !1), Q(se, Ig.tube, 0, i - .025, -r + .06, t, !1), Q(new qa(n * 2, r * 2), Ig.dark, 0, i - .002, 0, t, !1).rotation.x = Math.PI / 2;
-	for (let e of [-1, 1]) Q(new Oi(.02, .025, r * 2), Ig.alu, e * (n - .012), Lh + .035, 0, t);
+	se.rotateZ(Math.PI / 2), Q(se, Pg.tube, 0, i - .025, r - .04, t, !1), Q(se, Pg.tube, 0, i - .025, -r + .06, t, !1), Q(new qa(n * 2, r * 2), Pg.dark, 0, i - .002, 0, t, !1).rotation.x = Math.PI / 2;
+	for (let e of [-1, 1]) Q(new Oi(.02, .025, r * 2), Pg.alu, e * (n - .012), Lh + .035, 0, t);
 	let ce = new Mn();
-	t.add(ce), Q(new Oi(n * 2 - .02, .02, .028), Ig.alu, 0, Lh + .025, 0, ce);
-	for (let e of [-1, 1]) Q(new Oi(.04, .035, .05), Ig.blackPlastic, e * (n - .012), Lh + .035, 0, ce);
+	t.add(ce), Q(new Oi(n * 2 - .02, .02, .028), Pg.alu, 0, Lh + .025, 0, ce);
+	for (let e of [-1, 1]) Q(new Oi(.04, .035, .05), Pg.blackPlastic, e * (n - .012), Lh + .035, 0, ce);
 	let le = new Mn();
-	t.add(le), Q(new sg(.075, .05, .07, 2, .006), Ig.blackPlastic, 0, Lh + .005, 0, le);
-	let ue = Q(new ji(.013, .013, .018, 16), Ig.steel, 0, Lh - .02, 0, le);
+	t.add(le), Q(new ag(.075, .05, .07, 2, .006), Pg.blackPlastic, 0, Lh + .005, 0, le);
+	let ue = Q(new ji(.013, .013, .018, 16), Pg.steel, 0, Lh - .02, 0, le);
 	ue.rotation.z = Math.PI / 2;
 	let de = new ji(.0018, .0018, 1, 6);
 	de.translate(0, -.5, 0);
-	let fe = Q(de, Ig.steel, 0, 0, 0, t), pe = new Mn();
-	t.add(pe), Q(new ji(Vh, Vh * .94, Hh * 2, 28), Ig.chrome, 0, 0, 0, pe), Q(new ji(.014, Vh * .95, .034, 24), Ig.blackPlastic, 0, Hh + .017, 0, pe), Q(new ji(Vh * 1.02, Vh * 1.02, Hh * .7, 28), Ig.steel, 0, -Hh * .15, 0, pe), Q(new ji(.006, .006, .012, 10), Ig.steel, 0, -Hh - .004, 0, pe);
+	let fe = Q(de, Pg.steel, 0, 0, 0, t), pe = new Mn();
+	t.add(pe), Q(new ji(Vh, Vh * .94, Hh * 2, 28), Pg.chrome, 0, 0, 0, pe), Q(new ji(.014, Vh * .95, .034, 24), Pg.blackPlastic, 0, Hh + .017, 0, pe), Q(new ji(Vh * 1.02, Vh * 1.02, Hh * .7, 28), Pg.steel, 0, -Hh * .15, 0, pe), Q(new ji(.006, .006, .012, 10), Pg.steel, 0, -Hh - .004, 0, pe);
 	let me = [];
 	for (let e of [
 		Math.PI / 2,
@@ -22501,10 +22420,10 @@ function zg(e = jg[0]) {
 		let n = new Mn();
 		t.add(n);
 		let r = new Mn();
-		r.rotation.y = e, n.add(r), Q(new $a(new Hi(Gh.map(([e, t]) => Mg(e, t, 0)), !1, "centripetal"), 28, Kh, 8, !1), Ig.chrome, 0, 0, 0, r);
+		r.rotation.y = e, n.add(r), Q(new $a(new Hi(Gh.map(([e, t]) => Ag(e, t, 0)), !1, "centripetal"), 28, Kh, 8, !1), Pg.chrome, 0, 0, 0, r);
 		let i = Gh[Gh.length - 1], a = Gh[Gh.length - 2];
-		Q(new ki(Kh * 1.3, .02, 4, 10), Ig.rubber, (i[0] + a[0]) / 2, (i[1] + a[1]) / 2, 0, r).quaternion.setFromUnitVectors(Mg(0, 1, 0), Mg(i[0] - a[0], i[1] - a[1], 0).normalize());
-		let o = Q(new ji(.006, .006, .02, 10), Ig.steel, 0, 0, 0, r);
+		Q(new ki(Kh * 1.3, .02, 4, 10), Pg.rubber, (i[0] + a[0]) / 2, (i[1] + a[1]) / 2, 0, r).quaternion.setFromUnitVectors(Ag(0, 1, 0), Ag(i[0] - a[0], i[1] - a[1], 0).normalize());
+		let o = Q(new ji(.006, .006, .02, 10), Pg.steel, 0, 0, 0, r);
 		o.rotation.x = Math.PI / 2, me.push(n);
 	}
 	return {
@@ -22514,7 +22433,7 @@ function zg(e = jg[0]) {
 		cable: fe,
 		hub: pe,
 		prongs: me,
-		doorPos: Mg(-.3, -.52, .5),
+		doorPos: Ag(-.3, -.52, .5),
 		ledStrips: b,
 		prizeRing: d,
 		themeables: s,
@@ -22525,9 +22444,29 @@ function zg(e = jg[0]) {
 		ringDec: u
 	};
 }
-function Bg() {
+function Rg(e) {
+	let t = /* @__PURE__ */ new Set([
+		e.hub,
+		e.cable,
+		...e.prongs
+	]), n = new rr(), r = new z();
+	return e.root.updateWorldMatrix(!0, !0), e.root.traverse((e) => {
+		for (let n = e; n; n = n.parent) if (t.has(n)) return;
+		let i = e;
+		if (!i.isMesh || !i.geometry) return;
+		i.geometry.boundingBox || i.geometry.computeBoundingBox();
+		let a = i.geometry.boundingBox;
+		for (let e of [a.min.x, a.max.x]) for (let t of [a.min.y, a.max.y]) for (let o of [a.min.z, a.max.z]) n.expandByPoint(r.set(e, t, o).applyMatrix4(i.matrixWorld));
+	}), {
+		hx: Math.max(-n.min.x, n.max.x),
+		yMin: n.min.y,
+		yMax: n.max.y,
+		hz: Math.max(-n.min.z, n.max.z)
+	};
+}
+function zg() {
 	let e = new Mn(), t = new oi(new qa(16, 16), new uo({
-		map: Og(),
+		map: Eg(),
 		roughness: .4,
 		metalness: .05
 	}));
@@ -22536,111 +22475,9 @@ function Bg() {
 		color: 15789802,
 		roughness: .92
 	}));
-	n.position.set(0, 2, -1.6), e.add(n);
-	let r = [
-		16022184,
-		16106794,
-		4114648,
-		16022184,
-		16106794,
-		4114648
-	], i = [
-		"爪爪乐",
-		"爪爪乐",
-		"爪爪乐",
-		"爪爪乐",
-		"爪爪乐",
-		"爪爪乐"
-	];
-	return [
-		-1.3,
-		1.3,
-		-2.62,
-		2.62,
-		-3.95,
-		3.95
-	].forEach((t, n) => e.add(Wg(r[n], i[n], t, (n - 2.5) * .04))), e;
+	return n.position.set(0, 2, -1.6), e.add(n), e;
 }
-var Vg = {
-	body: new sg(1.16, 1, 1, 3, .02),
-	post: new Oi(.04, 1.22, .04),
-	head: new sg(1.16, .3, .96, 3, .02),
-	glass: new qa(1, 1.2),
-	lump: new Za(.042, 10, 8)
-}, Hg = [
-	15902656,
-	16773590,
-	16110442,
-	10475752,
-	12166888,
-	16777215,
-	16234890
-], Ug = new uo({
-	color: 16777215,
-	roughness: .95
-});
-function Wg(e, t, n, r) {
-	let i = new Mn();
-	i.position.set(n, 0, -.02 + Math.abs(n) * .02), i.rotation.y = r;
-	let a = new fo({
-		color: 16777215,
-		roughness: .25,
-		clearcoat: .7,
-		clearcoatRoughness: .2
-	}), o = new fo({
-		color: e,
-		roughness: .3,
-		clearcoat: .6
-	}), s = new oi(Vg.body, a);
-	s.position.y = -.5, s.receiveShadow = !0, i.add(s);
-	let c = new oi(Vg.head, a);
-	c.position.y = 1.35, i.add(c);
-	let l = new uo({
-		color: 273,
-		emissive: e,
-		emissiveIntensity: 1.4
-	});
-	{
-		let e = rg([new Oi(.01, 1.15, .01).translate(-.5, .6, .41), new Oi(.01, 1.15, .01).translate(.5, .6, .41)]);
-		i.add(new oi(e, l));
-	}
-	let u = fg(t, "#fff", "#" + e.toString(16).padStart(6, "0"), 512, 128, "bold 84px \"PingFang SC\",\"Microsoft YaHei\",sans-serif"), d = new oi(new qa(1, .25), new uo({
-		map: u,
-		emissive: 16777215,
-		emissiveMap: u,
-		emissiveIntensity: .85
-	}));
-	d.position.set(0, 1.36, .485), i.add(d);
-	let f = new oi(Vg.glass, new uo({
-		color: 0,
-		emissive: e,
-		emissiveIntensity: .25
-	}));
-	f.position.set(0, .6, -.4), i.add(f);
-	let p = new vi(Vg.lump, Ug, 28), m = new jn(), h = new zn();
-	for (let e = 0; e < 28; e++) {
-		let t = Math.sin(e * 12.9898 + n) * 43758.5453, r = t - Math.floor(t);
-		m.position.set(-.4 + r * .8, .04 + e % 3 * .045 + r * .03, -.32 + e * .618 % 1 * .6), m.scale.set(1 + e % 3 * .2, .85 + e % 2 * .25, 1 + r * .3), m.updateMatrix(), p.setMatrixAt(e, m.matrix), p.setColorAt(e, h.setHex(Hg[e % Hg.length]));
-	}
-	i.add(p);
-	let g = new vi(Vg.post, Ig.alu, 4), _ = 0;
-	for (let e of [-1, 1]) for (let t of [-1, 1]) m.position.set(e * .525, .6, t * .425), m.scale.set(1, 1, 1), m.updateMatrix(), g.setMatrixAt(_++, m.matrix);
-	i.add(g);
-	let v = new oi(new qa(1, .8), new uo({
-		color: 3820130,
-		roughness: 1
-	}));
-	v.rotation.x = -Math.PI / 2, v.position.y = .002, i.add(v);
-	let y = new oi(new Oi(.9, .012, .012), Ig.tube);
-	y.position.set(0, 1.17, .36), i.add(y);
-	let b = new oi(Vg.glass, Ig.glassRefl);
-	b.position.set(0, .6, .41), b.renderOrder = 4, i.add(b);
-	let x = new oi(new sg(.8, .07, .18, 2, .02), o);
-	x.position.set(0, -.02, .56), i.add(x);
-	let S = new oi(new Qa(.12, .015, 10, 32), l);
-	return S.position.set(-.28, -.55, .51), i.add(S), i;
-}
-function Gg() {
+function Bg() {
 	let e = new Hn(), t = new oi(new Oi(16, 5, 16), new uo({
 		color: 15262942,
 		side: 1,
@@ -22667,17 +22504,95 @@ function Gg() {
 	return r(16773365, 0, 7.9, Math.PI, 6, 2.4), r(16771232, -7.9, 2, Math.PI / 2), r(12120310, 7.9, -1, -Math.PI / 2), r(16022184, 3, 7.9, Math.PI, 1.5, 1.6), e.add(new Fo(16774640, 11577496, .7)), e;
 }
 //#endregion
+//#region node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+function Vg(e, t = !1) {
+	let n = e[0].index !== null, r = new Set(Object.keys(e[0].attributes)), i = new Set(Object.keys(e[0].morphAttributes)), a = {}, o = {}, s = e[0].morphTargetsRelative, c = new Ir(), l = 0;
+	for (let u = 0; u < e.length; ++u) {
+		let d = e[u], f = 0;
+		if (n !== (d.index !== null)) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them."), null;
+		for (let e in d.attributes) {
+			if (!r.has(e)) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". All geometries must have compatible attributes; make sure \"" + e + "\" attribute exists among all geometries, or in none of them."), null;
+			a[e] === void 0 && (a[e] = []), a[e].push(d.attributes[e]), f++;
+		}
+		if (f !== r.size) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". Make sure all geometries have the same number of attributes."), null;
+		if (s !== d.morphTargetsRelative) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". .morphTargetsRelative must be consistent throughout all geometries."), null;
+		for (let e in d.morphAttributes) {
+			if (!i.has(e)) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ".  .morphAttributes must be consistent throughout all geometries."), null;
+			o[e] === void 0 && (o[e] = []), o[e].push(d.morphAttributes[e]);
+		}
+		if (t) {
+			let e;
+			if (n) e = d.index.count;
+			else if (d.attributes.position !== void 0) e = d.attributes.position.count;
+			else return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed with geometry at index " + u + ". The geometry must have either an index or a position attribute"), null;
+			c.addGroup(l, e, u), l += e;
+		}
+	}
+	if (n) {
+		let t = 0, n = [];
+		for (let r = 0; r < e.length; ++r) {
+			let i = e[r].index;
+			for (let e = 0; e < i.count; ++e) n.push(i.getX(e) + t);
+			t += e[r].attributes.position.count;
+		}
+		c.setIndex(n);
+	}
+	for (let e in a) {
+		let t = Hg(a[e]);
+		if (!t) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed while trying to merge the " + e + " attribute."), null;
+		c.setAttribute(e, t);
+	}
+	for (let e in o) {
+		let t = o[e][0].length;
+		if (t !== 0) {
+			c.morphAttributes = c.morphAttributes || {}, c.morphAttributes[e] = [];
+			for (let n = 0; n < t; ++n) {
+				let t = [];
+				for (let r = 0; r < o[e].length; ++r) t.push(o[e][r][n]);
+				let r = Hg(t);
+				if (!r) return console.error("THREE.BufferGeometryUtils: .mergeGeometries() failed while trying to merge the " + e + " morphAttribute."), null;
+				c.morphAttributes[e].push(r);
+			}
+		}
+	}
+	return c;
+}
+function Hg(e) {
+	let t, n, r, i = -1, a = 0;
+	for (let o = 0; o < e.length; ++o) {
+		let s = e[o];
+		if (t === void 0 && (t = s.array.constructor), t !== s.array.constructor) return console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.array must be of consistent array types across matching attributes."), null;
+		if (n === void 0 && (n = s.itemSize), n !== s.itemSize) return console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.itemSize must be consistent across matching attributes."), null;
+		if (r === void 0 && (r = s.normalized), r !== s.normalized) return console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.normalized must be consistent across matching attributes."), null;
+		if (i === -1 && (i = s.gpuType), i !== s.gpuType) return console.error("THREE.BufferGeometryUtils: .mergeAttributes() failed. BufferAttribute.gpuType must be consistent across matching attributes."), null;
+		a += s.count * n;
+	}
+	let o = new t(a), s = new xr(o, n, r), c = 0;
+	for (let t = 0; t < e.length; ++t) {
+		let r = e[t];
+		if (r.isInterleavedBufferAttribute) {
+			let e = c / n;
+			for (let t = 0, i = r.count; t < i; t++) for (let i = 0; i < n; i++) {
+				let n = r.getComponent(t, i);
+				s.setComponent(t + e, i, n);
+			}
+		} else o.set(r.array, c);
+		c += r.count * n;
+	}
+	return i !== void 0 && (s.gpuType = i), s;
+}
+//#endregion
 //#region src/plush.ts
-var $ = (e = 0, t = 0, n = 0) => new z(e, t, n), Kg = (e = 0, t = 0, n = 0) => new mn(e, t, n), qg = {
+var $ = (e = 0, t = 0, n = 0) => new z(e, t, n), Ug = (e = 0, t = 0, n = 0) => new mn(e, t, n), Wg = {
 	uShells: { value: 6 },
 	uFurLen: { value: .0032 },
 	uFurTex: { value: null }
-}, Jg = 6, Yg = /* @__PURE__ */ new Set();
-function Xg(e) {
-	Jg = e, qg.uShells.value = Math.max(1, e);
-	for (let t of Yg) t.count = e, t.visible = e > 0;
+}, Gg = 6, Kg = /* @__PURE__ */ new Set();
+function qg(e) {
+	Gg = e, Wg.uShells.value = Math.max(1, e);
+	for (let t of Kg) t.count = e, t.visible = e > 0;
 }
-function Zg() {
+function Jg() {
 	return {
 		uCenter: { value: $() },
 		uDent: { value: [
@@ -22689,21 +22604,21 @@ function Zg() {
 		uFloorY: { value: 0 }
 	};
 }
-var Qg = new zn(16777215);
-function $g(e, t, n) {
+var Yg = new zn(16777215);
+function Xg(e, t, n) {
 	let r = new zn(e), i = new fo({
 		color: r,
 		roughness: .96,
 		metalness: 0,
 		sheen: .8,
 		sheenRoughness: .5,
-		sheenColor: r.clone().lerp(Qg, .3),
-		map: mg(),
-		normalMap: dg(),
+		sheenColor: r.clone().lerp(Yg, .3),
+		map: fg(),
+		normalMap: lg(),
 		normalScale: new R(.5, .5)
 	});
-	return qg.uFurTex.value = gg(), i.onBeforeCompile = (e) => {
-		Object.assign(e.uniforms, t, qg), e.vertexShader = e.vertexShader.replace("#include <common>", "#include <common>\nuniform vec3 uCenter; uniform vec4 uDent[3]; uniform vec4 uSquash; uniform float uFloorY; uniform float uShells; uniform float uFurLen;\nvarying float vShell;").replace("#include <begin_vertex>", `#include <begin_vertex>
+	return Wg.uFurTex.value = mg(), i.onBeforeCompile = (e) => {
+		Object.assign(e.uniforms, t, Wg), e.vertexShader = e.vertexShader.replace("#include <common>", "#include <common>\nuniform vec3 uCenter; uniform vec4 uDent[3]; uniform vec4 uSquash; uniform float uFloorY; uniform float uShells; uniform float uFurLen;\nvarying float vShell;").replace("#include <begin_vertex>", `#include <begin_vertex>
 vShell = 0.0;
 ${n ? "vShell = float(gl_InstanceID + 1) / uShells; transformed += normalize(objectNormal) * uFurLen * vShell; transformed.y -= uFurLen * 0.35 * vShell * vShell;" : ""}
 { float ax = dot(transformed, uSquash.xyz);
@@ -22717,7 +22632,7 @@ for (int i = 0; i < 3; i++) {
 ${n ? "{ float n = texture2D(uFurTex, vMapUv * vec2(16.0, 8.0)).r; if (n < vShell) discard; diffuseColor.rgb *= mix(0.74, 1.1, vShell); }" : "diffuseColor.rgb *= 0.9;"}`);
 	}, i.customProgramCacheKey = () => n ? "plush-fur" : "plush", i.userData.plush = !0, n && (i.userData.fur = !0), i;
 }
-var e_ = {
+var Zg = {
 	eye: new fo({
 		color: 723728,
 		roughness: .12,
@@ -22765,10 +22680,10 @@ var e_ = {
 		opacity: .32,
 		depthWrite: !1
 	})
-}, t_ = new Za(1, 24, 16), n_ = new Za(1, 14, 10), r_ = new Mi(1, 1, 14), i_ = new ji(1, 1, 1, 16), a_ = new Oi(1, 1, 1), o_ = new Qa(.0055, .0011, 5, 14, Math.PI), s_ = (e, t) => new ki(e, t * 2, 6, 18), c_ = class {
+}, Qg = new Za(1, 24, 16), $g = new Za(1, 14, 10), e_ = new Mi(1, 1, 14), t_ = new ji(1, 1, 1, 16), n_ = new Oi(1, 1, 1), r_ = new Qa(.0055, .0011, 5, 14, Math.PI), i_ = (e, t) => new ki(e, t * 2, 6, 18), a_ = class {
 	parts = /* @__PURE__ */ new Map();
 	add(e, t, n, r, i) {
-		let a = new rn().compose(n, new Nt().setFromEuler(i ?? Kg()), typeof r == "number" ? $(r, r, r) : r), o = e.index ? e.toNonIndexed() : e.clone();
+		let a = new rn().compose(n, new Nt().setFromEuler(i ?? Ug()), typeof r == "number" ? $(r, r, r) : r), o = e.index ? e.toNonIndexed() : e.clone();
 		for (let e of Object.keys(o.attributes)) [
 			"position",
 			"normal",
@@ -22781,20 +22696,20 @@ var e_ = {
 	build(e) {
 		let t = new Mn();
 		for (let [n, r] of this.parts) {
-			let i = rg(r), a = new oi(i, n), o = n.transparent;
+			let i = Vg(r), a = new oi(i, n), o = n.transparent;
 			a.castShadow = !o && !!n.userData.plush, a.receiveShadow = !o, t.add(a);
 			let s = e.get(n);
 			if (s) {
 				let e = new vi(i, s, 10);
-				e.count = Jg, e.visible = Jg > 0, e.castShadow = !1, e.receiveShadow = !0, Yg.add(e), t.add(e);
+				e.count = Gg, e.visible = Gg > 0, e.castShadow = !1, e.receiveShadow = !0, Kg.add(e), t.add(e);
 			}
 		}
 		return t;
 	}
 };
-function l_(e) {
+function o_(e) {
 	e.group.traverse((e) => {
-		e.isInstancedMesh && Yg.delete(e);
+		e.isInstancedMesh && Kg.delete(e);
 		let t = e;
 		if (t.isMesh) {
 			t.geometry.dispose();
@@ -22803,8 +22718,8 @@ function l_(e) {
 		}
 	});
 }
-function u_(e, t, n = .5) {
-	let r = Zg(), i = Math.floor(n * 2147483646) + 1, a = () => (i = i * 16807 % 2147483647) / 2147483647, o = (e) => (a() * 2 - 1) * e;
+function s_(e, t, n = .5) {
+	let r = Jg(), i = Math.floor(n * 2147483646) + 1, a = () => (i = i * 16807 % 2147483647) / 2147483647, o = (e) => (a() * 2 - 1) * e;
 	{
 		let e = {
 			h: 0,
@@ -22813,48 +22728,48 @@ function u_(e, t, n = .5) {
 		}, n = new zn(t);
 		n.getHSL(e), n.setHSL(e.h + o(.012), Math.max(0, e.s * (.9 + o(.12))), e.l * (.95 + o(.06))), t = n.getHex();
 	}
-	let s = new c_(), c = /* @__PURE__ */ new Map(), l = /* @__PURE__ */ new Map(), u = (e) => {
+	let s = new a_(), c = /* @__PURE__ */ new Map(), l = /* @__PURE__ */ new Map(), u = (e) => {
 		let t = l.get(e);
-		return t || (t = $g(e, r, !1), l.set(e, t), c.set(t, $g(e, r, !0))), t;
+		return t || (t = Xg(e, r, !1), l.set(e, t), c.set(t, Xg(e, r, !0))), t;
 	}, d = u(t), f = u(new zn(t).lerp(new zn(15787992), .55).getHex()), p = u(14066592), m = (e, t, n, r = .0062, i = 0) => {
-		for (let a of [-1, 1]) s.add(n_, e_.eye, $(a * n + o(.0012), e + o(.0012), t + .0026), $(r, r * 1.12, r * .75), Kg(-i, 0, 0));
+		for (let a of [-1, 1]) s.add($g, Zg.eye, $(a * n + o(.0012), e + o(.0012), t + .0026), $(r, r * 1.12, r * .75), Ug(-i, 0, 0));
 	}, h = (e, t, n = .25) => {
-		for (let r of [-1, 1]) s.add(o_, e_.thread, $(r * .0054, e, t + .0022), 1, Kg(n, 0, Math.PI));
+		for (let r of [-1, 1]) s.add(r_, Zg.thread, $(r * .0054, e, t + .0022), 1, Ug(n, 0, Math.PI));
 	}, g = (e, t, n, r = .5) => {
-		for (let i of [-1, 1]) s.add(n_, e_.blush, $(i * n, e, t + .0028), $(.0085, .0052, .0015), Kg(0, i * r, 0));
+		for (let i of [-1, 1]) s.add($g, Zg.blush, $(i * n, e, t + .0028), $(.0085, .0052, .0015), Ug(0, i * r, 0));
 	};
 	switch (e.id) {
 		case "bear":
-			s.add(t_, d, $(0, 0, 0), $(.045, .047, .042)), s.add(t_, f, $(0, -.006, .027), $(.028, .03, .018)), s.add(t_, d, $(0, .07, .004), $(.048, .044, .044)), s.add(t_, f, $(0, .06, .041), $(.021, .016, .012)), s.add(n_, e_.nose, $(0, .066, .0545), $(.0085, .006, .0055)), h(.0555, .0515), m(.079, .0435, .0175, .0064, .15), g(.064, .042, .03);
-			for (let e of [-1, 1]) s.add(t_, d, $(e * .035, .106, 0), $(.016, .016, .0095), Kg(0, 0, o(.25))), s.add(t_, p, $(e * .035, .105, .0058), $(.0095, .0095, .004)), s.add(s_(.0165, .012), d, $(e * .043, .004, .016), 1, Kg(.6, 0, e * .75)), s.add(t_, d, $(e * .023, -.037, .022), $(.02, .018, .024)), s.add(t_, f, $(e * .023, -.039, .043), $(.012, .011, .004));
-			a() < .5 && (s.add(r_, e_.ribbon, $(-.011, .031, .036), $(.009, .018, .006), Kg(0, 0, Math.PI / 2)), s.add(r_, e_.ribbon, $(.011, .031, .036), $(.009, .018, .006), Kg(0, 0, -Math.PI / 2)), s.add(n_, e_.ribbon, $(0, .031, .038), .0045));
+			s.add(Qg, d, $(0, 0, 0), $(.045, .047, .042)), s.add(Qg, f, $(0, -.006, .027), $(.028, .03, .018)), s.add(Qg, d, $(0, .07, .004), $(.048, .044, .044)), s.add(Qg, f, $(0, .06, .041), $(.021, .016, .012)), s.add($g, Zg.nose, $(0, .066, .0545), $(.0085, .006, .0055)), h(.0555, .0515), m(.079, .0435, .0175, .0064, .15), g(.064, .042, .03);
+			for (let e of [-1, 1]) s.add(Qg, d, $(e * .035, .106, 0), $(.016, .016, .0095), Ug(0, 0, o(.25))), s.add(Qg, p, $(e * .035, .105, .0058), $(.0095, .0095, .004)), s.add(i_(.0165, .012), d, $(e * .043, .004, .016), 1, Ug(.6, 0, e * .75)), s.add(Qg, d, $(e * .023, -.037, .022), $(.02, .018, .024)), s.add(Qg, f, $(e * .023, -.039, .043), $(.012, .011, .004));
+			a() < .5 && (s.add(e_, Zg.ribbon, $(-.011, .031, .036), $(.009, .018, .006), Ug(0, 0, Math.PI / 2)), s.add(e_, Zg.ribbon, $(.011, .031, .036), $(.009, .018, .006), Ug(0, 0, -Math.PI / 2)), s.add($g, Zg.ribbon, $(0, .031, .038), .0045));
 			break;
 		case "bunny":
-			s.add(t_, d, $(0, 0, 0), $(.041, .043, .039)), s.add(t_, f, $(0, -.004, .025), $(.024, .027, .016)), s.add(t_, d, $(0, .064, .004), $(.045, .041, .041)), s.add(n_, p, $(0, .062, .0465), $(.0055, .0042, .003)), h(.0545, .0435), m(.072, .039, .016, .0062, .1), g(.058, .038, .027);
-			for (let e of [-1, 1]) s.add(s_(.012, .022), d, $(e * .017, .128, -.004), $(1, 1, .55), Kg(o(.2), 0, -e * .16 + o(.22))), s.add(s_(.007, .018), p, $(e * .0175, .128, .0016), $(1, 1, .3), Kg(0, 0, -e * .16)), s.add(t_, d, $(e * .021, -.035, .02), $(.017, .015, .022)), s.add(s_(.012, .01), d, $(e * .037, .002, .021), 1, Kg(.5, 0, e * .5));
-			s.add(t_, u(16777215), $(0, -.012, -.041), .014);
+			s.add(Qg, d, $(0, 0, 0), $(.041, .043, .039)), s.add(Qg, f, $(0, -.004, .025), $(.024, .027, .016)), s.add(Qg, d, $(0, .064, .004), $(.045, .041, .041)), s.add($g, p, $(0, .062, .0465), $(.0055, .0042, .003)), h(.0545, .0435), m(.072, .039, .016, .0062, .1), g(.058, .038, .027);
+			for (let e of [-1, 1]) s.add(i_(.012, .022), d, $(e * .017, .128, -.004), $(1, 1, .55), Ug(o(.2), 0, -e * .16 + o(.22))), s.add(i_(.007, .018), p, $(e * .0175, .128, .0016), $(1, 1, .3), Ug(0, 0, -e * .16)), s.add(Qg, d, $(e * .021, -.035, .02), $(.017, .015, .022)), s.add(i_(.012, .01), d, $(e * .037, .002, .021), 1, Ug(.5, 0, e * .5));
+			s.add(Qg, u(16777215), $(0, -.012, -.041), .014);
 			break;
 		case "chick":
-			s.add(t_, d, $(0, 0, 0), $(.054, .052, .053)), s.add(r_, e_.felt, $(0, .004, .056), $(.0095, .016, .009), Kg(Math.PI / 2, 0, 0)), m(.017, .0485, .019, .0068), g(0, .048, .031, .6);
-			for (let e of [-1, 1]) s.add(t_, d, $(e * .05, -.004, -.002), $(.01, .023, .018), Kg(0, 0, e * .4)), s.add(t_, e_.felt, $(e * .018, -.05, .02), $(.012, .005, .016));
-			for (let e = -1; e <= 1; e++) s.add(t_, d, $(e * .008, .056, -.004), $(.006, .013, .006), Kg(0, 0, e * .45));
+			s.add(Qg, d, $(0, 0, 0), $(.054, .052, .053)), s.add(e_, Zg.felt, $(0, .004, .056), $(.0095, .016, .009), Ug(Math.PI / 2, 0, 0)), m(.017, .0485, .019, .0068), g(0, .048, .031, .6);
+			for (let e of [-1, 1]) s.add(Qg, d, $(e * .05, -.004, -.002), $(.01, .023, .018), Ug(0, 0, e * .4)), s.add(Qg, Zg.felt, $(e * .018, -.05, .02), $(.012, .005, .016));
+			for (let e = -1; e <= 1; e++) s.add(Qg, d, $(e * .008, .056, -.004), $(.006, .013, .006), Ug(0, 0, e * .45));
 			break;
 		case "penguin":
-			s.add(s_(.044, .026), d, $(0, .01, 0), 1), s.add(s_(.04, .02), u(15526111), $(0, .002, .019), $(.84, .98, .78)), s.add(r_, e_.felt, $(0, .036, .048), $(.008, .014, .006), Kg(Math.PI / 2, 0, 0));
-			for (let e of [-1, 1]) s.add(n_, e_.eyeWhite, $(e * .0145, .05, .0405), $(.0085, .0095, .004)), s.add(n_, e_.eye, $(e * .0145, .0495, .0435), $(.0048, .0058, .003)), s.add(t_, d, $(e * .045, .004, 0), $(.008, .028, .016), Kg(0, 0, e * .35)), s.add(t_, e_.felt, $(e * .017, -.06, .018), $(.013, .005, .017));
+			s.add(i_(.044, .026), d, $(0, .01, 0), 1), s.add(i_(.04, .02), u(15526111), $(0, .002, .019), $(.84, .98, .78)), s.add(e_, Zg.felt, $(0, .036, .048), $(.008, .014, .006), Ug(Math.PI / 2, 0, 0));
+			for (let e of [-1, 1]) s.add($g, Zg.eyeWhite, $(e * .0145, .05, .0405), $(.0085, .0095, .004)), s.add($g, Zg.eye, $(e * .0145, .0495, .0435), $(.0048, .0058, .003)), s.add(Qg, d, $(e * .045, .004, 0), $(.008, .028, .016), Ug(0, 0, e * .35)), s.add(Qg, Zg.felt, $(e * .017, -.06, .018), $(.013, .005, .017));
 			g(.036, .04, .027);
 			break;
 		default: {
-			s.add(t_, d, $(0, 0, 0), $(.056, .054, .055));
+			s.add(Qg, d, $(0, 0, 0), $(.056, .054, .055));
 			let e = u(new zn(t).multiplyScalar(.86).getHex());
-			s.add(i_, e, $(0, -.003, .054), $(.019, .012, .014), Kg(Math.PI / 2, 0, 0));
-			for (let t of [-1, 1]) s.add(n_, e_.nose, $(t * .006, -.003, .0625), $(.003, .0045, .002)), s.add(t_, d, $(t * .03, .047, -.004), $(.017, .015, .006), Kg(.35 + o(.15), 0, -t * .6 + o(.2))), s.add(t_, e, $(t * .026, -.046, .016), $(.014, .012, .016));
+			s.add(t_, e, $(0, -.003, .054), $(.019, .012, .014), Ug(Math.PI / 2, 0, 0));
+			for (let t of [-1, 1]) s.add($g, Zg.nose, $(t * .006, -.003, .0625), $(.003, .0045, .002)), s.add(Qg, d, $(t * .03, .047, -.004), $(.017, .015, .006), Ug(.35 + o(.15), 0, -t * .6 + o(.2))), s.add(Qg, e, $(t * .026, -.046, .016), $(.014, .012, .016));
 			h(-.02, .0525, .6), m(.023, .051, .021, .0064), g(.008, .051, .036, .6);
 		}
 	}
 	{
-		let t = a() < .5 ? -1 : 1, n = e.id === "chick" || e.id === "pig" ? -.03 : -.022, r = t * (e.id === "chick" || e.id === "pig" ? .036 : .026), i = Kg(o(.3), t * .9, o(.4) + t * .2);
-		s.add(a_, e_.tag, $(r, n - .012, -.027), $(.014, .026, .0012), i), s.add(a_, e_.tagPrint, $(r, n - .006, -.027), $(.0145, .003, .0014), i);
+		let t = a() < .5 ? -1 : 1, n = e.id === "chick" || e.id === "pig" ? -.03 : -.022, r = t * (e.id === "chick" || e.id === "pig" ? .036 : .026), i = Ug(o(.3), t * .9, o(.4) + t * .2);
+		s.add(n_, Zg.tag, $(r, n - .012, -.027), $(.014, .026, .0012), i), s.add(n_, Zg.tagPrint, $(r, n - .006, -.027), $(.0145, .003, .0014), i);
 	}
 	return {
 		group: s.build(c),
@@ -22863,7 +22778,7 @@ function u_(e, t, n = .5) {
 }
 //#endregion
 //#region src/audio.ts
-var d_ = class {
+var c_ = class {
 	ctx = null;
 	master;
 	muted = !1;
@@ -22984,12 +22899,12 @@ var d_ = class {
 	lose() {
 		this.tone(330, .16, "triangle", .06), this.tone(262, .3, "triangle", .06, .18);
 	}
-}, f_ = (e) => {
+}, l_ = (e) => {
 	try {
 		navigator.vibrate?.(e);
 	} catch {}
 };
-async function p_(e) {
+async function u_(e) {
 	let { root: n, kv: r, wallet: i, standalone: a = !1, debug: o = !1 } = e;
 	if (!n) throw Error("createClawApp: 需要一个根元素");
 	e.html && n.insertAdjacentHTML("beforeend", e.html), e.patch?.(n);
@@ -23028,19 +22943,19 @@ async function p_(e) {
 			_ = null, r.set("bag", JSON.stringify(g)).catch((e) => console.warn("[claw] 存档写入失败", e));
 		}, 400), f.add(_);
 	}
-	Fg();
+	Ng();
 	let b = s("c"), x = new Bu({
 		canvas: b,
 		antialias: !0,
 		powerPreference: "high-performance"
 	});
-	x.outputColorSpace = He, x.toneMapping = 4, x.toneMappingExposure = 1, x.shadowMap.enabled = !0, x.info.autoReset = !1, x.shadowMap.type = 1;
+	x.outputColorSpace = We, x.toneMapping = 4, x.toneMappingExposure = 1, x.shadowMap.enabled = !0, x.info.autoReset = !1, x.shadowMap.type = 1;
 	let S = new Hn();
 	S.background = new zn(15262942), S.fog = new Vn(15262942, 6, 14);
-	let C = new qs(x), w = C.fromScene(Gg(), .02).texture;
+	let C = new qs(x), w = C.fromScene(Bg(), .02).texture;
 	S.environment = w, S.environmentIntensity = .65;
-	let T = new qo(45, 1, .05, 30), E = new Zu(T, b);
-	E.enablePan = !1, E.enableDamping = !0, E.dampingFactor = .08, E.minAzimuthAngle = -1, E.maxAzimuthAngle = 1, E.minPolarAngle = .55, E.maxPolarAngle = 1.62, E.rotateSpeed = .55, E.touches = {
+	let T = new qo(45, 1, .05, 60), E = new Zu(T, b);
+	E.enablePan = !1, E.enableDamping = !0, E.dampingFactor = .08, E.minPolarAngle = .55, E.maxPolarAngle = 1.62, E.rotateSpeed = .55, E.touches = {
 		ONE: t.ROTATE,
 		TWO: t.DOLLY_ROTATE
 	}, E.enabled = !1, S.add(new Fo(16774640, 13156536, .55));
@@ -23062,7 +22977,7 @@ async function p_(e) {
 	let te = new Mn();
 	S.add(te);
 	let ne = new Jr({
-		color: jg[0].led,
+		color: kg[0].led,
 		transparent: !0,
 		opacity: .9,
 		depthWrite: !1,
@@ -23086,12 +23001,12 @@ async function p_(e) {
 		]) e.rotation.x = -Math.PI / 2, e.renderOrder = 5, te.add(e);
 		n.position.y = r.position.y = .001;
 	}
-	S.add(Bg());
-	let re = (Number(h.theme || 0) || 0) % jg.length, A = zg(jg[re]);
-	S.add(A.root), Rg(A, jg[re]);
+	S.add(zg());
+	let re = (Number(h.theme || 0) || 0) % kg.length, A = Lg(kg[re]);
+	S.add(A.root), Ig(A, kg[re]);
 	function ie(e) {
-		re = (e % jg.length + jg.length) % jg.length, r.set("theme", String(re)), Rg(A, jg[re]);
-		let t = jg[re];
+		re = (e % kg.length + kg.length) % kg.length, r.set("theme", String(re)), Ig(A, kg[re]);
+		let t = kg[re];
 		n.style.setProperty("--accent", t.accentHex), n.style.setProperty("--accent-soft", "#" + t.accentSoft.toString(16).padStart(6, "0")), n.style.setProperty("--accent-dark", "#" + t.dark.toString(16).padStart(6, "0")), n.querySelectorAll("#themes button").forEach((e, t) => e.classList.toggle("on", t === re)), ne.color.setHex(t.led), a && document.querySelector("meta[name=theme-color]")?.setAttribute("content", "#" + t.accentSoft.toString(16).padStart(6, "0"));
 	}
 	{
@@ -23113,16 +23028,16 @@ async function p_(e) {
 	]) e.traverse((e) => {
 		e.castShadow = !0;
 	});
-	let j = 0, ae = 0, oe = 0, se = 0;
-	function ce(e, t) {
-		j++, s("winName").textContent = e.type.name;
+	let j = Rg(A), ae = 0, oe = 0, se = 0, ce = 0;
+	function le(e, t) {
+		ae++, s("winName").textContent = e.type.name;
 		let n = t > 0 ? ` · +${t} 兑换券` : "";
-		s("winSub").textContent = `${e.colorName} · 你的第 ${$e()} 个奖品${n}`, fe(e), s("win").classList.add("show"), M(), se = 3.5;
+		s("winSub").textContent = `${e.colorName} · 你的第 ${rt()} 个奖品${n}`, pe(e), s("win").classList.add("show"), Ve(), ce = 3.5;
 	}
-	let le = null, ue = null, de = !1;
-	function fe(e) {
+	let ue = null, de = null, fe = !1;
+	function pe(e) {
 		let t = s("winPrev");
-		if (!le) try {
+		if (!ue) try {
 			let e = new Bu({
 				canvas: t,
 				alpha: !0,
@@ -23133,7 +23048,7 @@ async function p_(e) {
 			let n = new Hn();
 			n.add(new Fo(16777215, 15128798, 2.4));
 			let r = new es(16777215, 2.4);
-			r.position.set(.6, 1.4, 1.6), n.add(r), le = {
+			r.position.set(.6, 1.4, 1.6), n.add(r), ue = {
 				r: e,
 				s: n,
 				c: new qo(28, 1, .01, 5)
@@ -23142,81 +23057,81 @@ async function p_(e) {
 			t.style.display = "none";
 			return;
 		}
-		ue && (le.s.remove(ue.group), l_(ue)), ue = u_(e.type, e.color, e.seed);
-		let n = new rr().setFromObject(ue.group), r = n.getCenter(new z()), i = n.getSize(new z()).length();
-		ue.group.position.sub(r), ue.u.uCenter.value.set(0, 0, 0), ue.u.uFloorY.value = -10, le.c.position.set(0, i * .35, i * 2), le.c.lookAt(0, 0, 0);
+		de && (ue.s.remove(de.group), o_(de)), de = s_(e.type, e.color, e.seed);
+		let n = new rr().setFromObject(de.group), r = n.getCenter(new z()), i = n.getSize(new z()).length();
+		de.group.position.sub(r), de.u.uCenter.value.set(0, 0, 0), de.u.uFloorY.value = -10, ue.c.position.set(0, i * .35, i * 2), ue.c.lookAt(0, 0, 0);
 		let a = new Mn();
-		a.add(ue.group), le.s.add(a), ue.pivot = a, de = !0;
+		a.add(de.group), ue.s.add(a), de.pivot = a, fe = !0;
 	}
-	function pe(e) {
-		if (!de || !le || !ue) return;
-		let t = ue.pivot;
-		t.rotation.y = e * .9, t.position.y = Math.sin(e * 2.2) * .004, le.r.render(le.s, le.c);
+	function me(e) {
+		if (!fe || !ue || !de) return;
+		let t = de.pivot;
+		t.rotation.y = e * .9, t.position.y = Math.sin(e * 2.2) * .004, ue.r.render(ue.s, ue.c);
 	}
-	function me() {
-		de = !1, s("win").classList.remove("show"), Oe < 0 && (se = 0, Ie(0));
+	function he() {
+		fe = !1, s("win").classList.remove("show"), Me && (ce = 0, N(je));
 	}
-	let he = /* @__PURE__ */ new Map();
-	function ge() {
+	let ge = /* @__PURE__ */ new Map();
+	function _e() {
 		for (let e of [...F.prizes]) {
 			if (!e.won) continue;
-			let t = Be.get(e.uid);
+			let t = qe.get(e.uid);
 			if (!t) {
 				F.removePrize(e);
 				continue;
 			}
-			he.set(e.uid, {
+			ge.set(e.uid, {
 				m: t,
 				t: 0,
 				p0: t.group.position.clone(),
 				s0: t.group.scale.x
-			}), Be.delete(e.uid), F.removePrize(e);
+			}), qe.delete(e.uid), F.removePrize(e);
 		}
-		oe = 0;
+		se = 0;
 	}
-	function _e(e) {
-		for (let [t, n] of he) {
+	function ve(e) {
+		for (let [t, n] of ge) {
 			n.t += e / .45;
 			let r = Math.min(1, n.t);
-			n.m.group.position.set(n.p0.x, n.p0.y + Math.sin(r * Math.PI) * .03, n.p0.z + r * .35), n.m.group.scale.setScalar(n.s0 * (1 - r * r)), n.m.u.uCenter.value.copy(n.m.group.position), n.m.u.uFloorY.value = -10, r >= 1 && (S.remove(n.m.group), l_(n.m), he.delete(t));
+			n.m.group.position.set(n.p0.x, n.p0.y + Math.sin(r * Math.PI) * .03, n.p0.z + r * .35), n.m.group.scale.setScalar(n.s0 * (1 - r * r)), n.m.u.uCenter.value.copy(n.m.group.position), n.m.u.uFloorY.value = -10, r >= 1 && (S.remove(n.m.group), o_(n.m), ge.delete(t));
 		}
 	}
 	s("winOk").addEventListener("click", () => {
-		P.click(), me(), ge(), P.take();
+		P.click(), he(), _e(), P.take();
 	});
-	let ve = [
+	let ye = [
 		"低",
 		"中",
 		"高"
-	], ye = (navigator.deviceMemory ?? 8) <= 2 || (navigator.hardwareConcurrency ?? 8) <= 4 || !x.capabilities.isWebGL2, be = (a ? c.get("q") : new URLSearchParams(location.search).get("clawq")) ?? (h.q || null), xe = be != null && be !== "" ? Math.max(0, Math.min(2, Number(be) || 0)) : l ? +!ye : 2, Se = null, Ce = null;
-	function we() {
+	], be = (navigator.deviceMemory ?? 8) <= 2 || (navigator.hardwareConcurrency ?? 8) <= 4 || !x.capabilities.isWebGL2, xe = (a ? c.get("q") : new URLSearchParams(location.search).get("clawq")) ?? (h.q || null), Se = xe != null && xe !== "" ? Math.max(0, Math.min(2, Number(xe) || 0)) : l ? +!be : 2, Ce = null, we = null;
+	function Te() {
 		return {
 			w: Math.max(1, n.clientWidth),
 			h: Math.max(1, n.clientHeight)
 		};
 	}
-	function Te() {
+	function Ee() {
 		let e = Math.min(window.devicePixelRatio || 1, [
 			1,
 			1.5,
 			2
-		][xe]);
+		][Se]);
 		x.setPixelRatio(e);
 		let t = [
 			512,
 			1024,
 			l ? 2048 : 4096
-		][xe];
-		if (D.shadow.mapSize.x !== t && (D.shadow.mapSize.set(t, t), D.shadow.map?.dispose(), D.shadow.map = null), Xg([
+		][Se];
+		if (D.shadow.mapSize.x !== t && (D.shadow.mapSize.set(t, t), D.shadow.map?.dispose(), D.shadow.map = null), qg([
 			0,
 			4,
 			7
-		][xe]), Se?.dispose(), Se = null, xe > 0) {
-			let { w: t, h: n } = we(), r = new en(t * e, n * e, {
+		][Se]), Ce?.dispose(), Ce = null, Se > 0) {
+			let { w: t, h: n } = Te(), r = new en(t * e, n * e, {
 				type: v,
-				samples: xe === 2 ? 4 : 2
+				samples: Se === 2 ? 4 : 2
 			});
-			Se = new vd(x, r), Se.setPixelRatio(e), Se.addPass(new yd(S, T)), Se.addPass(new xd()), Ce = new hd({
+			Ce = new vd(x, r), Ce.setPixelRatio(e), Ce.addPass(new yd(S, T)), Ce.addPass(new xd()), we = new hd({
 				uniforms: {
 					tDiffuse: { value: null },
 					uT: { value: 0 },
@@ -23224,48 +23139,55 @@ async function p_(e) {
 				},
 				vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
 				fragmentShader: "uniform sampler2D tDiffuse; uniform float uT; uniform float uAmt; varying vec2 vUv;\n        float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + uT) * 43758.5453); }\n        void main(){ vec4 c = texture2D(tDiffuse, vUv);\n          vec2 q = vUv - 0.5; float v = 1.0 - dot(q, q) * 0.35;\n          c.rgb *= v; c.rgb += (h(gl_FragCoord.xy) - 0.5) * uAmt;\n          gl_FragColor = vec4(c.rgb, 1.0); }"
-			}), Se.addPass(Ce);
-		} else Ce = null;
-		n.querySelectorAll("#qseg button").forEach((e) => e.classList.toggle("on", Number(e.dataset.q) === xe)), Pe();
+			}), Ce.addPass(we);
+		} else we = null;
+		n.querySelectorAll("#qseg button").forEach((e) => e.classList.toggle("on", Number(e.dataset.q) === Se)), Re();
 	}
-	let Ee = new z(0, .6, 0), De = [], Oe = 0, ke = null, Ae = 1, je = 1, Me = !1;
-	function Ne() {
-		let e = Math.tan(Mt.degToRad(T.fov / 2));
-		return Me ? Math.max(.72 / (e * T.aspect * je), 1.22 / (e * Ae)) : Math.max(.62 / (e * T.aspect), .95 / (e * Ae));
+	let De = new z(0, .6, 0), Oe = ["front", "side"], ke = {
+		front: {
+			az: 0,
+			polWide: 1.3,
+			polNarrow: 1.26,
+			k: 1.05
+		},
+		side: {
+			az: 1.4,
+			polWide: 1.26,
+			polNarrow: 1.22,
+			k: 1.02
+		}
+	}, Ae = Math.max(...Oe.map((e) => Math.abs(ke[e].az))) + .05;
+	E.minAzimuthAngle = -Ae, E.maxAzimuthAngle = Ae;
+	let je = "front", Me = !1, Ne = null, Pe = 1, Fe = 1, Ie = !1;
+	function M(e) {
+		return {
+			halfW: (e === "front" ? j.hx : j.hz) * 1.02,
+			halfH: Math.max(Math.abs(j.yMax - De.y), Math.abs(j.yMin - De.y)) * 1.02
+		};
 	}
-	function Pe() {
+	function Le(e) {
+		let t = ke[e], { halfW: n, halfH: r } = M(e), i = Math.tan(Mt.degToRad(T.fov / 2));
+		Ie ? t.polWide : t.polNarrow;
+		let a = n / (i * T.aspect * Fe), o = r * 1.16 / (i * Pe);
+		return Math.max(a, o) * t.k;
+	}
+	function Re() {
 		if (u) return;
-		let { w: e, h: t } = we();
-		T.aspect = e / t, Me = e > t * 1.05;
-		let r = Me && t < 560;
-		n.classList.toggle("wide", Me), n.classList.toggle("compact", r);
-		let i = Me ? Math.round(r ? Math.min(190, e * .22) : Math.min(320, Math.max(230, e * .15))) : 0;
+		let { w: e, h: t } = Te();
+		T.aspect = e / t, Ie = e > t * 1.05;
+		let r = Ie && t < 560;
+		n.classList.toggle("wide", Ie), n.classList.toggle("compact", r);
+		let i = Ie ? Math.round(r ? Math.min(190, e * .22) : Math.min(320, Math.max(230, e * .15))) : 0;
 		n.style.setProperty("--side", i + "px");
 		let a = s("board").offsetHeight || 50;
 		n.style.setProperty("--top", a + "px");
-		let o = Me ? 0 : s("deck").offsetHeight || 150;
-		Ae = Math.max(.4, (t - a - o - (Me ? 12 : 0)) / t), je = Math.max(.3, (e - i * 2) / e), Ee.y = Me ? .45 : .35, T.setViewOffset(e, t, 0, (o - a) / 2, e, t), T.updateProjectionMatrix(), x.setSize(e, t, !1), Se?.setSize(e, t);
-		let c = Ne();
-		De = [
-			{
-				az: 0,
-				pol: Me ? 1.32 : 1.28,
-				dist: c
-			},
-			{
-				az: -.55,
-				pol: 1.28,
-				dist: c * 1.05
-			},
-			{
-				az: 0,
-				pol: .7,
-				dist: c * .92
-			}
-		], E.minDistance = c * .5, E.maxDistance = c * 1.3;
+		let o = Ie ? 0 : s("deck").offsetHeight || 150;
+		Pe = Math.max(.4, (t - a - o - (Ie ? 12 : 0)) / t), Fe = Math.max(.3, (e - i * 2) / e), De.y = Ie ? .45 : .35, T.setViewOffset(e, t, 0, (o - a) / 2, e, t), T.updateProjectionMatrix(), x.setSize(e, t, !1), Ce?.setSize(e, t);
+		let c = Le(je);
+		E.minDistance = c * .5, E.maxDistance = c * 1.3;
 	}
-	function Fe(e, t, n = .9) {
-		ke = {
+	function ze(e, t, n = .9) {
+		Ne = {
 			p0: T.position.clone(),
 			t0: E.target.clone(),
 			p1: e,
@@ -23274,29 +23196,35 @@ async function p_(e) {
 			dur: n
 		};
 	}
-	function Ie(e, t = !1) {
-		Oe = e;
-		let n = De[e], r = new z().setFromSpherical(new ys(n.dist, n.pol, n.az)).add(Ee);
-		if (t) {
-			E.target.copy(Ee), T.position.copy(r), T.lookAt(Ee), E.update();
+	function N(e, t = !1) {
+		je = e, Me = !1;
+		let n = ke[e], r = Le(e), i = Ie ? n.polWide : n.polNarrow, a = new z().setFromSpherical(new ys(r, i, n.az)).add(De);
+		if (E.minDistance = r * .5, E.maxDistance = r * 1.3, Be(), t) {
+			E.target.copy(De), T.position.copy(a), T.lookAt(De), E.update();
 			return;
 		}
-		Fe(r, Ee.clone());
+		ze(a, De.clone());
 	}
-	function M() {
-		Oe = -1;
-		let e = new z(A.doorPos.x + .08, -.52, .36), t = Math.tan(Mt.degToRad(T.fov / 2)), n = Math.max(.32 / (t * T.aspect * je), .34 / (t * Ae));
-		Fe(new z(e.x + n * .1, e.y + n * .16, e.z + n * .98), e, 1.1);
+	function Be() {
+		n.querySelectorAll("#views [data-cam]").forEach((e) => {
+			let t = e.dataset.cam === je && !Me;
+			e.classList.toggle("on", t), e.setAttribute("aria-pressed", t ? "true" : "false");
+		});
 	}
-	let Le = 0;
-	function Re() {
-		u || (cancelAnimationFrame(Le), Le = requestAnimationFrame(() => {
-			u || (Pe(), !We && Oe >= 0 && !Ge && Ie(Oe));
+	function Ve() {
+		Me = !0, Be();
+		let e = new z(A.doorPos.x + .08, -.52, .36), t = Math.tan(Mt.degToRad(T.fov / 2)), n = Math.max(.32 / (t * T.aspect * Fe), .34 / (t * Pe));
+		ze(new z(e.x + n * .1, e.y + n * .16, e.z + n * .98), e, 1.1);
+	}
+	let He = 0;
+	function Ue() {
+		u || (cancelAnimationFrame(He), He = requestAnimationFrame(() => {
+			u || (Re(), !Xe && !Me && !Ze && N(je));
 		}));
 	}
-	p(window, "resize", Re), p(window, "orientationchange", () => m(Re, 250)), window.visualViewport?.addEventListener("resize", Re), d.push(() => window.visualViewport?.removeEventListener("resize", Re));
-	let ze = typeof ResizeObserver < "u" ? new ResizeObserver(Re) : null;
-	ze?.observe(n), d.push(() => ze?.disconnect()), n.classList.toggle("fine", matchMedia("(pointer: fine)").matches);
+	p(window, "resize", Ue), p(window, "orientationchange", () => m(Ue, 250)), window.visualViewport?.addEventListener("resize", Ue), d.push(() => window.visualViewport?.removeEventListener("resize", Ue));
+	let Ge = typeof ResizeObserver < "u" ? new ResizeObserver(Ue) : null;
+	Ge?.observe(n), d.push(() => Ge?.disconnect()), n.classList.toggle("fine", matchMedia("(pointer: fine)").matches);
 	for (let e of [
 		"gesturestart",
 		"gesturechange",
@@ -23307,15 +23235,15 @@ async function p_(e) {
 		let t = e;
 		t.cancelable && t.preventDefault();
 	}, { passive: !1 });
-	let N = () => P.unlock();
-	p(n, "pointerdown", N, {
+	let Ke = () => P.unlock();
+	p(n, "pointerdown", Ke, {
 		once: !0,
 		capture: !0
-	}), p(n, "keydown", N, {
+	}), p(n, "keydown", Ke, {
 		once: !0,
 		capture: !0
 	});
-	let P = new d_(), F, Be = /* @__PURE__ */ new Map(), Ve = 0, Ue = 99, We = !0, Ge = !1, Ke = {
+	let P = new c_(), F, qe = /* @__PURE__ */ new Map(), Je = 0, Ye = 99, Xe = !0, Ze = !1, Qe = {
 		coins: s("coins").querySelector("b"),
 		timer: s("timer").querySelector("b"),
 		bag: s("bag").querySelector("b"),
@@ -23328,43 +23256,43 @@ async function p_(e) {
 	};
 	{
 		let e = s("themes");
-		jg.forEach((t, n) => {
+		kg.forEach((t, n) => {
 			let r = document.createElement("button");
 			r.type = "button", r.title = t.name, r.style.background = t.accentHex, r.addEventListener("click", () => {
 				P.click(), ie(n);
 			}), e.appendChild(r);
 		}), ie(re);
 	}
-	let qe = {
+	let $e = {
 		info: "i-alert",
 		ok: "i-check",
 		warn: "i-clock",
 		miss: "i-hand",
 		coin: "i-coin",
 		win: "i-gift"
-	}, Je = null, Ye = 0;
-	function Xe() {
-		let e = Je;
-		Je = null, e && (e.classList.remove("in"), e.classList.add("out"), m(() => e.remove(), 240));
+	}, et = null, tt = 0;
+	function I() {
+		let e = et;
+		et = null, e && (e.classList.remove("in"), e.classList.add("out"), m(() => e.remove(), 240));
 	}
-	function Ze(e, t = "info", n = "", r = 1.8) {
+	function L(e, t = "info", n = "", r = 1.8) {
 		if (u) return;
-		Xe();
+		I();
 		let i = document.createElement("div");
-		i.className = "toast " + t, i.setAttribute("role", "status"), i.innerHTML = `<span class="ti"><svg><use href="#${qe[t]}"/></svg></span><span class="tt"><b>${e}</b>${n ? `<small>${n}</small>` : ""}</span>`, s("toasts").appendChild(i), i.offsetWidth, i.classList.add("in"), Je = i, Ye = r;
+		i.className = "toast " + t, i.setAttribute("role", "status"), i.innerHTML = `<span class="ti"><svg><use href="#${$e[t]}"/></svg></span><span class="tt"><b>${e}</b>${n ? `<small>${n}</small>` : ""}</span>`, s("toasts").appendChild(i), i.offsetWidth, i.classList.add("in"), et = i, tt = r;
 	}
-	function Qe(e, t = "idle") {
-		Ke.hintTxt.textContent = e, Ke.hint.className = "hint " + t;
+	function nt(e, t = "idle") {
+		Qe.hintTxt.textContent = e, Qe.hint.className = "hint " + t;
 	}
-	function $e() {
+	function rt() {
 		return Object.values(g).reduce((e, t) => e + (Number(t) || 0), 0);
 	}
-	function et() {
+	function it() {
 		if (u) return;
 		let e = i.coins;
-		Ke.coins.textContent = String(e), Ke.bag.textContent = String($e());
+		Qe.coins.textContent = String(e), Qe.bag.textContent = String(rt());
 		let t = F?.state ?? "idle", n = t === "idle", r = t === "play";
-		Ke.insert.classList.toggle("gone", !n), Ke.insert.classList.toggle("attn", n && !We), Ke.insert.querySelector("small").textContent = e > 0 ? "1 币 / 局" : "币不足", Ke.grab.classList.toggle("disabled", !r), Ke.grab.setAttribute("aria-disabled", String(!r)), s("coins").classList.toggle("empty", e <= 0), Ke.joy.classList.toggle("disabled", !r), r || (Ke.timer.textContent = "--"), r || s("timer").classList.remove("urgent");
+		Qe.insert.classList.toggle("gone", !n), Qe.insert.classList.toggle("attn", n && !Xe), Qe.insert.querySelector("small").textContent = e > 0 ? "1 币 / 局" : "币不足", Qe.grab.classList.toggle("disabled", !r), Qe.grab.setAttribute("aria-disabled", String(!r)), s("coins").classList.toggle("empty", e <= 0), Qe.joy.classList.toggle("disabled", !r), r || (Qe.timer.textContent = "--"), r || s("timer").classList.remove("urgent");
 		let [a, o] = {
 			idle: e > 0 ? ["投币开始游戏", "idle"] : ["币用完了 · 点投币补充", "empty"],
 			play: [l ? "对准娃娃，按下爪" : "对准娃娃，按空格下爪", "play"],
@@ -23376,130 +23304,130 @@ async function p_(e) {
 			release: ["松爪…", "busy"],
 			reset: ["复位中…", "busy"]
 		}[t] ?? ["", "busy"];
-		Qe(a, o);
+		nt(a, o);
 	}
-	let tt = !1;
-	async function I() {
+	let at = !1;
+	async function ot() {
 		if (u || (P.unlock(), F.state !== "idle")) return;
-		if (s("win").classList.contains("show") && ge(), me(), i.coins < 1) {
-			P.click(), gt("nocoin"), et();
+		if (s("win").classList.contains("show") && _e(), he(), i.coins < 1) {
+			P.click(), St("nocoin"), it();
 			return;
 		}
-		if (tt) return;
-		tt = !0;
+		if (at) return;
+		at = !0;
 		let e = !1;
 		try {
 			e = await i.pay(1);
 		} finally {
-			tt = !1;
+			at = !1;
 		}
 		if (!u) {
 			if (!e) {
-				P.click(), et(), gt("nocoin");
+				P.click(), it(), St("nocoin");
 				return;
 			}
-			P.coin(), f_(30), F.startRound(), Ve = 30, Ue = 99, Ct = null, Tt = !1, Ze("投币成功", "coin", `本局 30 秒 · 剩余 ${i.coins} 币`, 1.5), et();
+			P.coin(), l_(30), F.startRound(), Je = 30, Ye = 99, kt = null, jt = !1, L("投币成功", "coin", `本局 30 秒 · 剩余 ${i.coins} 币`, 1.5), it();
 		}
 	}
-	function L() {
-		u || F.state !== "play" || (P.click(), f_([
+	function st() {
+		u || F.state !== "play" || (P.click(), l_([
 			20,
 			30,
 			40
 		]), F.drop());
 	}
-	let nt = {
+	let ct = {
 		x: 0,
 		y: 0,
 		id: -1
-	}, rt = {
+	}, lt = {
 		x: 0,
 		y: 0
 	};
-	function it(e) {
-		let t = Ke.joy.getBoundingClientRect(), n = e.clientX - (t.left + t.width / 2), r = e.clientY - (t.top + t.height / 2), i = t.width * .36, a = Math.hypot(n, r);
-		a > i && (n *= i / a, r *= i / a), Ke.knob.style.transform = `translate(${n}px, ${r}px)`;
+	function ut(e) {
+		let t = Qe.joy.getBoundingClientRect(), n = e.clientX - (t.left + t.width / 2), r = e.clientY - (t.top + t.height / 2), i = t.width * .36, a = Math.hypot(n, r);
+		a > i && (n *= i / a, r *= i / a), Qe.knob.style.transform = `translate(${n}px, ${r}px)`;
 		let o = n / i, s = -r / i, c = Math.hypot(o, s), l = .12, u = c < l ? 0 : (c - l) / .88 / c;
-		nt.x = o * u, nt.y = s * u;
+		ct.x = o * u, ct.y = s * u;
 	}
-	Ke.grab.addEventListener("pointerdown", () => {
-		if (F.state !== "idle" || We) return;
+	Qe.grab.addEventListener("pointerdown", () => {
+		if (F.state !== "idle" || Xe) return;
 		let e = i.coins;
-		P.click(), f_(15), Ze(e > 0 ? "请先投币" : "币用完了", "info", e > 0 ? "点右下角「投币」开始一局" : "点「投币」换几个币", 1.6), Ke.insert.classList.remove("nudge"), Ke.insert.offsetWidth, Ke.insert.classList.add("nudge");
-	}), Ke.joy.addEventListener("pointerdown", (e) => {
-		nt.id = e.pointerId, Ke.joy.setPointerCapture(e.pointerId), Ke.joy.classList.add("drag"), it(e), f_(8), e.preventDefault();
-	}), Ke.joy.addEventListener("pointermove", (e) => {
-		e.pointerId === nt.id && it(e);
+		P.click(), l_(15), L(e > 0 ? "请先投币" : "币用完了", "info", e > 0 ? "点右下角「投币」开始一局" : "点「投币」换几个币", 1.6), Qe.insert.classList.remove("nudge"), Qe.insert.offsetWidth, Qe.insert.classList.add("nudge");
+	}), Qe.joy.addEventListener("pointerdown", (e) => {
+		ct.id = e.pointerId, Qe.joy.setPointerCapture(e.pointerId), Qe.joy.classList.add("drag"), ut(e), l_(8), e.preventDefault();
+	}), Qe.joy.addEventListener("pointermove", (e) => {
+		e.pointerId === ct.id && ut(e);
 	});
-	let at = (e) => {
-		e.pointerId === nt.id && (nt.id = -1, nt.x = nt.y = 0, Ke.joy.classList.remove("drag"), Ke.knob.style.transform = "");
+	let dt = (e) => {
+		e.pointerId === ct.id && (ct.id = -1, ct.x = ct.y = 0, Qe.joy.classList.remove("drag"), Qe.knob.style.transform = "");
 	};
-	Ke.joy.addEventListener("pointerup", at), Ke.joy.addEventListener("pointercancel", at), Ke.grab.addEventListener("pointerdown", (e) => {
-		e.preventDefault(), L();
-	}), Ke.insert.addEventListener("click", () => {
-		I();
+	Qe.joy.addEventListener("pointerup", dt), Qe.joy.addEventListener("pointercancel", dt), Qe.grab.addEventListener("pointerdown", (e) => {
+		e.preventDefault(), st();
+	}), Qe.insert.addEventListener("click", () => {
+		ot();
 	});
-	let ot = /* @__PURE__ */ new Set();
+	let ft = /* @__PURE__ */ new Set();
 	p(window, "keydown", (e) => {
 		let t = e;
-		if (!u && (ot.add(t.code), !We)) {
-			if (/^(Key[WASD]|Arrow|Space|Enter)/.test(t.code) && xt(), t.repeat) {
+		if (!u && (ft.add(t.code), !Xe)) {
+			if (/^(Key[WASD]|Arrow|Space|Enter)/.test(t.code) && Dt(), t.repeat) {
 				(t.code.startsWith("Arrow") || t.code === "Space") && t.preventDefault();
 				return;
 			}
-			t.code === "Space" ? (t.preventDefault(), F.state === "idle" ? I() : L()) : t.code === "Enter" || t.code === "NumpadEnter" || t.code === "KeyC" ? I() : t.code === "KeyV" ? (P.click(), Ie((Math.max(0, Oe) + 1) % De.length)) : /^(Digit|Numpad)[123]$/.test(t.code) ? (P.click(), Ie(Number(t.code.slice(-1)) - 1)) : t.code === "KeyM" ? s("snd").click() : t.code === "KeyF" ? lt() : t.code === "Escape" && (s("win").classList.contains("show") && s("winOk").click(), _t("drawer"), _t("nocoin"), ht(!1)), t.code.startsWith("Arrow") && t.preventDefault();
+			t.code === "Space" ? (t.preventDefault(), F.state === "idle" ? ot() : st()) : t.code === "Enter" || t.code === "NumpadEnter" || t.code === "KeyC" ? ot() : t.code === "KeyV" ? (P.click(), N(je === "front" ? "side" : "front")) : /^(Digit|Numpad)[12]$/.test(t.code) ? (P.click(), N(Oe[Number(t.code.slice(-1)) - 1])) : t.code === "KeyM" ? s("snd").click() : t.code === "KeyF" ? ht() : t.code === "Escape" && (s("win").classList.contains("show") && s("winOk").click(), Ct("drawer"), Ct("nocoin"), xt(!1)), t.code.startsWith("Arrow") && t.preventDefault();
 		}
-	}), p(window, "blur", () => ot.clear());
-	let st = document.documentElement, ct = a && !!(st.requestFullscreen || st.webkitRequestFullscreen);
-	s("fs").classList.toggle("hidden", !ct);
-	function lt() {
-		if (!ct) return;
+	}), p(window, "blur", () => ft.clear());
+	let pt = document.documentElement, mt = a && !!(pt.requestFullscreen || pt.webkitRequestFullscreen);
+	s("fs").classList.toggle("hidden", !mt);
+	function ht() {
+		if (!mt) return;
 		let e = document;
-		e.fullscreenElement || e.webkitFullscreenElement ? (e.exitFullscreen ?? e.webkitExitFullscreen)?.call(e) : (st.requestFullscreen ?? st.webkitRequestFullscreen)?.call(st)?.catch?.(() => {});
+		e.fullscreenElement || e.webkitFullscreenElement ? (e.exitFullscreen ?? e.webkitExitFullscreen)?.call(e) : (pt.requestFullscreen ?? pt.webkitRequestFullscreen)?.call(pt)?.catch?.(() => {});
 	}
 	s("fs").addEventListener("click", () => {
-		P.click(), lt();
+		P.click(), ht();
 	});
-	let ut = {
+	let gt = {
 		x: 0,
 		y: 0
-	}, dt = [];
-	function ft() {
-		ut.x = ut.y = 0;
+	}, _t = [];
+	function vt() {
+		gt.x = gt.y = 0;
 		let e = navigator.getGamepads?.();
 		if (e) for (let t of e) {
 			if (!t) continue;
 			let e = (e) => !!t.buttons[e]?.pressed, n = t.axes[0] ?? 0, r = -(t.axes[1] ?? 0);
-			Math.hypot(n, r) < .18 && (n = r = 0), n += +!!e(15) - !!e(14), r += +!!e(12) - !!e(13), ut.x = Math.max(-1, Math.min(1, n)), ut.y = Math.max(-1, Math.min(1, r));
-			let i = (t) => e(t) && !dt[t];
-			We || (i(0) && (F.state === "idle" ? I() : L()), (i(2) || i(9)) && I(), i(3) && Ie((Math.max(0, Oe) + 1) % De.length)), t.buttons.forEach((t, n) => dt[n] = e(n));
+			Math.hypot(n, r) < .18 && (n = r = 0), n += +!!e(15) - !!e(14), r += +!!e(12) - !!e(13), gt.x = Math.max(-1, Math.min(1, n)), gt.y = Math.max(-1, Math.min(1, r));
+			let i = (t) => e(t) && !_t[t];
+			Xe || (i(0) && (F.state === "idle" ? ot() : st()), (i(2) || i(9)) && ot(), i(3) && N(je === "front" ? "side" : "front")), t.buttons.forEach((t, n) => _t[n] = e(n));
 			break;
 		}
 	}
-	p(window, "keyup", (e) => ot.delete(e.code));
-	function pt() {
-		rt.x = (ot.has("ArrowRight") || ot.has("KeyD") ? 1 : 0) - (ot.has("ArrowLeft") || ot.has("KeyA") ? 1 : 0), rt.y = (ot.has("ArrowUp") || ot.has("KeyW") ? 1 : 0) - (ot.has("ArrowDown") || ot.has("KeyS") ? 1 : 0);
+	p(window, "keyup", (e) => ft.delete(e.code));
+	function yt() {
+		lt.x = (ft.has("ArrowRight") || ft.has("KeyD") ? 1 : 0) - (ft.has("ArrowLeft") || ft.has("KeyA") ? 1 : 0), lt.y = (ft.has("ArrowUp") || ft.has("KeyW") ? 1 : 0) - (ft.has("ArrowDown") || ft.has("KeyS") ? 1 : 0);
 	}
 	s("snd").addEventListener("click", () => {
 		P.unlock(), P.setMuted(!P.muted), s("snd").setAttribute("aria-checked", String(!P.muted)), P.muted || P.click();
 	});
-	let mt = s("settings");
-	function ht(e) {
-		mt.classList.toggle("show", e), s("set").classList.toggle("on", e), s("set").setAttribute("aria-expanded", String(e));
+	let bt = s("settings");
+	function xt(e) {
+		bt.classList.toggle("show", e), s("set").classList.toggle("on", e), s("set").setAttribute("aria-expanded", String(e));
 	}
 	s("set").addEventListener("click", (e) => {
-		e.stopPropagation(), P.click(), ht(!mt.classList.contains("show"));
-	}), mt.addEventListener("pointerdown", (e) => e.stopPropagation()), p(n, "pointerdown", (e) => {
-		mt.classList.contains("show") && !e.target.closest("#set") && ht(!1);
+		e.stopPropagation(), P.click(), xt(!bt.classList.contains("show"));
+	}), bt.addEventListener("pointerdown", (e) => e.stopPropagation()), p(n, "pointerdown", (e) => {
+		bt.classList.contains("show") && !e.target.closest("#set") && xt(!1);
 	}), n.querySelectorAll("#qseg button").forEach((e) => e.addEventListener("click", () => {
-		P.click(), xe = Number(e.dataset.q), r.set("q", String(xe)), zt = !1, Te();
+		P.click(), Se = Number(e.dataset.q), r.set("q", String(Se)), Gt = !1, Ee();
 	}));
-	function gt(e) {
-		Xe();
+	function St(e) {
+		I();
 		let t = s(e);
 		t.classList.remove("hidden"), t.offsetWidth, t.classList.add("show");
 	}
-	function _t(e) {
+	function Ct(e) {
 		let t = s(e);
 		t.classList.remove("show"), m(() => {
 			t.classList.contains("show") || t.classList.add("hidden");
@@ -23510,45 +23438,48 @@ async function p_(e) {
 			let e = await i.recharge.run();
 			if (!u) {
 				if (!e) {
-					P.click(), Ze("还不够", "warn", "积分不够换币，先去做任务吧", 1.8), et();
+					P.click(), L("还不够", "warn", "积分不够换币，先去做任务吧", 1.8), it();
 					return;
 				}
-				P.coin(), f_(30), _t("nocoin"), et(), Ze("换到了", "coin", `${i.recharge.label} · 现在有 ${i.coins} 币`, 1.6);
+				P.coin(), l_(30), Ct("nocoin"), it(), L("换到了", "coin", `${i.recharge.label} · 现在有 ${i.coins} 币`, 1.6);
 			}
 		})();
 	}), s("later").addEventListener("click", () => {
-		P.click(), _t("nocoin");
+		P.click(), Ct("nocoin");
 	});
-	let vt = 0;
+	let wt = 0;
 	if (!l) {
 		let e = n.querySelectorAll("#onboard .step p");
 		e[0].textContent = "用 W A S D / 方向键 或拖动摇杆，把爪子移到娃娃正上方", e[1].textContent = "对准后按空格或红色按钮，爪子会下降抓取";
 	}
-	function yt(e) {
-		vt = e, n.querySelectorAll("#onboard .step").forEach((t, n) => t.classList.toggle("on", n === e)), n.querySelectorAll("#onboard .dots i").forEach((t, n) => t.classList.toggle("on", n === e)), s("obNext").textContent = e === 2 ? "开始玩" : "下一步";
+	function Tt(e) {
+		wt = e, n.querySelectorAll("#onboard .step").forEach((t, n) => t.classList.toggle("on", n === e)), n.querySelectorAll("#onboard .dots i").forEach((t, n) => t.classList.toggle("on", n === e)), s("obNext").textContent = e === 2 ? "开始玩" : "下一步";
 	}
-	function bt() {
-		r.set("guide", "1"), _t("onboard"), et();
+	function Et() {
+		r.set("guide", "1"), Ct("onboard"), it();
 	}
 	s("obNext").addEventListener("click", () => {
-		P.click(), vt < 2 ? yt(vt + 1) : bt();
+		P.click(), wt < 2 ? Tt(wt + 1) : Et();
 	}), s("obSkip").addEventListener("click", () => {
-		P.click(), bt();
+		P.click(), Et();
 	}), s("replayGuide").addEventListener("click", () => {
-		P.click(), ht(!1), yt(0), gt("onboard");
+		P.click(), xt(!1), Tt(0), St("onboard");
 	});
-	function xt() {
+	function Dt() {
 		h.keys || (h.keys = "1", r.set("keys", "1"), m(() => n.classList.add("keys-off"), 2500));
 	}
 	h.keys && n.classList.add("keys-off"), s("keysClose").addEventListener("click", () => {
 		P.click(), h.keys = "1", r.set("keys", "1"), n.classList.add("keys-off");
 	}), s("showKeys").addEventListener("click", () => {
-		P.click(), ht(!1), n.classList.remove("keys-off");
+		P.click(), xt(!1), n.classList.remove("keys-off");
 	}), p(n, "pointerdown", (e) => {
 		let t = e.target.closest?.(".btn");
-		t && !t.classList.contains("disabled") && f_(6);
-	}, { passive: !0 }), s("cam").addEventListener("click", () => {
-		P.click(), Ie((Oe + 1) % De.length);
+		t && !t.classList.contains("disabled") && l_(6);
+	}, { passive: !0 }), n.querySelectorAll("#views [data-cam]").forEach((e) => {
+		e.addEventListener("click", () => {
+			let t = e.dataset.cam;
+			(t !== je || Me) && (P.click(), N(t));
+		});
 	}), s("bag").addEventListener("click", () => {
 		let e = s("bagList");
 		e.innerHTML = "", P.click();
@@ -23559,77 +23490,77 @@ async function p_(e) {
 			let i = document.createElement("div");
 			i.className = "it" + (r ? "" : " none"), i.innerHTML = `<span class="sw" style="--c:${"#" + n.colors[0].toString(16).padStart(6, "0")}"></span><span class="nm">${n.name}</span><span class="ct">${r ? "×" + r : "未获得"}</span>`, e.appendChild(i);
 		}
-		s("bagTotal").textContent = `${t}/${Zh.length} 种 · 共 ${$e()} 个`, gt("drawer");
+		s("bagTotal").textContent = `${t}/${Zh.length} 种 · 共 ${rt()} 个`, St("drawer");
 	}), s("closeBag").addEventListener("click", () => {
-		P.click(), _t("drawer");
+		P.click(), Ct("drawer");
 	}), s("drawer").addEventListener("click", (e) => {
-		e.target === s("drawer") && _t("drawer");
+		e.target === s("drawer") && Ct("drawer");
 	});
-	let St = 0, Ct = null, wt = !1, Tt = !1;
-	function Et(e) {
+	let Ot = 0, kt = null, At = !1, jt = !1;
+	function R(e) {
 		switch (e.type) {
 			case "spawn": {
-				let t = u_(e.prize.type, e.prize.color, e.prize.seed);
-				t.group.scale.setScalar(e.prize.scale), Be.set(e.prize.uid, t), S.add(t.group);
+				let t = s_(e.prize.type, e.prize.color, e.prize.seed);
+				t.group.scale.setScalar(e.prize.scale), qe.set(e.prize.uid, t), S.add(t.group);
 				break;
 			}
 			case "remove": {
-				let t = Be.get(e.prize.uid);
-				t && (S.remove(t.group), l_(t), Be.delete(e.prize.uid));
+				let t = qe.get(e.prize.uid);
+				t && (S.remove(t.group), o_(t), qe.delete(e.prize.uid));
 				break;
 			}
 			case "win": {
-				Xe();
+				I();
 				let t = e.prize;
-				g[t.type.id] = (g[t.type.id] ?? 0) + 1, y(), P.chute(), f_([
+				g[t.type.id] = (g[t.type.id] ?? 0) + 1, y(), P.chute(), l_([
 					40,
 					60,
 					120
-				]), ae = 3.2, oe = 12, (async () => {
+				]), oe = 3.2, se = 12, (async () => {
 					let e = await i.award(t.type.id, t.type.name);
 					u || m(() => {
-						P.win(), ce(t, e), et();
+						P.win(), le(t, e), it();
 					}, 450);
-				})(), et();
+				})(), it();
 				break;
 			}
 			case "impact":
-				e.strength > .8 && F.time - St > .08 && (St = F.time, P.thud(e.strength));
+				e.strength > .8 && F.time - Ot > .08 && (Ot = F.time, P.thud(e.strength));
 				break;
 			case "clank":
-				P.clank(), f_(25);
+				P.clank(), l_(25);
 				break;
 			case "state":
-				et();
+				it();
 				break;
-			case "roundEnd": e.won || (P.lose(), Ct && wt ? Ze("差一点！", "miss", "就差一点点掉进出口", 1.9) : Ct ? Ze("滑掉了", "miss", "夹住了但没夹稳，再试一次", 1.9) : Ze("没抓住", "miss", "试试对准娃娃的身体中间", 1.9)), Ct = null, et();
+			case "roundEnd": e.won || (P.lose(), kt && At ? L("差一点！", "miss", "就差一点点掉进出口", 1.9) : kt ? L("滑掉了", "miss", "夹住了但没夹稳，再试一次", 1.9) : L("没抓住", "miss", "试试对准娃娃的身体中间", 1.9)), kt = null, it();
 		}
 	}
-	let Dt = new z(), Ot = new z(), kt = new Nt(), At = new z(0, -1, 0), jt = /* @__PURE__ */ new Map();
-	function R(e, t) {
+	let Pt = new z(), Ft = new z(), It = new Nt(), Lt = new z(0, -1, 0), Rt = /* @__PURE__ */ new Map();
+	function zt(e, t) {
 		return e < Fh.x1 + .03 && t > Fh.z0 - .03;
 	}
-	function Pt(e, t) {
-		_e(e), F.gatherProngContacts(jt);
+	function Bt(e, t) {
+		ve(e), F.gatherProngContacts(Rt);
 		for (let t of F.prizes) {
-			let n = Be.get(t.uid);
+			let n = qe.get(t.uid);
 			if (!n) continue;
 			let r = t.body.translation(), i = t.body.rotation();
-			n.group.position.set(r.x, r.y, r.z), n.group.quaternion.set(i.x, i.y, i.z, i.w), kt.copy(n.group.quaternion).invert(), n.u.uCenter.value.set(r.x, r.y, r.z), n.u.uFloorY.value = t.won ? Ih : R(r.x, r.z) ? -10 : 0;
-			let a = jt.get(t), o = a && a.length >= 2 ? -.07 : 0;
-			t.squashV += (-900 * (t.squash - o) - 16 * t.squashV) * e, t.squash = Math.max(-.2, Math.min(.25, t.squash + t.squashV * e)), Dt.set(0, 1, 0).applyQuaternion(kt), n.u.uSquash.value.set(Dt.x, Dt.y, Dt.z, t.squash);
+			n.group.position.set(r.x, r.y, r.z), n.group.quaternion.set(i.x, i.y, i.z, i.w), It.copy(n.group.quaternion).invert(), n.u.uCenter.value.set(r.x, r.y, r.z), n.u.uFloorY.value = t.won ? Ih : zt(r.x, r.z) ? -10 : 0;
+			let a = Rt.get(t), o = a && a.length >= 2 ? -.07 : 0;
+			t.squashV += (-900 * (t.squash - o) - 16 * t.squashV) * e, t.squash = Math.max(-.2, Math.min(.25, t.squash + t.squashV * e)), Pt.set(0, 1, 0).applyQuaternion(It), n.u.uSquash.value.set(Pt.x, Pt.y, Pt.z, t.squash);
 			let s = n.u.uDent.value;
 			for (let t of s) t.w *= Math.exp(-12 * e);
 			if (a) {
 				let e = 0;
 				for (let n of a) {
 					if (e >= 3) break;
-					Ot.set(n.x - r.x, n.y - r.y, n.z - r.z).applyQuaternion(kt).divideScalar(t.scale);
+					Ft.set(n.x - r.x, n.y - r.y, n.z - r.z).applyQuaternion(It).divideScalar(t.scale);
 					let i = !1;
-					for (let t = 0; t < e; t++) Math.hypot(s[t].x - Ot.x, s[t].y - Ot.y, s[t].z - Ot.z) < .015 && (i = !0);
+					for (let t = 0; t < e; t++) Math.hypot(s[t].x - Ft.x, s[t].y - Ft.y, s[t].z - Ft.z) < .015 && (i = !0);
 					if (i) continue;
 					let a = Math.min(.012, .004 + n.imp * .6);
-					s[e].set(Ot.x, Ot.y, Ot.z, Math.max(s[e].w, a)), e++;
+					s[e].set(Ft.x, Ft.y, Ft.z, Math.max(s[e].w, a)), e++;
 				}
 			}
 		}
@@ -23638,27 +23569,27 @@ async function p_(e) {
 			let n = e.translation(), r = e.rotation();
 			A.prongs[t].position.set(n.x, n.y, n.z), A.prongs[t].quaternion.set(r.x, r.y, r.z, r.w);
 		}), A.carriage.position.set(F.cx, 0, F.cz), A.beam.position.z = F.cz;
-		let i = Dt.set(F.cx, Lh - .02, F.cz), a = Ot.set(0, Hh + .03, 0).applyQuaternion(A.hub.quaternion).add(A.hub.position).sub(i), o = a.length();
-		A.cable.position.copy(i), A.cable.quaternion.setFromUnitVectors(At, a.normalize()), A.cable.scale.set(1, o, 1);
-		let s = ae > 0 ? Math.floor(t * 6) % 2 ? 1 : .1 : oe > 0 ? .7 : .2 + .15 * Math.sin(t * 2.2);
-		Ig.doorLamp.emissiveIntensity = s * 2.8, k.intensity = s * .4, ae = Math.max(0, ae - e), oe = Math.max(0, oe - e);
-		let c = 1.4 + .7 * Math.sin(t * 3.5) + (ae > 0 ? 1.5 * Math.abs(Math.sin(t * 12)) : 0);
-		Ig.ledStrip.emissiveIntensity = c, Ig.tube.emissiveIntensity = 2.8 + Math.sin(t * 13.1) * .03;
+		let i = Pt.set(F.cx, Lh - .02, F.cz), a = Ft.set(0, Hh + .03, 0).applyQuaternion(A.hub.quaternion).add(A.hub.position).sub(i), o = a.length();
+		A.cable.position.copy(i), A.cable.quaternion.setFromUnitVectors(Lt, a.normalize()), A.cable.scale.set(1, o, 1);
+		let s = oe > 0 ? Math.floor(t * 6) % 2 ? 1 : .1 : se > 0 ? .7 : .2 + .15 * Math.sin(t * 2.2);
+		Pg.doorLamp.emissiveIntensity = s * 2.8, k.intensity = s * .4, oe = Math.max(0, oe - e), se = Math.max(0, se - e);
+		let c = 1.4 + .7 * Math.sin(t * 3.5) + (oe > 0 ? 1.5 * Math.abs(Math.sin(t * 12)) : 0);
+		Pg.ledStrip.emissiveIntensity = c, Pg.tube.emissiveIntensity = 2.8 + Math.sin(t * 13.1) * .03;
 		let l = F.state;
 		if (l === "hold" || l === "return" || l === "release" || l === "lift") {
 			let e = null;
 			for (let t of F.prizes) {
 				if (t.won) continue;
-				let r = jt.get(t);
+				let r = Rt.get(t);
 				if (r && r.length >= 2 && t.body.translation().y > n.y - .2 && n.y > .55) {
 					e = t;
 					break;
 				}
 			}
-			if (e) Ct = e, wt = !1, !Tt && l !== "lift" && (Tt = !0, P.click(), f_(20), Ze("抓住了！", "ok", "稳住…送往出口", 1.6));
-			else if (Ct && !Ct.won) {
-				let e = Ct.body.translation();
-				wt ||= e.x < Fh.x1 + .12 && e.z > Fh.z0 - .12;
+			if (e) kt = e, At = !1, !jt && l !== "lift" && (jt = !0, P.click(), l_(20), L("抓住了！", "ok", "稳住…送往出口", 1.6));
+			else if (kt && !kt.won) {
+				let e = kt.body.translation();
+				At ||= e.x < Fh.x1 + .12 && e.z > Fh.z0 - .12;
 			}
 		}
 		let u = F.state === "play";
@@ -23668,59 +23599,59 @@ async function p_(e) {
 		}
 	}
 	p(document, "visibilitychange", () => {
-		document.hidden ? (P.ctx?.suspend(), ot.clear()) : (It = performance.now(), Ft = 0, P.muted || P.ctx?.resume());
+		document.hidden ? (P.ctx?.suspend(), ft.clear()) : (Ht = performance.now(), Vt = 0, P.muted || P.ctx?.resume());
 	});
-	let Ft = 0, It = performance.now(), Lt = 0, Rt = 0, zt = !c.has("noauto") && !h.q, Bt = 0, Vt = !1, Ht = {
+	let Vt = 0, Ht = performance.now(), Ut = 0, Wt = 0, Gt = !c.has("noauto") && !h.q, Kt = 0, qt = !1, Jt = {
 		cpu: [],
 		calls: 0,
 		tris: 0,
 		geo: 0,
 		tex: 0
-	}, Ut = 0;
-	function Wt(e) {
+	}, Yt = 0;
+	function Xt(e) {
 		if (u) return;
-		Ut = requestAnimationFrame(Wt);
+		Yt = requestAnimationFrame(Xt);
 		let t = performance.now();
 		x.info.reset();
-		let n = Math.min(.05, (e - It) / 1e3);
-		if (It = e, F.state === "play") {
-			pt(), ft();
-			let e = nt.x + rt.x + ut.x, t = nt.y + rt.y + ut.y, r = Math.hypot(e, t);
+		let n = Math.min(.05, (e - Ht) / 1e3);
+		if (Ht = e, F.state === "play") {
+			yt(), vt();
+			let e = ct.x + lt.x + gt.x, t = ct.y + lt.y + gt.y, r = Math.hypot(e, t);
 			r > 1 && (e /= r, t /= r);
-			let i = Dt.copy(Ee).sub(T.position);
-			i.y = 0, i.normalize(), F.input.x = -i.z * e + i.x * t, F.input.z = i.x * e + i.z * t, Ve -= n;
-			let a = Math.ceil(Math.max(0, Ve));
-			Ke.timer.textContent = String(a), a <= 5 && a !== Ue && (Ue > 5 && Ze("剩余 5 秒", "warn", "快下爪！", 1.3), Ue = a, s("timer").classList.add("urgent"), s("timer").classList.remove("beat"), s("timer").offsetWidth, s("timer").classList.add("beat"), P.tick(), f_(10)), Ve <= 0 && L();
+			let i = Pt.copy(De).sub(T.position);
+			i.y = 0, i.normalize(), F.input.x = -i.z * e + i.x * t, F.input.z = i.x * e + i.z * t, Je -= n;
+			let a = Math.ceil(Math.max(0, Je));
+			Qe.timer.textContent = String(a), a <= 5 && a !== Ye && (Ye > 5 && L("剩余 5 秒", "warn", "快下爪！", 1.3), Ye = a, s("timer").classList.add("urgent"), s("timer").classList.remove("beat"), s("timer").offsetWidth, s("timer").classList.add("beat"), P.tick(), l_(10)), Je <= 0 && st();
 		}
-		Ft += n;
+		Vt += n;
 		let r = 0;
-		for (; Ft >= 1 / 120 && r < 6;) F.step(1 / 120), Ft -= 1 / 120, r++;
-		r === 6 && (Ft = 0);
+		for (; Vt >= 1 / 120 && r < 6;) F.step(1 / 120), Vt -= 1 / 120, r++;
+		r === 6 && (Vt = 0);
 		let i = F.state, a = Math.hypot(F.vx, F.vz), o = a > .02;
-		if (o !== Vt && (P.gantry(o), Vt = o), i === "descend" || i === "lift" ? P.motorLevel(.9, i === "lift" ? 1.25 : 1.05) : P.motorLevel(Math.min(1, a / .18), .8 + a * 2.2), We) {
-			let t = De[0], n = e / 1e3;
-			T.position.setFromSpherical(new ys(t.dist * 1.12, 1.36 + Math.sin(n * .27) * .025, Math.sin(n * .19) * .22)).add(Ee), T.lookAt(Ee);
-		} else if (ke) {
-			ke.t = Math.min(1, ke.t + n / ke.dur);
-			let e = ke.t * ke.t * (3 - 2 * ke.t);
-			T.position.lerpVectors(ke.p0, ke.p1, e), E.target.lerpVectors(ke.t0, ke.t1, e), T.lookAt(E.target), ke.t >= 1 && (ke = null);
+		if (o !== qt && (P.gantry(o), qt = o), i === "descend" || i === "lift" ? P.motorLevel(.9, i === "lift" ? 1.25 : 1.05) : P.motorLevel(Math.min(1, a / .18), .8 + a * 2.2), Xe) {
+			let t = Le("front"), n = e / 1e3;
+			T.position.setFromSpherical(new ys(t * 1.12, 1.36 + Math.sin(n * .27) * .025, Math.sin(n * .19) * .22)).add(De), T.lookAt(De);
+		} else if (Ne) {
+			Ne.t = Math.min(1, Ne.t + n / Ne.dur);
+			let e = Ne.t * Ne.t * (3 - 2 * Ne.t);
+			T.position.lerpVectors(Ne.p0, Ne.p1, e), E.target.lerpVectors(Ne.t0, Ne.t1, e), T.lookAt(E.target), Ne.t >= 1 && (Ne = null);
 		}
-		se > 0 && !ke && (se -= n, se <= 0 && Oe < 0 && Ie(0)), !We && !Ge && !ke && E.update();
-		let c = e / 1e3, l = We || Ge ? 0 : 1, d = (Math.sin(c * .71) + Math.sin(c * 1.37 + 1) * .5) * .0025 * l, f = (Math.sin(c * .53 + 2) + Math.sin(c * 1.13) * .4) * .0018 * l;
-		if (T.position.x += d, T.position.y += f, Pt(n, e / 1e3), Ye > 0 && (Ye -= n, Ye <= 0 && Xe()), pe(e / 1e3), Ce && (Ce.uniforms.uT.value = e / 1e3 % 100), Se ? Se.render() : x.render(S, T), Ht.cpu.push(performance.now() - t), Ht.cpu.length > 240 && Ht.cpu.shift(), Ht.calls = x.info.render.calls, Ht.tris = x.info.render.triangles, Ht.geo = x.info.memory.geometries, Ht.tex = x.info.memory.textures, T.position.x -= d, T.position.y -= f, zt && Bt && e - Bt > 1500 && (Lt += n, Rt++, Lt > 3)) {
-			let e = Rt / Lt;
-			Lt = 0, Rt = 0, e < 42 && xe > 0 ? (xe--, Te(), Ze(`画质已调整为「${ve[xe]}」`, "info", "保持流畅运行", 1.6)) : zt = !1;
+		ce > 0 && !Ne && (ce -= n, ce <= 0 && Me && N(je)), !Xe && !Ze && !Ne && E.update();
+		let c = e / 1e3, l = Xe || Ze ? 0 : 1, d = (Math.sin(c * .71) + Math.sin(c * 1.37 + 1) * .5) * .0025 * l, f = (Math.sin(c * .53 + 2) + Math.sin(c * 1.13) * .4) * .0018 * l;
+		if (T.position.x += d, T.position.y += f, Bt(n, e / 1e3), tt > 0 && (tt -= n, tt <= 0 && I()), me(e / 1e3), we && (we.uniforms.uT.value = e / 1e3 % 100), Ce ? Ce.render() : x.render(S, T), Jt.cpu.push(performance.now() - t), Jt.cpu.length > 240 && Jt.cpu.shift(), Jt.calls = x.info.render.calls, Jt.tris = x.info.render.triangles, Jt.geo = x.info.memory.geometries, Jt.tex = x.info.memory.textures, T.position.x -= d, T.position.y -= f, Gt && Kt && e - Kt > 4e3 && (Ut += n, Wt++, Ut > 4)) {
+			let e = Wt / Ut;
+			Ut = 0, Wt = 0, e < 42 && Se > 0 ? (Se--, Ee(), L(`画质已调整为「${ye[Se]}」`, "info", "保持流畅运行", 1.6)) : Gt = !1;
 		}
 	}
-	let Gt = {}, Kt = s("bar"), qt = s("loadTxt");
-	if (Te(), Ie(0, !0), Kt.style.width = "15%", qt.textContent = "正在加载物理引擎…", await Nh.init(), u || (Kt.style.width = "50%", qt.textContent = "正在摆放娃娃…", await new Promise((e) => setTimeout(e, 30)), u) || (F = new ng(Nh), F.on(Et), F.fill(30), Kt.style.width = "80%", qt.textContent = "正在编译着色器…", await new Promise((e) => setTimeout(e, 30)), u)) return Yt();
-	x.compile(S, T), Kt.style.width = "100%", qt.textContent = "准备就绪", et(), Ut = requestAnimationFrame(Wt), s("start").classList.add("ready");
-	let Jt = s("go");
-	Jt.disabled = !1, Jt.addEventListener("click", () => {
-		u || (P.unlock(), P.click(), f_(20), s("start").classList.add("hide"), Bt = performance.now(), We = !1, E.enabled = !0, n.classList.remove("intro"), Ie(0), !h.guide && !c.has("noguide") && m(() => {
-			yt(0), gt("onboard");
-		}, 650), et());
-	}), Object.defineProperties(Gt, {
+	let Zt = {}, Qt = s("bar"), $t = s("loadTxt");
+	if (Ee(), N("front", !0), Qt.style.width = "15%", $t.textContent = "正在加载物理引擎…", await Nh.init(), u || (Qt.style.width = "50%", $t.textContent = "正在摆放娃娃…", await new Promise((e) => setTimeout(e, 30)), u) || (F = new ng(Nh), F.on(R), F.fill(30), Qt.style.width = "80%", $t.textContent = "正在编译着色器…", await new Promise((e) => setTimeout(e, 30)), u)) return nn();
+	x.compile(S, T), Qt.style.width = "100%", $t.textContent = "准备就绪", it(), Yt = requestAnimationFrame(Xt), s("start").classList.add("ready");
+	let tn = s("go");
+	tn.disabled = !1, tn.addEventListener("click", () => {
+		u || (P.unlock(), P.click(), l_(20), s("start").classList.add("hide"), Kt = performance.now(), Xe = !1, E.enabled = !0, n.classList.remove("intro"), N("front"), !h.guide && !c.has("noguide") && m(() => {
+			Tt(0), St("onboard");
+		}, 650), it());
+	}), Object.defineProperties(Zt, {
 		game: {
 			get: () => F,
 			enumerable: !0
@@ -23730,49 +23661,73 @@ async function p_(e) {
 			enumerable: !0
 		},
 		intro: {
-			get: () => We,
+			get: () => Xe,
+			enumerable: !0
+		},
+		camMode: {
+			get: () => je,
 			enumerable: !0
 		},
 		bag: {
 			get: () => ({ ...g }),
 			enumerable: !0
 		}
-	}), Object.assign(Gt, {
-		perf: Ht,
+	}), Object.assign(Zt, {
+		perf: Jt,
 		renderer: x,
 		scene: S,
 		camera: T,
-		joy: nt,
-		toast: Ze,
-		openModal: gt,
-		closeModal: _t,
-		showGuide: yt,
-		insertCoin: I,
-		doGrab: L,
-		showWin: ce,
-		goDoor: M,
+		joy: ct,
+		toast: L,
+		openModal: St,
+		closeModal: Ct,
+		showGuide: Tt,
+		insertCoin: ot,
+		doGrab: st,
+		showWin: le,
+		goDoor: Ve,
+		goView: N,
 		setTheme: ie,
 		wallet: i,
+		machineRoot: A.root,
+		camInfo: () => ({
+			mode: je,
+			door: Me,
+			d: +Le(je).toFixed(3),
+			ext: j,
+			visFrac: +Pe.toFixed(3),
+			hFrac: +Fe.toFixed(3),
+			wide: Ie,
+			fov: T.fov
+		}),
+		bboxOf: (e) => {
+			e.updateWorldMatrix(!0, !0);
+			let t = new rr().setFromObject(e);
+			return {
+				min: t.min.toArray(),
+				max: t.max.toArray()
+			};
+		},
 		setQuality: (e) => {
-			xe = e, Te();
+			Se = e, Ee();
 		},
-		camBusy: () => !!ke || se > 0,
-		camAnimating: () => !!ke,
+		camBusy: () => !!Ne || ce > 0,
+		camAnimating: () => !!Ne,
 		setCam: (e, t) => {
-			ke = null, Ge = !0, T.position.set(e[0], e[1], e[2]), T.lookAt(t[0], t[1], t[2]);
+			Ne = null, Ze = !0, T.position.set(e[0], e[1], e[2]), T.lookAt(t[0], t[1], t[2]);
 		},
-		start: () => Jt.click(),
+		start: () => tn.click(),
 		ready: !0
 	});
-	function Yt() {
+	function nn() {
 		return {
-			destroy: Xt,
-			debug: Gt
+			destroy: rn,
+			debug: Zt
 		};
 	}
-	async function Xt() {
+	async function rn() {
 		if (!u) {
-			u = !0, cancelAnimationFrame(Ut), cancelAnimationFrame(Le);
+			u = !0, cancelAnimationFrame(Yt), cancelAnimationFrame(He);
 			for (let e of f) clearTimeout(e);
 			f.clear(), _ &&= (clearTimeout(_), null);
 			for (let e of d.splice(0)) try {
@@ -23785,8 +23740,8 @@ async function p_(e) {
 			try {
 				F?.world.free();
 			} catch {}
-			for (let e of Be.values()) l_(e);
-			Be.clear(), ue &&= (le?.s.remove(ue.group), l_(ue), null), S.traverse((e) => {
+			for (let e of qe.values()) o_(e);
+			qe.clear(), de &&= (ue?.s.remove(de.group), o_(de), null), S.traverse((e) => {
 				let t = e;
 				t.geometry?.dispose();
 				let n = Array.isArray(t.material) ? t.material : t.material ? [t.material] : [];
@@ -23794,33 +23749,33 @@ async function p_(e) {
 					for (let t of Object.values(e)) t && typeof t == "object" && typeof t.dispose == "function" && t.isTexture && t.dispose();
 					e.dispose();
 				}
-			}), S.clear(), E.dispose(), Se?.dispose(), Se = null, Ce = null, w.dispose(), C.dispose(), le?.r.dispose(), le = null, x.dispose();
+			}), S.clear(), E.dispose(), Ce?.dispose(), Ce = null, we = null, w.dispose(), C.dispose(), ue?.r.dispose(), ue = null, x.dispose();
 			try {
 				x.forceContextLoss();
 			} catch {}
-			(o || window.__claw === Gt) && delete window.__claw, n.classList.remove("intro", "wide", "compact", "fine", "keys-off"), n.removeAttribute("style");
+			(o || window.__claw === Zt) && delete window.__claw, n.classList.remove("intro", "wide", "compact", "fine", "keys-off"), n.removeAttribute("style");
 		}
 	}
-	return o && (window.__claw = Gt), Yt();
+	return o && (window.__claw = Zt), nn();
 }
 //#endregion
 //#region src/plugin/html.ts
-var m_ = "<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\">\n  <defs>\n    <symbol id=\"i-coin\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 7.5v9M9.5 9.5h3.75a1.75 1.75 0 0 1 0 3.5h-2.5a1.75 1.75 0 0 0 0 3.5H14.5\"/></symbol>\n    <symbol id=\"i-clock\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 7.5V12l3 2\"/></symbol>\n    <symbol id=\"i-gift\" viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"9\" width=\"16\" height=\"11\" rx=\"2\"/><path d=\"M3 9h18M12 9v11M12 9c-2-4-6-4-6-1.5S10 9 12 9zm0 0c2-4 6-4 6-1.5S14 9 12 9z\"/></symbol>\n    <symbol id=\"i-sound\" viewBox=\"0 0 24 24\"><path d=\"M4 9.5h3.5L12 6v12l-4.5-3.5H4z\"/><path class=\"w\" d=\"M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7a7 7 0 0 1 0 10\"/><path class=\"x\" d=\"M16 9.5l4.5 5M20.5 9.5l-4.5 5\"/></symbol>\n    <symbol id=\"i-cam\" viewBox=\"0 0 24 24\"><path d=\"M4 8.5h3l1.8-2h6.4l1.8 2h3V18H4z\"/><circle cx=\"12\" cy=\"13\" r=\"3.2\"/></symbol>\n    <symbol id=\"i-gear\" viewBox=\"0 0 24 24\"><path d=\"M4 7h9M17 7h3M4 17h3M11 17h9\"/><circle cx=\"15\" cy=\"7\" r=\"2.2\"/><circle cx=\"9\" cy=\"17\" r=\"2.2\"/></symbol>\n    <symbol id=\"i-full\" viewBox=\"0 0 24 24\"><path d=\"M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15\"/></symbol>\n    <symbol id=\"i-check\" viewBox=\"0 0 24 24\"><path d=\"M6 12.5l4 4 8-9\"/></symbol>\n    <symbol id=\"i-hand\" viewBox=\"0 0 24 24\"><path d=\"M8 13V6.5a1.5 1.5 0 0 1 3 0V12M11 11V5a1.5 1.5 0 0 1 3 0v6M14 11V6.5a1.5 1.5 0 0 1 3 0V14c0 3.5-2.5 6-6 6s-5-2-6.5-4.5L3 13a1.5 1.5 0 0 1 2.5-1.5L8 14\"/></symbol>\n    <symbol id=\"i-alert\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 7.5v5.5M12 16.2v.3\"/></symbol>\n    <symbol id=\"i-down\" viewBox=\"0 0 24 24\"><path d=\"M12 4v12M7 11l5 5 5-5M6 20h12\"/></symbol>\n    <symbol id=\"i-move\" viewBox=\"0 0 24 24\"><path d=\"M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5\"/></symbol>\n    <symbol id=\"i-key\" viewBox=\"0 0 24 24\"><rect x=\"3\" y=\"6.5\" width=\"18\" height=\"11\" rx=\"2\"/><path d=\"M6.5 10h1M10 10h1M13.5 10h1M17 10h.5M8 14h8\"/></symbol>\n    <symbol id=\"i-close\" viewBox=\"0 0 24 24\"><path d=\"M7 7l10 10M17 7L7 17\"/></symbol>\n  </defs>\n</svg>\n<div id=\"app\">\n  <canvas id=\"c\"></canvas>\n  <div id=\"hud\">\n    <div id=\"board\">\n      <div class=\"stats\">\n        <div class=\"stat\" id=\"coins\" title=\"剩余游戏币\"><svg class=\"ic\"><use href=\"#i-coin\"/></svg><b>10</b></div>\n        <div class=\"stat\" id=\"timer\" title=\"本局剩余时间\"><svg class=\"ic\"><use href=\"#i-clock\"/></svg><b>--</b></div>\n        <button class=\"stat btn\" id=\"bag\" title=\"我的奖品\" aria-label=\"我的奖品\"><svg class=\"ic\"><use href=\"#i-gift\"/></svg><b>0</b></button>\n      </div>\n      <div class=\"tools\">\n        <button class=\"tool btn\" id=\"cam\" title=\"换角度（V）\" aria-label=\"换角度\"><svg><use href=\"#i-cam\"/></svg></button>\n        <button class=\"tool btn\" id=\"set\" title=\"设置\" aria-label=\"设置\" aria-expanded=\"false\"><svg><use href=\"#i-gear\"/></svg></button>\n        <button class=\"tool btn\" id=\"fs\" title=\"全屏（F）\" aria-label=\"全屏\"><svg><use href=\"#i-full\"/></svg></button>\n      </div>\n    </div>\n    <div id=\"settings\" class=\"pop\" role=\"dialog\" aria-label=\"设置\">\n      <div class=\"row\"><span class=\"lbl\">机台配色</span><div class=\"chips\" id=\"themes\"></div></div>\n      <div class=\"row\"><span class=\"lbl\">画质</span><div class=\"seg\" id=\"qseg\"><button class=\"btn\" data-q=\"0\">低</button><button class=\"btn\" data-q=\"1\">中</button><button class=\"btn\" data-q=\"2\">高</button></div></div>\n      <div class=\"row\"><span class=\"lbl\">声音</span><button class=\"switch btn\" id=\"snd\" role=\"switch\" aria-checked=\"true\" aria-label=\"声音\"><i></i></button></div>\n      <div class=\"row links\"><button class=\"link btn\" id=\"replayGuide\">重看新手引导</button><button class=\"link btn fine-only\" id=\"showKeys\">按键说明</button></div>\n    </div>\n    <div id=\"toasts\" aria-live=\"polite\"></div>\n    <div id=\"deck\">\n      <div class=\"side l\">\n        <div class=\"keys\" id=\"keys\">\n          <div class=\"keys-hd\"><svg class=\"ic\"><use href=\"#i-key\"/></svg><span>键盘操作</span><button class=\"x btn\" id=\"keysClose\" title=\"收起\" aria-label=\"收起\"><svg><use href=\"#i-close\"/></svg></button></div>\n          <div class=\"kr\"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><em>移动爪子</em></div>\n          <div class=\"kr\"><span><kbd class=\"wide\">空格</kbd></span><em>下爪</em></div>\n          <div class=\"kr\"><span><kbd>Enter</kbd></span><em>投币</em></div>\n          <div class=\"kr\"><span><kbd>V</kbd></span><em>换角度</em></div>\n          <p>鼠标拖动旋转 · 滚轮缩放</p>\n        </div>\n        <div id=\"joy\" title=\"拖动移动爪子\"><div class=\"ring\"><i class=\"ar n\"></i><i class=\"ar e\"></i><i class=\"ar s\"></i><i class=\"ar w\"></i></div><div id=\"knob\"></div></div>\n      </div>\n      <div class=\"side r\">\n        <div id=\"hint\" class=\"hint\"><span class=\"dot\"></span><span id=\"hintTxt\">投币开始游戏</span></div>\n        <div class=\"acts\">\n          <button class=\"btn\" id=\"insert\" title=\"投币（Enter）\"><span class=\"coin\"><svg><use href=\"#i-coin\"/></svg></span><span class=\"t\"><em>投币</em><small>1 币 / 局</small></span></button>\n          <button class=\"btn\" id=\"grab\" title=\"下爪（空格）\" aria-label=\"下爪\"><span class=\"cap\"><svg><use href=\"#i-down\"/></svg></span><em>下爪</em></button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div id=\"drawer\" class=\"modal hidden\" role=\"dialog\" aria-label=\"我的奖品\">\n    <div class=\"panel\">\n      <div class=\"panel-hd\"><h2>我的奖品</h2><span id=\"bagTotal\" class=\"pill\"></span><button class=\"x btn\" id=\"closeBag\" aria-label=\"关闭\"><svg><use href=\"#i-close\"/></svg></button></div>\n      <div id=\"bagList\" class=\"grid\"></div>\n    </div>\n  </div>\n\n  <div id=\"nocoin\" class=\"modal hidden\" role=\"dialog\" aria-label=\"币用完了\">\n    <div class=\"panel small\">\n      <div class=\"badge\"><svg><use href=\"#i-coin\"/></svg></div>\n      <h2>币用完啦</h2>\n      <p id=\"nocoinHint\">今日免费补给：领取 10 个游戏币继续玩</p>\n      <button class=\"primary btn\" id=\"claim\">领取 10 币</button>\n      <button class=\"ghost btn\" id=\"later\">稍后</button>\n    </div>\n  </div>\n\n  <div id=\"win\" role=\"dialog\" aria-label=\"出奖\">\n    <div class=\"wcard\">\n      <canvas id=\"winPrev\" width=\"240\" height=\"240\"></canvas>\n      <div class=\"winfo\">\n        <span class=\"tag\">出奖啦</span>\n        <div class=\"name\" id=\"winName\"></div>\n        <div class=\"wsub\" id=\"winSub\"></div>\n      </div>\n      <button class=\"primary btn\" id=\"winOk\">从取物口取出</button>\n    </div>\n  </div>\n\n  <div id=\"onboard\" class=\"modal hidden\" role=\"dialog\" aria-label=\"新手引导\">\n    <div class=\"panel guide\">\n      <div class=\"steps\">\n        <div class=\"step on\"><div class=\"art a1\"><div class=\"mini-joy\"><i></i></div></div><h3>移动爪子</h3><p>拖动左下摇杆，把爪子移到娃娃正上方</p></div>\n        <div class=\"step\"><div class=\"art a2\"><div class=\"mini-btn\"></div></div><h3>按下爪</h3><p>对准后按红色按钮，爪子会下降抓取</p></div>\n        <div class=\"step\"><div class=\"art a3\"><div class=\"mini-ring\">PRIZE<br>OUT</div></div><h3>掉进出口就中奖</h3><p>娃娃落入左前方出口，从取物口拿走</p></div>\n      </div>\n      <div class=\"guide-ft\"><div class=\"dots\"><i class=\"on\"></i><i></i><i></i></div><button class=\"ghost btn\" id=\"obSkip\">跳过</button><button class=\"primary btn\" id=\"obNext\">下一步</button></div>\n    </div>\n  </div>\n\n  <div id=\"start\">\n    <div class=\"sheet\">\n      <div class=\"brand\"><span class=\"blob\"><i></i><i></i></span><div><h1>爪爪乐</h1><p class=\"en\">PAW PLAY · 线上娃娃机</p></div></div>\n      <div class=\"offer\"><svg class=\"ic\"><use href=\"#i-gift\"/></svg><span id=\"offerTxt\">新玩家赠送 <b>10</b> 币 · 1 币 1 局</span></div>\n      <div class=\"loading\"><div class=\"bar\"><div id=\"bar\"></div></div><p id=\"loadTxt\">正在加载…</p></div>\n      <button class=\"primary btn big\" id=\"go\" disabled>开始游戏</button>\n    </div>\n  </div>\n</div>", h_ = "/* ============================================================\n   爪爪乐 UI — white + theme accent, soft cards, one type scale\n   type: 11 caption · 12 small · 13 body · 15 title · 18 heading · 30 display  (weights 500 / 700)\n   space: 4 · 8 · 12 · 16 · 20      radius: 10 small · 14 control · 18 card · 24 sheet\n   ============================================================ */\n* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }\n:root {\n  --accent: #f47aa8; --accent-soft: #ffd6e6; --accent-dark: #c44a78;\n  --ink: #26232b; --ink-2: #57525e; --muted: #8e8896; --line: rgba(38,35,43,.08);\n  --card: rgba(255,255,255,.94); --glass: rgba(255,255,255,.82);\n  --shadow-1: 0 1px 2px rgba(38,28,48,.06), 0 4px 12px rgba(38,28,48,.08);\n  --shadow-2: 0 2px 6px rgba(38,28,48,.06), 0 12px 32px rgba(38,28,48,.16);\n  --ease: cubic-bezier(.2,.8,.2,1);\n  --green: #1fa971; --amber: #e3a008; --red: #e5484d; --orange: #ee7b2a;\n}\nhtml, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-touch-callout: none; -webkit-text-size-adjust: 100%;\n  background: #ece8e3; color: var(--ink); font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"HarmonyOS Sans SC\", \"MiSans\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", sans-serif;\n  touch-action: none; user-select: none; -webkit-user-select: none; }\n#app, #c { position: fixed; inset: 0; width: 100%; height: 100%; }\n#c { display: block; }\nbutton { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }\nbutton:focus { outline: none; }\n.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\nsvg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }\n.ic { width: 16px; height: 16px; flex: none; }\n#hud { position: fixed; inset: 0; pointer-events: none; transition: opacity .4s; }\n#hud > * { pointer-events: auto; }\n#hud > #toasts { pointer-events: none; }\nbody.intro #hud { opacity: 0; pointer-events: none; }\nbody.intro #hud > * { pointer-events: none; }\n\n/* ---------- top HUD ---------- */\n#board { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 8px;\n  padding: calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 12px); }\n.stats { display: flex; align-items: stretch; height: 40px; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);\n  border-radius: 14px; box-shadow: var(--shadow-1); border: 1px solid rgba(255,255,255,.7); }\n.stat { display: flex; align-items: center; gap: 6px; padding: 0 12px; position: relative; color: var(--ink); }\n.stat + .stat::before { content: \"\"; position: absolute; left: 0; top: 10px; bottom: 10px; width: 1px; background: var(--line); }\n.stat .ic { color: var(--muted); }\n#coins .ic { color: var(--amber); } #bag .ic { color: var(--accent-dark); }\n.stat b { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 1.3em; text-align: left; letter-spacing: -.2px; }\n#coins.empty b { color: var(--red); }\n#timer.urgent b, #timer.urgent .ic { color: var(--red); }\n#timer.beat b { animation: beat .45s var(--ease); }\n@keyframes beat { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }\n#bag { border-radius: 0 14px 14px 0; transition: background .15s; }\n#bag:active { background: rgba(0,0,0,.04); }\n.tools { margin-left: auto; display: flex; gap: 8px; }\n.tool { position: relative; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 14px; color: var(--ink-2);\n  background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--shadow-1); border: 1px solid rgba(255,255,255,.7);\n  transition: transform .12s var(--ease), background .15s, color .15s; }\n.tool::after { content: \"\"; position: absolute; inset: -4px; }  /* 48px hit area */\n.tool svg { width: 20px; height: 20px; }\n.tool:active { transform: scale(.92); }\n.tool.on { background: var(--ink); color: #fff; }\n#fs.hidden { display: none; }\nbody.fine .tool:hover { color: var(--accent-dark); }\n\n/* settings popover */\n.pop { position: absolute; right: calc(env(safe-area-inset-right) + 12px); top: calc(env(safe-area-inset-top) + 56px); width: 264px; padding: 8px 16px;\n  background: var(--card); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-radius: 18px; box-shadow: var(--shadow-2);\n  opacity: 0; transform: translateY(-6px) scale(.97); transform-origin: top right; pointer-events: none; transition: opacity .2s var(--ease), transform .2s var(--ease); z-index: 5; }\n#hud > .pop { pointer-events: none; }\n#hud > .pop.show { opacity: 1; transform: none; pointer-events: auto; }\n.pop .row { display: flex; align-items: center; justify-content: space-between; min-height: 52px; border-bottom: 1px solid var(--line); }\n.pop .row:last-child { border-bottom: 0; }\n.pop .lbl { font-size: 13px; color: var(--ink-2); }\n.chips { display: flex; gap: 10px; }\n.chips button { position: relative; width: 28px; height: 28px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.9), 0 1px 3px rgba(0,0,0,.18); transition: transform .15s var(--ease); }\n.chips button::after { content: \"\"; position: absolute; inset: -8px; }\n.chips button.on { box-shadow: inset 0 0 0 2px #fff, 0 0 0 2px var(--ink); }\n.chips button:active { transform: scale(.9); }\n.seg { display: flex; background: #f1eef3; border-radius: 10px; padding: 3px; }\n.seg button { min-width: 42px; height: 30px; border-radius: 8px; font-size: 13px; color: var(--ink-2); transition: background .15s, color .15s; }\n.seg button.on { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.1); }\n.switch { width: 46px; height: 28px; border-radius: 14px; background: #d9d4dd; position: relative; transition: background .2s; }\n.switch i { position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .2s var(--ease); }\n.switch[aria-checked=\"true\"] { background: var(--accent); }\n.switch[aria-checked=\"true\"] i { transform: translateX(18px); }\n.pop .links { justify-content: flex-start; gap: 20px; }\n.link { font-size: 13px; color: var(--accent-dark); font-weight: 700; padding: 8px 0; }\nbody:not(.fine) .fine-only, body:not(.wide) .fine-only { display: none; }\n\n/* ---------- toasts ---------- */\n#toasts { position: absolute; left: 0; right: 0; top: calc(var(--top, 56px) + 8px); display: grid; justify-items: center; z-index: 4; }\n.toast { grid-area: 1 / 1; display: flex; align-items: center; gap: 12px; max-width: min(86vw, 340px); padding: 10px 18px 10px 10px;\n  background: var(--card); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-radius: 18px; box-shadow: var(--shadow-2);\n  opacity: 0; transform: translateY(-10px) scale(.96); transition: opacity .2s var(--ease), transform .2s var(--ease); }\n.toast.in { opacity: 1; transform: none; }\n.toast.out { opacity: 0; transform: translateY(-6px) scale(.98); transition-duration: .16s; }\n.toast .ti { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent-dark); }\n.toast .ti svg { width: 20px; height: 20px; stroke-width: 2; }\n.toast .tt { display: flex; flex-direction: column; min-width: 0; }\n.toast b { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; }\n.toast small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.toast.ok .ti { background: #def5ea; color: var(--green); }\n.toast.coin .ti { background: #fdf1cf; color: #b47c00; }\n.toast.warn .ti { background: #fde4e4; color: var(--red); }\n.toast.warn b { color: var(--red); }\n.toast.miss .ti { background: #fdeadb; color: var(--orange); }\n.toast.ok.in .ti, .toast.coin.in .ti { animation: pop .36s var(--ease); }\n@keyframes pop { 0% { transform: scale(.6); } 70% { transform: scale(1.08); } 100% { transform: scale(1); } }\n\n/* ---------- control deck ---------- */\n#deck { position: absolute; left: 0; right: 0; bottom: 0; height: calc(env(safe-area-inset-bottom) + 172px);\n  padding: 14px calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 12px) calc(env(safe-area-inset-left) + 16px);\n  display: flex; align-items: center; justify-content: space-between;\n  background: #faf7f9; border-radius: 24px 24px 0 0; box-shadow: 0 -1px 0 rgba(255,255,255,.8), 0 -8px 24px rgba(38,28,48,.10); }\n#deck .side { display: flex; align-items: center; }\n#deck .side.r { flex-direction: column; align-items: flex-end; gap: 10px; }\n.acts { display: flex; align-items: center; gap: 16px; }\n\n/* persistent state line (above drop button) */\n.hint { display: inline-flex; background: #fff; align-items: center; gap: 8px; height: 28px; padding: 0 12px 0 10px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line);\n  font-size: 12px; font-weight: 500; color: var(--ink-2); white-space: nowrap; transition: background .2s, color .2s; }\n.hint .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }\n.hint.idle .dot { animation: breathe 1.6s ease-in-out infinite; }\n.hint.play .dot { background: var(--green); }\n.hint.busy .dot { background: none; width: 10px; height: 10px; border: 2px solid var(--accent-soft); border-top-color: var(--accent-dark); animation: spin .8s linear infinite; }\n.hint.empty .dot { background: var(--red); }\n@keyframes breathe { 50% { opacity: .35; transform: scale(.8); } }\n@keyframes spin { to { transform: rotate(360deg); } }\n\n/* joystick */\n#joy { position: relative; width: 124px; height: 124px; touch-action: none; transition: opacity .2s; }\n#joy .ring { position: absolute; inset: 8px; border-radius: 50%; background: radial-gradient(circle, #fff 0 52%, #f6f2f5 53%); box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line); }\n#joy .ar { position: absolute; width: 0; height: 0; border: 5px solid transparent; opacity: .35; }\n#joy .ar.n { left: 50%; top: 8px; margin-left: -5px; border-bottom-color: var(--ink); }\n#joy .ar.s { left: 50%; bottom: 8px; margin-left: -5px; border-top-color: var(--ink); }\n#joy .ar.w { top: 50%; left: 8px; margin-top: -5px; border-right-color: var(--ink); }\n#joy .ar.e { top: 50%; right: 8px; margin-top: -5px; border-left-color: var(--ink); }\n#knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; transition: transform .12s var(--ease);\n  background: radial-gradient(circle at 38% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 40%), var(--accent);\n  box-shadow: 0 6px 12px rgba(38,28,48,.22), inset 0 -3px 0 rgba(0,0,0,.12); }\n#joy.drag #knob { transition: none; }\n#joy.disabled { opacity: .55; }\n#joy.disabled #knob { background: radial-gradient(circle at 38% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 40%), #c9c3cc; }\n\n/* insert coin */\n#insert { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 16px 0 10px; border-radius: 18px; background: #fff; box-shadow: var(--shadow-1);\n  transition: transform .12s var(--ease), opacity .2s; }\n#insert .coin { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #8a5a00; background: radial-gradient(circle at 40% 35%, #ffe28a, #f5b81c); box-shadow: inset 0 -2px 0 rgba(0,0,0,.12); }\n#insert .coin svg { width: 22px; height: 22px; stroke-width: 2; }\n#insert .t { display: flex; flex-direction: column; align-items: flex-start; }\n#insert em { font-style: normal; font-weight: 700; font-size: 15px; color: var(--ink); }\n#insert small { font-size: 11px; color: var(--muted); }\n#insert:active { transform: scale(.95); }\n#insert.attn { animation: attn 1.8s ease-in-out infinite; }\n@keyframes attn { 0%, 100% { box-shadow: var(--shadow-1), 0 0 0 0 var(--accent-soft); } 50% { box-shadow: var(--shadow-1), 0 0 0 6px var(--accent-soft); } }\n#insert.nudge { animation: nudge .42s var(--ease); }\n@keyframes nudge { 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }\n#insert.gone { opacity: 0; pointer-events: none; transform: scale(.9); }\n\n/* drop button */\n#grab { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; }\n#grab .cap { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; color: rgba(255,255,255,.95);\n  background: radial-gradient(circle at 40% 30%, #ff7d74, #ee3b33 55%, #c3221c);\n  box-shadow: 0 5px 0 #9a1914, 0 9px 18px rgba(200,40,30,.28), inset 0 2px 3px rgba(255,255,255,.3); transition: transform .07s, box-shadow .07s, filter .2s; }\n#grab .cap svg { width: 30px; height: 30px; stroke-width: 2.4; }\n#grab em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--ink-2); letter-spacing: 1px; }\n#grab:not(.disabled):active .cap { transform: translateY(4px); box-shadow: 0 1px 0 #9a1914, 0 3px 8px rgba(200,40,30,.25), inset 0 2px 3px rgba(255,255,255,.2); }\n#grab.disabled .cap { background: radial-gradient(circle at 40% 30%, #f2eff3, #d9d4dc 60%, #c6c0ca); color: #fff; box-shadow: 0 5px 0 #aaa3ae, 0 6px 12px rgba(0,0,0,.08), inset 0 2px 3px rgba(255,255,255,.6); }\n#grab.disabled em { color: var(--muted); }\n\n/* PC key panel */\n.keys { display: none; }\n.keys-hd { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }\n.keys-hd .ic { color: var(--accent-dark); }\n.x { position: relative; margin-left: auto; width: 28px; height: 28px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); transition: background .15s; }\n.x::after { content: \"\"; position: absolute; inset: -6px; }\n.x svg { width: 16px; height: 16px; }\n.x:hover { background: rgba(0,0,0,.05); color: var(--ink); }\n.kr { display: flex; justify-content: space-between; align-items: center; height: 34px; border-bottom: 1px solid var(--line); gap: 8px; }\n.kr em { font-style: normal; font-size: 12px; color: var(--ink-2); white-space: nowrap; }\n.kr span { white-space: nowrap; display: flex; gap: 3px; }\n.keys p { margin: 10px 0 0; font-size: 11px; color: var(--muted); }\nkbd { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; font: 700 11px/1 ui-monospace, \"SF Mono\", Menlo, Consolas, monospace; color: var(--ink);\n  background: #fff; border-radius: 6px; box-shadow: inset 0 0 0 1px #e4dfe7, 0 1px 0 #e4dfe7; }\nkbd.wide { min-width: 56px; font-family: inherit; }\n\n/* ---------- modals (bag / out of coins / onboarding) ---------- */\n.modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(28,22,34,.36);\n  opacity: 0; transition: opacity .2s var(--ease); }\n.modal.show { opacity: 1; }\n.modal.hidden { display: none; }\n.panel { width: min(88vw, 340px); background: #fff; border-radius: 24px; padding: 20px; box-shadow: var(--shadow-2); transform: translateY(12px) scale(.97); transition: transform .22s var(--ease); }\n.modal.show .panel { transform: none; }\n.panel h2 { margin: 0; font-size: 18px; font-weight: 700; }\n.panel-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }\n.pill { font-size: 11px; color: var(--accent-dark); background: var(--accent-soft); padding: 3px 8px; border-radius: 10px; font-weight: 700; }\n.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 56vh; overflow: auto; }\n.grid .it { display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 14px; background: #f8f5f8; }\n.grid .sw { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: inset 0 -2px 0 rgba(0,0,0,.1); flex: none; }\n.grid .nm { font-size: 13px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.grid .ct { font-size: 12px; font-weight: 700; color: var(--accent-dark); }\n.grid .it.none { background: #faf9fa; } .grid .it.none .sw { filter: grayscale(1); opacity: .3; } .grid .it.none .nm, .grid .it.none .ct { color: #b9b3bd; font-weight: 500; }\n.primary { display: block; width: 100%; height: 48px; border-radius: 14px; background: var(--accent); color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 1px;\n  box-shadow: 0 3px 0 var(--accent-dark); transition: transform .08s, box-shadow .08s, background .2s; }\n.primary:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--accent-dark); }\n.primary:disabled { background: #e3dfe5; color: #a6a0aa; box-shadow: none; }\n.ghost { display: block; width: 100%; height: 44px; border-radius: 14px; color: var(--ink-2); font-size: 13px; font-weight: 700; }\n.ghost:active { background: rgba(0,0,0,.04); }\n.panel.small { text-align: center; width: min(84vw, 300px); padding-top: 24px; }\n.panel.small p { margin: 6px 0 20px; color: var(--muted); font-size: 13px; }\n.badge { width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center; color: #8a5a00; background: radial-gradient(circle at 40% 35%, #ffe28a, #f5b81c); box-shadow: 0 6px 16px rgba(245,184,28,.35), inset 0 -3px 0 rgba(0,0,0,.1); }\n.badge svg { width: 30px; height: 30px; stroke-width: 2; }\n.panel.small .ghost { margin-top: 4px; }\n\n/* onboarding */\n.guide { padding: 16px 16px 12px; }\n.steps { display: grid; }\n.step { grid-area: 1 / 1; text-align: center; opacity: 0; transform: translateX(16px); transition: opacity .22s var(--ease), transform .22s var(--ease); pointer-events: none; }\n.step.on { opacity: 1; transform: none; }\n.step h3 { margin: 14px 0 4px; font-size: 18px; font-weight: 700; }\n.step p { margin: 0 8px; font-size: 13px; color: var(--muted); min-height: 36px; }\n.art { height: 140px; border-radius: 18px; background: linear-gradient(160deg, var(--accent-soft), #fff 80%); display: grid; place-items: center; overflow: hidden; }\n.mini-joy { width: 84px; height: 84px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-1); position: relative; }\n.mini-joy i { position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px; border-radius: 50%; background: var(--accent); box-shadow: 0 4px 8px rgba(0,0,0,.18); animation: joyc 2.4s ease-in-out infinite; }\n@keyframes joyc { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(18px, 0); } 50% { transform: translate(0, -18px); } 75% { transform: translate(-18px, 0); } }\n.mini-btn { width: 72px; height: 72px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #ff7d74, #ee3b33 55%, #c3221c); box-shadow: 0 6px 0 #9a1914; animation: press 1.6s ease-in-out infinite; }\n@keyframes press { 0%, 60%, 100% { transform: none; box-shadow: 0 6px 0 #9a1914; } 70%, 85% { transform: translateY(5px); box-shadow: 0 1px 0 #9a1914; } }\n.mini-ring { width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; text-align: center; font: 700 12px/1.2 -apple-system, sans-serif; color: var(--accent-dark); background: #fff;\n  box-shadow: 0 0 0 6px var(--accent), 0 0 0 10px var(--accent-soft); animation: glow 1.2s ease-in-out infinite; }\n@keyframes glow { 50% { box-shadow: 0 0 0 6px var(--accent), 0 0 0 16px rgba(255,255,255,0); } }\n.guide-ft { display: flex; align-items: center; gap: 8px; margin-top: 16px; }\n.guide-ft .dots { display: flex; gap: 6px; margin-right: auto; padding-left: 4px; }\n.guide-ft .dots i { width: 6px; height: 6px; border-radius: 3px; background: #e2dde5; transition: width .2s var(--ease), background .2s; }\n.guide-ft .dots i.on { width: 18px; background: var(--accent); }\n.guide-ft .ghost { width: auto; padding: 0 16px; }\n.guide-ft .primary { width: 116px; }\n\n/* ---------- win card ---------- */\n#win { position: fixed; left: 50%; top: calc(var(--top, 56px) + 8px); z-index: 6; transform: translate(-50%, -12px) scale(.96); opacity: 0; pointer-events: none;\n  transition: opacity .22s var(--ease), transform .22s var(--ease); }\n#win.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }\n.wcard { width: min(90vw, 340px); display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 4px 14px; padding: 12px 14px 14px 12px;\n  background: var(--card); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-radius: 24px; box-shadow: var(--shadow-2); }\n#winPrev { width: 96px; height: 96px; border-radius: 18px; background: radial-gradient(circle at 50% 60%, #fff, var(--accent-soft)); }\n.winfo { min-width: 0; }\n.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 1px; }\n#win.show .tag { animation: pop .4s var(--ease) .1s both; }\n.winfo .name { font-size: 20px; font-weight: 700; margin: 6px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.winfo .wsub { font-size: 12px; color: var(--muted); }\n.wcard .primary { grid-column: 1 / -1; margin-top: 10px; }\n\n/* ---------- start / loading ---------- */\n#start { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center; padding: 16px;\n  background: linear-gradient(rgba(250,246,248,0) 40%, rgba(250,246,248,.6) 70%); transition: opacity .45s var(--ease); }\n#start.hide { opacity: 0; pointer-events: none; }\n#start .sheet { width: 100%; max-width: 400px; padding: 20px 20px 20px; margin-bottom: env(safe-area-inset-bottom); background: var(--card);\n  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-radius: 24px; box-shadow: var(--shadow-2); transition: transform .45s var(--ease); }\n#start.hide .sheet { transform: translateY(24px); }\n.brand { display: flex; align-items: center; gap: 14px; }\n.brand .blob { position: relative; width: 56px; height: 56px; border-radius: 18px; background: var(--accent); box-shadow: inset 0 -4px 0 rgba(0,0,0,.1); flex: none; }\n.brand .blob::before { content: \"\"; position: absolute; left: 10px; right: 10px; top: 12px; bottom: 10px; border-radius: 50% 50% 45% 45%; background: #fff; }\n.brand .blob i { position: absolute; top: 24px; width: 5px; height: 6px; border-radius: 50%; background: var(--ink); }\n.brand .blob i:first-child { left: 20px; } .brand .blob i:last-child { right: 20px; }\n#start h1 { margin: 0; font-size: 30px; line-height: 1.1; font-weight: 700; letter-spacing: 2px; color: var(--ink); }\n#start .en { margin: 4px 0 0; font-size: 11px; letter-spacing: 2px; color: var(--muted); font-weight: 700; }\n.offer { display: flex; align-items: center; gap: 8px; margin: 16px 0 12px; padding: 10px 12px; border-radius: 14px; background: var(--accent-soft); color: var(--accent-dark); font-size: 13px; }\n.offer b { font-weight: 700; }\n.loading { height: 30px; }\n.loading .bar { height: 4px; background: #efebf1; border-radius: 2px; overflow: hidden; }\n#bar { height: 100%; width: 0; background: var(--accent); transition: width .3s var(--ease); border-radius: 2px; }\n#loadTxt { font-size: 11px; color: var(--muted); margin: 6px 0 0; }\n#start.ready .loading { visibility: hidden; height: 4px; }\n.primary.big { height: 52px; font-size: 17px; letter-spacing: 4px; }\n\n/* ---------- wide (desktop / landscape) ---------- */\nbody.wide #deck { top: var(--top, 56px); height: auto; padding: 0; background: none; pointer-events: none; display: block; }\nbody.wide #deck .side { pointer-events: auto; position: absolute; top: 0; bottom: 0; width: var(--side, 240px); flex-direction: column; justify-content: flex-end; align-items: center; gap: 20px;\n  padding: 16px 16px calc(env(safe-area-inset-bottom) + 28px); background: rgba(250,246,248,.9); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }\nbody.wide #deck .side.l { left: 0; padding-left: calc(env(safe-area-inset-left) + 16px); box-shadow: 1px 0 0 var(--line); }\nbody.wide #deck .side.r { right: 0; padding-right: calc(env(safe-area-inset-right) + 16px); box-shadow: -1px 0 0 var(--line); }\nbody.wide .acts { flex-direction: column; gap: 20px; }\nbody.wide .hint { order: 0; }\nbody.wide #joy { width: 152px; height: 152px; }\nbody.wide #knob { width: 62px; height: 62px; margin: -31px; }\nbody.wide #grab .cap { width: 100px; height: 100px; }\nbody.wide #insert { width: 100%; max-width: 200px; justify-content: center; }\nbody.wide.fine .keys { display: block; width: 100%; margin-bottom: auto; padding: 14px; border-radius: 18px; background: #fff; box-shadow: var(--shadow-1);\n  transition: opacity .3s var(--ease), transform .3s var(--ease); }\nbody.wide.fine.keys-off .keys { opacity: 0; transform: translateY(-8px); pointer-events: none; }\nbody.wide.compact #board { padding-top: calc(env(safe-area-inset-top) + 6px); padding-bottom: 6px; }\nbody.wide.compact .stats, body.wide.compact .tool { height: 36px; } body.wide.compact .tool { width: 36px; }\nbody.wide.compact .stat b { font-size: 15px; }\nbody.wide.compact #deck .side { padding: 8px 10px calc(env(safe-area-inset-bottom) + 10px); gap: 10px; }\nbody.wide.compact .acts { gap: 10px; }\nbody.wide.compact #joy { width: 116px; height: 116px; }\nbody.wide.compact #knob { width: 50px; height: 50px; margin: -25px; }\nbody.wide.compact #grab .cap { width: 76px; height: 76px; }\nbody.wide.compact #grab em { display: none; }\nbody.wide.compact #insert { height: 48px; padding: 0 10px 0 6px; } body.wide.compact #insert .coin { width: 30px; height: 30px; } body.wide.compact #insert small { display: none; }\nbody.wide.compact .hint { max-width: 100%; overflow: hidden; font-size: 11px; padding: 0 8px; }\nbody.wide.compact #start .sheet { max-width: 380px; padding: 14px 16px; } body.wide.compact .offer { margin: 10px 0 8px; } body.wide.compact #start h1 { font-size: 24px; }\nbody.wide.compact .art { height: 96px; } body.wide.compact .step h3 { margin-top: 8px; font-size: 15px; }\n\n/* ---------- narrow phones ---------- */\n@media (max-width: 360px) {\n  .stat { padding: 0 9px; } .tools { gap: 6px; } .acts { gap: 10px; }\n  #insert { padding: 0 10px 0 8px; } #insert small { display: none; } #grab .cap { width: 76px; height: 76px; } #joy { width: 112px; height: 112px; }\n}\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }\n";
+var d_ = "<svg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\">\n  <defs>\n    <symbol id=\"i-coin\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 7.5v9M9.5 9.5h3.75a1.75 1.75 0 0 1 0 3.5h-2.5a1.75 1.75 0 0 0 0 3.5H14.5\"/></symbol>\n    <symbol id=\"i-clock\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 7.5V12l3 2\"/></symbol>\n    <symbol id=\"i-gift\" viewBox=\"0 0 24 24\"><rect x=\"4\" y=\"9\" width=\"16\" height=\"11\" rx=\"2\"/><path d=\"M3 9h18M12 9v11M12 9c-2-4-6-4-6-1.5S10 9 12 9zm0 0c2-4 6-4 6-1.5S14 9 12 9z\"/></symbol>\n    <symbol id=\"i-sound\" viewBox=\"0 0 24 24\"><path d=\"M4 9.5h3.5L12 6v12l-4.5-3.5H4z\"/><path class=\"w\" d=\"M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7a7 7 0 0 1 0 10\"/><path class=\"x\" d=\"M16 9.5l4.5 5M20.5 9.5l-4.5 5\"/></symbol>\n    <symbol id=\"i-gear\" viewBox=\"0 0 24 24\"><path d=\"M4 7h9M17 7h3M4 17h3M11 17h9\"/><circle cx=\"15\" cy=\"7\" r=\"2.2\"/><circle cx=\"9\" cy=\"17\" r=\"2.2\"/></symbol>\n    <symbol id=\"i-full\" viewBox=\"0 0 24 24\"><path d=\"M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15\"/></symbol>\n    <symbol id=\"i-check\" viewBox=\"0 0 24 24\"><path d=\"M6 12.5l4 4 8-9\"/></symbol>\n    <symbol id=\"i-hand\" viewBox=\"0 0 24 24\"><path d=\"M8 13V6.5a1.5 1.5 0 0 1 3 0V12M11 11V5a1.5 1.5 0 0 1 3 0v6M14 11V6.5a1.5 1.5 0 0 1 3 0V14c0 3.5-2.5 6-6 6s-5-2-6.5-4.5L3 13a1.5 1.5 0 0 1 2.5-1.5L8 14\"/></symbol>\n    <symbol id=\"i-alert\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 7.5v5.5M12 16.2v.3\"/></symbol>\n    <symbol id=\"i-down\" viewBox=\"0 0 24 24\"><path d=\"M12 4v12M7 11l5 5 5-5M6 20h12\"/></symbol>\n    <symbol id=\"i-move\" viewBox=\"0 0 24 24\"><path d=\"M12 3v18M3 12h18M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5\"/></symbol>\n    <symbol id=\"i-key\" viewBox=\"0 0 24 24\"><rect x=\"3\" y=\"6.5\" width=\"18\" height=\"11\" rx=\"2\"/><path d=\"M6.5 10h1M10 10h1M13.5 10h1M17 10h.5M8 14h8\"/></symbol>\n    <symbol id=\"i-close\" viewBox=\"0 0 24 24\"><path d=\"M7 7l10 10M17 7L7 17\"/></symbol>\n  </defs>\n</svg>\n<div id=\"app\">\n  <canvas id=\"c\"></canvas>\n  <div id=\"hud\">\n    <div id=\"board\">\n      <div class=\"stats\">\n        <div class=\"stat\" id=\"coins\" title=\"剩余游戏币\"><svg class=\"ic\"><use href=\"#i-coin\"/></svg><b>10</b></div>\n        <div class=\"stat\" id=\"timer\" title=\"本局剩余时间\"><svg class=\"ic\"><use href=\"#i-clock\"/></svg><b>--</b></div>\n        <button class=\"stat btn\" id=\"bag\" title=\"我的奖品\" aria-label=\"我的奖品\"><svg class=\"ic\"><use href=\"#i-gift\"/></svg><b>0</b></button>\n      </div>\n      <div class=\"tools\">\n        <button class=\"tool btn\" id=\"set\" title=\"设置\" aria-label=\"设置\" aria-expanded=\"false\"><svg><use href=\"#i-gear\"/></svg></button>\n        <button class=\"tool btn\" id=\"fs\" title=\"全屏（F）\" aria-label=\"全屏\"><svg><use href=\"#i-full\"/></svg></button>\n      </div>\n    </div>\n    <div id=\"views\" role=\"group\" aria-label=\"机位\">\n      <button class=\"vw btn on\" data-cam=\"front\" aria-pressed=\"true\">正面</button>\n      <button class=\"vw btn\" data-cam=\"side\" aria-pressed=\"false\">侧面</button>\n    </div>\n    <div id=\"settings\" class=\"pop\" role=\"dialog\" aria-label=\"设置\">\n      <div class=\"row\"><span class=\"lbl\">机台配色</span><div class=\"chips\" id=\"themes\"></div></div>\n      <div class=\"row\"><span class=\"lbl\">画质</span><div class=\"seg\" id=\"qseg\"><button class=\"btn\" data-q=\"0\">低</button><button class=\"btn\" data-q=\"1\">中</button><button class=\"btn\" data-q=\"2\">高</button></div></div>\n      <div class=\"row\"><span class=\"lbl\">声音</span><button class=\"switch btn\" id=\"snd\" role=\"switch\" aria-checked=\"true\" aria-label=\"声音\"><i></i></button></div>\n      <div class=\"row links\"><button class=\"link btn\" id=\"replayGuide\">重看新手引导</button><button class=\"link btn fine-only\" id=\"showKeys\">按键说明</button></div>\n    </div>\n    <div id=\"toasts\" aria-live=\"polite\"></div>\n    <div id=\"deck\">\n      <div class=\"side l\">\n        <div class=\"keys\" id=\"keys\">\n          <div class=\"keys-hd\"><svg class=\"ic\"><use href=\"#i-key\"/></svg><span>键盘操作</span><button class=\"x btn\" id=\"keysClose\" title=\"收起\" aria-label=\"收起\"><svg><use href=\"#i-close\"/></svg></button></div>\n          <div class=\"kr\"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><em>移动爪子</em></div>\n          <div class=\"kr\"><span><kbd class=\"wide\">空格</kbd></span><em>下爪</em></div>\n          <div class=\"kr\"><span><kbd>Enter</kbd></span><em>投币</em></div>\n          <div class=\"kr\"><span><kbd>V</kbd></span><em>换机位</em></div>\n          <p>鼠标拖动旋转 · 滚轮缩放</p>\n        </div>\n        <div id=\"joy\" title=\"拖动移动爪子\"><div class=\"ring\"><i class=\"ar n\"></i><i class=\"ar e\"></i><i class=\"ar s\"></i><i class=\"ar w\"></i></div><div id=\"knob\"></div></div>\n      </div>\n      <div class=\"side r\">\n        <div id=\"hint\" class=\"hint\"><span class=\"dot\"></span><span id=\"hintTxt\">投币开始游戏</span></div>\n        <div class=\"acts\">\n          <button class=\"btn\" id=\"insert\" title=\"投币（Enter）\"><span class=\"coin\"><svg><use href=\"#i-coin\"/></svg></span><span class=\"t\"><em>投币</em><small>1 币 / 局</small></span></button>\n          <button class=\"btn\" id=\"grab\" title=\"下爪（空格）\" aria-label=\"下爪\"><span class=\"cap\"><svg><use href=\"#i-down\"/></svg></span><em>下爪</em></button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div id=\"drawer\" class=\"modal hidden\" role=\"dialog\" aria-label=\"我的奖品\">\n    <div class=\"panel\">\n      <div class=\"panel-hd\"><h2>我的奖品</h2><span id=\"bagTotal\" class=\"pill\"></span><button class=\"x btn\" id=\"closeBag\" aria-label=\"关闭\"><svg><use href=\"#i-close\"/></svg></button></div>\n      <div id=\"bagList\" class=\"grid\"></div>\n    </div>\n  </div>\n\n  <div id=\"nocoin\" class=\"modal hidden\" role=\"dialog\" aria-label=\"币用完了\">\n    <div class=\"panel small\">\n      <div class=\"badge\"><svg><use href=\"#i-coin\"/></svg></div>\n      <h2>币用完啦</h2>\n      <p id=\"nocoinHint\">今日免费补给：领取 10 个游戏币继续玩</p>\n      <button class=\"primary btn\" id=\"claim\">领取 10 币</button>\n      <button class=\"ghost btn\" id=\"later\">稍后</button>\n    </div>\n  </div>\n\n  <div id=\"win\" role=\"dialog\" aria-label=\"出奖\">\n    <div class=\"wcard\">\n      <canvas id=\"winPrev\" width=\"240\" height=\"240\"></canvas>\n      <div class=\"winfo\">\n        <span class=\"tag\">出奖啦</span>\n        <div class=\"name\" id=\"winName\"></div>\n        <div class=\"wsub\" id=\"winSub\"></div>\n      </div>\n      <button class=\"primary btn\" id=\"winOk\">从取物口取出</button>\n    </div>\n  </div>\n\n  <div id=\"onboard\" class=\"modal hidden\" role=\"dialog\" aria-label=\"新手引导\">\n    <div class=\"panel guide\">\n      <div class=\"steps\">\n        <div class=\"step on\"><div class=\"art a1\"><div class=\"mini-joy\"><i></i></div></div><h3>移动爪子</h3><p>拖动左下摇杆，把爪子移到娃娃正上方</p></div>\n        <div class=\"step\"><div class=\"art a2\"><div class=\"mini-btn\"></div></div><h3>按下爪</h3><p>对准后按红色按钮，爪子会下降抓取</p></div>\n        <div class=\"step\"><div class=\"art a3\"><div class=\"mini-ring\">PRIZE<br>OUT</div></div><h3>掉进出口就中奖</h3><p>娃娃落入左前方出口，从取物口拿走</p></div>\n      </div>\n      <div class=\"guide-ft\"><div class=\"dots\"><i class=\"on\"></i><i></i><i></i></div><button class=\"ghost btn\" id=\"obSkip\">跳过</button><button class=\"primary btn\" id=\"obNext\">下一步</button></div>\n    </div>\n  </div>\n\n  <div id=\"start\">\n    <div class=\"sheet\">\n      <div class=\"brand\"><span class=\"blob\"><i></i><i></i></span><div><h1>爪爪乐</h1><p class=\"en\">PAW PLAY · 线上娃娃机</p></div></div>\n      <div class=\"offer\"><svg class=\"ic\"><use href=\"#i-gift\"/></svg><span id=\"offerTxt\">新玩家赠送 <b>10</b> 币 · 1 币 1 局</span></div>\n      <div class=\"loading\"><div class=\"bar\"><div id=\"bar\"></div></div><p id=\"loadTxt\">正在加载…</p></div>\n      <button class=\"primary btn big\" id=\"go\" disabled>开始游戏</button>\n    </div>\n  </div>\n</div>", f_ = "/* ============================================================\n   爪爪乐 UI — white + theme accent, soft cards, one type scale\n   type: 11 caption · 12 small · 13 body · 15 title · 18 heading · 30 display  (weights 500 / 700)\n   space: 4 · 8 · 12 · 16 · 20      radius: 10 small · 14 control · 18 card · 24 sheet\n   ============================================================ */\n* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }\n:root {\n  --accent: #f47aa8; --accent-soft: #ffd6e6; --accent-dark: #c44a78;\n  --ink: #26232b; --ink-2: #57525e; --muted: #8e8896; --line: rgba(38,35,43,.08);\n  --card: rgba(255,255,255,.94); --glass: rgba(255,255,255,.82);\n  --shadow-1: 0 1px 2px rgba(38,28,48,.06), 0 4px 12px rgba(38,28,48,.08);\n  --shadow-2: 0 2px 6px rgba(38,28,48,.06), 0 12px 32px rgba(38,28,48,.16);\n  --ease: cubic-bezier(.2,.8,.2,1);\n  --green: #1fa971; --amber: #e3a008; --red: #e5484d; --orange: #ee7b2a;\n}\nhtml, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-touch-callout: none; -webkit-text-size-adjust: 100%;\n  background: #ece8e3; color: var(--ink); font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"HarmonyOS Sans SC\", \"MiSans\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", sans-serif;\n  touch-action: none; user-select: none; -webkit-user-select: none; }\n#app, #c { position: fixed; inset: 0; width: 100%; height: 100%; }\n#c { display: block; }\nbutton { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }\nbutton:focus { outline: none; }\n.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\nsvg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }\n.ic { width: 16px; height: 16px; flex: none; }\n#hud { position: fixed; inset: 0; pointer-events: none; transition: opacity .4s; }\n#hud > * { pointer-events: auto; }\n#hud > #toasts { pointer-events: none; }\nbody.intro #hud { opacity: 0; pointer-events: none; }\nbody.intro #hud > * { pointer-events: none; }\n\n/* ---------- top HUD ---------- */\n#board { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 8px;\n  padding: calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 12px); }\n.stats { display: flex; align-items: stretch; height: 40px; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);\n  border-radius: 14px; box-shadow: var(--shadow-1); border: 1px solid rgba(255,255,255,.7); }\n.stat { display: flex; align-items: center; gap: 6px; padding: 0 12px; position: relative; color: var(--ink); }\n.stat + .stat::before { content: \"\"; position: absolute; left: 0; top: 10px; bottom: 10px; width: 1px; background: var(--line); }\n.stat .ic { color: var(--muted); }\n#coins .ic { color: var(--amber); } #bag .ic { color: var(--accent-dark); }\n.stat b { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 1.3em; text-align: left; letter-spacing: -.2px; }\n#coins.empty b { color: var(--red); }\n#timer.urgent b, #timer.urgent .ic { color: var(--red); }\n#timer.beat b { animation: beat .45s var(--ease); }\n@keyframes beat { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }\n#bag { border-radius: 0 14px 14px 0; transition: background .15s; }\n#bag:active { background: rgba(0,0,0,.04); }\n.tools { margin-left: auto; display: flex; gap: 8px; }\n.tool { position: relative; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 14px; color: var(--ink-2);\n  background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--shadow-1); border: 1px solid rgba(255,255,255,.7);\n  transition: transform .12s var(--ease), background .15s, color .15s; }\n.tool::after { content: \"\"; position: absolute; inset: -4px; }  /* 48px hit area */\n.tool svg { width: 20px; height: 20px; }\n.tool:active { transform: scale(.92); }\n.tool.on { background: var(--ink); color: #fff; }\n\n/* ---------- 机位（正面 / 侧面） ----------\n   为什么不塞进顶栏：量过，375 宽时顶栏已经占满（.stats 206 + .tools 136 + 间隙 + 内边距 = 374/375），\n   再塞两个按钮必然把全屏键挤出屏幕。这块是画布**上方**的空白，白捡的，\n   而且正好在 prize-park 放机位按钮的位置（顶栏下面一行）。 */\n#views { position: absolute; z-index: 3; left: calc(env(safe-area-inset-left) + 12px);\n  top: calc(env(safe-area-inset-top) + var(--top, 56px) + 8px);\n  display: flex; gap: 4px; padding: 3px; border-radius: 13px;\n  background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);\n  border: 1px solid rgba(255,255,255,.7); box-shadow: var(--shadow-1); }\n#views .vw { height: 26px; padding: 0 11px; border-radius: 10px; font-size: 12px; font-weight: 700;\n  color: var(--ink-2); transition: background .15s, color .15s, transform .12s var(--ease); }\n#views .vw.on { background: var(--ink); color: #fff; }\n#views .vw:active { transform: scale(.94); }\nbody.fine #views .vw:hover { color: var(--accent-dark); }\nbody.fine #views .vw.on:hover { color: #fff; }\n/* 宽屏左侧是键盘说明面板（内容在顶部），机位改挂右上角 —— 右面板上半部是空的 */\nbody.wide #views { left: auto; right: calc(env(safe-area-inset-right) + 12px); top: calc(env(safe-area-inset-top) + var(--top, 56px) + 12px); }\n/* 宽屏机位在右上、吐司居中，互不干扰，吐司回到原位 */\nbody.wide #toasts { top: calc(var(--top, 56px) + 8px); }\n#fs.hidden { display: none; }\nbody.fine .tool:hover { color: var(--accent-dark); }\n\n/* settings popover */\n.pop { position: absolute; right: calc(env(safe-area-inset-right) + 12px); top: calc(env(safe-area-inset-top) + 56px); width: 264px; padding: 8px 16px;\n  background: var(--card); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-radius: 18px; box-shadow: var(--shadow-2);\n  opacity: 0; transform: translateY(-6px) scale(.97); transform-origin: top right; pointer-events: none; transition: opacity .2s var(--ease), transform .2s var(--ease); z-index: 5; }\n#hud > .pop { pointer-events: none; }\n#hud > .pop.show { opacity: 1; transform: none; pointer-events: auto; }\n.pop .row { display: flex; align-items: center; justify-content: space-between; min-height: 52px; border-bottom: 1px solid var(--line); }\n.pop .row:last-child { border-bottom: 0; }\n.pop .lbl { font-size: 13px; color: var(--ink-2); }\n.chips { display: flex; gap: 10px; }\n.chips button { position: relative; width: 28px; height: 28px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.9), 0 1px 3px rgba(0,0,0,.18); transition: transform .15s var(--ease); }\n.chips button::after { content: \"\"; position: absolute; inset: -8px; }\n.chips button.on { box-shadow: inset 0 0 0 2px #fff, 0 0 0 2px var(--ink); }\n.chips button:active { transform: scale(.9); }\n.seg { display: flex; background: #f1eef3; border-radius: 10px; padding: 3px; }\n.seg button { min-width: 42px; height: 30px; border-radius: 8px; font-size: 13px; color: var(--ink-2); transition: background .15s, color .15s; }\n.seg button.on { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.1); }\n.switch { width: 46px; height: 28px; border-radius: 14px; background: #d9d4dd; position: relative; transition: background .2s; }\n.switch i { position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .2s var(--ease); }\n.switch[aria-checked=\"true\"] { background: var(--accent); }\n.switch[aria-checked=\"true\"] i { transform: translateX(18px); }\n.pop .links { justify-content: flex-start; gap: 20px; }\n.link { font-size: 13px; color: var(--accent-dark); font-weight: 700; padding: 8px 0; }\nbody:not(.fine) .fine-only, body:not(.wide) .fine-only { display: none; }\n\n/* ---------- toasts ---------- */\n/* 竖屏时机位按钮就在左上角这一行，吐司往下让一格（宽屏机位在右上，吐司居中，不冲突） */\n#toasts { position: absolute; left: 0; right: 0; top: calc(var(--top, 56px) + 46px); display: grid; justify-items: center; z-index: 4; }\n.toast { grid-area: 1 / 1; display: flex; align-items: center; gap: 12px; max-width: min(86vw, 340px); padding: 10px 18px 10px 10px;\n  background: var(--card); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-radius: 18px; box-shadow: var(--shadow-2);\n  opacity: 0; transform: translateY(-10px) scale(.96); transition: opacity .2s var(--ease), transform .2s var(--ease); }\n.toast.in { opacity: 1; transform: none; }\n.toast.out { opacity: 0; transform: translateY(-6px) scale(.98); transition-duration: .16s; }\n.toast .ti { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent-dark); }\n.toast .ti svg { width: 20px; height: 20px; stroke-width: 2; }\n.toast .tt { display: flex; flex-direction: column; min-width: 0; }\n.toast b { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; }\n.toast small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.toast.ok .ti { background: #def5ea; color: var(--green); }\n.toast.coin .ti { background: #fdf1cf; color: #b47c00; }\n.toast.warn .ti { background: #fde4e4; color: var(--red); }\n.toast.warn b { color: var(--red); }\n.toast.miss .ti { background: #fdeadb; color: var(--orange); }\n.toast.ok.in .ti, .toast.coin.in .ti { animation: pop .36s var(--ease); }\n@keyframes pop { 0% { transform: scale(.6); } 70% { transform: scale(1.08); } 100% { transform: scale(1); } }\n\n/* ---------- control deck ---------- */\n#deck { position: absolute; left: 0; right: 0; bottom: 0; height: calc(env(safe-area-inset-bottom) + 172px);\n  padding: 14px calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 12px) calc(env(safe-area-inset-left) + 16px);\n  display: flex; align-items: center; justify-content: space-between;\n  background: #faf7f9; border-radius: 24px 24px 0 0; box-shadow: 0 -1px 0 rgba(255,255,255,.8), 0 -8px 24px rgba(38,28,48,.10); }\n#deck .side { display: flex; align-items: center; }\n#deck .side.r { flex-direction: column; align-items: flex-end; gap: 10px; }\n.acts { display: flex; align-items: center; gap: 16px; }\n\n/* persistent state line (above drop button) */\n.hint { display: inline-flex; background: #fff; align-items: center; gap: 8px; height: 28px; padding: 0 12px 0 10px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line);\n  font-size: 12px; font-weight: 500; color: var(--ink-2); white-space: nowrap; transition: background .2s, color .2s; }\n.hint .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }\n.hint.idle .dot { animation: breathe 1.6s ease-in-out infinite; }\n.hint.play .dot { background: var(--green); }\n.hint.busy .dot { background: none; width: 10px; height: 10px; border: 2px solid var(--accent-soft); border-top-color: var(--accent-dark); animation: spin .8s linear infinite; }\n.hint.empty .dot { background: var(--red); }\n@keyframes breathe { 50% { opacity: .35; transform: scale(.8); } }\n@keyframes spin { to { transform: rotate(360deg); } }\n\n/* joystick */\n#joy { position: relative; width: 124px; height: 124px; touch-action: none; transition: opacity .2s; }\n#joy .ring { position: absolute; inset: 8px; border-radius: 50%; background: radial-gradient(circle, #fff 0 52%, #f6f2f5 53%); box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line); }\n#joy .ar { position: absolute; width: 0; height: 0; border: 5px solid transparent; opacity: .35; }\n#joy .ar.n { left: 50%; top: 8px; margin-left: -5px; border-bottom-color: var(--ink); }\n#joy .ar.s { left: 50%; bottom: 8px; margin-left: -5px; border-top-color: var(--ink); }\n#joy .ar.w { top: 50%; left: 8px; margin-top: -5px; border-right-color: var(--ink); }\n#joy .ar.e { top: 50%; right: 8px; margin-top: -5px; border-left-color: var(--ink); }\n#knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; transition: transform .12s var(--ease);\n  background: radial-gradient(circle at 38% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 40%), var(--accent);\n  box-shadow: 0 6px 12px rgba(38,28,48,.22), inset 0 -3px 0 rgba(0,0,0,.12); }\n#joy.drag #knob { transition: none; }\n#joy.disabled { opacity: .55; }\n#joy.disabled #knob { background: radial-gradient(circle at 38% 30%, rgba(255,255,255,.5), rgba(255,255,255,0) 40%), #c9c3cc; }\n\n/* insert coin */\n#insert { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 16px 0 10px; border-radius: 18px; background: #fff; box-shadow: var(--shadow-1);\n  transition: transform .12s var(--ease), opacity .2s; }\n#insert .coin { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #8a5a00; background: radial-gradient(circle at 40% 35%, #ffe28a, #f5b81c); box-shadow: inset 0 -2px 0 rgba(0,0,0,.12); }\n#insert .coin svg { width: 22px; height: 22px; stroke-width: 2; }\n#insert .t { display: flex; flex-direction: column; align-items: flex-start; }\n#insert em { font-style: normal; font-weight: 700; font-size: 15px; color: var(--ink); }\n#insert small { font-size: 11px; color: var(--muted); }\n#insert:active { transform: scale(.95); }\n#insert.attn { animation: attn 1.8s ease-in-out infinite; }\n@keyframes attn { 0%, 100% { box-shadow: var(--shadow-1), 0 0 0 0 var(--accent-soft); } 50% { box-shadow: var(--shadow-1), 0 0 0 6px var(--accent-soft); } }\n#insert.nudge { animation: nudge .42s var(--ease); }\n@keyframes nudge { 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }\n#insert.gone { opacity: 0; pointer-events: none; transform: scale(.9); }\n\n/* drop button */\n#grab { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; }\n#grab .cap { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; color: rgba(255,255,255,.95);\n  background: radial-gradient(circle at 40% 30%, #ff7d74, #ee3b33 55%, #c3221c);\n  box-shadow: 0 5px 0 #9a1914, 0 9px 18px rgba(200,40,30,.28), inset 0 2px 3px rgba(255,255,255,.3); transition: transform .07s, box-shadow .07s, filter .2s; }\n#grab .cap svg { width: 30px; height: 30px; stroke-width: 2.4; }\n#grab em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--ink-2); letter-spacing: 1px; }\n#grab:not(.disabled):active .cap { transform: translateY(4px); box-shadow: 0 1px 0 #9a1914, 0 3px 8px rgba(200,40,30,.25), inset 0 2px 3px rgba(255,255,255,.2); }\n#grab.disabled .cap { background: radial-gradient(circle at 40% 30%, #f2eff3, #d9d4dc 60%, #c6c0ca); color: #fff; box-shadow: 0 5px 0 #aaa3ae, 0 6px 12px rgba(0,0,0,.08), inset 0 2px 3px rgba(255,255,255,.6); }\n#grab.disabled em { color: var(--muted); }\n\n/* PC key panel */\n.keys { display: none; }\n.keys-hd { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }\n.keys-hd .ic { color: var(--accent-dark); }\n.x { position: relative; margin-left: auto; width: 28px; height: 28px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); transition: background .15s; }\n.x::after { content: \"\"; position: absolute; inset: -6px; }\n.x svg { width: 16px; height: 16px; }\n.x:hover { background: rgba(0,0,0,.05); color: var(--ink); }\n.kr { display: flex; justify-content: space-between; align-items: center; height: 34px; border-bottom: 1px solid var(--line); gap: 8px; }\n.kr em { font-style: normal; font-size: 12px; color: var(--ink-2); white-space: nowrap; }\n.kr span { white-space: nowrap; display: flex; gap: 3px; }\n.keys p { margin: 10px 0 0; font-size: 11px; color: var(--muted); }\nkbd { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; font: 700 11px/1 ui-monospace, \"SF Mono\", Menlo, Consolas, monospace; color: var(--ink);\n  background: #fff; border-radius: 6px; box-shadow: inset 0 0 0 1px #e4dfe7, 0 1px 0 #e4dfe7; }\nkbd.wide { min-width: 56px; font-family: inherit; }\n\n/* ---------- modals (bag / out of coins / onboarding) ---------- */\n.modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(28,22,34,.36);\n  opacity: 0; transition: opacity .2s var(--ease); }\n.modal.show { opacity: 1; }\n.modal.hidden { display: none; }\n.panel { width: min(88vw, 340px); background: #fff; border-radius: 24px; padding: 20px; box-shadow: var(--shadow-2); transform: translateY(12px) scale(.97); transition: transform .22s var(--ease); }\n.modal.show .panel { transform: none; }\n.panel h2 { margin: 0; font-size: 18px; font-weight: 700; }\n.panel-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }\n.pill { font-size: 11px; color: var(--accent-dark); background: var(--accent-soft); padding: 3px 8px; border-radius: 10px; font-weight: 700; }\n.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 56vh; overflow: auto; }\n.grid .it { display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 14px; background: #f8f5f8; }\n.grid .sw { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: inset 0 -2px 0 rgba(0,0,0,.1); flex: none; }\n.grid .nm { font-size: 13px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.grid .ct { font-size: 12px; font-weight: 700; color: var(--accent-dark); }\n.grid .it.none { background: #faf9fa; } .grid .it.none .sw { filter: grayscale(1); opacity: .3; } .grid .it.none .nm, .grid .it.none .ct { color: #b9b3bd; font-weight: 500; }\n.primary { display: block; width: 100%; height: 48px; border-radius: 14px; background: var(--accent); color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 1px;\n  box-shadow: 0 3px 0 var(--accent-dark); transition: transform .08s, box-shadow .08s, background .2s; }\n.primary:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--accent-dark); }\n.primary:disabled { background: #e3dfe5; color: #a6a0aa; box-shadow: none; }\n.ghost { display: block; width: 100%; height: 44px; border-radius: 14px; color: var(--ink-2); font-size: 13px; font-weight: 700; }\n.ghost:active { background: rgba(0,0,0,.04); }\n.panel.small { text-align: center; width: min(84vw, 300px); padding-top: 24px; }\n.panel.small p { margin: 6px 0 20px; color: var(--muted); font-size: 13px; }\n.badge { width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center; color: #8a5a00; background: radial-gradient(circle at 40% 35%, #ffe28a, #f5b81c); box-shadow: 0 6px 16px rgba(245,184,28,.35), inset 0 -3px 0 rgba(0,0,0,.1); }\n.badge svg { width: 30px; height: 30px; stroke-width: 2; }\n.panel.small .ghost { margin-top: 4px; }\n\n/* onboarding */\n.guide { padding: 16px 16px 12px; }\n.steps { display: grid; }\n.step { grid-area: 1 / 1; text-align: center; opacity: 0; transform: translateX(16px); transition: opacity .22s var(--ease), transform .22s var(--ease); pointer-events: none; }\n.step.on { opacity: 1; transform: none; }\n.step h3 { margin: 14px 0 4px; font-size: 18px; font-weight: 700; }\n.step p { margin: 0 8px; font-size: 13px; color: var(--muted); min-height: 36px; }\n.art { height: 140px; border-radius: 18px; background: linear-gradient(160deg, var(--accent-soft), #fff 80%); display: grid; place-items: center; overflow: hidden; }\n.mini-joy { width: 84px; height: 84px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-1); position: relative; }\n.mini-joy i { position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px; border-radius: 50%; background: var(--accent); box-shadow: 0 4px 8px rgba(0,0,0,.18); animation: joyc 2.4s ease-in-out infinite; }\n@keyframes joyc { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(18px, 0); } 50% { transform: translate(0, -18px); } 75% { transform: translate(-18px, 0); } }\n.mini-btn { width: 72px; height: 72px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #ff7d74, #ee3b33 55%, #c3221c); box-shadow: 0 6px 0 #9a1914; animation: press 1.6s ease-in-out infinite; }\n@keyframes press { 0%, 60%, 100% { transform: none; box-shadow: 0 6px 0 #9a1914; } 70%, 85% { transform: translateY(5px); box-shadow: 0 1px 0 #9a1914; } }\n.mini-ring { width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; text-align: center; font: 700 12px/1.2 -apple-system, sans-serif; color: var(--accent-dark); background: #fff;\n  box-shadow: 0 0 0 6px var(--accent), 0 0 0 10px var(--accent-soft); animation: glow 1.2s ease-in-out infinite; }\n@keyframes glow { 50% { box-shadow: 0 0 0 6px var(--accent), 0 0 0 16px rgba(255,255,255,0); } }\n.guide-ft { display: flex; align-items: center; gap: 8px; margin-top: 16px; }\n.guide-ft .dots { display: flex; gap: 6px; margin-right: auto; padding-left: 4px; }\n.guide-ft .dots i { width: 6px; height: 6px; border-radius: 3px; background: #e2dde5; transition: width .2s var(--ease), background .2s; }\n.guide-ft .dots i.on { width: 18px; background: var(--accent); }\n.guide-ft .ghost { width: auto; padding: 0 16px; }\n.guide-ft .primary { width: 116px; }\n\n/* ---------- win card ---------- */\n#win { position: fixed; left: 50%; top: calc(var(--top, 56px) + 8px); z-index: 6; transform: translate(-50%, -12px) scale(.96); opacity: 0; pointer-events: none;\n  transition: opacity .22s var(--ease), transform .22s var(--ease); }\n#win.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }\n.wcard { width: min(90vw, 340px); display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 4px 14px; padding: 12px 14px 14px 12px;\n  background: var(--card); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-radius: 24px; box-shadow: var(--shadow-2); }\n#winPrev { width: 96px; height: 96px; border-radius: 18px; background: radial-gradient(circle at 50% 60%, #fff, var(--accent-soft)); }\n.winfo { min-width: 0; }\n.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 1px; }\n#win.show .tag { animation: pop .4s var(--ease) .1s both; }\n.winfo .name { font-size: 20px; font-weight: 700; margin: 6px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.winfo .wsub { font-size: 12px; color: var(--muted); }\n.wcard .primary { grid-column: 1 / -1; margin-top: 10px; }\n\n/* ---------- start / loading ---------- */\n#start { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center; padding: 16px;\n  background: linear-gradient(rgba(250,246,248,0) 40%, rgba(250,246,248,.6) 70%); transition: opacity .45s var(--ease); }\n#start.hide { opacity: 0; pointer-events: none; }\n#start .sheet { width: 100%; max-width: 400px; padding: 20px 20px 20px; margin-bottom: env(safe-area-inset-bottom); background: var(--card);\n  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-radius: 24px; box-shadow: var(--shadow-2); transition: transform .45s var(--ease); }\n#start.hide .sheet { transform: translateY(24px); }\n.brand { display: flex; align-items: center; gap: 14px; }\n.brand .blob { position: relative; width: 56px; height: 56px; border-radius: 18px; background: var(--accent); box-shadow: inset 0 -4px 0 rgba(0,0,0,.1); flex: none; }\n.brand .blob::before { content: \"\"; position: absolute; left: 10px; right: 10px; top: 12px; bottom: 10px; border-radius: 50% 50% 45% 45%; background: #fff; }\n.brand .blob i { position: absolute; top: 24px; width: 5px; height: 6px; border-radius: 50%; background: var(--ink); }\n.brand .blob i:first-child { left: 20px; } .brand .blob i:last-child { right: 20px; }\n#start h1 { margin: 0; font-size: 30px; line-height: 1.1; font-weight: 700; letter-spacing: 2px; color: var(--ink); }\n#start .en { margin: 4px 0 0; font-size: 11px; letter-spacing: 2px; color: var(--muted); font-weight: 700; }\n.offer { display: flex; align-items: center; gap: 8px; margin: 16px 0 12px; padding: 10px 12px; border-radius: 14px; background: var(--accent-soft); color: var(--accent-dark); font-size: 13px; }\n.offer b { font-weight: 700; }\n.loading { height: 30px; }\n.loading .bar { height: 4px; background: #efebf1; border-radius: 2px; overflow: hidden; }\n#bar { height: 100%; width: 0; background: var(--accent); transition: width .3s var(--ease); border-radius: 2px; }\n#loadTxt { font-size: 11px; color: var(--muted); margin: 6px 0 0; }\n#start.ready .loading { visibility: hidden; height: 4px; }\n.primary.big { height: 52px; font-size: 17px; letter-spacing: 4px; }\n\n/* ---------- wide (desktop / landscape) ---------- */\nbody.wide #deck { top: var(--top, 56px); height: auto; padding: 0; background: none; pointer-events: none; display: block; }\nbody.wide #deck .side { pointer-events: auto; position: absolute; top: 0; bottom: 0; width: var(--side, 240px); flex-direction: column; justify-content: flex-end; align-items: center; gap: 20px;\n  padding: 16px 16px calc(env(safe-area-inset-bottom) + 28px); background: rgba(250,246,248,.9); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }\nbody.wide #deck .side.l { left: 0; padding-left: calc(env(safe-area-inset-left) + 16px); box-shadow: 1px 0 0 var(--line); }\nbody.wide #deck .side.r { right: 0; padding-right: calc(env(safe-area-inset-right) + 16px); box-shadow: -1px 0 0 var(--line); }\nbody.wide .acts { flex-direction: column; gap: 20px; }\nbody.wide .hint { order: 0; }\nbody.wide #joy { width: 152px; height: 152px; }\nbody.wide #knob { width: 62px; height: 62px; margin: -31px; }\nbody.wide #grab .cap { width: 100px; height: 100px; }\nbody.wide #insert { width: 100%; max-width: 200px; justify-content: center; }\nbody.wide.fine .keys { display: block; width: 100%; margin-bottom: auto; padding: 14px; border-radius: 18px; background: #fff; box-shadow: var(--shadow-1);\n  transition: opacity .3s var(--ease), transform .3s var(--ease); }\nbody.wide.fine.keys-off .keys { opacity: 0; transform: translateY(-8px); pointer-events: none; }\nbody.wide.compact #board { padding-top: calc(env(safe-area-inset-top) + 6px); padding-bottom: 6px; }\nbody.wide.compact .stats, body.wide.compact .tool { height: 36px; } body.wide.compact .tool { width: 36px; }\nbody.wide.compact .stat b { font-size: 15px; }\nbody.wide.compact #deck .side { padding: 8px 10px calc(env(safe-area-inset-bottom) + 10px); gap: 10px; }\nbody.wide.compact .acts { gap: 10px; }\nbody.wide.compact #joy { width: 116px; height: 116px; }\nbody.wide.compact #knob { width: 50px; height: 50px; margin: -25px; }\nbody.wide.compact #grab .cap { width: 76px; height: 76px; }\nbody.wide.compact #grab em { display: none; }\nbody.wide.compact #insert { height: 48px; padding: 0 10px 0 6px; } body.wide.compact #insert .coin { width: 30px; height: 30px; } body.wide.compact #insert small { display: none; }\nbody.wide.compact .hint { max-width: 100%; overflow: hidden; font-size: 11px; padding: 0 8px; }\nbody.wide.compact #start .sheet { max-width: 380px; padding: 14px 16px; } body.wide.compact .offer { margin: 10px 0 8px; } body.wide.compact #start h1 { font-size: 24px; }\nbody.wide.compact .art { height: 96px; } body.wide.compact .step h3 { margin-top: 8px; font-size: 15px; }\n\n/* ---------- narrow phones ---------- */\n@media (max-width: 360px) {\n  .stat { padding: 0 9px; } .tools { gap: 6px; } .acts { gap: 10px; }\n  #insert { padding: 0 10px 0 8px; } #insert small { display: none; } #grab .cap { width: 76px; height: 76px; } #joy { width: 112px; height: 112px; }\n}\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }\n";
 //#endregion
 //#region src/plugin/scope-css.ts
-function g_(e) {
+function p_(e) {
 	let t = [], n = 0, r = "";
 	for (let i of e) i === "(" || i === "[" ? n++ : (i === ")" || i === "]") && (n = Math.max(0, n - 1)), i === "," && n === 0 ? (t.push(r), r = "") : r += i;
 	return t.push(r), t;
 }
-function __(e, t) {
+function m_(e, t) {
 	let n = e.trim();
 	if (!n) return "";
 	if (n === t || n.startsWith(t + ".") || n.startsWith(t + " ") || n.startsWith(t + ":")) return n;
 	let r = n.match(/^(:root|html|body)\b/);
 	return r ? t + n.slice(r[0].length) : t + " " + n;
 }
-function v_(e, t) {
+function h_(e, t) {
 	let n = e.replace(/\/\*[\s\S]*?\*\//g, ""), r = "", i = 0;
 	for (; i < n.length;) {
 		let e = n.indexOf("{", i);
@@ -23832,10 +23787,10 @@ function v_(e, t) {
 		for (; c < n.length; c++) if (n[c] === "{") s++;
 		else if (n[c] === "}" && (s--, s === 0)) break;
 		let l = n.slice(e + 1, c);
-		if (/^@(media|supports|container|layer)\b/.test(o)) r += a + "{" + v_(l, t) + "}";
+		if (/^@(media|supports|container|layer)\b/.test(o)) r += a + "{" + h_(l, t) + "}";
 		else if (o.startsWith("@")) r += a + "{" + l + "}";
 		else {
-			let e = g_(o).map((e) => __(e, t)).filter(Boolean).join(",");
+			let e = p_(o).map((e) => m_(e, t)).filter(Boolean).join(",");
 			r += e + "{" + l + "}";
 		}
 		i = c + 1;
@@ -23844,7 +23799,7 @@ function v_(e, t) {
 }
 //#endregion
 //#region src/plugin/index.ts
-var y_ = 1, b_ = 20, x_ = 1, S_ = 5, C_ = 1, w_ = {
+var g_ = 1, __ = 20, v_ = 1, y_ = 5, b_ = 1, x_ = {
 	id: "claw3d",
 	name: "爪爪乐",
 	emoji: "🎪",
@@ -23857,14 +23812,14 @@ var y_ = 1, b_ = 20, x_ = 1, S_ = 5, C_ = 1, w_ = {
 		emoji: "🐾"
 	},
 	economy: {
-		playCost: x_,
+		playCost: v_,
 		expectedPayout: .7,
-		capPerPrize: C_,
+		capPerPrize: b_,
 		voucherPerCoin: 1
 	}
-}, T_ = (e) => Math.max(0, Math.round(Number.isFinite(e) ? e : 0));
-function E_(e, t) {
-	let n = T_(t.coins), r = T_(t.points), i = !1;
+}, S_ = (e) => Math.max(0, Math.round(Number.isFinite(e) ? e : 0));
+function C_(e, t) {
+	let n = S_(t.coins), r = S_(t.points), i = !1;
 	async function a(e) {
 		if (i) return !1;
 		i = !0;
@@ -23877,18 +23832,18 @@ function E_(e, t) {
 	async function o() {
 		try {
 			let [t, i] = await Promise.all([e.gameCoinBalance(), Promise.resolve(typeof e.balance == "function" ? e.balance() : r)]);
-			typeof t == "number" && Number.isFinite(t) && (n = T_(t)), typeof i == "number" && Number.isFinite(i) && (r = T_(i));
+			typeof t == "number" && Number.isFinite(t) && (n = S_(t)), typeof i == "number" && Number.isFinite(i) && (r = S_(i));
 		} catch (e) {
 			console.warn("[claw] 钱包对账失败，保持内存余额", e);
 		}
 	}
 	async function s(t) {
-		let i = T_(t);
-		return i <= 0 || i > b_ ? !1 : a(async () => {
-			let t = i * y_;
+		let i = S_(t);
+		return i <= 0 || i > __ ? !1 : a(async () => {
+			let t = i * g_;
 			if (r < t) return !1;
 			try {
-				if (!await e.buyGameCoin(i, y_, `买 ${i} 个爪爪币`)) return await o(), !1;
+				if (!await e.buyGameCoin(i, g_, `买 ${i} 个爪爪币`)) return await o(), !1;
 			} catch (e) {
 				return console.warn("[claw] 买币失败", e), await o(), !1;
 			}
@@ -23903,7 +23858,7 @@ function E_(e, t) {
 			return r;
 		},
 		async pay(t) {
-			let r = T_(t);
+			let r = S_(t);
 			return r <= 0 || a(async () => {
 				if (n < r) return !1;
 				try {
@@ -23916,20 +23871,20 @@ function E_(e, t) {
 		},
 		async award(t, n) {
 			try {
-				return await e.mintVoucher(C_, `抓到「${n}」`);
+				return await e.mintVoucher(b_, `抓到「${n}」`);
 			} catch (e) {
 				return console.warn("[claw] 发兑换券失败", e), 0;
 			}
 		},
 		recharge: {
-			label: `换 ${S_} 个币`,
-			hint: `币用完啦。用积分换币：${y_} 积分 = 1 个${w_.coin.name}`,
-			run: () => s(S_)
+			label: `换 ${y_} 个币`,
+			hint: `币用完啦。用积分换币：${g_} 积分 = 1 个${x_.coin.name}`,
+			run: () => s(y_)
 		}
 	};
 }
-var D_ = "\n.claw-root, .claw-root *, .claw-root *::before, .claw-root *::after { box-sizing: border-box; }\n.claw-root #app, .claw-root #c, .claw-root #hud,\n.claw-root .modal, .claw-root #win, .claw-root #start { position: absolute; }\n";
-async function O_(e, t, n) {
+var w_ = "\n.claw-root, .claw-root *, .claw-root *::before, .claw-root *::after { box-sizing: border-box; }\n.claw-root #app, .claw-root #c, .claw-root #hud,\n.claw-root .modal, .claw-root #win, .claw-root #start { position: absolute; }\n";
+async function T_(e, t, n) {
 	if (!e) throw Error("mount: 需要一个容器元素");
 	if (!t) throw Error("mount: 需要 host API");
 	let r = 0, i = 0;
@@ -23943,7 +23898,7 @@ async function O_(e, t, n) {
 	} catch (e) {
 		console.warn("[claw] 读积分失败", e);
 	}
-	let a = E_(t, {
+	let a = C_(t, {
 		coins: r,
 		points: i
 	}), o = {
@@ -23957,19 +23912,19 @@ async function O_(e, t, n) {
 	}, s = document.createElement("div");
 	s.className = "claw-root intro", s.style.cssText = "position:relative;width:100%;height:100%;overflow:hidden", e.replaceChildren(s);
 	let c = document.createElement("style");
-	c.dataset.claw3d = "1", c.textContent = v_(h_, ".claw-root") + D_, s.appendChild(c);
+	c.dataset.claw3d = "1", c.textContent = h_(f_, ".claw-root") + w_, s.appendChild(c);
 	let l = await (async () => {
 		try {
-			return await p_({
+			return await u_({
 				root: s,
-				html: m_,
+				html: d_,
 				kv: o,
 				wallet: a,
 				standalone: !1,
 				debug: !0,
 				patch: (e) => {
 					let t = e.querySelector("#offerTxt");
-					t && (t.textContent = `${x_} 币 1 局 · 用积分换币`);
+					t && (t.textContent = `${v_} 币 1 局 · 用积分换币`);
 				}
 			});
 		} catch (t) {
@@ -23993,4 +23948,4 @@ async function O_(e, t, n) {
 	};
 }
 //#endregion
-export { w_ as manifest, O_ as mount };
+export { x_ as manifest, T_ as mount };

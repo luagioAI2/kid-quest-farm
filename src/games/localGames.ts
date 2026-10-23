@@ -47,8 +47,8 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "name": "爪爪乐",
     "version": "1.0.0",
     "url": "/games/claw3d/claw3d.plugin.mjs",
-    "sha256": "6c80236ec5a330e43a6718cce7f5dff490820610b53322070e5577657c74bee0",
-    "bytes": 5225202,
+    "sha256": "1cd4e343352d3612d5b2f9a68fa72b90a2c672089908397cd8a182631ea6a7d6",
+    "bytes": 5225796,
     "assetBase": "/games/claw3d/"
   }
 ]
