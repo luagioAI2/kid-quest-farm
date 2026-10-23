@@ -41,6 +41,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "d3967ea5c7ae261862c12833ffc9f5feb8e2a089dfe645f1f516bb491bf9d8a5",
     "bytes": 3396736,
     "assetBase": "/games/prizepark/"
+  },
+  {
+    "id": "claw3d",
+    "name": "爪爪乐",
+    "version": "1.0.0",
+    "url": "/games/claw3d/claw3d.plugin.mjs",
+    "sha256": "6c80236ec5a330e43a6718cce7f5dff490820610b53322070e5577657c74bee0",
+    "bytes": 5225202,
+    "assetBase": "/games/claw3d/"
   }
 ]
 

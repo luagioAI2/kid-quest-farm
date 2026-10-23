@@ -6,6 +6,13 @@
       "version": "1.6.1",
       "file": "prizepark/prizepark.plugin.mjs",
       "assetBase": "prizepark/"
+    },
+    {
+      "id": "claw3d",
+      "name": "爪爪乐",
+      "version": "1.0.0",
+      "file": "claw3d/claw3d.plugin.mjs",
+      "assetBase": "claw3d/"
     }
   ]
 }

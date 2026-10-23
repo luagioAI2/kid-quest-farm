@@ -346,6 +346,28 @@ mount(container: HTMLElement, host: HostApi, ctx: MountContext): Unmount | Promi
 > `destroy()` **永远不跑**。而当时的测试自己 `await mount()`，所以全绿。
 > ➜ **契约如果逼着实现者违反它，那是契约的问题，不是实现的问题。**
 
+#### 2.2.1 反复挂载会踩的四件事（2026-10-23 接爪爪乐时全部踩过）
+
+插件不是"开一次关一次"，是**切 tab 就卸、切回来再挂**。下面四条只有在
+"挂第二次"时才会暴露，而它们**都不报错**：
+
+1. **模块顶层不要碰 `document`。** 任何"建 canvas / 建纹理 / 建材质"的代码
+   都必须放进函数里。症状：`node scripts/check-plugin.mjs` 报
+   `document is not defined`（它在 Node 里真 `import()` 一次来验导出形状），
+   看着像包坏了。爪爪乐原来在 `models.ts` 顶层就 `glossWhite()`，
+   改成懒建的工厂（`useFreshMaterials()`）。
+2. **材质 / 纹理必须每次挂载新建。** 上一轮 `unmount` 已经 `dispose()` 了，
+   模块级单例第二轮拿到的是**已销毁的对象** ⇒ 黑屏或纯白，**不报错**。
+   判据：切走再切回，画面还能看（`e2e-plugin-claw3d.mjs` ④ 段）。
+3. **`Object.assign(debug, { get x() { return x } })` 会当场求值**，
+   把那一刻的值拷进去。走查脚本于是永远读到 `intro: true`，
+   表现成"点了开始游戏没反应"。要挂**活的**读取器就用
+   `Object.defineProperties(debug, { x: { get: () => x } })`。
+4. **别在 `document` 上 `preventDefault`。** 爪爪乐原来为了"不许滚动/捏合"
+   在 `document` 上挂了 `touchmove` 的 `preventDefault` —— 插件里那等于
+   让**宿主整页**滑不动，而症状是"农场页滚不了了"，没人会想到是娃娃机干的。
+   收到**自己的根节点**上（`root.addEventListener`）。
+
 ### 2.3 容器是**定高盒子**：`height:100%` 一定解析得到
 
 宿主给你的 `container` 是一个**高度确定**的盒子 —— 正好等于「顶栏和底栏之间那块」
@@ -392,7 +414,17 @@ mount(container: HTMLElement, host: HostApi, ctx: MountContext): Unmount | Promi
 甚至 Rapier（+ 1.8MB base64 wasm）。替代口径：
 
 - **不进主包**：包是运行时下载的，所以**首装体积不变**；
-- **单文件包 ≤ 4 MB**（gzip ≤ 1.2 MB）是实测可接受的上限（奖品公园 3.24MB / 1.06MB）；
+- **单文件包 ≤ 4 MB**（gzip ≤ 1.2 MB）是**纯 DOM 游戏**的实测可接受上限
+  （奖品公园 3.24MB / 1.06MB）；
+- **3D + 物理引擎的包会更大，那是引擎的地板价**：爪爪乐（2026-10-23 接入）
+  4.98 MB / gzip 1.76 MB —— 其中 three 约 0.7MB、`@dimforge/rapier3d-compat`
+  的 wasm 内联成 base64 约 2.6MB。**这两块省不掉**（wasm 不能另发：插件在
+  `blob:` 模块里，取不到第二个文件）。判据不是"小"，而是"装得下、起得来"：
+  真宿主里从挂载到 `__claw.ready` 实测 3~6 秒（headless SwiftShader，
+  真机更快），期间开场页自己在转 loading 条。
+- ⚠️ **本地包（`public/games/<id>/`）会进 APK** —— 上面"首装体积不变"只对
+  **远程目录**成立。爪爪乐 5MB 是加在 APK 上的；嫌大就只发远程目录，
+  别放 `public/`；
 - **资源另发**，不进 JS（base64 会让体积 +33%，而且 blob 模块解析几十 MB 字符串会卡死）；
 - 资源必须**转 WebP** 并出 `assets/manifest.json`（每张 sha256）。
   奖品公园实测：41 张 PNG 63.7MB → 5.2MB（12.7×）。
