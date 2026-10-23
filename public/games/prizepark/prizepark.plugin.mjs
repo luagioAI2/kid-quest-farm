@@ -29608,7 +29608,7 @@ async function vx(e) {
 		}, ei.push($r), B.phase = "back", B.t = 0, Ir()) : (B.phase = "get", Ir()), B.x = n.home.x, B.y = n.home.y, B.z = n.home.z, vt(!1), B.releaseSuccess = !1, B.guidePrize = null;
 		for (let e of rt) e.joint.configureMotorPosition(e.side * n.openAngle, 60, 8);
 		let r = t, i = !(x.gotCounts[r] ?? 0);
-		x.gotCounts[r] = (x.gotCounts[r] ?? 0) + 1, x.stock[r] = (x.stock[r] ?? 0) + 1, i && (x.firstGot[r] = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)), Dr(), le(), Jt();
+		x.gotCounts[r] = (x.gotCounts[r] ?? 0) + 1, x.stock[r] = (x.stock[r] ?? 0) + 1, i && (x.firstGot[r] = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)), Dr(), le(), Jt(), _i();
 		let a = L.every((e) => e.got);
 		window.setTimeout(() => {
 			n.mascot || (hi({
