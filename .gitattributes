@@ -1,0 +1,12 @@
+# 插件包是**按字节哈希校验**的发布物
+# ------------------------------------------------------------
+# `src/games/localGames.ts` 里烧着每个包的 SHA-256（由
+# `scripts/make-local-catalog.mjs` 现算），安装时逐字节比对。
+#
+# 而 `core.autocrlf=true` 会在 **checkout 时把 LF 换成 CRLF** ——
+# 哈希立刻对不上，症状是「装不上 / 校验失败」，而排查的人第一反应
+# 是去查网络，方向从第一秒就是错的。
+#
+# 所以 `public/games/` 下面的一切都必须**原样进出**：包、资源、
+# 每张图的 sha256 清单（`assets/manifest.json`）。
+public/games/** -text
