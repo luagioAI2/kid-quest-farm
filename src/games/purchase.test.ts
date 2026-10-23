@@ -37,8 +37,8 @@ vi.mock('./registry', async (importOriginal) => {
 
 const { db, currentMallBalance, postMall } = await import('../db/db')
 const { useApp } = await import('../store/useApp')
-const { GAME_CLAW, GAME_FARM } = await import('./ids')
-const { GAMES, gameById } = await import('./registry')
+const { GAME_FARM } = await import('./ids')
+const { GAMES } = await import('./registry')
 
 /**
  * 「还没做好的那款游戏」——**从注册表里找**，不写死 id。
@@ -132,21 +132,18 @@ describe('买游戏', () => {
     expect(useApp.getState().mallBalance).toBe(9999)
   })
 
-  it('★ 娃娃机（真游戏）买得下来、能切成当前 —— 家长走的就是这条路', async () => {
-    // 这一条钉的是**家长 2026-10-16 那个需求**的闭环：
-    //   设置 → 游戏 → 花钻石买娃娃机 → 设为当前。
-    // 上面 `test-game` 那几条验的是机制，这一条验的是**真的那款游戏**接上了。
-    const price = gameById(GAME_CLAW)!.priceMall
-    await grantMall(price + 10)
-    const res = await useApp.getState().buyGame(GAME_CLAW)
-    expect(res.ok).toBe(true)
-    expect(useApp.getState().mallBalance).toBe(10)
-    expect(useApp.getState().ownedGameIds).toContain(GAME_CLAW)
-
-    await useApp.getState().setActiveGame(GAME_CLAW)
-    expect(useApp.getState().activeGameId).toBe(GAME_CLAW)
-    // 落进设置才算真的切了（重启后还在）
-    expect(useApp.getState().settings.activeGame).toBe(GAME_CLAW)
+  it('★ 内置娃娃机已整台移除（`claw` 不许回到注册表）', () => {
+    // 2026-10-23：那台机器（ClawPage + clawEconomy + store 动作）全删了，
+    // 娃娃机改由**插件**提供（`public/games/` + `localGames.ts`）。
+    //
+    // 这条断言钉的是「别再回来」：一旦有人把 `claw` 加回 `GAMES`，
+    // 家长栏会多出一个付费格子，而 `pages.ts` 里没有它的页面 ——
+    // 买下来、切成当前，孩子看到的就是一片空白。**而且不报错。**
+    //
+    // 原来这里验的是「真游戏买得下来 → 能切成当前」。那条链的每一环
+    // 上面 `test-game` 那几条都覆盖了（买 → 扣钻石 → 拥有派生 → 切当前 → 落进设置），
+    // 所以删掉它没有留下空洞。
+    expect(GAMES.map((g) => g.id)).not.toContain('claw')
   })
 
   it('不存在的游戏买不了', async () => {

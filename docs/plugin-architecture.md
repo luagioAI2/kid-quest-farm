@@ -227,8 +227,9 @@ expectedPayout × voucherPerCoin < playCost ← 真正的印钞机闸门
 
 所以 2026-10-23 加了 `mintVoucher`（HOST_API 4），实现是
 `db.mintGameVouchers` → `postHarvest({ source: 'claw_prize', refId: gameId })`
-—— 和**内置娃娃机**同一个入口、同一套口径（内置那台一直是「扣 1 币 + 当场发券」，
-在 `useApp.settleClawRound` 里同一个事务）。
+—— 和当年那台**内置娃娃机**同一个入口、同一套口径（它一直是「扣 1 币 + 当场发券」，
+在 `useApp.settleClawRound` 里同一个事务；那台机器已于 2026-10-23 整台移除，
+`claw_prize` 这个 source 名**故意保留**，改了就和新流水对不上账）。
 
 > 判据：**看币账本**。卖完娃娃如果 `__coin` 里多了一行，就是写错了。
 > `src/db/gameCoin.test.ts` 的 `mintGameVouchers` 那组第一条断言就是

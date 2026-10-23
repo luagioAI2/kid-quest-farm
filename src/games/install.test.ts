@@ -231,12 +231,12 @@ describe('fetchVerifiedGame —— 每一道门都要能拦', () => {
     const err = await catchError(
       fetchVerifiedGame({
         catalogUrl: CATALOG_URL,
-        gameId: 'claw',
+        gameId: 'ghost-game',
         publicKeyRaw: pubRaw,
         fetchImpl: tableFetch(files),
       }),
     )
-    expect(err.message).toContain('claw')
+    expect(err.message).toContain('ghost-game')
     expect(err.message).toContain('demo') // 「目录里有什么」—— 排查时第一眼要看的就是它
   })
 

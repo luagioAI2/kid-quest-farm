@@ -265,15 +265,19 @@ export interface LedgerEntry {
  * **刻意比 `LedgerSource` 少** —— 这里不该出现 `task` / `checkin`，
  * 因为兑换券只能从「玩出来的产出」里来，任务和签到只发积分。
  *
- * ⚠️ 2026-10-16 起多了一个 `claw_prize`：娃娃机抓到的娃娃也能换商城币。
- * 加它的同时**必须回头看那条不变量** —— 娃娃机每局的期望产出要 < 1
- * （兑换商城里 1 兑换券 ≡ 1 积分，而一局只花 1 积分）。
- * 判据与单测在 `domain/clawEconomy.ts`。
+ * ⚠️ `claw_prize` 这个名字是 2026-10-16 留下的，现在**不再指内置娃娃机**
+ * （那台已于 2026-10-23 整台移除）—— 它现在是「**奖品 → 兑换券**」这条边的
+ * 统一来源标记，插件游戏发券（`host.mintVoucher`）也用它。
+ * **不要改名**：改名会让老存档里的历史流水和新流水变成两个来源，
+ * 统计口径当场对不上，而且不报错。
+ *
+ * 加任何新来源时都要回头看那条不变量：产出速率 < 成本
+ * （兑换商城里 1 兑换券 ≡ 1 积分）。插件那条链的判据在 `domain/pluginEconomy.ts`。
  */
 export type HarvestSource =
   | 'farm_harvest' // 作物收获
   | 'farm_market' // 市场卖出产出
-  | 'claw_prize' // 娃娃机抓到娃娃兑换（2026-10-16）
+  | 'claw_prize' // 奖品 → 兑换券（含插件游戏 mintVoucher；名字是历史遗留）
   | 'game_redeem' // 插件游戏的币换成兑换券（2026-10-22）
   | 'harvest_redeem' // 用兑换券兑换（负数）
   | 'manual_adjust' // 家长手工调整
@@ -971,28 +975,6 @@ export interface AppSettings {
 
   /** 农场时间流速设置 */
   farmClock: FarmClockSettings
-
-  /**
-   * 娃娃机：中奖率（0~1）与「每抓到一只兑换多少兑换券」。
-   *
-   * 两个都**可选** —— 老库里没有这两个字段，`loadSettings` 会和
-   * `DEFAULT_SETTINGS` 合并拿到默认值，所以**不需要数据迁移**。
-   *
-   * ⚠️ 这两个数是**乘在一起**的：`期望产出 = 中奖率 × 每只兑换数`，
-   * 而它必须 ≤ `CLAW_MAX_EXPECTED`（0.8）—— 因为兑换商城里
-   * `1 兑换券 ≡ 1 积分`，期望产出 ≥ 1 就等于「孩子坐着玩就能刷积分」。
-   * 判据与夹紧都在 `domain/clawEconomy.ts`，**别在设置界面里自己乘**。
-   */
-  clawWinRate?: number
-  clawExchangePerPrize?: number
-
-  /**
-   * 娃娃机的配色下标（`CLAW_THEMES` 的 0..2）。
-   *
-   * 同样**可选**，老库里没有就走默认值，不需要数据迁移。
-   * ⚠️ 这是**孩子**的偏好，不是家长策略 —— 所以不受家长锁保护。
-   */
-  clawTheme?: number
 
   /** 家长锁 PIN（明文仅本地，4 位） */
   parentPin?: string

@@ -57,10 +57,18 @@ if (!chrome) throw new Error('找不到 Chrome/Edge')
    ★ 目标版本 / 表名从 `db.ts` 读出来（**不抄**）
    ------------------------------------------------------------ */
 const DB_SRC = readFileSync(new URL('../src/db/db.ts', import.meta.url), 'utf8')
-const blocks = [...DB_SRC.matchAll(/this\.version\((\d+)\)\.stores\(\{([\s\S]*?)\}\)/g)]
+/* ★ 两种声明写法都要认：
+     ① `this.version(N).stores({...})`  —— 改表结构
+     ② `this.version(N).upgrade(fn)`    —— **只搬数据、不改结构**
+   2026-10-23 加了 ②（移除内置娃娃机时清 `gameKv` 里 `claw:` 的行），
+   当时这里只认 ①，于是脚本读到的「声明版本」还停在 v7 —— 而 App 实际开的是 v8。
+   这种错不会报错，只会让升级验收悄悄测了个过期的目标。 */
+const blocks = [
+  ...DB_SRC.matchAll(/this\.version\((\d+)\)(?:\.stores\(\{([\s\S]*?)\}\)|\.upgrade\()/g),
+]
 if (blocks.length === 0) {
   console.error(
-    '无法从 src/db/db.ts 解析 `this.version(N).stores({...})`。\n' +
+    '无法从 src/db/db.ts 解析 `this.version(N).stores({...})` 或 `.upgrade(...)`。\n' +
       '改过 Dexie 的声明写法的话，请同步更新本脚本的解析方式。',
   )
   process.exit(2)
@@ -68,9 +76,11 @@ if (blocks.length === 0) {
 /** Dexie 声明版本（vN）→ IndexedDB 实际版本（N×10） */
 const DECLARED = Math.max(...blocks.map((b) => Number(b[1])))
 const IDB_VERSION = DECLARED * 10
-/* 每个 version 只声明**变动**的表 —— 表名要取并集 */
+/* 每个 version 只声明**变动**的表 —— 表名要取并集。
+   `upgrade()` 那种写法没有 stores 段（b[2] 是 undefined），跳过即可。 */
 const DECLARED_TABLES = new Set()
 for (const b of blocks) {
+  if (!b[2]) continue
   for (const m of b[2].matchAll(/(\w+)\s*:/g)) DECLARED_TABLES.add(m[1])
 }
 /* 起点（v4）之后才加的表 —— 升级验收真正要盯的就是它们。

@@ -46,7 +46,7 @@ export interface CurrencyDef {
  *
  * 唯一的例外是**兑换商城的付款口**：那里 `1 兑换券 ≡ 1 积分`
  * （`planRedeemPayment`：先用光兑换券，差额用积分补）。
- * 所以「兑换券」的产出速率必须受控 —— 见 `domain/clawEconomy.ts` 的期望值不变量。
+ * 所以「兑换券」的产出速率必须受控 —— 判据见 `domain/pluginEconomy.ts`。
  */
 export const CURRENCY: Record<CurrencyId, CurrencyDef> = {
   points: { name: '积分', emoji: '🪙', tone: 'sun' },

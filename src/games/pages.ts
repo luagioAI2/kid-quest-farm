@@ -1,6 +1,6 @@
-import { lazy, type ComponentType } from 'react'
+import type { ComponentType } from 'react'
 import FarmPage from '../features/farm/FarmPage'
-import { GAME_CLAW, GAME_FARM } from './ids'
+import { GAME_FARM } from './ids'
 import type { GameDef } from './registry'
 
 /**
@@ -11,18 +11,15 @@ import type { GameDef } from './registry'
  * `useApp → registry → FarmPage → useApp` 的环，而 `useApp` 在模块顶层
  * 遍历 `GAMES` —— 环里谁先被 import 谁就炸。详见 `registry.ts` 的头注释。
  *
- * ## ⚠️ 娃娃机为什么是 `lazy` 而农场不是
+ * ## 2026-10-23：内置娃娃机已整台移除
  *
- * 娃娃机带 **three.js**（实测 tree-shaken 后 **135 KB gzip**）。静态 import
- * 的话这 135 KB 会进主包，**每一个不玩娃娃机的孩子**都要先把它下下来 ——
- * 而首装只有农场（家长 2026-10-14 拍板），娃娃机是家长后来花钻石买的。
+ * 原来这里挂着一台 `React.lazy` 的 `ClawPage`（带 three.js，135 KB gzip）。
+ * 那台机器已经删掉，娃娃机改由**插件**提供（与「奖品公园」并列，
+ * 走 `public/games/` + `localGames.ts` 那条链）。
  *
- * `React.lazy` + 动态 `import()` 让 three.js 落到**自己的 chunk**：
- * 只有孩子真的切到娃娃机那一格，浏览器才去取。
- * 农场保持静态 —— 它是首装里唯一的游戏，拆出去只会多一次往返。
- *
- * ⚠️ `lazy` 的组件**必须**被 `<Suspense>` 兜住（见 `App.tsx`），
- * 否则切过去的第一帧会整棵树抛出去。
+ * ⚠️ 于是 `GAME_PAGES` 里现在**只有农场**。将来再加带 three.js 的内置游戏时，
+ * 记得用 `React.lazy` + 动态 `import()` 把重依赖挡在主包外
+ * （内置娃娃机当年就是这么做的，135 KB gzip 只在切过去时才下载）。
  *
  * ## 加一款新游戏
  *
@@ -36,7 +33,6 @@ import type { GameDef } from './registry'
  */
 export const GAME_PAGES: Record<string, ComponentType> = {
   [GAME_FARM]: FarmPage,
-  [GAME_CLAW]: lazy(() => import('../features/claw/ClawPage')),
 }
 
 /**

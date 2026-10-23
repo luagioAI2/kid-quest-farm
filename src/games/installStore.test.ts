@@ -259,9 +259,9 @@ describe('installFromCatalog —— 生产路径', () => {
   it('目录里没有这一款 → 报错里列出目录现有的 id', async () => {
     const kp = await makeKeypair()
     await stubHost({ kp, catalogId: 'demo', codeId: 'demo' })
-    const res = await useApp.getState().installFromCatalog(CATALOG_URL, 'claw')
+    const res = await useApp.getState().installFromCatalog(CATALOG_URL, 'ghost-game')
     expect(res.ok).toBe(false)
-    expect(res.message).toContain('claw')
+    expect(res.message).toContain('ghost-game')
     expect(res.message).toContain('demo')
   })
 

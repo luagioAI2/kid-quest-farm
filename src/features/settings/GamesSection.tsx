@@ -1,20 +1,17 @@
 import { useState } from 'react'
 import { useApp } from '../../store/useApp'
 import { GAMES } from '../../games/registry'
-import { GAME_CLAW } from '../../games/ids'
 import { Card } from './ui'
-import { ClawEconomyCard } from './ClawEconomyCard'
 import { PluginStoreCard } from './PluginStoreCard'
 import { CURRENCY } from '../../domain/currency'
 
 /**
  * 家长栏 → 「游戏」。
  *
- * 六块，各回答一个问题：
+ * 五块，各回答一个问题：
  *   ① **钻石** —— 有多少、从哪来（含手动发放）；
  *   ② **已购买** —— 内置游戏里我有哪些、现在玩的是哪一个（可切换）；
- *   ②′ **娃娃机** —— 买了才显示：中奖率 / 每只换多少兑换券（`ClawEconomyCard`）；
- *   ②″ **游戏商店** —— 从已签名目录装第三方游戏（`PluginStoreCard`，没配地址时只有一句说明）；
+ *   ②′ **游戏商店** —— 从已签名目录装第三方游戏（`PluginStoreCard`，没配地址时只有一句说明）；
  *   ③ **已下载** —— 运行时装进来的游戏（装了才显示，见那边的注释）；
  *   ④ **敬请期待** —— 还没做的。
  *
@@ -62,8 +59,6 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
   const owned = GAMES.filter((g) => ownedGameIds.includes(g.id))
   const notOwned = GAMES.filter((g) => !ownedGameIds.includes(g.id))
   const installed = Object.values(installedGames)
-  /** 买了娃娃机才显示它那一屏参数 —— 没买的话调了也没用，只是多一屏东西 */
-  const clawOwned = ownedGameIds.includes(GAME_CLAW)
 
   const buy = async (id: string) => {
     const res = await buyGame(id)
@@ -196,14 +191,6 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
           「当前」的那款会出现在孩子底部的那个游戏按钮上。
         </p>
       </Card>
-
-      {/*
-        ②′ 娃娃机的参数 —— **买了才显示**（`clawOwned`）。
-
-        没买就调，调的是「一件还不存在的事」；而且这一屏会平白多出一整块。
-        参数本身的说明（为什么有不安全组合、期望值怎么算）在 `ClawEconomyCard` 里。
-      */}
-      {clawOwned && <ClawEconomyCard gateOpen={gateOpen} />}
 
       {/*
         ②″ 游戏商店 —— 从**已签名目录**里装游戏（spec §12.4 / P2）。

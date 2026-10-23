@@ -23,11 +23,9 @@ import type {
   TaskInstance,
 } from '../domain/types'
 import {
-  addGameCoin,
   addItem,
   ASSET_BASE_KEY,
   BUNDLE_KEY,
-  buyGameCoin,
   clearGameKv,
   consumeItem,
   currentBalance,
@@ -35,7 +33,6 @@ import {
   currentMallBalance,
   db,
   DEFAULT_SETTINGS,
-  gameCoinBalanceOf,
   getGameKv,
   listGameKv,
   listGameKvOwnerIds,
@@ -62,20 +59,11 @@ import {
   saveQuotaCarry,
   saveSettings,
   setGameKv,
-  spendGameCoin,
   spendMall,
   wipeAll,
   type GameKvRow,
 } from '../db/db'
-import { DEFAULT_GAME_ID, GAME_CLAW } from '../games/ids'
-import {
-  CLAW_DEFAULT_EXCHANGE,
-  CLAW_DEFAULT_WIN_RATE,
-  CLAW_PLAYS_KEY,
-  CLAW_PLAY_COST,
-  clampClawEconomy,
-  clawResolveRound,
-} from '../domain/clawEconomy'
+import { DEFAULT_GAME_ID } from '../games/ids'
 import { GAMES, gameById, ownedByDefault, purchasedIdsFrom } from '../games/registry'
 import { makeHostApi } from '../games/hostApi'
 import { importBundle, mountBundle } from '../games/loader'
@@ -240,27 +228,6 @@ interface AppState {
    * 「清单说装了、其实包里没有」或反过来 —— 本项目的老毛病。
    */
   installedGames: Record<string, GameManifestV2>
-
-  /**
-   * **娃娃机的币余额**（2026-10-16 起）。
-   *
-   * 和宿主那三套币同一个口径：**算出来的**（`gameKv` 里 `__coin` 账本的
-   * delta 之和），不存 `balance` 字段。
-   *
-   * ⚠️ 这是**游戏自己的币**，不是第四套宿主币 —— 它只能靠花积分买
-   * （`buyClawCoin`），而且**永远换不回积分**（`addGameCoin` 只进不出）。
-   * 币的出口是「玩一局」，玩出来的兑换券才进 `harvestLedger`。
-   */
-  clawCoins: number
-
-  /**
-   * 娃娃机**已经玩过多少局**（2026-10-16 起）。
-   *
-   * 它同时是**下一局的 seed 来源**（`clawResolveRound(index, …)`），
-   * 所以只能**在结算之后 +1** —— 中途刷新时局数没变，
-   * 算出来还是同一个结果（公平），下一局才是新的结果。
-   */
-  clawPlays: number
 
   todayKey: string
 
@@ -485,36 +452,6 @@ interface AppState {
    * 余额永远是 delta 之和。`amount` 为负就是扣回去。
    */
   mintMall: (amount: number, memo?: string) => Promise<{ ok: boolean; message: string }>
-
-  /* ---- 娃娃机 ---- */
-
-  /**
-   * **花积分买一个娃娃机的币**（1 积分 = 1 币）。
-   *
-   * 扣积分和记币在**同一个事务**里（`db.buyGameCoin`）——
-   * 不能写成「先扣分再记币」，那中间崩一下就变成「积分扣了、币没到」，
-   * 而且不报错。
-   *
-   * 返回 `false` = 积分不够，**一分不扣、一个币不发**。
-   */
-  buyClawCoin: () => Promise<boolean>
-
-  /**
-   * **结算一局娃娃机**。
-   *
-   * 中不中由 `domain/clawEconomy.ts` 的 `clawResolveRound(index, ...)` 定
-   * —— 幂等伪随机，同一次投币刷不刷新都是同一个结果。
-   *
-   * 中了就 `postHarvest` 发兑换券（走兑换券账本，和农场卖东西同一个入口）。
-   *
-   * ⚠️ `index` 必须是**这一局是第几局**（从 0 开始、只在结算后 +1）。
-   * 传时间戳或者随机数进来，就等于把「刷新不能重掷」这条保证拆了。
-   *
-   * `ok === false` = 一个币都没扣成（没币了 / 并发撞车），此时
-   * `won` 一定是 `false`。**页面必须看 `ok`** —— 只看 `won` 的话
-   * 「没币」会被当成「这一局没抓到」，给孩子说一句假话。
-   */
-  settleClawRound: (index: number) => Promise<{ ok: boolean; won: boolean; coupons: number }>
 
   /* ---- 设置与数据 ---- */
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>
@@ -1150,8 +1087,6 @@ async function doRefresh(
     redeemRecords,
     farmEvents,
     quotaCarry,
-    clawCoins,
-    clawPlaysRaw,
   ] = await Promise.all([
     db.taskInstances.orderBy('date').reverse().toArray(),
     // 全量加载流水。这里曾经 limit(500)，导致孩子用久了以后
@@ -1174,11 +1109,6 @@ async function doRefresh(
     loadRedeemRecords(),
     loadFarmEvents(40),
     loadQuotaCarry(),
-    // 娃娃机的币余额。和宿主那三套币同一个口径：**算出来的**（账本 delta 之和），
-    // 不存 `balance` 字段 —— 存了就会出现「余额和流水对不上」，而且不报错。
-    gameCoinBalanceOf(GAME_CLAW),
-    // 已玩局数（下一局的 seed 来源）。脏数据一律当 0 —— 不炸。
-    getGameKv<unknown>(GAME_CLAW, CLAW_PLAYS_KEY),
   ])
 
   // 拥有关系从账本派生；「当前游戏」再按拥有关系解析一遍 ——
@@ -1214,12 +1144,6 @@ async function doRefresh(
     balance,
     harvestBalance,
     mallBalance,
-    clawCoins,
-    // 脏数据（负数 / 非整数 / 字符串）一律当 0：局数只用来当 seed，
-    // 不值得为它炸掉整个 refresh。
-    clawPlays: typeof clawPlaysRaw === 'number' && Number.isFinite(clawPlaysRaw) && clawPlaysRaw >= 0
-      ? Math.floor(clawPlaysRaw)
-      : 0,
     ownedGameIds,
     activeGameId: resolveActiveGame(
       settings.activeGame,
@@ -1627,8 +1551,6 @@ export const useApp = create<AppState>((set, get) => ({
   balance: 0,
   harvestBalance: 0,
   mallBalance: 0,
-  clawCoins: 0,
-  clawPlays: 0,
   activeGameId: DEFAULT_GAME_ID,
   ownedGameIds: ownedGameIdsFrom([]),
   installedGames: {},
@@ -3077,67 +2999,6 @@ export const useApp = create<AppState>((set, get) => ({
     return { ok: true, message: n > 0 ? `已发放 ${n} ${CURRENCY.mall.name}` : `已扣回 ${-n} ${CURRENCY.mall.name}` }
   },
 
-  /* ================= 娃娃机 ================= */
-
-  buyClawCoin: async () => {
-    // ⚠️ 扣积分和记币必须在**同一个事务**里 —— 所以走 `db.buyGameCoin`，
-    //    不是「先 spendPoints 再 addGameCoin」。理由见那个函数的注释。
-    const ok = await buyGameCoin(GAME_CLAW, CLAW_PLAY_COST, '买 1 个娃娃机币')
-    if (ok) await get().refresh()
-    return ok
-  },
-
-  settleClawRound: async (index) => {
-    const s = get().settings
-    // 参数从设置里现读，并且**夹一遍** —— 老存档里可能没有这两个字段，
-    // 也可能被手改过（IndexedDB 是能直接改的）。夹紧的逻辑只有一份：
-    // `clawEconomy.ts` 的 `clampClawEconomy`（有全参数空间单测钉着）。
-    const econ = clampClawEconomy({
-      winRate: s.clawWinRate ?? CLAW_DEFAULT_WIN_RATE,
-      exchangePerPrize: s.clawExchangePerPrize ?? CLAW_DEFAULT_EXCHANGE,
-    })
-    const round = clawResolveRound(index, econ)
-
-    // ★ 三件事必须在**同一个事务**里：扣一个币、发兑换券、局数 +1。
-    //   拆开的话中间崩一下就变成「币扣了、券没发」或者「券发了、局数没走」，
-    //   而且**都不报错**。Dexie 的嵌套事务会复用外层事务，所以内层那两个
-    //   函数仍然只有一份实现，守卫也还都在它们自己里面。
-    const ok = await db.transaction('rw', db.gameKv, db.harvestLedger, async () => {
-      /*
-        ★★ 「同一局只能结算一次」的闸门。
-
-        没有它的话，`settleClawRound(3)` 调两次就**扣两个币、发两遍券** ——
-        而且第二遍算出来的结果和第一遍**一模一样**（seed 是 index，
-        幂等），所以看着完全正常，只是账上少了一个币。
-        页面那边有 `busyRef` 挡着，但那是 UI 层的约定，不是账上的保证。
-
-        ⚠️ 读和判必须在这个事务里。放到事务外面就是经典的
-        「先读后写」：两个并发调用都读到 3，都以为自己是对的。
-      */
-      const raw = await getGameKv<unknown>(GAME_CLAW, CLAW_PLAYS_KEY)
-      const cur =
-        typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 0
-      if (cur !== index) return false
-
-      const paid = await spendGameCoin(GAME_CLAW, CLAW_PLAY_COST, '玩一局娃娃机')
-      if (!paid) return false
-      if (round.coupons > 0) {
-        // 发兑换券走**和农场卖东西同一个入口**（`postHarvest`）——
-        // 不另开一条通路，账目才只有一套口径。
-        await postHarvest({
-          delta: round.coupons,
-          source: 'claw_prize',
-          memo: `娃娃机抓到 1 只，兑换 ${round.coupons} 兑换券`,
-        })
-      }
-      // ★ 局数只在**结算之后** +1。中途刷新时它没变 ⇒ 结果一样（不会重掷）。
-      await setGameKv(GAME_CLAW, CLAW_PLAYS_KEY, index + 1)
-      return true
-    })
-    await get().refresh()
-    return { ok, won: ok && round.won, coupons: ok ? round.coupons : 0 }
-  },
-
   /* ---- 插件游戏：装配（spec §12.5） ---- */
 
   installFromCatalog: async (catalogUrl, gameId) => {
@@ -3894,20 +3755,6 @@ declare global {
        */
       syncSeedTasks: () => Promise<void>
       /**
-       * 测试专用：把**娃娃机**调成「马上能玩」。
-       *
-       * 一次做完四件事，因为少任何一件都玩不到：
-       *   ① 补足钻石 —— 余额是**从账本算出来的**，补币必须走 `mintMall`
-       *      （直接改余额会让余额和流水对不上，而且不报错）；
-       *   ② 买下它 —— 「拥有」是从 `game_purchase` 那一笔**派生**的，
-       *      不买就没有拥有记录；
-       *   ③ 切成「当前游戏」—— 买完**不会**自动切（见 `buyGame` 的注释）；
-       *   ④ 发币 + 补积分 —— 否则还得先赚积分换币才能投第一次。
-       * 已有币 / 已购买时不重复发，可以反复执行。
-       * 只用于本地调试，不参与业务逻辑。
-       */
-      unlockClaw: () => Promise<void>
-      /**
        * **插件游戏**（spec §12）。P1 的验收入口。
        *
        * 真实入口是家长栏的「游戏」页；这里是为了让走查脚本能在**不点 UI** 的
@@ -3956,22 +3803,6 @@ declare global {
         priceMall: number
         defaultOwned: boolean
       }[]
-      /**
-       * 娃娃机（见实现处的注释）。
-       *
-       * ★ 走查脚本靠它「先问第几局会中，再精确走到那一局」——
-       * 结果由局数算出来，脚本没法靠多试几次碰运气。
-       */
-      claw: {
-        /** 第 `index` 局的结果；参数不传就用当前设置 */
-        resolve: (
-          index: number,
-          winRate?: number,
-          exchangePerPrize?: number,
-        ) => { index: number; won: boolean; coupons: number; seed: number }
-        /** 从 `from` 起第一局结果为 `won` 的局号；500 局内没有就返回 -1 */
-        findRound: (from: number, won: boolean, winRate?: number, exchangePerPrize?: number) => number
-      }
     }
   }
 }
@@ -4079,56 +3910,6 @@ if (typeof window !== 'undefined') {
       console.log('[kqf-cheat] 已添加', added, '个新任务')
       window.location.reload()
     },
-    unlockClaw: async () => {
-      const claw = gameById(GAME_CLAW)
-      if (!claw) {
-        console.warn('[kqf-cheat] 注册表里没有娃娃机，什么都不做')
-        return
-      }
-
-      // ① 买下它。**补币放在这一支里面** —— 已经拥有时不该再凭空发一笔钻石
-      //    （余额是账本算出来的，白发一笔就多一笔对不上用途的流水）。
-      if (!useApp.getState().ownedGameIds.includes(GAME_CLAW)) {
-        // ⚠️ 补币走 `mintMall`（写账本），**不是**直接改余额 ——
-        //    余额永远是 delta 之和，直接改会「余额对不上流水」且不报错。
-        const shortfall = claw.priceMall - useApp.getState().mallBalance
-        if (shortfall > 0) {
-          console.log('[kqf-cheat] 发放钻石:', shortfall)
-          await useApp.getState().mintMall(shortfall, '调试：买娃娃机')
-        }
-        const r = await useApp.getState().buyGame(GAME_CLAW)
-        console.log('[kqf-cheat] 购买娃娃机:', r.message)
-      } else {
-        console.log('[kqf-cheat] 娃娃机已拥有，跳过购买')
-      }
-
-      // ② 切成当前游戏（`buyGame` 故意不自动切）
-      await useApp.getState().setActiveGame(GAME_CLAW)
-
-      // ③ 发币 + 补积分。币**不是账本**（`gameKv`），所以走 `addGameCoin`；
-      //    积分走 `postLedger`。两者混用会破坏「币不能换回积分」这条约束。
-      await postLedger({
-        delta: 500,
-        source: 'manual_adjust',
-        memo: '调试：娃娃机测试积分',
-      })
-      await addGameCoin(GAME_CLAW, 20, '调试：发 20 个娃娃机币')
-
-      await useApp.getState().refresh()
-      const after = useApp.getState()
-      console.log(
-        '[kqf-cheat] 娃娃机就绪 →',
-        '积分', after.balance,
-        '· 钻石', after.mallBalance,
-        '· 娃娃机币', after.clawCoins,
-        '· 当前游戏', after.activeGameId,
-      )
-      if (after.activeGameId !== GAME_CLAW) {
-        console.warn(
-          '[kqf-cheat] ⚠️ 当前游戏不是娃娃机 —— 说明拥有关系没落上（账本里没有 game_purchase 那一笔）',
-        )
-      }
-    },
     plugin: {
       hostApiVersion: HOST_API,
       installed: () => useApp.getState().installedGames,
@@ -4174,42 +3955,6 @@ if (typeof window !== 'undefined') {
         priceMall: g.priceMall,
         defaultOwned: g.defaultOwned,
       })),
-    /**
-     * 娃娃机的调试句柄（2026-10-16）。
-     *
-     * ★ 为什么需要它：走查脚本要验「中一局会发兑换券」，而**结果是由局数算出来的**
-     * （幂等伪随机，见 `domain/clawEconomy.ts`）。脚本没法「多试几次直到中」——
-     * 那既慢又不确定。所以这里把**结算时用的同一个函数**暴露出来，
-     * 让脚本能先问「第几局会中」，再精确地走到那一局。
-     *
-     * ⚠️ 走的是 `clawResolveRound` + `clampClawEconomy` 的**原函数**，
-     * 不是照抄一份公式 —— 抄一份的话，改了公式脚本还会全绿。
-     */
-    claw: {
-      /** 第 `index` 局的结果（`winRate` / `exchangePerPrize` 不传就用当前设置） */
-      resolve: (index: number, winRate?: number, exchangePerPrize?: number) => {
-        const s = useApp.getState().settings
-        return clawResolveRound(
-          index,
-          clampClawEconomy({
-            winRate: winRate ?? s.clawWinRate ?? CLAW_DEFAULT_WIN_RATE,
-            exchangePerPrize: exchangePerPrize ?? s.clawExchangePerPrize ?? CLAW_DEFAULT_EXCHANGE,
-          }),
-        )
-      },
-      /** 从 `from` 起第一局 `won` 为 `won` 的局号；找不到返回 -1 */
-      findRound: (from: number, won: boolean, winRate?: number, exchangePerPrize?: number) => {
-        const s = useApp.getState().settings
-        const econ = clampClawEconomy({
-          winRate: winRate ?? s.clawWinRate ?? CLAW_DEFAULT_WIN_RATE,
-          exchangePerPrize: exchangePerPrize ?? s.clawExchangePerPrize ?? CLAW_DEFAULT_EXCHANGE,
-        })
-        for (let i = from; i < from + 500; i++) {
-          if (clawResolveRound(i, econ).won === won) return i
-        }
-        return -1
-      },
-    },
   }
 }
 

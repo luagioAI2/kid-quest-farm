@@ -2,7 +2,6 @@ import Dexie, { type Table } from 'dexie'
 import { createInitialFarm } from '../domain/farm'
 import { createInitialMarket } from '../domain/market'
 import { PRODUCE_BASE_PRICE } from '../domain/catalog'
-import { CLAW_DEFAULT_EXCHANGE, CLAW_DEFAULT_WIN_RATE } from '../domain/clawEconomy'
 import { DEFAULT_GAME_ID } from '../games/ids'
 import type {
   Animal,
@@ -152,10 +151,53 @@ class KidQuestFarmDB extends Dexie {
     this.version(7).stores({
       gameKv: 'key, gameId',
     })
+
+    // 2026-10-23：内置娃娃机（`claw`）整台移除，顺手把它留下的 `gameKv` 行清掉
+    // —— `claw:__coin`（币账本）、`claw:plays`（局数）、`claw:save`（存档）。
+    //
+    // ⚠️ **只删 `gameId === 'claw'` 的 kv 行，一个账本都不碰。**
+    //    玩家已经挣到的兑换券记在 `harvestLedger`（`source: 'claw_prize'`），
+    //    那是真钱；删行等于从孩子兜里把钱拿走，而且余额会静默变少。
+    //    同理不删 `mallLedger` 里那笔购买记录 —— 那是历史流水。
+    //
+    // ⚠️ 没有 `.stores(...)`：这一版**不改表结构**，只搬数据。
+    //    Dexie 允许「只 upgrade 不 stores」，schema 自动沿用 v7。
+    this.version(8).upgrade(async (tx) => {
+      await purgeRemovedGameKv(tx.table('gameKv'))
+    })
   }
 }
 
 export const db = new KidQuestFarmDB()
+
+/**
+ * 已经**整台移除**的内置游戏 id。
+ *
+ * 加一个 id 进来之前先问两件事：
+ *   ① 它的 `gameKv` 里留着什么（币账本 / 局数 / 存档）；
+ *   ② 那些数要不要**搬走**而不是删掉（见 MEMORY「实体离开时，挂在它身上的累计量必须搬走」）。
+ *      这一次 `claw` 的币和局数都只属于那台机器，搬过去没有意义，所以清掉；
+ *      但玩家**已经挣到的兑换券**记在 `harvestLedger` 里，不在 `gameKv` —— 所以不受影响。
+ */
+export const REMOVED_GAME_IDS = ['claw'] as const
+
+/**
+ * 清掉已移除游戏在 `gameKv` 里的行。
+ *
+ * 为什么抽成函数而不是把两行写在 `upgrade` 里：**单测够不着 `upgrade`**。
+ * Dexie 的 upgrade 只在「老库 + 新版本」这条路径上跑，而单测用 fake-indexeddb
+ * 开的是全新库；e2e 用的也是全新 profile。四层验收里没有任何一层会走到它 ——
+ * 抽出来之后至少能直接调一次、断言「claw 的行没了、别人的行还在」。
+ *
+ * ⚠️ **只动 `gameKv`，一个账本都不碰。** `harvestLedger` 里的
+ * `source: 'claw_prize'` 是玩家已经挣到的兑换券（余额 = Σdelta），
+ * 删行等于把余额改小，而且不报错。
+ */
+export async function purgeRemovedGameKv(table: Table<GameKvRow, string>): Promise<void> {
+  for (const id of REMOVED_GAME_IDS) {
+    await table.where('gameId').equals(id).delete()
+  }
+}
 
 /* ---------------- 通用键值（下载来的游戏用） ---------------- */
 
@@ -665,9 +707,9 @@ export async function buyGameCoins(
 /**
  * 买 **1 个**币（老签名）。内置娃娃机在用，保持不动。
  *
- * 为什么不直接把它改成多币版本：`useApp.ts` 那边传的第二个参数是 `CLAW_PLAY_COST`，
+ * 为什么不直接把它改成多币版本：调用方传的第二个参数是「一局几个币」（当年是 `CLAW_PLAY_COST`），
  * 语义是「1 个币值多少积分」；改成 `(gameId, count, cost)` 会让那个调用点
- * **静默**变成「买 CLAW_PLAY_COST 个币、每个 0 积分」—— 白送币，而且不报错。
+ * **静默**变成「买 N 个币、每个 0 积分」—— 白送币，而且不报错。
  * 所以加新函数、老函数委托过去。
  */
 export async function buyGameCoin(
@@ -737,7 +779,7 @@ export async function redeemGameCoins(
  * ## 为什么需要这扇门（而不是复用 `mintGameCoin` + `redeemGameCoins`）
  *
  * 两只娃娃机的玩法不同：
- *   · **内置那台**：玩一局扣 1 币，抓到娃娃**当场发券**（`useApp.settleClawRound`
+ *   · **插件游戏**：玩一局扣 1 币，抓到奖品**当场发券**（`host.mintVoucher`
  *     里和扣币在同一个事务）—— 币永远是「入场券」，不是「战利品」。
  *   · **插件那台（奖品公园）**：原来的回收是「娃娃 → 币」，于是币有了第二个来源。
  *     而币能直接开局 ⇒ 抓娃娃本身能续玩 = 那条「坐着玩」的回路又回来了。
@@ -749,7 +791,7 @@ export async function redeemGameCoins(
  *
  * ## 为什么这条不算印钞机
  *
- * 和内置那台同一个口径：`postHarvest` 是兑换券的**唯一入口**，兑换券 ⇸ 积分
+ * `postHarvest` 是兑换券的**唯一入口**，兑换券 ⇸ 积分
  * （见 `HarvestEntry` 的两条不可逆约束）。一局能出多少券由
  * `economy.expectedPayout`（安装时 `checkPluginEconomy` 把关）钉住。
  *
@@ -764,7 +806,7 @@ export async function mintGameVouchers(
   if (!(n > 0)) return 0
   // 走 `postHarvest` —— 和农场卖东西、内置娃娃机兑奖是**同一个入口**，
   // 账目只有一套口径（`balanceAfter` 也由它算）。
-  // `source` 复用 `claw_prize`（「娃娃机抓到娃娃兑换」），
+  // `source` 复用 `claw_prize`（历史名，现在是「奖品 → 兑换券」的统一标记），
   // `refId` 记游戏 id，将来要分「哪台机器发的」也分得开。
   const row = await postHarvest({ delta: n, source: 'claw_prize', refId: gameId, memo })
   return row.delta
@@ -958,21 +1000,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     timeScale: 1,
     showClock: true,
   },
-  /**
-   * 娃娃机的两个家长可调参数（2026-10-16）。
-   *
-   * 默认 1/3 中奖率 × 每只 2 兑换券 ⇒ 每局期望 **0.67 兑换券**。
-   * 上限是 0.8（`CLAW_MAX_EXPECTED`），所以默认档留了余量。
-   *
-   * ⚠️ 为什么默认就低于上限而不是贴着上限：兑换商城里 `1 兑换券 ≡ 1 积分`，
-   * 而一局只花 1 积分 ⇒ 期望产出只要 ≥ 1，娃娃机就变成一台
-   * 「坐着玩就能把积分刷上去」的机器。**0.67 是消费，1.0 是漏洞。**
-   * 口径与夹紧见 `domain/clawEconomy.ts`（有全参数空间单测钉着）。
-   */
-  clawWinRate: CLAW_DEFAULT_WIN_RATE,
-  clawExchangePerPrize: CLAW_DEFAULT_EXCHANGE,
-  /** 娃娃机默认配色：0 = 粉（和参考实现的默认一致） */
-  clawTheme: 0,
   /** 默认家长密码：0000。首次打开即有密码保护，家长可在设置里改。 */
   parentPin: '0000',
 }

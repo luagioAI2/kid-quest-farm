@@ -15,7 +15,6 @@
  */
 
 export const GAME_FARM = 'farm'
-export const GAME_CLAW = 'claw'
 export const GAME_FISHING = 'fishing'
 
 /**

@@ -9,6 +9,9 @@ import {
   currentMallBalance,
   postMall,
   spendMall,
+  purgeRemovedGameKv,
+  postHarvest,
+  currentHarvestBalance,
 } from '../db/db'
 
 /* ============================================================
@@ -324,5 +327,41 @@ describe('钻石账本', () => {
   it('金额一律取整（和 postLedger / postHarvest 同口径）', async () => {
     await postMall({ delta: 10.4, source: 'manual_adjust', memo: '小数' })
     expect(await currentMallBalance()).toBe(10)
+  })
+})
+
+/* ============================================================
+   移除内置娃娃机：v8 的数据清理
+   ------------------------------------------------------------
+   `this.version(8).upgrade()` 只在「老库 + 新版本」这条路径上跑，
+   单测开的是全新库、e2e 用的是全新 profile —— 四层验收没有一层走到它。
+   所以把清理逻辑抽成 `purgeRemovedGameKv`，在这里直接调。
+   ============================================================ */
+
+describe('移除内置娃娃机（claw）', () => {
+  it('★ 只清 `claw` 的 kv 行，别人的行一个不动', async () => {
+    await db.gameKv.bulkPut([
+      { key: 'claw:__coin', gameId: 'claw', value: [{ delta: 3, memo: '玩一局', at: 1 }] },
+      { key: 'claw:plays', gameId: 'claw', value: 7 },
+      { key: 'claw:save', gameId: 'claw', value: { v: 1 } },
+      { key: 'prizepark:save', gameId: 'prizepark', value: { v: 2 } },
+      { key: 'farm:__coin', gameId: 'farm', value: [] },
+    ])
+
+    await purgeRemovedGameKv(db.gameKv)
+
+    const left = (await db.gameKv.toArray()).map((r) => r.key).sort()
+    expect(left).toEqual(['farm:__coin', 'prizepark:save'])
+  })
+
+  it('★ 已经挣到的兑换券不受影响（账本不是 kv，删了就是把钱拿走）', async () => {
+    await postHarvest({ delta: 5, source: 'claw_prize', memo: '历史：娃娃机抓到 1 只' })
+    await db.gameKv.put({ key: 'claw:__coin', gameId: 'claw', value: [] })
+
+    await purgeRemovedGameKv(db.gameKv)
+
+    expect(await db.gameKv.count()).toBe(0)
+    expect(await currentHarvestBalance()).toBe(5)
+    expect(await db.harvestLedger.count()).toBe(1)
   })
 })
