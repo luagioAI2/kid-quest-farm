@@ -38322,7 +38322,7 @@ var DU = 6e3, OU = 1440, kU = .55, AU = .22, jU = .006, MU = [
 		matureMin: 120,
 		cost: 1e3,
 		intervalMin: 480,
-		times: 365,
+		times: 22,
 		price: 6,
 		item: "mythgem",
 		fragility: 0,
@@ -38435,7 +38435,7 @@ var DU = 6e3, OU = 1440, kU = .55, AU = .22, jU = .006, MU = [
 		matureMin: 120,
 		cost: 1e3,
 		intervalMin: 480,
-		times: 365,
+		times: 19,
 		price: 7,
 		item: "dracopearl",
 		fragility: 0,
@@ -44061,7 +44061,14 @@ html[lang=ja] #ui{font-family:${DG}}
    横向账：badge 40 + 8 + 胶囊 + 8 + 44 + 8 + 44 = 152 + 胶囊，
    390 上胶囊最多 218，所以内部按 212 收：
    6(padding) + 28(天气) + 5(分隔) + 3×44 + 5 + 30(收起) = 212。 */
-.topbar .seg{flex:0 1 auto;min-width:0;margin:0 auto;height:36px;padding:3px;gap:0;align-items:center;border-radius:999px;box-shadow:0 4px 14px rgba(90,56,20,.14)}
+/* 胶囊**占满中间那段**（flex:1），不再按内容宽度靠左/居中摆。
+   ⚠️ 这段注释在 CSS 的**模板字符串里**，不能写反引号 —— 会把字符串提前闭合，
+      报的错是「Expected a semicolon … at 这一行」，看着像别处的语法错。
+   为什么要占满：左边一簇 40、右边一簇 96，只按内容居中会**偏左 28px**
+   （390 上实测胶囊中心 167、屏幕中心 195）—— 看上去就是「没在正中」。
+   占满之后两条缝都是 8px，左右对称，分区自然落在中间。
+   上限 260 是给平板的：不限的话 966 宽下会拉成一整条空胶囊。 */
+.topbar .seg{flex:1 1 auto;min-width:0;max-width:260px;margin:0 auto;justify-content:center;height:36px;padding:3px;gap:0;align-items:center;border-radius:999px;box-shadow:0 4px 14px rgba(90,56,20,.14)}
 .topbar .seg .ssep{height:16px;margin:0 2px}
 #ui .topbar .seg button{height:30px;min-width:0;padding:0 9px;font-size:13px;color:${Z.text};text-shadow:none}
 #ui .topbar .seg button.on{background:${Z.harvest};box-shadow:none;text-shadow:none}
@@ -46097,7 +46104,7 @@ var LK = {
 	name: "云边小农场",
 	emoji: "🌾",
 	tabLabel: "农场",
-	version: "1.1.0",
+	version: "1.1.1",
 	minHostApi: 4,
 	coin: {
 		id: "cloudfarm-harvest",
@@ -46106,7 +46113,7 @@ var LK = {
 	},
 	economy: {
 		playCost: 10,
-		expectedPayout: 6.5,
+		expectedPayout: 6.7,
 		capPerPrize: 2e3,
 		voucherPerCoin: 0
 	}
