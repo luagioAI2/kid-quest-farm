@@ -43820,6 +43820,14 @@ function LG(e) {
 	let t = [], n = 0, r = e.length;
 	for (; n < r;) {
 		for (; n < r && /\s/.test(e[n]);) n++;
+		for (; e.startsWith("/*", n);) {
+			let i = e.indexOf("*/", n + 2);
+			if (i < 0) {
+				t.push(e.slice(n)), n = r;
+				break;
+			}
+			for (t.push(e.slice(n, i + 2)), n = i + 2; n < r && /\s/.test(e[n]);) n++;
+		}
 		if (n >= r) break;
 		let i = e.indexOf("{", n);
 		if (i < 0) {
@@ -43896,12 +43904,10 @@ html[lang=ja] #ui{font-family:${DG}}
 #ui .iconbtn::after{content:"";position:absolute;inset:-4px}
 #ui .iconbtn .ic{width:28px;height:28px}
 .dot{position:absolute;top:3px;right:3px;width:10px;height:10px;border-radius:50%;background:${Z.danger};box-shadow:0 0 0 2px #fff}
-.subbar{pointer-events:none;display:flex;align-items:center;gap:6px;padding:0 8px}
 .seg{pointer-events:auto;display:flex;gap:2px;padding:3px;border-radius:999px;box-shadow:${OG};flex:none}
 #ui .seg button{position:relative;min-width:52px;height:30px;padding:0 12px;border:none;border-radius:999px;background:transparent;font-size:13px;font-weight:800;color:${Z.muted};display:flex;align-items:center;justify-content:center;white-space:nowrap;text-shadow:${PG}}
 #ui .seg button::after{content:"";position:absolute;left:0;right:0;top:-9px;bottom:-9px}
 #ui .seg button.on{background:linear-gradient(180deg,#7CCB5C,${Z.harvest});color:#fff;text-shadow:0 1px 0 rgba(0,0,0,.15);box-shadow:0 2px 0 ${Z.harvestDark}}
-.weather{pointer-events:none;font-size:12px;font-weight:800;color:${Z.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;padding:5px 10px;border-radius:999px;box-shadow:${OG}}
 #ui .fold{pointer-events:auto;position:relative;width:36px;height:30px;border:none;border-radius:999px;box-shadow:${OG};display:flex;align-items:center;justify-content:center;color:${Z.wood};flex:none;padding:0}
 #ui .fold::after{content:"";position:absolute;inset:-9px -6px}
 #ui .fold svg{width:18px;height:18px}
@@ -43919,6 +43925,7 @@ html[lang=ja] #ui{font-family:${DG}}
 #ui .unfold{position:absolute;top:calc(16px + env(safe-area-inset-top));right:16px;display:flex;align-items:center;gap:4px;height:48px;padding:0 6px 0 10px;border:none;border-radius:999px;box-shadow:${kG};pointer-events:auto;font-weight:800;font-size:14px;color:${Z.text};font-variant-numeric:tabular-nums;opacity:0;transform:translateY(-8px) scale(.9);transition:opacity .25s,transform .3s cubic-bezier(.2,.9,.3,1);visibility:hidden}
 #ui .unfold img{width:22px;height:22px}
 #ui .unfold svg{width:18px;height:18px;color:${Z.wood}}
+#ui .unfold.solo{padding:0 9px}
 #ui.bars-off .unfold{opacity:1;transform:none;visibility:visible}
 /* ---- 播种提示条 ---- */
 .guide{position:absolute;left:8px;right:8px;display:flex;align-items:center;gap:8px;padding:4px 4px 4px 12px;border-radius:999px;pointer-events:auto;font-weight:700;font-size:15px;box-shadow:${kG};animation:bin .3s}
@@ -44050,18 +44057,32 @@ html[lang=ja] #ui{font-family:${DG}}
 .tv-a .topbar .lv{width:40px;height:40px;padding:0;margin:0;border-radius:50%;background:conic-gradient(${Z.harvest} var(--p,0%),rgba(79,168,58,.18) 0);box-shadow:0 3px 10px rgba(90,56,20,.16);display:flex;align-items:center;justify-content:center}
 .tv-a .topbar .lv::before{content:"";position:absolute;inset:4px;border-radius:50%;background:#FFF8E8}
 .tv-a .topbar .lv .lvt{position:relative;font-size:12px}
-/* 分段胶囊：与上栏同材质，居中；天气在左、收起在右 */
-.subbar{padding:0;justify-content:center}
-.seg{height:36px;padding:3px;gap:0;align-items:center;border-radius:999px;box-shadow:0 4px 14px rgba(90,56,20,.14)}
-.seg .ssep{height:16px;margin:0 3px}
-#ui .seg button{height:30px;min-width:50px;padding:0 11px;font-size:13px;color:${Z.text};text-shadow:none}
-#ui .seg button.on{background:${Z.harvest};box-shadow:none;text-shadow:none}
-.wx{display:flex;align-items:center;justify-content:center;width:30px;height:30px;font-size:15px}
+/* 分段胶囊（天气 + 分区 + 收起）**住在顶栏里**，替掉那条 spacer。
+   横向账：badge 40 + 8 + 胶囊 + 8 + 44 + 8 + 44 = 152 + 胶囊，
+   390 上胶囊最多 218，所以内部按 212 收：
+   6(padding) + 28(天气) + 5(分隔) + 3×44 + 5 + 30(收起) = 212。 */
+.topbar .seg{flex:0 1 auto;min-width:0;margin:0 auto;height:36px;padding:3px;gap:0;align-items:center;border-radius:999px;box-shadow:0 4px 14px rgba(90,56,20,.14)}
+.topbar .seg .ssep{height:16px;margin:0 2px}
+#ui .topbar .seg button{height:30px;min-width:0;padding:0 9px;font-size:13px;color:${Z.text};text-shadow:none}
+#ui .topbar .seg button.on{background:${Z.harvest};box-shadow:none;text-shadow:none}
+.topbar .seg .wx{display:flex;align-items:center;justify-content:center;width:28px;height:30px;font-size:14px;flex:none}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-#ui .seg .fold{width:34px;min-width:34px;height:30px;padding:0;border-radius:999px;box-shadow:none;background:none;color:${Z.wood}}
-#ui .seg .fold svg{width:16px;height:16px}
-.weather{display:none}
-@media (max-width:360px){.tv-a .topbar .lv{width:36px;height:36px}.tv-a .topbar .lv .lvt{font-size:11px}}
+#ui .topbar .seg .fold{width:30px;min-width:30px;height:30px;padding:0;border-radius:999px;box-shadow:none;background:none;color:${Z.wood};flex:none}
+#ui .topbar .seg .fold svg{width:16px;height:16px}
+/* 窄屏放不下：先让掉天气图标（分区与收起是**控件**，不能让）。 */
+@media (max-width:380px){
+  .topbar .seg .wx,.topbar .seg .wx+.ssep{display:none}
+  .tv-a .topbar .lv{width:36px;height:36px}
+  .tv-a .topbar .lv .lvt{font-size:11px}
+}
+/* 320 这种更窄的屏：让掉分隔线、再压一点内边距（分区和收起都是控件，不能让）。
+   320 的账：300 可用 - (36 badge + 8 + 8 + 44 + 8 + 44) = 152 给胶囊，
+   胶囊内部 6 + 3×36 + 28 = 142 —— 按钮保住 36（26 字宽 + 10 内边距），一个字都不裁。 */
+@media (max-width:340px){
+  .topbar .seg .ssep{display:none}
+  #ui .topbar .seg button{padding:0 5px}
+  #ui .topbar .seg .fold{width:28px;min-width:28px}
+}
 `, VG = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M6 15l6-6 6 6\"/></svg>", HG = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M6 9l6 6 6-6\"/></svg>", Q = (e) => String(e).replace(/[&<>"]/g, (e) => ({
 	"&": "&amp;",
 	"<": "&lt;",
@@ -44119,7 +44140,7 @@ function XG(e) {
 	}
 	function y(t, n = !0) {
 		if (t !== _) {
-			_ = t, v(), S?.cue("sfx.tap");
+			_ = t, v(), t && b(), S?.cue("sfx.tap");
 			try {
 				globalThis.__cfHaptic?.();
 			} catch {}
@@ -44132,7 +44153,8 @@ function XG(e) {
 		typeof e.barsHidden == "boolean" && e.barsHidden !== _ && (_ = e.barsHidden, v(), S?.relayout());
 	});
 	function b() {
-		g.innerHTML = `<img src="${WG("coin")}" alt=""><span>${S ? S.farm.s.points : ""}</span>${HG}`;
+		let e = !!S?.farm?.wallet?.enabled;
+		g.innerHTML = e ? HG : `<img src="${WG("coin")}" alt=""><span>${S ? S.farm.s.points : ""}</span>${HG}`, g.classList.toggle("solo", e);
 	}
 	v();
 	let x = null;
@@ -44154,16 +44176,13 @@ function XG(e) {
 		f.innerHTML = `
       <div class="topbar">
         <div class="lv" id="lvBadge" title="${Q(Y("hud.lv", { n: S.farm.level.level }))}"><span class="lvt" id="lvt"></span><span class="exp" id="exp"></span></div>
-        <div class="spacer"></div>
-        <button class="iconbtn" id="logBtn" aria-label="${Q(Y("a11y.log"))}">${FG("log", 22)}<i class="dot" id="logDot" hidden></i></button>
-        <button class="iconbtn" id="setBtn" aria-label="${Q(Y("a11y.settings"))}">${FG("gear", 22)}</button>
-      </div>
-      <div class="subbar">
         <div class="seg glass" role="tablist">
           <span class="wx" id="weatherChip"><span id="wicon"></span><span class="vh" id="wname"></span></span><i class="ssep"></i>
           <button data-zone="ranch" role="tab">${Q(Y("hud.ranch"))}</button><button data-zone="field" role="tab">${Q(Y("hud.field"))}</button><button data-zone="pond" role="tab">${Q(Y("hud.pond"))}</button>
           <i class="ssep"></i><button class="fold" id="foldBtn" aria-label="${Q(Y("a11y.hideBars"))}" title="${Q(Y("a11y.hideBars"))}">${VG}</button>
         </div>
+        <button class="iconbtn" id="logBtn" aria-label="${Q(Y("a11y.log"))}">${FG("log", 22)}<i class="dot" id="logDot" hidden></i></button>
+        <button class="iconbtn" id="setBtn" aria-label="${Q(Y("a11y.settings"))}">${FG("gear", 22)}</button>
       </div>`, f.classList.add("tv-a"), f.querySelector("#foldBtn").addEventListener("click", () => y(!0)), f.querySelector("#logBtn").addEventListener("click", () => {
 			S.cue("sfx.tap"), ie("log");
 		}), f.querySelector("#setBtn").addEventListener("click", () => {
@@ -44870,7 +44889,7 @@ function XG(e) {
 		S && (C(), j(), ee(), ne(), b(), F && L(), Fe && Re && Re(), Ie());
 	});
 	function ze() {
-		C(), j(), ee(), S.relayout(), Le();
+		C(), j(), ee(), b(), S.relayout(), Le();
 		{
 			let e = new URLSearchParams(location.search), t = e.get("tod"), n = e.get("wx"), r = t != null && t !== "" && !Number.isNaN(Number(t)), i = n === "rain" || n === "cloud" || n === "sun", a = () => {
 				if (Fe) {
