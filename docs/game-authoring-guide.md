@@ -331,6 +331,14 @@ mount(container: HTMLElement, host: HostApi, ctx: MountContext): Unmount | Promi
 - **`ctx` 的第三个参数必须用**：资源路径只能从 `ctx.assetUrl(rel)` 拿。
   自己拼相对路径会以 `blob:` 为基准解析 ⇒ 全 404，报错是
   `could not load texture`，看着像打包坏了。
+  ⚠️ `rel` 的口径是**相对 `assets/`**（`assetUrl('assets/ui/x.webp')`）。
+  如果你的游戏从 MakePlay 扒下来，`rel` 就是 `"assets/" + p` —— 千万别在
+  「插件分支」里把它省掉（2026-10-24 云边小农场：省掉之后 12 个
+  `manifest.json` 全 404，而 `res.json()` 吃进 404 正文抛的是
+  `SyntaxError: Unexpected non-whitespace character after JSON at position 4`
+  —— 因为正文是 `404 Not Found`：`404` 当数字解析完，第 4 个字符 `N` 成了"多余内容"。
+  **这个报错完全不像 404**，会把人往"存档坏了 / 序列化"方向带。
+  判据：e2e 里断言**整轮挂载 0 个 404**（排除 favicon），静态扫描靠不住）。
 - **卸载必须清掉自己注册的定时器 / 监听。**
   ⚠️ `removeEventListener` 要传**同一个函数**：写成
   `addEventListener('click', () => void play())` 的话，
@@ -351,11 +359,16 @@ mount(container: HTMLElement, host: HostApi, ctx: MountContext): Unmount | Promi
 插件不是"开一次关一次"，是**切 tab 就卸、切回来再挂**。下面四条只有在
 "挂第二次"时才会暴露，而它们**都不报错**：
 
-1. **模块顶层不要碰 `document`。** 任何"建 canvas / 建纹理 / 建材质"的代码
-   都必须放进函数里。症状：`node scripts/check-plugin.mjs` 报
-   `document is not defined`（它在 Node 里真 `import()` 一次来验导出形状），
-   看着像包坏了。爪爪乐原来在 `models.ts` 顶层就 `glossWhite()`，
-   改成懒建的工厂（`useFreshMaterials()`）。
+1. **模块顶层不要碰 `document` / `window`。** 任何"建 canvas / 建纹理 / 建材质 /
+   挂监听 / 读设置"的代码都必须放进函数里。症状：`node scripts/check-plugin.mjs`
+   报 `document is not defined` 或 `window is not defined`（它在 Node 里真
+   `import()` 一次来验导出形状），看着像包坏了。爪爪乐原来在 `models.ts` 顶层就
+   `glossWhite()`，改成懒建的工厂（`useFreshMaterials()`）。
+   云边小农场 2026-10-24 也踩了一次：`window.addEventListener("pagehide", …)`
+   和 `void loadAudioPrefs()` 都在模块顶层 —— 后者更阴，它跑的时候
+   `__cfStore` 还是 `null`（`start()` 才注入），异常被 `catch` 吞掉，
+   **音量/静音设置从来没被恢复过**，而一切看起来正常。
+   ➜ 凡是"读存档"的初始化，都必须排在 `start()` 注入后端**之后**。
 2. **材质 / 纹理必须每次挂载新建。** 上一轮 `unmount` 已经 `dispose()` 了，
    模块级单例第二轮拿到的是**已销毁的对象** ⇒ 黑屏或纯白，**不报错**。
    判据：切走再切回，画面还能看（`e2e-plugin-claw3d.mjs` ④ 段）。
@@ -367,6 +380,13 @@ mount(container: HTMLElement, host: HostApi, ctx: MountContext): Unmount | Promi
    在 `document` 上挂了 `touchmove` 的 `preventDefault` —— 插件里那等于
    让**宿主整页**滑不动，而症状是"农场页滚不了了"，没人会想到是娃娃机干的。
    收到**自己的根节点**上（`root.addEventListener`）。
+5. **卸载时把全局调试钩子摘掉**（`window.__farm` / `window.__gpPlayable` 之类）。
+   2026-10-24 实测：云边小农场切走后容器没了，但 `window.__farm` 还指着
+   **已销毁**的实例 ⇒ 外部根本判不出"卸载到底跑没跑"（判据失效），
+   而第二次挂载时它被覆盖，症状被盖住。
+   `__gpPlayable` 更危险：留成 `true` 的话，**第二次挂载时**任何
+   「等 `__gpPlayable`」的脚本会立刻通过 —— 那时纹理可能还没加载完，纯假通过。
+   ➜ 判据用**身份比较**，别删别人的：`if (globalThis.__farm === game) delete globalThis.__farm`。
 
 ### 2.3 容器是**定高盒子**：`height:100%` 一定解析得到
 
@@ -403,6 +423,45 @@ mount(container: HTMLElement, host: HostApi, ctx: MountContext): Unmount | Promi
 > `Math.abs(rootHeight - containerHeight) <= 1`。
 > 「h > 0」这条断言在 0px 那次是**唯一**能抓到它的，但它当时写的是 `> 0`，
 > 于是抓不到 —— 改成等于之后，`scripts/e2e-plugin-local.mjs` 才真的拦住这一类。
+
+#### 2.3.1 **别动容器的定位**（2026-10-24 接云边小农场时踩的）
+
+宿主的容器是 `<div class="absolute inset-0">` —— `position:absolute` 在**类**里。
+云边小农场的 `mount()` 原来这样写：
+
+```js
+const prevPos = container.style.position          // ← 读 inline，得到 ""
+if (!prevPos || prevPos === 'static') container.style.position = 'relative'  // ← 覆盖了 absolute
+```
+
+`container.style.position` 读的是 **inline** 值，宿主的定位在**类**里，于是读成空串，
+判定为"没定位"就补了个 `relative`。而 **inline 胜过类**，盒子从
+「绝对定位铺满」变成「普通流里的相对定位」：
+
+- `inset-0` 的 `bottom:0` 对 `relative` **不生效**（只认 `top`）；
+- 高度退回**内容高度** = canvas 高度。
+
+实测：平板上父容器 966px，插件盒只有 **600px**，底部多出一条空白带。
+手机上同样少了 98px（698 → 600）。
+
+**而所有断言照样绿** —— 因为当时写的是 `canvasH === hostH`，两个数一起错
+（容器就是被 canvas 撑出来的）。这和 §2.3 那次「整屏空白但全绿」是同一类。
+
+判据要改成**跟父容器比**：
+
+```js
+// ★ 不是 canvas == 容器，而是 容器 == 父容器
+Math.abs(box.getBoundingClientRect().height - box.parentElement.getBoundingClientRect().height) <= 1
+```
+
+写代码时：判断"要不要补定位"必须用**计算值**，并且只还原自己改过的那一项。
+
+```js
+const patchedPos = getComputedStyle(container).position === 'static'
+if (patchedPos) container.style.position = 'relative'
+// unmount: if (patchedPos) container.style.position = prevPos
+```
+
 
 ### 2.4 体积预算
 
@@ -475,6 +534,56 @@ manifest: {
 - 换券用 `redeemGameCoin(count, memo)`，**汇率不归你传**：宿主从
   已安装的 manifest 里读 `voucherPerCoin`。所以界面显示的是**返回值**，
   不是自己乘出来的数。
+
+### 3.1 第二种合法形态：**不设币**，积分直接花、卖出直接出券
+
+不是每个游戏都需要中间那枚游戏币。云边小农场（2026-10-24）就是这样接的：
+
+```
+积分 🪙 ──spendPoints──▶ 买种子 / 开地 / 领动物 ──▶ 收成 ──卖出──▶ 兑换券 🎟️
+                    （mintVoucher，不经过币）
+```
+
+申报写法：
+
+```js
+economy: { playCost: 10, expectedPayout: 6.5, capPerPrize: 2000, voucherPerCoin: 0 }
+```
+
+- `voucherPerCoin: 0` = **不开放「币 → 券」**。`checkPluginEconomy` 对 `rate === 0`
+  会跳过第 4 条不变量，这是它明确允许的形态。`check-plugin.mjs` 会给一条提示
+  「这个游戏的币只能玩，换不成兑换券」—— 对这类游戏是**预期**，不是错误。
+- `manifest.coin` 仍要写（宿主 schema 必填），但它只是占位：本作一次
+  `mintGameCoin` / `spendGameCoin` 都没调，币余额恒为 0。
+- **`expectedPayout` 按「最坏的那一项」申报，不取平均**。云边小农场逐项算
+  「满产卖出 ÷ 种子成本」落在 0.40~0.67，再乘天气/虫害的期望折损 ≈0.87，
+  实际期望 0.4~0.55 —— 申报取 0.65（贴着最坏项）。按平均值申报等于漏报，
+  漏报的那一刻闸门就失效了。
+
+#### ⚠️⚠️ 插件**不能**发积分，奖励要改投「游戏内资源」
+
+这是本形态最容易犯的错。原版扒下来的游戏里常有「看广告 +50 金币」「清虫 +2 金币」
+这类小奖励，直接照搬就会变成**游戏自己印积分** —— 而 HostApi 里根本没有
+往 `db.ledger` 写正数的接口（`spendPoints` 只写负数）。有人会想"那我用
+`mintGameCoin` 再 `redeemGameCoin` 换出来" —— 那是**绕闸门**，`voucherPerCoin: 0`
+时换不出来，写非 0 又会触发第 4 条不变量。
+
+正确做法：**把这些奖励改成游戏内资源**。云边小农场把三处金币奖励
+（清虫 / 戳气球 / 消毒）统一改成发 **🧪 神奇肥料**（游戏内道具），
+奖励的手感还在，而不变量一点没破。
+
+#### HUD 上别重复画宿主顶栏已有的币种
+
+宿主的顶栏常驻显示 🪙 积分。插件 HUD 再画一个 🪙 胶囊 = 同一个数字画两遍，
+而且孩子会以为是两种钱。云边小农场最终是：
+
+| 位置 | 画什么 | 为什么 |
+| --- | --- | --- |
+| 插件 HUD | 🎟️ 兑换券 | 宿主顶栏**没有**这一项，必须自己显示 |
+| 打开种子/动物弹层 | 🪙 余额 | 这里是**花钱**的地方，就近给个"够不够"的参照，只读、没有「＋」 |
+| 宿主顶栏 | 🪙 积分 | 宿主的事，插件不要碰 |
+
+「＋ 加积分」这类**入口**一律删掉 —— 积分只能由 App 发（任务 / 打卡 / 家长）。
 
 **`storage` 上以 `__` 开头的键是宿主保留的**
 （`__bundle` 存包代码 / `__coin` 存币账本 / `__assets` 存资源根）：

@@ -1,0 +1,2347 @@
+{
+ "generated": "convert-webp.py",
+ "note": "uvLocked=true 的图尺寸不可改：world.js 用像素坐标算 UV 窗口",
+ "total": {
+  "srcBytes": 18057300,
+  "webpBytes": 2997334,
+  "ratio": 6.02
+ },
+ "assets": [
+  {
+   "file": "animals/chicken-sleep.webp",
+   "w": 298,
+   "h": 264,
+   "bytes": 12068,
+   "sha256": "1b647024ef004749fdaa37e10dca8d02d3b03e4023adb73985cf076da440308f",
+   "src": {
+    "file": "animals/chicken-sleep.png",
+    "w": 298,
+    "h": 264,
+    "bytes": 88556
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.5
+  },
+  {
+   "file": "animals/chicken.webp",
+   "w": 248,
+   "h": 300,
+   "bytes": 15380,
+   "sha256": "18a7e70338754291817c6e1bdda584ec2a13c821dcb93410c782b4f9e04aace9",
+   "src": {
+    "file": "animals/chicken.png",
+    "w": 248,
+    "h": 300,
+    "bytes": 81473
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.99
+  },
+  {
+   "file": "animals/cow-sleep.webp",
+   "w": 298,
+   "h": 140,
+   "bytes": 10110,
+   "sha256": "ceb021611dbdbf4745669bca165d99db7efbd100823d7df93a8255e923621050",
+   "src": {
+    "file": "animals/cow-sleep.png",
+    "w": 298,
+    "h": 140,
+    "bytes": 61521
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.28
+  },
+  {
+   "file": "animals/cow.webp",
+   "w": 300,
+   "h": 236,
+   "bytes": 16478,
+   "sha256": "2fd7eebb316cf93539e32b4e0626062df8cf0b7620634de14499648b63275bbf",
+   "src": {
+    "file": "animals/cow.png",
+    "w": 300,
+    "h": 236,
+    "bytes": 89505
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.5
+  },
+  {
+   "file": "animals/dog-sleep.webp",
+   "w": 300,
+   "h": 214,
+   "bytes": 14264,
+   "sha256": "f92d7ef8d7e70a91fc063027edd14728d486c6fa130cfe00676f47ad6f3a601c",
+   "src": {
+    "file": "animals/dog-sleep.png",
+    "w": 300,
+    "h": 214,
+    "bytes": 90707
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.59
+  },
+  {
+   "file": "animals/dog.webp",
+   "w": 281,
+   "h": 300,
+   "bytes": 22994,
+   "sha256": "c602f2947205e26b5bec30b1b172b5a26ba3dc0b15faf6ee4cf52a677ffba879",
+   "src": {
+    "file": "animals/dog.png",
+    "w": 281,
+    "h": 300,
+    "bytes": 118187
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.4
+  },
+  {
+   "file": "animals/duck-sleep.webp",
+   "w": 289,
+   "h": 268,
+   "bytes": 11264,
+   "sha256": "160d0c334c5ee7d460427ee9d837c5ee356bbbf2a5672fafc9cade2d30399239",
+   "src": {
+    "file": "animals/duck-sleep.png",
+    "w": 289,
+    "h": 268,
+    "bytes": 84421
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.64
+  },
+  {
+   "file": "animals/duck.webp",
+   "w": 221,
+   "h": 300,
+   "bytes": 15656,
+   "sha256": "d1ca829ff7d4dcba2c8e118fd0632c73a2034b496f103fbf66cd1748db862943",
+   "src": {
+    "file": "animals/duck.png",
+    "w": 221,
+    "h": 300,
+    "bytes": 72519
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.11
+  },
+  {
+   "file": "animals/fish.webp",
+   "w": 300,
+   "h": 186,
+   "bytes": 14098,
+   "sha256": "9661ee30ffe40f8a883bcffd621a62f319d9aa8314181276e4faba23674b9ff1",
+   "src": {
+    "file": "animals/fish.png",
+    "w": 300,
+    "h": 186,
+    "bytes": 89258
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.17
+  },
+  {
+   "file": "animals/giraffe-sleep.webp",
+   "w": 292,
+   "h": 298,
+   "bytes": 16956,
+   "sha256": "4a1bda7a8b825079dbed5113a2d4395e786fc1f9c627ac9579aed959622812b2",
+   "src": {
+    "file": "animals/giraffe-sleep.png",
+    "w": 292,
+    "h": 298,
+    "bytes": 103462
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.29
+  },
+  {
+   "file": "animals/giraffe.webp",
+   "w": 209,
+   "h": 300,
+   "bytes": 16310,
+   "sha256": "1de93ddab0ffec061ba7d001414c6dff9a955fc5fa80a24b2ce6009368315831",
+   "src": {
+    "file": "animals/giraffe.png",
+    "w": 209,
+    "h": 300,
+    "bytes": 84586
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.76
+  },
+  {
+   "file": "animals/grasscarp.webp",
+   "w": 300,
+   "h": 181,
+   "bytes": 15016,
+   "sha256": "ef9c7e51cc0a9dce19b35f16db01945e4964e48536aa2e45bb32ed96e2871f25",
+   "src": {
+    "file": "animals/grasscarp.png",
+    "w": 300,
+    "h": 181,
+    "bytes": 74720
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.2
+  },
+  {
+   "file": "animals/koi.webp",
+   "w": 300,
+   "h": 169,
+   "bytes": 15388,
+   "sha256": "d5d22783c959bee56825012c5802072138f18997a4f015588e49f6dc6d54dfe5",
+   "src": {
+    "file": "animals/koi.png",
+    "w": 300,
+    "h": 169,
+    "bytes": 79298
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.04
+  },
+  {
+   "file": "animals/loach.webp",
+   "w": 300,
+   "h": 106,
+   "bytes": 11416,
+   "sha256": "602511decdfff9f0a1741ffe7dcda37379d23e642a804f9b57309eb44d4ab963",
+   "src": {
+    "file": "animals/loach.png",
+    "w": 300,
+    "h": 106,
+    "bytes": 48224
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.21
+  },
+  {
+   "file": "animals/mandarinfish.webp",
+   "w": 300,
+   "h": 193,
+   "bytes": 22750,
+   "sha256": "ccf3da5b3d76a773946cc59b5ba83da35af5fbc3513fe9759379269c2716fd4f",
+   "src": {
+    "file": "animals/mandarinfish.png",
+    "w": 300,
+    "h": 193,
+    "bytes": 93961
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 35.16
+  },
+  {
+   "file": "animals/mythcat-sleep.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 95438,
+   "sha256": "be0804775f4247149c33aae4c6fa2120f9400a6d56f5001693aea57ec6c3df2c",
+   "src": {
+    "file": "animals/mythcat-sleep.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1236582
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 40.08
+  },
+  {
+   "file": "animals/mythcat.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 123696,
+   "sha256": "df3a224ffd65fdd9d9cdd8935c88df735a19af80759bd775e3064d543b02e225",
+   "src": {
+    "file": "animals/mythcat.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1336917
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.66
+  },
+  {
+   "file": "animals/ostrich-sleep.webp",
+   "w": 297,
+   "h": 135,
+   "bytes": 9204,
+   "sha256": "2e15f90cfa6d9842d8b21f81f0e0b3903717273e4b6a813e5d52719c6ed613d0",
+   "src": {
+    "file": "animals/ostrich-sleep.png",
+    "w": 297,
+    "h": 135,
+    "bytes": 47156
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.23
+  },
+  {
+   "file": "animals/ostrich.webp",
+   "w": 180,
+   "h": 300,
+   "bytes": 13246,
+   "sha256": "1736f7feb5da069f799b65f45bd7b15d843a8d8140ea98a7dca371920cedf1bb",
+   "src": {
+    "file": "animals/ostrich.png",
+    "w": 180,
+    "h": 300,
+    "bytes": 48150
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.68
+  },
+  {
+   "file": "animals/peacock-sleep.webp",
+   "w": 298,
+   "h": 196,
+   "bytes": 19998,
+   "sha256": "3a54122e30ebf89f124a471fab4ea648c5c5287607b2150104eb117a437d09f1",
+   "src": {
+    "file": "animals/peacock-sleep.png",
+    "w": 298,
+    "h": 196,
+    "bytes": 73022
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 31.56
+  },
+  {
+   "file": "animals/peacock-spread.webp",
+   "w": 300,
+   "h": 273,
+   "bytes": 46028,
+   "sha256": "19a0bb41c61c11a61e341374a3a095427cb605b2b99853a367ceccf62cadd424",
+   "src": {
+    "file": "animals/peacock-spread.png",
+    "w": 300,
+    "h": 273,
+    "bytes": 197772
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 27.02
+  },
+  {
+   "file": "animals/peacock.webp",
+   "w": 300,
+   "h": 295,
+   "bytes": 27050,
+   "sha256": "c76668debd1ec668bc9e29b8449820af68719edbf51f0924d6596374b128447e",
+   "src": {
+    "file": "animals/peacock.png",
+    "w": 300,
+    "h": 295,
+    "bytes": 106421
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 30.65
+  },
+  {
+   "file": "animals/pig-sleep.webp",
+   "w": 298,
+   "h": 174,
+   "bytes": 9034,
+   "sha256": "ec9be356d5d43c05c0d15ad9894ba6b05ab8e5f27886c4d5a7d1073db455246f",
+   "src": {
+    "file": "animals/pig-sleep.png",
+    "w": 298,
+    "h": 174,
+    "bytes": 67815
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.3
+  },
+  {
+   "file": "animals/pig.webp",
+   "w": 300,
+   "h": 223,
+   "bytes": 14662,
+   "sha256": "d547c9f92edfaea325a346f888503b2810a201f2db61f49a25e85e8eb32d3479",
+   "src": {
+    "file": "animals/pig.png",
+    "w": 300,
+    "h": 223,
+    "bytes": 84352
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.83
+  },
+  {
+   "file": "animals/polarbear-sleep.webp",
+   "w": 300,
+   "h": 131,
+   "bytes": 9548,
+   "sha256": "aa20c9dc1e540895cdf1773880410cc8388193fdab8b0db4185bd264d3b8a33f",
+   "src": {
+    "file": "animals/polarbear-sleep.png",
+    "w": 300,
+    "h": 131,
+    "bytes": 52419
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.06
+  },
+  {
+   "file": "animals/polarbear.webp",
+   "w": 300,
+   "h": 266,
+   "bytes": 16568,
+   "sha256": "517b776f7c1c5328df776ded8819994bf8e2548df20db14cf1bd9a8024fea831",
+   "src": {
+    "file": "animals/polarbear.png",
+    "w": 300,
+    "h": 266,
+    "bytes": 96786
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.34
+  },
+  {
+   "file": "animals/sheep-sleep.webp",
+   "w": 298,
+   "h": 175,
+   "bytes": 9544,
+   "sha256": "0cc18fc49001cce1e32540f3763a587f54f98b6a176a55470000fc2329422cc8",
+   "src": {
+    "file": "animals/sheep-sleep.png",
+    "w": 298,
+    "h": 175,
+    "bytes": 66594
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.2
+  },
+  {
+   "file": "animals/sheep.webp",
+   "w": 300,
+   "h": 255,
+   "bytes": 14750,
+   "sha256": "2d3980d47c2eec0f469cddb3e788eb3176cf0d06f73e55485b12cf2c5e1452d9",
+   "src": {
+    "file": "animals/sheep.png",
+    "w": 300,
+    "h": 255,
+    "bytes": 83052
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.95
+  },
+  {
+   "file": "animals/sturgeon.webp",
+   "w": 300,
+   "h": 126,
+   "bytes": 11586,
+   "sha256": "81f154eb66713137546d1ff58ed69ea7bd6aabee2d5bd7ad4577e0176c581d6b",
+   "src": {
+    "file": "animals/sturgeon.png",
+    "w": 300,
+    "h": 126,
+    "bytes": 50533
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.17
+  },
+  {
+   "file": "animals/turtle-bask.webp",
+   "w": 300,
+   "h": 196,
+   "bytes": 14826,
+   "sha256": "74662b93751b7f0d5973f65f7bdc5f77eacb25e5a3ce458c8130bfa338efbb49",
+   "src": {
+    "file": "animals/turtle-bask.png",
+    "w": 300,
+    "h": 196,
+    "bytes": 89876
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.93
+  },
+  {
+   "file": "animals/turtle-sleep.webp",
+   "w": 297,
+   "h": 214,
+   "bytes": 11624,
+   "sha256": "4891e877ea848541b3f483f7b07e15b80dbe5ebb80b221c46178f7e39219b507",
+   "src": {
+    "file": "animals/turtle-sleep.png",
+    "w": 297,
+    "h": 214,
+    "bytes": 81781
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.87
+  },
+  {
+   "file": "animals/turtle.webp",
+   "w": 300,
+   "h": 215,
+   "bytes": 16416,
+   "sha256": "824cec622c0f900b5cdd9383ddadcacd600216eb9568570931de5d4d16e76773",
+   "src": {
+    "file": "animals/turtle.png",
+    "w": 300,
+    "h": 215,
+    "bytes": 110053
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.74
+  },
+  {
+   "file": "animals/yulong.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 40614,
+   "sha256": "f6681dbf9ca341de0326ee033efec64e2b0002ea94b4761743dc4a40a4fcc02e",
+   "src": {
+    "file": "animals/yulong.png",
+    "w": 512,
+    "h": 512,
+    "bytes": 370277
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.18
+  },
+  {
+   "file": "babies/chicken.webp",
+   "w": 173,
+   "h": 220,
+   "bytes": 11768,
+   "sha256": "ef42847b47f419b6d2b21848005f06c789202c6c5741a9ca983e3ef7d736a3f6",
+   "src": {
+    "file": "babies/chicken.png",
+    "w": 173,
+    "h": 220,
+    "bytes": 55961
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.72
+  },
+  {
+   "file": "babies/cow.webp",
+   "w": 193,
+   "h": 220,
+   "bytes": 13284,
+   "sha256": "1c90070a8c47275a88b8514f7753f0f4ccac96844b9499a1879010b367065a11",
+   "src": {
+    "file": "babies/cow.png",
+    "w": 193,
+    "h": 220,
+    "bytes": 72619
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.84
+  },
+  {
+   "file": "babies/dog.webp",
+   "w": 193,
+   "h": 220,
+   "bytes": 12136,
+   "sha256": "af5549472772e1f0cde53c324db8216715cbab3643ada71442131167fd9a6fab",
+   "src": {
+    "file": "babies/dog.png",
+    "w": 193,
+    "h": 220,
+    "bytes": 69902
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.3
+  },
+  {
+   "file": "babies/duck.webp",
+   "w": 170,
+   "h": 220,
+   "bytes": 11334,
+   "sha256": "d202f343d6615e635df0d3534ce2e4bb675b44422a6d63ab33bef93767da20c6",
+   "src": {
+    "file": "babies/duck.png",
+    "w": 170,
+    "h": 220,
+    "bytes": 51213
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.22
+  },
+  {
+   "file": "babies/fish.webp",
+   "w": 185,
+   "h": 127,
+   "bytes": 7608,
+   "sha256": "ce265b337a6815b7369e0d8e5d5379b285aa9f0b32ac6c3af44739cb0b573430",
+   "src": {
+    "file": "babies/fish.png",
+    "w": 185,
+    "h": 127,
+    "bytes": 67448
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.92
+  },
+  {
+   "file": "babies/grasscarp.webp",
+   "w": 200,
+   "h": 130,
+   "bytes": 9190,
+   "sha256": "a9ee5aa2382b07f6c67212c0e70f31ae8526e3136b2b2dc1fe1b331d32d85252",
+   "src": {
+    "file": "babies/grasscarp.png",
+    "w": 200,
+    "h": 130,
+    "bytes": 40413
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.06
+  },
+  {
+   "file": "babies/koi.webp",
+   "w": 198,
+   "h": 133,
+   "bytes": 8936,
+   "sha256": "a4aa7180c4f9d3aa4f58fe417abaa416d3a8ee303a31d9fab059731287768a16",
+   "src": {
+    "file": "babies/koi.png",
+    "w": 198,
+    "h": 133,
+    "bytes": 72619
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.59
+  },
+  {
+   "file": "babies/loach.webp",
+   "w": 200,
+   "h": 104,
+   "bytes": 8704,
+   "sha256": "0bbd38b5618723f0b0c55aeeed313cc56531a01517ea10a514ca2bcb1329dc7c",
+   "src": {
+    "file": "babies/loach.png",
+    "w": 200,
+    "h": 104,
+    "bytes": 36166
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.29
+  },
+  {
+   "file": "babies/mandarinfish.webp",
+   "w": 198,
+   "h": 135,
+   "bytes": 12212,
+   "sha256": "d3b704d6f8930ae4cad44664290b4100d3f3c5b6e628c514b04521dd6a25718d",
+   "src": {
+    "file": "babies/mandarinfish.png",
+    "w": 198,
+    "h": 135,
+    "bytes": 46548
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 34.48
+  },
+  {
+   "file": "babies/mythcat.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 110748,
+   "sha256": "0d61b2e38b9a561b09069cb6a4e287c5937e45f9bd2f0a53dd35a3aff7a1c8ee",
+   "src": {
+    "file": "babies/mythcat.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1313984
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.81
+  },
+  {
+   "file": "babies/ostrich.webp",
+   "w": 176,
+   "h": 300,
+   "bytes": 17762,
+   "sha256": "7d5d09d73483df8ebcda678a6bb969836e1ffbc592cd7542712d0051b43d11c9",
+   "src": {
+    "file": "babies/ostrich.png",
+    "w": 176,
+    "h": 300,
+    "bytes": 74665
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.26
+  },
+  {
+   "file": "babies/peacock.webp",
+   "w": 196,
+   "h": 300,
+   "bytes": 11466,
+   "sha256": "3c45badb69f09a95e31077bf55ee61ec9f0824a18cfd162142647c8ca9cef3de",
+   "src": {
+    "file": "babies/peacock.png",
+    "w": 196,
+    "h": 300,
+    "bytes": 54293
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.33
+  },
+  {
+   "file": "babies/pig.webp",
+   "w": 202,
+   "h": 220,
+   "bytes": 11838,
+   "sha256": "d977fcb7fc71d00de57de9da69799e89f457c69e9a956bed38e7bee890572140",
+   "src": {
+    "file": "babies/pig.png",
+    "w": 202,
+    "h": 220,
+    "bytes": 67106
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 40.14
+  },
+  {
+   "file": "babies/polarbear.webp",
+   "w": 202,
+   "h": 220,
+   "bytes": 11824,
+   "sha256": "5ce6d739afb3880d636dcd665a16d03656165e9e0a886960c19805842c21e09c",
+   "src": {
+    "file": "babies/polarbear.png",
+    "w": 202,
+    "h": 220,
+    "bytes": 64983
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.66
+  },
+  {
+   "file": "babies/sheep.webp",
+   "w": 193,
+   "h": 220,
+   "bytes": 12172,
+   "sha256": "e6eb96b4a33e053ef31f7df27536279564e910c65d337d28156d5c6518e8ab0e",
+   "src": {
+    "file": "babies/sheep.png",
+    "w": 193,
+    "h": 220,
+    "bytes": 66535
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.48
+  },
+  {
+   "file": "babies/sturgeon.webp",
+   "w": 200,
+   "h": 97,
+   "bytes": 7882,
+   "sha256": "3b6ac19b1d43a5ec9a961a37319339a653c2bd8b775c8b04288bed33871e446b",
+   "src": {
+    "file": "babies/sturgeon.png",
+    "w": 200,
+    "h": 97,
+    "bytes": 31580
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.68
+  },
+  {
+   "file": "babies/turtle.webp",
+   "w": 209,
+   "h": 165,
+   "bytes": 9010,
+   "sha256": "dc496ab9eacb82c5db4d578d636aa7f928e2e5db17ae404a36d34b90140e5f4a",
+   "src": {
+    "file": "babies/turtle.png",
+    "w": 209,
+    "h": 165,
+    "bytes": 89917
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.13
+  },
+  {
+   "file": "babies/yulong.webp",
+   "w": 384,
+   "h": 384,
+   "bytes": 19666,
+   "sha256": "11c99c174f664fd7ec89cdde446574691ec938ee8217718dce4118634913631b",
+   "src": {
+    "file": "babies/yulong.png",
+    "w": 384,
+    "h": 384,
+    "bytes": 197308
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.46
+  },
+  {
+   "file": "bg/field.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 108724,
+   "sha256": "3ae6f9e5b522d9709488eb3cdbb6c42af92445cc4556db288427db0f0f69cae4",
+   "src": {
+    "file": "bg/field.jpg",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 154682
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 40.68
+  },
+  {
+   "file": "bg/pond.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 147632,
+   "sha256": "4a4e21791901fc00dfc0ca3a48d5d5ef7063dfcedd3ecc041ed00c7a9367098c",
+   "src": {
+    "file": "bg/pond.jpg",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 196720
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 39.39
+  },
+  {
+   "file": "bg/ranch.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 110950,
+   "sha256": "52b601e624121472789d8f5c65e715b7ec5e09c84bd200f7aa0e58c8f07302bf",
+   "src": {
+    "file": "bg/ranch.jpg",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 155061
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 41.05
+  },
+  {
+   "file": "bg/river.webp",
+   "w": 1024,
+   "h": 320,
+   "bytes": 52940,
+   "sha256": "f8313db5a7b205a660f87ffa87826acc18e8ecf3df15fc8c4ef8e2f91d340ebf",
+   "src": {
+    "file": "bg/river.jpg",
+    "w": 1024,
+    "h": 320,
+    "bytes": 76047
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 38.4
+  },
+  {
+   "file": "crops/g00.webp",
+   "w": 212,
+   "h": 198,
+   "bytes": 14064,
+   "sha256": "2b489889cb1940ae040d14398b44bea9e5af023617b3e030765739450d8240ac",
+   "src": {
+    "file": "crops/g00.png",
+    "w": 212,
+    "h": 198,
+    "bytes": 109186
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.46
+  },
+  {
+   "file": "crops/g01.webp",
+   "w": 205,
+   "h": 212,
+   "bytes": 18652,
+   "sha256": "4cf3f36760cb56ddad51fc9967955859e49c3f148e4ed07f3d5cc5f10308c58c",
+   "src": {
+    "file": "crops/g01.png",
+    "w": 205,
+    "h": 212,
+    "bytes": 114671
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.74
+  },
+  {
+   "file": "crops/g02.webp",
+   "w": 201,
+   "h": 214,
+   "bytes": 17510,
+   "sha256": "635ddbeef1cb115ce8d18645a847ef912f59bcca85453d20075fef6ee2cf23f2",
+   "src": {
+    "file": "crops/g02.png",
+    "w": 201,
+    "h": 214,
+    "bytes": 117392
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.3
+  },
+  {
+   "file": "crops/g03.webp",
+   "w": 205,
+   "h": 196,
+   "bytes": 15180,
+   "sha256": "65d4e3cfd0715882d5b8591a67561ba8ca0343c0c42a3ccb8c940ca61d41563c",
+   "src": {
+    "file": "crops/g03.png",
+    "w": 205,
+    "h": 196,
+    "bytes": 116881
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.7
+  },
+  {
+   "file": "crops/g04.webp",
+   "w": 186,
+   "h": 220,
+   "bytes": 17788,
+   "sha256": "1b5fca3ca3c38e4ab1729761f39a9563797ae8a30011621645964b19cec54c80",
+   "src": {
+    "file": "crops/g04.png",
+    "w": 186,
+    "h": 220,
+    "bytes": 62427
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.59
+  },
+  {
+   "file": "crops/g05.webp",
+   "w": 198,
+   "h": 220,
+   "bytes": 19896,
+   "sha256": "548d9a9b03caa5c74ade1bedf338d5cba16bb0cffcde73932366450873a8fd4f",
+   "src": {
+    "file": "crops/g05.png",
+    "w": 198,
+    "h": 220,
+    "bytes": 84827
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.1
+  },
+  {
+   "file": "crops/g06.webp",
+   "w": 179,
+   "h": 220,
+   "bytes": 20694,
+   "sha256": "21170eae1184bbddd6f2caee005999df701ea19b7454427e5049cd706f22c05c",
+   "src": {
+    "file": "crops/g06.png",
+    "w": 179,
+    "h": 220,
+    "bytes": 83402
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.37
+  },
+  {
+   "file": "crops/g07.webp",
+   "w": 205,
+   "h": 207,
+   "bytes": 19252,
+   "sha256": "383cf88396cfea1180edf3f4677f235f157f261709902491e39ab2cb9d8cd3e5",
+   "src": {
+    "file": "crops/g07.png",
+    "w": 205,
+    "h": 207,
+    "bytes": 124994
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.19
+  },
+  {
+   "file": "crops/g08.webp",
+   "w": 214,
+   "h": 166,
+   "bytes": 16038,
+   "sha256": "f60666b59ad128bdc075bf7c1b492fb13696670fe6b0719e524b3f9a6a35509e",
+   "src": {
+    "file": "crops/g08.png",
+    "w": 214,
+    "h": 166,
+    "bytes": 102198
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.88
+  },
+  {
+   "file": "crops/g09.webp",
+   "w": 201,
+   "h": 217,
+   "bytes": 16722,
+   "sha256": "b7ea16eac5f6033fa409ec1fc3b08efde4c58f6b63c88ed4df14c099fd96a1c2",
+   "src": {
+    "file": "crops/g09.png",
+    "w": 201,
+    "h": 217,
+    "bytes": 116817
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.8
+  },
+  {
+   "file": "crops/g10.webp",
+   "w": 208,
+   "h": 212,
+   "bytes": 14986,
+   "sha256": "474cf8c0ee6f0d8179760e262bdae40a947c41e4df6836ee38d32db7b804dc87",
+   "src": {
+    "file": "crops/g10.png",
+    "w": 208,
+    "h": 212,
+    "bytes": 112459
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.27
+  },
+  {
+   "file": "crops/g11.webp",
+   "w": 191,
+   "h": 220,
+   "bytes": 19966,
+   "sha256": "5ba02831488080c0847be648071e275641e58f43c203c349e078db6f1cb1f309",
+   "src": {
+    "file": "crops/g11.png",
+    "w": 191,
+    "h": 220,
+    "bytes": 80558
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.77
+  },
+  {
+   "file": "crops/g12.webp",
+   "w": 189,
+   "h": 219,
+   "bytes": 16152,
+   "sha256": "572c22c551128267f897d0fb2aa4812ed1ab6190964b638b00c8a761f6c03b19",
+   "src": {
+    "file": "crops/g12.png",
+    "w": 189,
+    "h": 219,
+    "bytes": 111240
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.99
+  },
+  {
+   "file": "crops/g13.webp",
+   "w": 168,
+   "h": 220,
+   "bytes": 16778,
+   "sha256": "7e04eb700fa09a12fbedd7e76f1d9575a16fa08cd3feb5ea60a8b728b92bde2b",
+   "src": {
+    "file": "crops/g13.png",
+    "w": 168,
+    "h": 220,
+    "bytes": 66550
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.58
+  },
+  {
+   "file": "crops/g14.webp",
+   "w": 161,
+   "h": 220,
+   "bytes": 21698,
+   "sha256": "ec7f304ae4f43a03b5fe3b45028a37963ee27b845bd00f8a9e404645aed135f6",
+   "src": {
+    "file": "crops/g14.png",
+    "w": 161,
+    "h": 220,
+    "bytes": 74914
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.85
+  },
+  {
+   "file": "crops/g15.webp",
+   "w": 134,
+   "h": 107,
+   "bytes": 4278,
+   "sha256": "edd417f9c1c718ec81f35f945d949d905514752210d8854ad394188e3651f476",
+   "src": {
+    "file": "crops/g15.png",
+    "w": 134,
+    "h": 107,
+    "bytes": 33846
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.61
+  },
+  {
+   "file": "crops/m00.webp",
+   "w": 220,
+   "h": 202,
+   "bytes": 16990,
+   "sha256": "7dd94289549e1d583fc023970e78e8ed655ef76dbdc0a70a9efb9671324dd633",
+   "src": {
+    "file": "crops/m00.png",
+    "w": 220,
+    "h": 202,
+    "bytes": 83508
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.54
+  },
+  {
+   "file": "crops/m01.webp",
+   "w": 210,
+   "h": 217,
+   "bytes": 15282,
+   "sha256": "54d8dfeb668ea25a39a2e1f60b1afa4a24494f9388732e0029c02f05d6c1cd43",
+   "src": {
+    "file": "crops/m01.png",
+    "w": 210,
+    "h": 217,
+    "bytes": 124775
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.57
+  },
+  {
+   "file": "crops/m02.webp",
+   "w": 215,
+   "h": 207,
+   "bytes": 15218,
+   "sha256": "dcfac7a946040b5ae53bfb4d0466ce143faf75ade6281fd35ef05147368b26cf",
+   "src": {
+    "file": "crops/m02.png",
+    "w": 215,
+    "h": 207,
+    "bytes": 128187
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.62
+  },
+  {
+   "file": "crops/m03.webp",
+   "w": 212,
+   "h": 190,
+   "bytes": 13810,
+   "sha256": "ec132bab8341ae26d8a2bbf5cee2da58abdf7b5ae4be05aa9723a1c2ecadef09",
+   "src": {
+    "file": "crops/m03.png",
+    "w": 212,
+    "h": 190,
+    "bytes": 117322
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.96
+  },
+  {
+   "file": "crops/m04.webp",
+   "w": 170,
+   "h": 220,
+   "bytes": 18684,
+   "sha256": "c896e6c8e18b2957fd05384fd6d27df22a54ce972d5fe91632f8570b88a74cf0",
+   "src": {
+    "file": "crops/m04.png",
+    "w": 170,
+    "h": 220,
+    "bytes": 72410
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.6
+  },
+  {
+   "file": "crops/m05.webp",
+   "w": 157,
+   "h": 220,
+   "bytes": 17952,
+   "sha256": "48ec58a9ba308b96446875b25b1c471d2aa207a25e25d8e0233b61c1ccb6801b",
+   "src": {
+    "file": "crops/m05.png",
+    "w": 157,
+    "h": 220,
+    "bytes": 80141
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.74
+  },
+  {
+   "file": "crops/m06.webp",
+   "w": 177,
+   "h": 220,
+   "bytes": 21692,
+   "sha256": "ae77ca03aa46355be7a514cc381a9e923a4d7662c61add5c0595cc229df85d89",
+   "src": {
+    "file": "crops/m06.png",
+    "w": 177,
+    "h": 220,
+    "bytes": 98020
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.83
+  },
+  {
+   "file": "crops/m07.webp",
+   "w": 220,
+   "h": 199,
+   "bytes": 17962,
+   "sha256": "11ef67941fce169cebcd2efd9b258e3d10b27bb829b3bcb27a6e0538d0f97745",
+   "src": {
+    "file": "crops/m07.png",
+    "w": 220,
+    "h": 199,
+    "bytes": 100891
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.62
+  },
+  {
+   "file": "crops/m08.webp",
+   "w": 220,
+   "h": 203,
+   "bytes": 19050,
+   "sha256": "6b29958b72f9bb9219b9642eac58a9a631a75bb0f8fd409b45b82c81e4e8de20",
+   "src": {
+    "file": "crops/m08.png",
+    "w": 220,
+    "h": 203,
+    "bytes": 107125
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.95
+  },
+  {
+   "file": "crops/m09.webp",
+   "w": 211,
+   "h": 220,
+   "bytes": 15120,
+   "sha256": "38d6517b92b2384b58db8f79b6fe6b4ba50d230d5ac221fbce6c79ef9bf5ad17",
+   "src": {
+    "file": "crops/m09.png",
+    "w": 211,
+    "h": 220,
+    "bytes": 96232
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.52
+  },
+  {
+   "file": "crops/m10.webp",
+   "w": 217,
+   "h": 220,
+   "bytes": 20070,
+   "sha256": "cea776e6ec95592b5a076ba092d7c836a47eedd05d07ec33c189f77eeacaaca6",
+   "src": {
+    "file": "crops/m10.png",
+    "w": 217,
+    "h": 220,
+    "bytes": 90368
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.97
+  },
+  {
+   "file": "crops/m11.webp",
+   "w": 213,
+   "h": 220,
+   "bytes": 15502,
+   "sha256": "31246284f86ca8ced747d9efe1127575903bad0f08f2289f77012fcc7c172a15",
+   "src": {
+    "file": "crops/m11.png",
+    "w": 213,
+    "h": 220,
+    "bytes": 98387
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.22
+  },
+  {
+   "file": "crops/m12.webp",
+   "w": 198,
+   "h": 220,
+   "bytes": 14966,
+   "sha256": "c9ba4fc283a9190faff5de8c071c221de7f7fbf4fb84c7c89cf53a7aca037380",
+   "src": {
+    "file": "crops/m12.png",
+    "w": 198,
+    "h": 220,
+    "bytes": 87610
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.2
+  },
+  {
+   "file": "crops/m13.webp",
+   "w": 138,
+   "h": 220,
+   "bytes": 16634,
+   "sha256": "e3d6b357c3e051bfd259421314dbfc0ccc469df2b23ea8704e844e2ac36e6e01",
+   "src": {
+    "file": "crops/m13.png",
+    "w": 138,
+    "h": 220,
+    "bytes": 68043
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.44
+  },
+  {
+   "file": "crops/m14.webp",
+   "w": 158,
+   "h": 220,
+   "bytes": 22106,
+   "sha256": "e0aa0c988f5cf1340f83c6d9426a73c1205c37e4e48e6af07cbc1c9d2aadab4e",
+   "src": {
+    "file": "crops/m14.png",
+    "w": 158,
+    "h": 220,
+    "bytes": 98767
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.98
+  },
+  {
+   "file": "crops/m15.webp",
+   "w": 219,
+   "h": 140,
+   "bytes": 7402,
+   "sha256": "eea492e8a60bb4f3da13de620f3aafe147dde1c89dc7a5cecc76a55545f6486f",
+   "src": {
+    "file": "crops/m15.png",
+    "w": 219,
+    "h": 140,
+    "bytes": 70138
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.05
+  },
+  {
+   "file": "items/i00.webp",
+   "w": 99,
+   "h": 128,
+   "bytes": 6092,
+   "sha256": "264387ac4d12921cf8ce963c97ecdc4e821a1217c3aca6719b204dac31596f38",
+   "src": {
+    "file": "items/i00.png",
+    "w": 99,
+    "h": 128,
+    "bytes": 25160
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.36
+  },
+  {
+   "file": "items/i01.webp",
+   "w": 123,
+   "h": 128,
+   "bytes": 6324,
+   "sha256": "c5c8cffedf079947bfcc82b3201ff19a4df995f138c4d9c7feae35b1207fe5d8",
+   "src": {
+    "file": "items/i01.png",
+    "w": 123,
+    "h": 128,
+    "bytes": 22211
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.08
+  },
+  {
+   "file": "items/i02.webp",
+   "w": 106,
+   "h": 128,
+   "bytes": 7016,
+   "sha256": "530822d2a3404fc451b0673620e47898ffc806e9b5959dc6d0373a5c654a3850",
+   "src": {
+    "file": "items/i02.png",
+    "w": 106,
+    "h": 128,
+    "bytes": 29232
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.7
+  },
+  {
+   "file": "items/i03.webp",
+   "w": 104,
+   "h": 128,
+   "bytes": 6424,
+   "sha256": "a0469683659125a326d32ac91ba7b3a8874ddb5ed511fb3efa320074618f933a",
+   "src": {
+    "file": "items/i03.png",
+    "w": 104,
+    "h": 128,
+    "bytes": 29639
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.28
+  },
+  {
+   "file": "items/i04.webp",
+   "w": 103,
+   "h": 128,
+   "bytes": 7320,
+   "sha256": "15825e8598f78c032d9beaf4e940eee1e558ee1812bcb8203cfcc496ec5a740e",
+   "src": {
+    "file": "items/i04.png",
+    "w": 103,
+    "h": 128,
+    "bytes": 28458
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 34.58
+  },
+  {
+   "file": "items/i05.webp",
+   "w": 125,
+   "h": 128,
+   "bytes": 6576,
+   "sha256": "3ed87eabdaad6102c7742e1661d63dead969b11bc4eaa33f6b0244665f7acbc6",
+   "src": {
+    "file": "items/i05.png",
+    "w": 125,
+    "h": 128,
+    "bytes": 30395
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.22
+  },
+  {
+   "file": "items/i06.webp",
+   "w": 128,
+   "h": 128,
+   "bytes": 6042,
+   "sha256": "b25a1f2c2e0ee343eb90fcdb6dd5b42671ed1086eb856fd087283b666d69c724",
+   "src": {
+    "file": "items/i06.png",
+    "w": 128,
+    "h": 128,
+    "bytes": 31429
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.77
+  },
+  {
+   "file": "items/i07.webp",
+   "w": 128,
+   "h": 128,
+   "bytes": 6338,
+   "sha256": "7547d98da8bda0da6e08724f577ec245ec4247be751c0a7ded256ddba0fba41c",
+   "src": {
+    "file": "items/i07.png",
+    "w": 128,
+    "h": 128,
+    "bytes": 31704
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.67
+  },
+  {
+   "file": "items/i08.webp",
+   "w": 128,
+   "h": 121,
+   "bytes": 5666,
+   "sha256": "c290fad5ce032c32c9d8c348de5da05096879d4528670446b3bfff7f478e5bb1",
+   "src": {
+    "file": "items/i08.png",
+    "w": 128,
+    "h": 121,
+    "bytes": 28134
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.74
+  },
+  {
+   "file": "items/i09.webp",
+   "w": 113,
+   "h": 128,
+   "bytes": 5744,
+   "sha256": "6894d39fca756077867de1b0e1970d63b5b594deaf25f9db8e9b77a43c00b410",
+   "src": {
+    "file": "items/i09.png",
+    "w": 113,
+    "h": 128,
+    "bytes": 28218
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.7
+  },
+  {
+   "file": "items/i10.webp",
+   "w": 78,
+   "h": 128,
+   "bytes": 7020,
+   "sha256": "82eefbc676e5908c9f4a56bebe1250f56cd6d52d1f4f63af2a43a4e2be741062",
+   "src": {
+    "file": "items/i10.png",
+    "w": 78,
+    "h": 128,
+    "bytes": 24126
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 34.97
+  },
+  {
+   "file": "items/i11.webp",
+   "w": 122,
+   "h": 128,
+   "bytes": 5748,
+   "sha256": "3b687d254036ee314a4a62a2cecbd3dbb85850a62e85018f10f0d872e5555179",
+   "src": {
+    "file": "items/i11.png",
+    "w": 122,
+    "h": 128,
+    "bytes": 28744
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.2
+  },
+  {
+   "file": "items/i12.webp",
+   "w": 106,
+   "h": 128,
+   "bytes": 7834,
+   "sha256": "34a81c8cf22e782f7a8f4549bd0e6c22a47777eeacff6c48fea918d4cb7c540c",
+   "src": {
+    "file": "items/i12.png",
+    "w": 106,
+    "h": 128,
+    "bytes": 27155
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 33.15
+  },
+  {
+   "file": "items/i13.webp",
+   "w": 122,
+   "h": 128,
+   "bytes": 8696,
+   "sha256": "8ce56c46a4836807b8f6f92aacaeb24ddcee42b72b5032e4e4687cf0e201efbc",
+   "src": {
+    "file": "items/i13.png",
+    "w": 122,
+    "h": 128,
+    "bytes": 36635
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.18
+  },
+  {
+   "file": "items/i14.webp",
+   "w": 121,
+   "h": 128,
+   "bytes": 7838,
+   "sha256": "9d410362adbe661f7f832afd9a67449b7f7e65bde3fe2da4c7c06a118b81c622",
+   "src": {
+    "file": "items/i14.png",
+    "w": 121,
+    "h": 128,
+    "bytes": 47491
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.95
+  },
+  {
+   "file": "items/i15.webp",
+   "w": 105,
+   "h": 128,
+   "bytes": 4984,
+   "sha256": "53089d42364e8e748d74c2317b08ed7ba3ce3de3fdf192df54bdc7201cc1ba64",
+   "src": {
+    "file": "items/i15.png",
+    "w": 105,
+    "h": 128,
+    "bytes": 22267
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 40.11
+  },
+  {
+   "file": "items/i16.webp",
+   "w": 111,
+   "h": 128,
+   "bytes": 6106,
+   "sha256": "f7d247fac9ef1f10142605f04a9749fb7349f2eeb2b454b3f46814c607f49898",
+   "src": {
+    "file": "items/i16.png",
+    "w": 111,
+    "h": 128,
+    "bytes": 22341
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.33
+  },
+  {
+   "file": "items/i17.webp",
+   "w": 128,
+   "h": 126,
+   "bytes": 7332,
+   "sha256": "5fce499ab94187b60524c95f10015707df05e81ca5cf344c523519e23430eaf5",
+   "src": {
+    "file": "items/i17.png",
+    "w": 128,
+    "h": 126,
+    "bytes": 37110
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.05
+  },
+  {
+   "file": "items/i18.webp",
+   "w": 126,
+   "h": 128,
+   "bytes": 6208,
+   "sha256": "00e4449915fd5bcc59611019b63eef9fe8ea00559ccf8ba6d3d2dcaac1489fcd",
+   "src": {
+    "file": "items/i18.png",
+    "w": 126,
+    "h": 128,
+    "bytes": 32474
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.54
+  },
+  {
+   "file": "items/i19.webp",
+   "w": 70,
+   "h": 128,
+   "bytes": 4378,
+   "sha256": "91ff9796d9f0bd688eea6b489e3766e8e651210ce6e77a15a2d8555d8b2a0240",
+   "src": {
+    "file": "items/i19.png",
+    "w": 70,
+    "h": 128,
+    "bytes": 19591
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.71
+  },
+  {
+   "file": "items/i20.webp",
+   "w": 128,
+   "h": 118,
+   "bytes": 5404,
+   "sha256": "baddf302c84e7679503ac7543b001ac17ddc9d41cde4edca13d4a8d141aa9837",
+   "src": {
+    "file": "items/i20.png",
+    "w": 128,
+    "h": 118,
+    "bytes": 19716
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.93
+  },
+  {
+   "file": "items/i21.webp",
+   "w": 123,
+   "h": 128,
+   "bytes": 6606,
+   "sha256": "3031f047092108f774b96e0272582ce20c3b26b7f3f97b1d697f467cba3541e7",
+   "src": {
+    "file": "items/i21.png",
+    "w": 123,
+    "h": 128,
+    "bytes": 35160
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.38
+  },
+  {
+   "file": "items/i22.webp",
+   "w": 113,
+   "h": 128,
+   "bytes": 5838,
+   "sha256": "2c3d2789994cf1d0ca667f659bb22f6a00309883024789a16f2bc71fca30849e",
+   "src": {
+    "file": "items/i22.png",
+    "w": 113,
+    "h": 128,
+    "bytes": 28464
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.8
+  },
+  {
+   "file": "items/i23.webp",
+   "w": 128,
+   "h": 89,
+   "bytes": 6230,
+   "sha256": "40270c4aa93ab96b320294d7e379a236a09f6e930382b1e74a832f63c5dcd3c5",
+   "src": {
+    "file": "items/i23.png",
+    "w": 128,
+    "h": 89,
+    "bytes": 24945
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.58
+  },
+  {
+   "file": "items/i24.webp",
+   "w": 103,
+   "h": 128,
+   "bytes": 5478,
+   "sha256": "1bf54404308d91d4c7090a5ca971456d9d9dff148c0642459107e216b23b1328",
+   "src": {
+    "file": "items/i24.png",
+    "w": 103,
+    "h": 128,
+    "bytes": 27058
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.64
+  },
+  {
+   "file": "items/i25.webp",
+   "w": 120,
+   "h": 128,
+   "bytes": 7524,
+   "sha256": "ea12690e12af08bf92b0976318784318c8c96a04c4c3f8edd3dfe6fa03db5c14",
+   "src": {
+    "file": "items/i25.png",
+    "w": 120,
+    "h": 128,
+    "bytes": 35600
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.88
+  },
+  {
+   "file": "items/i26.webp",
+   "w": 111,
+   "h": 128,
+   "bytes": 6760,
+   "sha256": "fb9483489b285225c0be4d1432d511d0e27f622e45de165e9c8307d3c3b6b903",
+   "src": {
+    "file": "items/i26.png",
+    "w": 111,
+    "h": 128,
+    "bytes": 34178
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.72
+  },
+  {
+   "file": "items/i27.webp",
+   "w": 114,
+   "h": 128,
+   "bytes": 6524,
+   "sha256": "698c4784e889a29a861ea3c1101e47e22bad306d7dc1a265253cd07aea744a00",
+   "src": {
+    "file": "items/i27.png",
+    "w": 114,
+    "h": 128,
+    "bytes": 32845
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.04
+  },
+  {
+   "file": "items/i28.webp",
+   "w": 127,
+   "h": 128,
+   "bytes": 7812,
+   "sha256": "08fa00a869dc291f50715ea24a792585e3563bfb995ad9294d19f3eaad1b68be",
+   "src": {
+    "file": "items/i28.png",
+    "w": 127,
+    "h": 128,
+    "bytes": 33250
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 34.21
+  },
+  {
+   "file": "items/i29.webp",
+   "w": 109,
+   "h": 128,
+   "bytes": 6976,
+   "sha256": "598b7af223c354096b3dbcb857599dca6f28b857a1adc482c8e164d96b8b018f",
+   "src": {
+    "file": "items/i29.png",
+    "w": 109,
+    "h": 128,
+    "bytes": 24357
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.15
+  },
+  {
+   "file": "items/i30.webp",
+   "w": 218,
+   "h": 300,
+   "bytes": 20664,
+   "sha256": "dac17c6749d8af5f57358b68ca1bae34159b688cfc662b6c2bbd031dc6235097",
+   "src": {
+    "file": "items/i30.png",
+    "w": 218,
+    "h": 300,
+    "bytes": 80457
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 32.23
+  },
+  {
+   "file": "items/i31.webp",
+   "w": 239,
+   "h": 300,
+   "bytes": 10114,
+   "sha256": "9106eeedb99e59dae1265e6da0dc1570c61635d71edd793da9b601e3d562b915",
+   "src": {
+    "file": "items/i31.png",
+    "w": 239,
+    "h": 300,
+    "bytes": 81184
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 39.21
+  },
+  {
+   "file": "items/i32.webp",
+   "w": 93,
+   "h": 128,
+   "bytes": 5560,
+   "sha256": "f226ef25414f28434bcb4deaeb911489cd550d12f12c4f0e4c1c6295f0dda33e",
+   "src": {
+    "file": "items/i32.png",
+    "w": 93,
+    "h": 128,
+    "bytes": 18791
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.92
+  },
+  {
+   "file": "items/i33.webp",
+   "w": 124,
+   "h": 128,
+   "bytes": 4778,
+   "sha256": "a6ca41b47303e6c82f65a5b2e82a7d76c32234097b2c3251efa5213a2c1df43c",
+   "src": {
+    "file": "items/i33.png",
+    "w": 124,
+    "h": 128,
+    "bytes": 18074
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 38.09
+  },
+  {
+   "file": "items/i34.webp",
+   "w": 128,
+   "h": 110,
+   "bytes": 5756,
+   "sha256": "3d3b732eb9dac6bf731d5babd22e58862df7f06c12cc6886b79208e180da28a5",
+   "src": {
+    "file": "items/i34.png",
+    "w": 128,
+    "h": 110,
+    "bytes": 26663
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.04
+  },
+  {
+   "file": "items/i35.webp",
+   "w": 128,
+   "h": 121,
+   "bytes": 6650,
+   "sha256": "da81badb986f4679166e4f0cc41041b088a7d8425c7016360704f3eb21489e92",
+   "src": {
+    "file": "items/i35.png",
+    "w": 128,
+    "h": 121,
+    "bytes": 32041
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.31
+  },
+  {
+   "file": "items/i36.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 63736,
+   "sha256": "f0365559a8cf1d27434d363894b6a7bc309f22e2b974dd17bd82cec966830ff2",
+   "src": {
+    "file": "items/i36.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1040681
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 41.77
+  },
+  {
+   "file": "items/i37.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 14014,
+   "sha256": "0f4689dcd23d01b6872391ed37348a433f55ba926e2e6299cbdbc6e1912f874f",
+   "src": {
+    "file": "items/i37.png",
+    "w": 256,
+    "h": 256,
+    "bytes": 108444
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.99
+  },
+  {
+   "file": "sprites/bridge-deck.webp",
+   "w": 136,
+   "h": 280,
+   "bytes": 8024,
+   "sha256": "f201606252c3dc43ac4fbb0bd037b410f3c5688c842d344010b8d86945b8fba1",
+   "src": {
+    "file": "sprites/bridge-deck.png",
+    "w": 136,
+    "h": 280,
+    "bytes": 55764
+   },
+   "uvLocked": true,
+   "q": 88,
+   "psnr": 37.93
+  },
+  {
+   "file": "sprites/cloud.webp",
+   "w": 360,
+   "h": 210,
+   "bytes": 10572,
+   "sha256": "d90e207ab14fe1b7278a839d3f503d13933529d64e7bb3bd5c738dcadb571d46",
+   "src": {
+    "file": "sprites/cloud.png",
+    "w": 360,
+    "h": 210,
+    "bytes": 60478
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 42.0
+  },
+  {
+   "file": "sprites/dragonfly.webp",
+   "w": 256,
+   "h": 233,
+   "bytes": 21320,
+   "sha256": "3e716bbcd03edccd1f17f34b8cb2c070528496cf575b4697bd73cdd62d25ed03",
+   "src": {
+    "file": "sprites/dragonfly.png",
+    "w": 256,
+    "h": 233,
+    "bytes": 67780
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 32.41
+  },
+  {
+   "file": "sprites/fishbone.webp",
+   "w": 170,
+   "h": 89,
+   "bytes": 8194,
+   "sha256": "969fd426f95904c5cdc315b6b3ae52f2e0405435a7c37a142bf32c24a1cc1dcf",
+   "src": {
+    "file": "sprites/fishbone.png",
+    "w": 170,
+    "h": 89,
+    "bytes": 20861
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.03
+  },
+  {
+   "file": "sprites/iceblock.webp",
+   "w": 300,
+   "h": 297,
+   "bytes": 32760,
+   "sha256": "5e537204390be79c217794d21e87d558c32c3c72253f518a378f14adc1aeb771",
+   "src": {
+    "file": "sprites/iceblock.png",
+    "w": 300,
+    "h": 297,
+    "bytes": 145603
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 33.52
+  },
+  {
+   "file": "sprites/pebbles.webp",
+   "w": 180,
+   "h": 116,
+   "bytes": 7974,
+   "sha256": "fd1873f7a9151200748f07da18daf0bf8b2bbd81fddc2f0bb222e3ce6ebaca30",
+   "src": {
+    "file": "sprites/pebbles.png",
+    "w": 180,
+    "h": 116,
+    "bytes": 37698
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.77
+  },
+  {
+   "file": "sprites/plot.webp",
+   "w": 360,
+   "h": 247,
+   "bytes": 20382,
+   "sha256": "18a26076b47c7cc682a320f1931b23be191244e91fd948c97028230ac5224810",
+   "src": {
+    "file": "sprites/plot.png",
+    "w": 360,
+    "h": 247,
+    "bytes": 141635
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.18
+  },
+  {
+   "file": "sprites/scarecrow.webp",
+   "w": 243,
+   "h": 400,
+   "bytes": 30194,
+   "sha256": "6ac09dbbc7199d5c2a79642edf36daacd00db07ead23ce381d8e8d3249f17203",
+   "src": {
+    "file": "sprites/scarecrow.png",
+    "w": 243,
+    "h": 400,
+    "bytes": 117441
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 34.75
+  },
+  {
+   "file": "sprites/turtleshell.webp",
+   "w": 170,
+   "h": 125,
+   "bytes": 9836,
+   "sha256": "511e793d97224c7673e2cc717f33e1013b5cd2e7a6b398be89bd08bc770ab02f",
+   "src": {
+    "file": "sprites/turtleshell.png",
+    "w": 170,
+    "h": 125,
+    "bytes": 39228
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 34.39
+  },
+  {
+   "file": "sprites/willow2.webp",
+   "w": 249,
+   "h": 400,
+   "bytes": 67656,
+   "sha256": "e8692113c9aabcad10e5438ebfb4a9ee85e12d5c08a21beac576fac8a9916406",
+   "src": {
+    "file": "sprites/willow2.png",
+    "w": 249,
+    "h": 400,
+    "bytes": 146822
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 34.59
+  },
+  {
+   "file": "sprites/wutong-0.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 45590,
+   "sha256": "28974f903cf6f3c998e36ae962de4af1f40558e92f30224cf3e4be4c5e103246",
+   "src": {
+    "file": "sprites/wutong-0.png",
+    "w": 512,
+    "h": 512,
+    "bytes": 403434
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.12
+  },
+  {
+   "file": "sprites/wutong-1.webp",
+   "w": 768,
+   "h": 768,
+   "bytes": 100354,
+   "sha256": "99bd75559a2be1f8050f513d7283924f933341d335b7fb1dffb8fbd50ac31a5d",
+   "src": {
+    "file": "sprites/wutong-1.png",
+    "w": 768,
+    "h": 768,
+    "bytes": 941120
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 37.3
+  },
+  {
+   "file": "sprites/wutong-2.webp",
+   "w": 1024,
+   "h": 1024,
+   "bytes": 256902,
+   "sha256": "d7f47c9bc2450e6f24d5fcc0fd2271cf8d7a735da521a89ce94e83fb31024d40",
+   "src": {
+    "file": "sprites/wutong-2.png",
+    "w": 1024,
+    "h": 1024,
+    "bytes": 1811505
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.02
+  },
+  {
+   "file": "ui/animals.webp",
+   "w": 128,
+   "h": 107,
+   "bytes": 5870,
+   "sha256": "68b90a3f5903423c6dc419c12fb9a18ebb849ee5f0a30c628993dbf78b81514d",
+   "src": {
+    "file": "ui/animals.png",
+    "w": 128,
+    "h": 107,
+    "bytes": 24635
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.56
+  },
+  {
+   "file": "ui/bag.webp",
+   "w": 126,
+   "h": 128,
+   "bytes": 6180,
+   "sha256": "3e580752e15a932ddd085b45f1dbe02927591c26fbd6b18484ad57ef87a3fe12",
+   "src": {
+    "file": "ui/bag.png",
+    "w": 126,
+    "h": 128,
+    "bytes": 33355
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.85
+  },
+  {
+   "file": "ui/fish.webp",
+   "w": 128,
+   "h": 101,
+   "bytes": 6370,
+   "sha256": "242ef0bc0161b2cfbaee593c84a9523e49dbf43fb5c9b93416b28e340bfc4228",
+   "src": {
+    "file": "ui/fish.png",
+    "w": 128,
+    "h": 101,
+    "bytes": 26090
+   },
+   "uvLocked": false,
+   "q": 88,
+   "psnr": 34.11
+  },
+  {
+   "file": "ui/gear.webp",
+   "w": 126,
+   "h": 128,
+   "bytes": 6512,
+   "sha256": "5c0810e1a19a104f07d7867b265c6286c88a5b4e66a55a63884dfb84d373a12a",
+   "src": {
+    "file": "ui/gear.png",
+    "w": 126,
+    "h": 128,
+    "bytes": 29530
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.97
+  },
+  {
+   "file": "ui/hat.webp",
+   "w": 128,
+   "h": 92,
+   "bytes": 4908,
+   "sha256": "fcba8801b46c04cd2f3a99acbcd0a4fb3a70bb89d3c43162b1410d724a84b2e8",
+   "src": {
+    "file": "ui/hat.png",
+    "w": 128,
+    "h": 92,
+    "bytes": 24125
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.92
+  },
+  {
+   "file": "ui/log.webp",
+   "w": 128,
+   "h": 96,
+   "bytes": 5524,
+   "sha256": "823dfff303e50ffbd8ce72faff2302839c8948af382b0d6968773d4fcec72f10",
+   "src": {
+    "file": "ui/log.png",
+    "w": 128,
+    "h": 96,
+    "bytes": 25411
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 35.07
+  },
+  {
+   "file": "ui/market.webp",
+   "w": 128,
+   "h": 121,
+   "bytes": 10304,
+   "sha256": "ef7ba18592f828383800872426b10fb2186abe6f9dbbcc4757bc7da07d21d947",
+   "src": {
+    "file": "ui/market.png",
+    "w": 128,
+    "h": 121,
+    "bytes": 39073
+   },
+   "uvLocked": false,
+   "q": 94,
+   "psnr": 34.15
+  },
+  {
+   "file": "ui/seeds.webp",
+   "w": 110,
+   "h": 128,
+   "bytes": 5938,
+   "sha256": "26ac155fddc71364fbcae535378d3c3f9654c465a9f4c983ae6f6aab277290ed",
+   "src": {
+    "file": "ui/seeds.png",
+    "w": 110,
+    "h": 128,
+    "bytes": 31278
+   },
+   "uvLocked": false,
+   "q": 82,
+   "psnr": 36.2
+  }
+ ]
+}

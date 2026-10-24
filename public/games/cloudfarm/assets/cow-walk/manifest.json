@@ -1,0 +1,67 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "cow-walk",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "a959896d4a08af76307bbbfbd67fcc28e5d41fa56bd341cdd8537617758f56b8",
+   "size": 145002
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "56a920c9257d2ea5ad9fa5e7c5652e9a9d5bf028f668a64b0e2e69146684dc05",
+   "size": 443290
+  }
+ ],
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 246,
+  "h": 195,
+  "count": 16,
+  "cols": 4,
+  "rows": 4
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 12.12,
+ "frame_ms": 83,
+ "duration_ms": 1320,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9282
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 21.01,
+  "still_mae": null,
+  "bg_worst": 0.0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9871,
+  "alpha_semi_share": 0.0706,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 89,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 1094036785,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1.0,
+  "fit": null
+ }
+}

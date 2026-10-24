@@ -1,0 +1,73 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "peacock-walk",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "76f74b070846bd76bd7ca88c2e8211b3337d5388598acb74ccc7b86d5f1fde8d",
+   "size": 217212
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "bc03e3decc6b3ce3e318f4d0296c6ec946140ff3082e0336777910acccdbd79f",
+   "size": 346722
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "31d2b93d0f5e4f45e9b050a982ba8e2d1fd7b4b2cc7deab1f786983a62d3febe",
+   "size": 117742
+  }
+ ],
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 264,
+  "h": 236,
+  "count": 16,
+  "cols": 3,
+  "rows": 4
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 21.0,
+ "frame_ms": 48,
+ "duration_ms": 762,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9407
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 50.69,
+  "still_mae": null,
+  "bg_worst": 0.0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9749,
+  "alpha_semi_share": 0.1087,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 107,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 914308693,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1.0,
+  "fit": null
+ }
+}

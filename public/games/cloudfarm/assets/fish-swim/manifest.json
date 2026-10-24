@@ -1,0 +1,67 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "fish-swim",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "3a4481841f03cf73b8c713aeb7cef239fbcbd2951c98b449977580f252573672",
+   "size": 168442
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "6a1bb91e32e241ca1e2d3fed62927eb3c434d774d1daa3edf9e2b317ae185377",
+   "size": 376036
+  }
+ ],
+ "action_id": "swim_loop",
+ "kind": "loop",
+ "frame": {
+  "w": 243,
+  "h": 158,
+  "count": 16,
+  "cols": 4,
+  "rows": 4
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 12.6,
+ "frame_ms": 79,
+ "duration_ms": 1270,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9114
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 11.27,
+  "still_mae": null,
+  "bg_worst": 0.0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9906,
+  "alpha_semi_share": 0.0633,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 0,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 1915059843,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1.0,
+  "fit": null
+ }
+}

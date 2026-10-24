@@ -1,0 +1,73 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "sheep-walk",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "10e1cc9ab9889e9ae2c4c939f5a3237723e29fa89285722779537e044c42d1ce",
+   "size": 129199
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "16d6c7a07c56b97b4e20a8f94a8cba5f2fcbab52721b64c1a404dd0a01ef8e26",
+   "size": 298280
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "01f90e03de2cfafc18ef210ea9f114b9e097513e1ebb71852f051f6f93330014",
+   "size": 101126
+  }
+ ],
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 267,
+  "h": 209,
+  "count": 16,
+  "cols": 3,
+  "rows": 4
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 21.0,
+ "frame_ms": 48,
+ "duration_ms": 762,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.933
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 56.93,
+  "still_mae": null,
+  "bg_worst": 0.0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9845,
+  "alpha_semi_share": 0.0665,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 51,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 2048575536,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1.0,
+  "fit": null
+ }
+}

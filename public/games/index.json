@@ -13,6 +13,13 @@
       "version": "1.0.0",
       "file": "claw3d/claw3d.plugin.mjs",
       "assetBase": "claw3d/"
+    },
+    {
+      "id": "cloudfarm",
+      "name": "云边小农场",
+      "version": "1.1.0",
+      "file": "cloudfarm/cloudfarm.plugin.mjs",
+      "assetBase": "cloudfarm/"
     }
   ]
 }

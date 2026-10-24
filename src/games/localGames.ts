@@ -50,6 +50,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "1cd4e343352d3612d5b2f9a68fa72b90a2c672089908397cd8a182631ea6a7d6",
     "bytes": 5225796,
     "assetBase": "/games/claw3d/"
+  },
+  {
+    "id": "cloudfarm",
+    "name": "云边小农场",
+    "version": "1.1.0",
+    "url": "/games/cloudfarm/cloudfarm.plugin.mjs",
+    "sha256": "5ec292038dab05abd72445ad14ef256a829808961d16ac5584ee8e9a2148a363",
+    "bytes": 4492243,
+    "assetBase": "/games/cloudfarm/"
   }
 ]
 
