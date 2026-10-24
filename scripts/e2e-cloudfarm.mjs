@@ -343,9 +343,20 @@ let pointsAfterPlant = 0
       canvasH: r(cv),
       uiH: r(ui),
       uiOnBody: !!document.body.querySelector(':scope > #ui'),
-      // HUD 上不该再有 🪙 胶囊（宿主顶栏已经有了）和「＋」按钮
+      // HUD 上不该再有 🪙 / 🎟️（宿主顶栏都有）和「＋」按钮
       plus: box?.querySelectorAll('#plusBtn, .plus').length ?? 0,
-      hasVoucherPill: !!box?.querySelector('#hp'),
+      voucherPill: !!box?.querySelector('#hp'),
+      // 顶栏通栏底：有了就会在「等级」和「两个按钮」之间留出一条空栏
+      barBg: (() => {
+        const b = box?.querySelector('#ui .topbar')
+        if (!b) return '(没有 .topbar)'
+        const cs = getComputedStyle(b)
+        return `${cs.backgroundImage}|${cs.backgroundColor}`
+      })(),
+      barShadow: (() => {
+        const b = box?.querySelector('#ui .topbar')
+        return b ? getComputedStyle(b).boxShadow : ''
+      })(),
     }
   }, GAME_ID)
   /*
@@ -369,7 +380,23 @@ let pointsAfterPlant = 0
   )
   check('UI 层在容器里（没漏到 body 上）', shape.uiH > 0 && shape.uiOnBody === false, `ui ${shape.uiH}`)
   check('★ HUD 上没有「＋」按钮', shape.plus === 0, `plus=${shape.plus}`)
-  check('HUD 上有 🎟️ 兑换券胶囊', shape.hasVoucherPill)
+  /*
+   * ★ 两种币都交给宿主顶栏（2026-10-24）：
+   *   🪙 积分宿主一直有；🎟️ 兑换券从 HOST_API 4 起是**同一张** `db.harvestLedger`，
+   *   所以宿主对所有游戏都显示它。插件再画一枚 = 同一个数画两遍。
+   */
+  check('★ HUD 上没有 🎟️ 兑换券胶囊（宿主顶栏画）', shape.voucherPill === false)
+  check(
+    '★ 顶栏不再有通栏底（不留一条空栏）',
+    /none/.test(shape.barBg) && shape.barShadow === 'none',
+    `bg=${shape.barBg} shadow=${shape.barShadow}`,
+  )
+  // 反过来：宿主顶栏必须**真的**在显示兑换券（否则孩子哪儿都看不到这个数）
+  const hostVoucher = await page.evaluate(() => {
+    const el = document.querySelector('header [aria-label^="兑换券"]')
+    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : null
+  })
+  check('★ 宿主顶栏显示兑换券（插件当值时也在）', hostVoucher !== null, hostVoucher ?? '(顶栏没有兑换券)')
   // 留一张图给走查（`screenshots/` 才是要留的，这里进 scratch）
   await page.screenshot({ path: join(OUT, `${VIEWPORT}-host.png`) })
 
@@ -448,6 +475,20 @@ console.log('\n【③ 收成 → 卖出 → 兑换券】')
     afterSell.vouchers === (res.sold?.earned ?? -1),
     `0→${afterSell.vouchers}（卖出申报 ${res.sold?.earned}）`,
   )
+  /*
+   * ★ 光看 store 不够：孩子看到的是**顶栏那个数**。
+   *   `hostApi.mintVoucher` 里有 `deps.refresh()`（got > 0 时），这条断言就是钉住它 ——
+   *   漏了 refresh 的话 store 会变、顶栏不动，而所有 store 断言照样绿。
+   */
+  const headAfter = await page.evaluate(() => {
+    const el = document.querySelector('header [aria-label^="兑换券"]')
+    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : null
+  })
+  check(
+    '★ 卖出后宿主顶栏的兑换券数字跟着变了',
+    headAfter !== null && headAfter.includes(String(afterSell.vouchers)),
+    `${headAfter ?? '(没有)'}（余额 ${afterSell.vouchers}）`,
+  )
   check(
     '卖出**没有**把积分加回来',
     afterSell.balance === pointsAfterPlant,
@@ -462,6 +503,8 @@ console.log('\n【③ 收成 → 卖出 → 兑换券】')
     positives.length === 0,
     positives.length ? JSON.stringify(positives.map((r) => [r.delta, r.source])) : '0 行',
   )
+  // 卖掉之后再来一张：这时开局的 toast 已经散了，能看清宿主顶栏两枚币
+  await page.screenshot({ path: join(OUT, `${VIEWPORT}-host-after.png`) })
 }
 
 /* ============================================================

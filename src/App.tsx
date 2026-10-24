@@ -10,7 +10,6 @@ import { SetupWizard } from './features/onboarding/SetupWizard'
 import { ChildTour } from './features/onboarding/ChildTour'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { isNative, playTone } from './platform/files'
-import { GAME_FARM } from './games/ids'
 import { gameById } from './games/registry'
 import { pageFor } from './games/pages'
 import { PluginGameHost } from './games/PluginGameHost'
@@ -288,24 +287,27 @@ export default function App() {
                 </span>
               </div>
               {/*
-                兑换券是**农场这一款游戏**的币，不是全局的 —— 每款游戏有自己的
-                账本和自己的余额（见 `games/registry.ts`）。
-                所以只有当前游戏是农场时才渲染这枚币；否则会显示一枚跟眼前
-                这个游戏毫无关系的币，等于界面在说一件不成立的事。
-                ⚠️ 第二款游戏上线时，这里要改成「按当前游戏取它自己的币 + 余额」，
-                不能继续共用 `harvestBalance`。
+                兑换券**所有游戏都显示**（2026-10-24 改）。
+
+                原来这里写着「兑换券是农场这一款游戏的币，只有当前游戏是农场时才渲染」——
+                那是**旧口径**，从 HOST_API 4 起就不成立了：插件的 `mintVoucher` 走的是
+                同一个 `postHarvest` → `db.harvestLedger`，和内置农场卖菜、娃娃机兑奖
+                **是同一张账本**（`harvestBalance` 就是它的 delta 之和）。
+                所以兑换券是 App 级的，不是某一款游戏的。
+
+                这条也是「插件 HUD 别重复画宿主已有的币种」的另一半：
+                宿主在这里把 🎟️ 画全，插件里就不用再画一枚
+                （云边小农场 2026-10-24 已经把它从自己的顶栏删掉了）。
               */}
-              {activeGameId === GAME_FARM && (
-                <div
-                  className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
-                  aria-label={`兑换券 ${harvestBalance}`}
-                >
-                  <span className="text-base leading-none">🎟️</span>
-                  <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">
-                    {harvestBalance}
-                  </span>
-                </div>
-              )}
+              <div
+                className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
+                aria-label={`兑换券 ${harvestBalance}`}
+              >
+                <span className="text-base leading-none">🎟️</span>
+                <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">
+                  {harvestBalance}
+                </span>
+              </div>
               {/* 家长确认：放在设置旁边，和「家长相关」的事聚在一起。
                   尺寸从 40 提到 44 —— 44 是触控目标的下限，
                   这两个按钮孩子也会点（👀 能看自己交了什么）。 */}
