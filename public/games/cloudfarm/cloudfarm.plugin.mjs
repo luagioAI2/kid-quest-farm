@@ -39940,7 +39940,7 @@ var hW = class {
 		"tab.adopt": "领养",
 		"tab.mine": "我的（{n}/{m}）",
 		"adopt.info": "{t} 长大 · 每 {i} 产 {item} · 共 {k} 次",
-		"adopt.infoInf": "{t} 长大 · 每 {i} 产 {item} · 永久存活 · ∞ 次",
+		"adopt.infoInf": "{t} 长大 · 每 {i} 产 {item} · 永久存活 · 共 {k} 次",
 		"adopt.cost": "价格 {n} 🪙",
 		"btn.adopt": "领养",
 		"adopt.full": "住满啦",
@@ -39970,7 +39970,7 @@ var hW = class {
 		"st.sick": "生病 · 停产中",
 		"st.dead": "它安安静静地睡着了",
 		"st.left": "还能产 {n} 次",
-		"st.leftInf": "永久存活 · ∞ 次产出",
+		"st.leftInf": "永久存活 · 还能产 {n} 次",
 		"btn.feed": "🍽 喂一喂",
 		"btn.pet": "🤗 摸摸它",
 		"btn.collect": "收下产出",
@@ -40311,7 +40311,7 @@ var hW = class {
 		"tab.adopt": "Adopt",
 		"tab.mine": "Mine ({n}/{m})",
 		"adopt.info": "Grows in {t} · {item} every {i} · {k} times",
-		"adopt.infoInf": "Grows in {t} · {item} every {i} · Lives forever · ∞ times",
+		"adopt.infoInf": "Grows in {t} · {item} every {i} · Lives forever · {k} times",
 		"adopt.cost": "Price {n} 🪙",
 		"btn.adopt": "Adopt",
 		"adopt.full": "Full",
@@ -40341,7 +40341,7 @@ var hW = class {
 		"st.sick": "Sick · paused",
 		"st.dead": "Fell peacefully asleep",
 		"st.left": "{n} left",
-		"st.leftInf": "Lives forever · ∞ harvests",
+		"st.leftInf": "Lives forever · {n} harvests left",
 		"btn.feed": "🍽 Feed",
 		"btn.pet": "🤗 Pet",
 		"btn.collect": "Collect",
@@ -40681,7 +40681,7 @@ var hW = class {
 		"tab.adopt": "お迎え",
 		"tab.mine": "うちの子（{n}/{m}）",
 		"adopt.info": "{t}で成長・{i}ごとに{item}・全{k}回",
-		"adopt.infoInf": "{t}で成長・{i}ごとに{item}・永遠に生存・∞回",
+		"adopt.infoInf": "{t}で成長・{i}ごとに{item}・永遠に生存・計{k}回",
 		"adopt.cost": "価格 {n} 🪙",
 		"btn.adopt": "お迎え",
 		"adopt.full": "満員",
@@ -40711,7 +40711,7 @@ var hW = class {
 		"st.sick": "病気・お休み中",
 		"st.dead": "静かに眠りについた",
 		"st.left": "あと{n}回",
-		"st.leftInf": "永遠に生存 · ∞回収穫",
+		"st.leftInf": "永遠に生存 · 残り{n}回",
 		"btn.feed": "🍽 ごはん",
 		"btn.pet": "🤗 なでる",
 		"btn.collect": "受け取る",
@@ -44456,7 +44456,7 @@ function XG(e) {
 				item: wW(e.item, 4),
 				k: e.times
 			}))}</span>${o}
-        <div class="tags"><span class="tg c">${$(X("adopt.cost", { n: e.cost }))}</span><span class="tg h">${e.permanent ? "∞" : $(X("seed.cap", { n: KU(e) }))}</span><span class="tg ${i >= r ? "d" : "g"}">${$(X("adopt.capTag", { n: r }))} · ${i}/${r}</span></div></div>${a}</div>`;
+        <div class="tags"><span class="tg c">${$(X("adopt.cost", { n: e.cost }))}</span><span class="tg h">${$(X("seed.cap", { n: KU(e) }))}</span><span class="tg ${i >= r ? "d" : "g"}">${$(X("adopt.capTag", { n: r }))} · ${i}/${r}</span></div></div>${a}</div>`;
 		}).join("");
 	}
 	function ue() {
@@ -44490,7 +44490,7 @@ function XG(e) {
 	};
 	function R(e) {
 		let t = S.farm.animal(e), n = S.farm.animalInfo(t), r = n.def, i = "", a = 0;
-		t.dead ? i = X("st.dead") : t.sickSince == null ? t.poopSince == null ? n.mature ? S.farm.isBasking(t) ? (i = X("st.bask", { t: EW((t.baskUntil ?? 0) - S.farm.now()) }), a = 0) : n.spent ? i = X("st.spent") : t.kind === "dog" ? i = S.isSleeping(e) ? X("st.dogSleep") : X("st.patrol") : t.kind === "polarbear" && S.isNapping(e) ? i = X("st.bearSleep") : n.ready > 0 ? i = X("st.ready", { n: n.ready }) : (i = r.permanent ? X("st.next", { t: EW(n.nextAt) }) + " · " + X("st.leftInf") : X("st.next", { t: EW(n.nextAt) }) + " · " + X("st.left", { n: r.times - t.rounds }), a = n.cycleP) : (i = X("st.baby", { t: EW(n.nextAt) }), a = n.growP) : i = X("st.poop") : i = X("st.sick");
+		t.dead ? i = X("st.dead") : t.sickSince == null ? t.poopSince == null ? n.mature ? S.farm.isBasking(t) ? (i = X("st.bask", { t: EW((t.baskUntil ?? 0) - S.farm.now()) }), a = 0) : n.spent ? i = X("st.spent") : t.kind === "dog" ? i = S.isSleeping(e) ? X("st.dogSleep") : X("st.patrol") : t.kind === "polarbear" && S.isNapping(e) ? i = X("st.bearSleep") : n.ready > 0 ? i = X("st.ready", { n: n.ready }) : (i = X("st.next", { t: EW(n.nextAt) }) + " · " + (r.permanent ? X("st.leftInf", { n: Math.max(0, r.times - t.rounds) }) : X("st.left", { n: r.times - t.rounds })), a = n.cycleP) : (i = X("st.baby", { t: EW(n.nextAt) }), a = n.growP) : i = X("st.poop") : i = X("st.sick");
 		let o = !n.mature && !r.noBaby ? IG(`babies/${t.kind}.webp`) : IG(`animals/${t.kind}.webp`), s = r.zone === "pond" ? t.kind === "turtle" ? X("btn.feedTurtle") : X("btn.feedFish") : X("btn.feed"), c = "", l = "";
 		F.kind !== "animal" && RU(t.kind).zone === "ranch" && !t.dead && n.spent && (l = `<button class="btn y" data-act="balloonpop" data-arg="${e}">${$(X("btn.balloonPop"))}<small>1~2 🧪</small></button>`), t.kind === "peacock" && !t.dead && n.mature && (c = S.displayState(e).displaying ? `<button class="btn w" disabled>🦚 ${$(X("btn.displaying"))}</button>` : `<button class="btn w" id="disp-${e}" data-act="display" data-arg="${e}">🦚 ${$(X("btn.display"))}</button>`);
 		let u = "", d = "";
@@ -46134,7 +46134,7 @@ var RK = {
 	name: "云边小农场",
 	emoji: "🌾",
 	tabLabel: "农场",
-	version: "1.1.2",
+	version: "1.1.3",
 	minHostApi: 4,
 	coin: {
 		id: "cloudfarm-harvest",
