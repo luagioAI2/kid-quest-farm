@@ -84,7 +84,7 @@ function InstallAction({
   gateOpen: boolean
   installingId: string | null
   onInstall: (id: string) => void
-  size?: 'sm' | 'lg'
+  size?: 'xs' | 'sm' | 'lg'
 }) {
   const installedGames = useApp((s) => s.installedGames)
   const local = LOCAL_GAMES.find((g) => g.id === id)
@@ -93,7 +93,12 @@ function InstallAction({
   // 下载来的包不许占用内置 id（`installFromCatalog` 也会拒），这里直接把按钮拿掉
   const clashes = !!gameById(id)
 
-  const pad = size === 'lg' ? 'h-12 px-6 text-base' : 'h-10 px-3.5 text-xs'
+  const pad =
+    size === 'lg'
+      ? 'h-12 px-6 text-base'
+      : size === 'xs'
+        ? 'h-8 px-3.5 text-[12.5px]' // 列表行里的药丸
+        : 'h-10 px-3.5 text-xs'
 
   if (clashes) {
     return (
@@ -178,14 +183,136 @@ function InstallAction({
  *   `data-plugin-installed-row` / `data-plugin-set-current` / `data-plugin-uninstall*`
  *   也一样（原来在「已下载」卡上，现在挪到这一行上）。
  */
+/*
+ * 行尾那颗药丸。iOS 应用市场的一行**只有一个动作**（获取 / 打开），就这一颗。
+ *
+ * 三种配色对应三种语义，别再临时拼颜色：
+ *   · MAIN  —— 这一步该做的事（安装 / 更新 / 花钻石买）
+ *   · SOFT  —— 可做但不算主动作（设为当前）
+ *   · MUTE  —— 状态，不可点（当前 / 敬请期待）
+ */
+const PILL_BASE =
+  'btn h-8 shrink-0 rounded-full px-3.5 text-[12.5px] font-extrabold active:btn-press disabled:opacity-50'
+const PILL_MAIN = PILL_BASE + ' bg-sun-300 text-ink-900'
+const PILL_SOFT = PILL_BASE + ' border border-ink-200 bg-white text-ink-700'
+const PILL_MUTE =
+  'grid h-8 shrink-0 place-items-center rounded-full bg-ink-100 px-3.5 text-[12.5px] font-extrabold text-ink-500'
+
+/** 列表行左边的图标：插件用着色方块，内置用纸色方块 + emoji */
+function RowIcon({ emoji, tint }: { emoji: string; tint?: StoreTint }) {
+  return (
+    <span
+      aria-hidden
+      className={
+        'grid h-[58px] w-[58px] shrink-0 place-items-center rounded-[15px] border-2 border-ink-900/10 text-2xl shadow-flat ' +
+        (tint ? TINT_BG[tint] : 'bg-paper-2')
+      }
+    >
+      {emoji}
+    </span>
+  )
+}
+
+/**
+ * 一行。
+ *
+ * iOS 的做法：**整行可点进详情**，但行里那颗药丸要能单独点。
+ * 所以铺一层透明的覆盖按钮（`absolute inset-0`）当点击区，内容层
+ * `pointer-events-none` 让点击穿过去，只有药丸那一簇 `pointer-events-auto`。
+ *
+ * ⚠️ 别把覆盖层放在内容**上面**（`z-10`）—— 那会把药丸盖住，
+ *   `el.click()` 照样绿（它不走命中测试），真人点却点不动。
+ */
+function RowShell({
+  builtinId,
+  pluginId,
+  installedRowId,
+  upToDateId,
+  icon,
+  name,
+  note,
+  subtitle,
+  meta,
+  pill,
+  onOpen,
+}: {
+  builtinId?: string
+  pluginId?: string
+  installedRowId?: string
+  upToDateId?: string
+  icon: ReactNode
+  name: string
+  note?: string
+  subtitle: string
+  meta?: ReactNode
+  pill: ReactNode
+  onOpen?: () => void
+}) {
+  return (
+    <li
+      data-market-builtin={builtinId}
+      data-local-row={pluginId}
+      data-plugin-installed-row={installedRowId}
+      data-local-installed={upToDateId}
+      className="relative border-t border-ink-100 first:border-t-0"
+    >
+      {onOpen && pluginId && (
+        <button
+          type="button"
+          data-store-detail={pluginId}
+          onClick={onOpen}
+          aria-label={`查看 ${name} 的详情`}
+          className="absolute inset-0 z-0"
+        />
+      )}
+      <div className="pointer-events-none relative flex items-center gap-3 py-3">
+        {icon}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-1.5">
+            <span className="truncate font-display text-[15px] font-extrabold leading-tight text-ink-900">
+              {name}
+            </span>
+            {note && <span className="shrink-0 text-[10px] font-bold text-ink-300">{note}</span>}
+          </div>
+          {/* 一句话简介给**两行**：iOS 那行副标题只有「摄影与录像」这么短，
+              我们这句是完整句子，压成一行会截在「把收成拿到…」这种地方 */}
+          <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-ink-500">{subtitle}</p>
+          {meta && (
+            <p className="mt-0.5 truncate text-[10.5px] font-bold leading-snug text-ink-500">
+              {meta}
+            </p>
+          )}
+        </div>
+        <div className="pointer-events-auto shrink-0">{pill}</div>
+        {/*
+          箭头用 SVG 不用「›」那个字形：它的大小/基线跟着字体走，
+          换字体就变成一个小点（平板截图上几乎看不见）。iOS 用的也是矢量箭头。
+        */}
+        {onOpen && (
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            className="h-4 w-4 shrink-0 text-ink-300"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m9 5 7 7-7 7" />
+          </svg>
+        )}
+      </div>
+    </li>
+  )
+}
+
 type BuiltinRow = { src: 'builtin'; game: GameDef; kind: GameKind }
 type PluginRow = { src: 'plugin'; local: LocalGameEntry; g: StorefrontEntry; kind: GameKind }
 type MarketRow = BuiltinRow | PluginRow
 
 export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
   const [detailId, setDetailId] = useState<string | null>(null)
-  /** 正在等二次确认的插件 id —— 卸载会连存档一起删，不能一下点掉 */
-  const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const { install, installingId } = useInstall()
 
   const installedGames = useApp((s) => s.installedGames)
@@ -193,7 +320,6 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
   const ownedGameIds = useApp((s) => s.ownedGameIds)
   const setActiveGame = useApp((s) => s.setActiveGame)
   const buyGame = useApp((s) => s.buyGame)
-  const uninstallGame = useApp((s) => s.uninstallGame)
   const pushToast = useApp((s) => s.pushToast)
 
   // 内置在前（农场是首款），插件按 `storefront.ts` 的书写顺序跟在后面。
@@ -216,11 +342,6 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
     })
   }
 
-  const uninstall = async (id: string) => {
-    setConfirmingId(null)
-    await uninstallGame(id)
-  }
-
   return (
     <>
       <Card title="游戏市场" emoji="🏬">
@@ -232,78 +353,61 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
           const group = rows.filter((r) => r.kind === kind)
           if (group.length === 0) return null
           return (
-            <section key={kind} data-market-kind={kind} className="mt-4">
-              <h3 className="font-display text-base font-extrabold text-ink-900">
-                {GAME_KINDS[kind].label}
-              </h3>
-              <p className="mt-0.5 text-xs leading-snug text-ink-500">{GAME_KINDS[kind].note}</p>
+            <section key={kind} data-market-kind={kind} className="mt-5">
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="font-display text-[13px] font-extrabold tracking-wide text-ink-600">
+                  {GAME_KINDS[kind].label}
+                </h3>
+                <span className="shrink-0 text-[11px] font-bold text-ink-300">{group.length} 款</span>
+              </div>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-ink-500">
+                {GAME_KINDS[kind].note}
+              </p>
 
-              <ul className="mt-2 space-y-2.5">
+              <ul className="mt-1">
                 {group.map((row) => {
-                  /* ---------- 内置游戏：状态只有「当前 / 设为当前 / 要买 / 敬请期待」 ---------- */
+                  /* ---------- 内置：状态只有 当前 / 设为当前 / 要买 / 敬请期待 ---------- */
                   if (row.src === 'builtin') {
                     const { game } = row
                     const owned = ownedGameIds.includes(game.id)
                     const isCurrent = activeGameId === game.id
                     return (
-                      <li
+                      <RowShell
                         key={game.id}
-                        data-market-builtin={game.id}
-                        className="rounded-2xl border-3 border-ink-900/10 bg-paper-2 p-2.5"
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <span
-                            aria-hidden
-                            className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-3 border-ink-900/10 bg-paper text-2xl shadow-flat"
-                          >
-                            {game.emoji}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate font-display text-base font-extrabold text-ink-900">
-                                {game.name}
-                              </span>
-                              <span className="shrink-0 rounded-full bg-ink-900/5 px-1.5 py-0.5 text-[10px] font-extrabold text-ink-500">
-                                自带
-                              </span>
-                            </div>
-                            <p className="mt-0.5 text-xs leading-snug text-ink-600">{game.tagline}</p>
-                          </div>
-                        </div>
-
-                        <div className="mt-2 flex items-center justify-end gap-2">
-                          {/*
-                            `comingSoon` **只显示状态**：不写价格、不给购买按钮 ——
-                            买了也没得玩，那就是「界面承诺了它做不到的事」。
-                          */}
-                          {game.status === 'comingSoon' ? (
-                            <span className="rounded-full bg-ink-900/5 px-3 py-1 text-xs font-extrabold text-ink-500">
-                              敬请期待
-                            </span>
+                        builtinId={game.id}
+                        icon={<RowIcon emoji={game.emoji} />}
+                        name={game.name}
+                        note="自带"
+                        subtitle={game.tagline}
+                        /*
+                          `comingSoon` **只显示状态**：不写价格、不给购买按钮 ——
+                          买了也没得玩，那就是「界面承诺了它做不到的事」。
+                        */
+                        pill={
+                          game.status === 'comingSoon' ? (
+                            <span className={PILL_MUTE}>敬请期待</span>
                           ) : !owned ? (
                             <button
                               disabled={!gateOpen}
                               data-buy-game={game.id}
                               onClick={() => void buy(game.id)}
-                              className="btn h-10 shrink-0 rounded-full bg-sun-300 px-3.5 text-xs font-extrabold text-ink-900 shadow-flat active:btn-press disabled:opacity-50"
+                              className={PILL_MAIN}
                             >
                               {CURRENCY.mall.emoji} {game.priceMall}
                             </button>
                           ) : isCurrent ? (
-                            <span className="rounded-full bg-grass-300 px-3 py-1 text-xs font-extrabold text-ink-900">
-                              当前
-                            </span>
+                            <span className={PILL_MUTE}>当前</span>
                           ) : (
                             <button
                               disabled={!gateOpen}
                               onClick={() => void setActiveGame(game.id)}
-                              className="btn h-10 shrink-0 rounded-full bg-white px-3.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press disabled:opacity-50"
+                              className={PILL_SOFT}
                             >
                               设为当前
                             </button>
-                          )}
-                        </div>
-                      </li>
+                          )
+                        }
+                      />
                     )
                   }
 
@@ -312,128 +416,56 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                   const installed = installedGames[local.id]
                   const upToDate = !!installed && installed.version === local.version
                   const isCurrent = activeGameId === local.id
-                  const confirming = confirmingId === local.id
                   // 只有装过才谈得上「参数异常」—— 没装时没有 manifest 可校验
                   const issue = installed ? !!checkPluginEconomy(installed.economy) : false
 
                   return (
-                    <li
+                    <RowShell
                       key={local.id}
-                      data-local-row={local.id}
-                      data-plugin-installed-row={installed ? local.id : undefined}
-                      className="rounded-2xl border-3 border-ink-900/10 bg-paper-2 p-2.5"
-                    >
-                      <div className="flex items-start gap-2.5">
-                        {/* 图标是「看详情」的入口。整卡可点会和按钮抢命中区 */}
-                        <button
-                          data-store-detail={local.id}
-                          onClick={() => setDetailId(local.id)}
-                          aria-label={'查看 ' + g.name + ' 的详情'}
-                          className="shrink-0 active:scale-[.97]"
-                        >
-                          <GameIcon g={g} />
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate font-display text-base font-extrabold text-ink-900">
-                              {g.name}
-                            </span>
-                            <span className="shrink-0 text-[11px] font-bold text-ink-500">
-                              v{local.version}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 text-xs leading-snug text-ink-600">{g.pitch}</p>
-                          <p className="mt-1 text-[11px] font-bold text-ink-500">
-                            {g.age} · {g.session} · {formatSize(local.bytes)}
-                            {issue && <span className="ml-1 text-berry-500">· 参数异常</span>}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/*
-                        「练什么」**只在详情里**（2026-10-25 家长要求）。
-
-                        原来这一栏摊在每一行上，四条子弹把一行撑到 ~200px，
-                        三款游戏就把「游戏市场」撑过一整屏 —— 而列表本来只是
-                        用来挑的。家长原话：「练什么也放详情吧。」
-                        ⇒ 列表留一句话（`pitch`）+ 状态，练什么点「详情」看。
-
-                        ⚠️ 别把它挪回来：详情里那一节标题也叫「练什么」，
-                          内容同一个 `g.learn`，两处都画就是同一件事写两遍。
-                      */}
-
-                      {/*
-                        这一条 bar 上带着 `data-local-installed` —— 装好之后行尾显示的是
-                        「当前 / 设为当前」（不再是 `InstallAction` 里的「已安装」），
-                        但 e2e 要判的仍然是「界面上这一行变成已装了没有」。
-                        挂在 bar 上而不是挂在那两个控件上：一行只该有一个。
-                      */}
-                      <div
-                        className="mt-2 flex items-center justify-end gap-2"
-                        data-local-installed={upToDate ? local.id : undefined}
-                      >
-                        {/* 二次确认时只留这两个 —— 四个按钮挤在 390 上会点错 */}
-                        {confirming ? (
-                          <>
+                      pluginId={local.id}
+                      installedRowId={installed ? local.id : undefined}
+                      upToDateId={upToDate ? local.id : undefined}
+                      icon={<RowIcon emoji={g.emoji} tint={g.tint} />}
+                      name={g.name}
+                      note={`v${local.version}`}
+                      subtitle={g.pitch}
+                      /*
+                        行上只留「适龄 · 一次多久」。**体积不放这儿** ——
+                        iOS 应用市场的列表也不放，它属于详情。挤上来会把
+                        「一次 5~10 分钟」截断成「一次 5~10 分…」，正好截掉最要紧那半句。
+                      */
+                      meta={
+                        <>
+                          {g.age} · {g.session}
+                          {issue && <span className="text-berry-500"> · 参数异常</span>}
+                        </>
+                      }
+                      onOpen={() => setDetailId(local.id)}
+                      pill={
+                        upToDate ? (
+                          isCurrent ? (
+                            <span className={PILL_MUTE}>当前</span>
+                          ) : (
                             <button
-                              data-plugin-uninstall-confirm={local.id}
-                              onClick={() => void uninstall(local.id)}
-                              className="btn h-10 shrink-0 rounded-full bg-berry-500 px-3.5 text-xs font-extrabold text-white shadow-flat active:btn-press"
+                              disabled={!gateOpen}
+                              data-plugin-set-current={local.id}
+                              onClick={() => void setActiveGame(local.id)}
+                              className={PILL_SOFT}
                             >
-                              确认卸载
+                              设为当前
                             </button>
-                            <button
-                              onClick={() => setConfirmingId(null)}
-                              className="btn h-10 shrink-0 rounded-full bg-white px-3.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press"
-                            >
-                              取消
-                            </button>
-                          </>
+                          )
                         ) : (
-                          <>
-                            <button
-                              onClick={() => setDetailId(local.id)}
-                              className="btn h-10 shrink-0 rounded-full bg-white px-3.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press"
-                            >
-                              详情
-                            </button>
-                            {installed && (
-                              <button
-                                data-plugin-uninstall={local.id}
-                                onClick={() => setConfirmingId(local.id)}
-                                aria-label={`卸载 ${g.name}`}
-                                className="btn h-10 shrink-0 rounded-full bg-white px-3 text-xs font-extrabold text-ink-500 shadow-flat active:btn-press"
-                              >
-                                卸载
-                              </button>
-                            )}
-                            {upToDate ? (
-                              isCurrent ? (
-                                <span className="rounded-full bg-grass-300 px-3 py-1 text-xs font-extrabold text-ink-900">
-                                  当前
-                                </span>
-                              ) : (
-                                <button
-                                  disabled={!gateOpen}
-                                  data-plugin-set-current={local.id}
-                                  onClick={() => void setActiveGame(local.id)}
-                                  className="btn h-10 shrink-0 rounded-full bg-white px-3.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press disabled:opacity-50"
-                                >
-                                  设为当前
-                                </button>
-                              )
-                            ) : (
-                              <InstallAction
-                                id={local.id}
-                                gateOpen={gateOpen}
-                                installingId={installingId}
-                                onInstall={install}
-                              />
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </li>
+                          <InstallAction
+                            id={local.id}
+                            gateOpen={gateOpen}
+                            installingId={installingId}
+                            onInstall={install}
+                            size="xs"
+                          />
+                        )
+                      }
+                    />
                   )
                 })}
               </ul>
@@ -442,7 +474,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
         })}
 
         <p className="mt-4 text-[11px] leading-snug text-ink-500">
-          装之前会核对包的内容（本地包对内置哈希）。卸载会把这个游戏的存档一起删掉，下次装回来是重新开始。
+          装之前会核对包的内容（本地包对内置哈希）。卸载在「详情」最下面 —— 会把存档一起删掉。
         </p>
       </Card>
 
@@ -525,6 +557,12 @@ function DetailView({
 }) {
   const [zoom, setZoom] = useState<StoreShot | null>(null)
   const local = LOCAL_GAMES.find((x) => x.id === g.id)
+
+  const installedGames = useApp((s) => s.installedGames)
+  const uninstallGame = useApp((s) => s.uninstallGame)
+  /** 卸载的二次确认：会连存档一起删，不能一下点掉 */
+  const [confirmingUninstall, setConfirmingUninstall] = useState(false)
+  const installed = installedGames[g.id]
 
   return (
     <>
@@ -632,6 +670,52 @@ function DetailView({
           这个游戏花的是 App 里的积分（家长在「设置 → 游戏」里能看到每一局花多少、期望收回多少）。
           它不能自己发积分。
         </p>
+
+        {/*
+          卸载放在**详情最下面**（2026-10-25）。
+          列表行上只留一个动作（iOS 应用市场就是这样），而「删存档」是不可逆的，
+          不该躺在孩子每天滚的那一屏里等着被误触。
+        */}
+        {installed && (
+          <section className="mt-6 border-t border-ink-100 pt-4">
+            {confirmingUninstall ? (
+              <div className="rounded-2xl bg-berry-100 px-3 py-3">
+                <p className="text-[12.5px] leading-snug text-ink-700">
+                  卸载会连「{g.name}」的存档一起删掉，下次装回来是重新开始。
+                </p>
+                <div className="mt-2.5 flex gap-2">
+                  <button
+                    data-plugin-uninstall-confirm={g.id}
+                    onClick={() => {
+                      void (async () => {
+                        setConfirmingUninstall(false)
+                        await uninstallGame(g.id)
+                        onClose()
+                      })()
+                    }}
+                    className="btn h-10 flex-1 rounded-full bg-berry-500 text-sm font-extrabold text-white active:btn-press"
+                  >
+                    确认卸载
+                  </button>
+                  <button
+                    onClick={() => setConfirmingUninstall(false)}
+                    className="btn h-10 flex-1 rounded-full bg-white text-sm font-extrabold text-ink-700 active:btn-press"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                data-plugin-uninstall={g.id}
+                onClick={() => setConfirmingUninstall(true)}
+                className="btn h-10 w-full rounded-full bg-white text-sm font-extrabold text-berry-500 active:btn-press"
+              >
+                卸载这个游戏
+              </button>
+            )}
+          </section>
+        )}
       </div>
 
       {zoom && (

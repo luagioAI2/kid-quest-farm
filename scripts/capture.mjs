@@ -610,6 +610,27 @@ try {
   await wait(600)
   await shot('11c-games-installed')
 
+  /*
+    11d：装完之后**详情最下面多出一块「卸载」**（2026-10-25 从列表行挪进去的）——
+    这是这次新加的界面，不走查就等于没做。滚到最底下再拍。
+  */
+  if (installedId) {
+    await page.evaluate(
+      (id) => document.querySelector(`[data-store-detail="${id}"]`)?.click(),
+      installedId,
+    )
+    await wait(600)
+    await page.evaluate(() => {
+      const d = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
+      const sc = d?.querySelector('.overflow-y-auto')
+      if (sc) sc.scrollTop = sc.scrollHeight
+    })
+    await wait(400)
+    await shot('11d-games-detail-uninstall')
+    await page.evaluate(() => document.querySelector('[data-store-close]')?.click())
+    await wait(300)
+  }
+
   if (installedId) {
     await page.evaluate((id) => window.__kqf__.plugin.uninstall(id), installedId)
     await wait(700)

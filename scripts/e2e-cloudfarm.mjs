@@ -589,6 +589,12 @@ console.log('\n【⑤ 卸载：设置 → 游戏 → 卸载】')
 {
   const err = await openGameSettings()
   check('再次打开「设置 → 游戏」', err === null, err ?? '')
+  /*
+    卸载在**详情最下面**（2026-10-25 起）：列表行只留一个动作，
+    「删存档」这种不可逆的事不该躺在孩子每天滚的那一屏里。
+  */
+  check('点开详情（卸载在详情里）', await clickSel(`[data-store-detail="${GAME_ID}"]`))
+  await waitFor(`[data-plugin-uninstall="${GAME_ID}"]`, 5000)
   const clicked = await page.evaluate((id) => {
     const b = document.querySelector(`[data-plugin-uninstall="${id}"]`)
     if (!b) return false

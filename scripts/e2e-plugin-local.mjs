@@ -332,8 +332,22 @@ let pointsBefore = 0
   }, GAME_ID)
   check('游戏市场里列出了奖品公园', !!row, row?.text ?? '(没找到那一行)')
   check('安装按钮在、而且是可点的', !!row?.hasButton && row?.disabled === false, JSON.stringify(row))
-  // 体积是清单里给的提示值，不是校验依据；这里只确认它**不是「大小未知」**
-  check('那一行写了包体大小（说明清单里带着 bytes）', /MB|KB/.test(row?.text ?? ''), row?.text ?? '')
+  /*
+    体积是清单里给的提示值，不是校验依据；这里只确认它**不是「大小未知」**。
+    ⚠️ 2026-10-25 起体积**不在列表行上**了（iOS 应用市场的列表也不放体积，
+       挤在那一行会把「一次 3~8 分钟」截断），改到详情里判。
+  */
+  check('点开详情（体积在详情里）', await clickSel(`[data-store-detail="${GAME_ID}"]`))
+  await waitFor('[role="dialog"][aria-label="游戏详情"]', 5000)
+  const sizeChip = await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
+    if (!d) return null
+    const texts = [...d.querySelectorAll('span')].map((x) => (x.textContent ?? '').trim())
+    return texts.find((t) => /^[0-9]+(\.[0-9]+)?\s?(KB|MB)$/.test(t)) ?? null
+  })
+  check('详情里写了包体大小（说明清单里带着 bytes）', !!sizeChip, sizeChip ?? '详情里没找到体积')
+  await clickSel('[data-store-close]')
+  await wait(400)
 
   const clicked = await clickSel(`[data-local-install="${GAME_ID}"]`)
   check('点了「安装」', clicked)
@@ -843,6 +857,12 @@ console.log('\n【⑥ 卸载】')
   const err = await openGameSettings()
   check('又打开了「设置 → 游戏」', err === null, err ?? '')
 
+  /*
+    卸载在**详情最下面**（2026-10-25 起）—— 列表行只留一个动作，
+    「删存档」这种不可逆的事不该躺在孩子每天滚的那一屏里。
+  */
+  check('点开详情（卸载在详情里）', await clickSel(`[data-store-detail="${GAME_ID}"]`))
+  await waitFor(`[data-plugin-uninstall="${GAME_ID}"]`, 5000)
   check('点了「卸载」', await clickSel(`[data-plugin-uninstall="${GAME_ID}"]`))
   await wait(400)
   // 二次确认：卸载会连存档一起删，所以故意要点两下
