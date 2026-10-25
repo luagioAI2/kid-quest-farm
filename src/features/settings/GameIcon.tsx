@@ -36,7 +36,8 @@ import type { StoreTint } from '../../games/storefront'
 const BG: Record<StoreTint, [string, string, string]> = {
   grass: ['#D9F3AC', '#79C24E', '#3C8628'],
   sky: ['#D3EBFF', '#6FB2F2', '#2C6AB8'],
-  sun: ['#FFEDB4', '#F7B93C', '#B0700C'],
+  // 金色要**暖而亮**：偏红偏深就变成沙丘了（第一版 #F7B93C→#B0700C 就是）
+  sun: ['#FFF0C4', '#F5BE4A', '#A9761A'],
   berry: ['#FFCBE5', '#C883EC', '#8B3EC4'],
 }
 
@@ -44,9 +45,9 @@ const BG: Record<StoreTint, [string, string, string]> = {
  * 内置农场用 `sun`（麦田），云边小农场用 `grass`（草地）。
  *
  * 两个都是农场，**底色必须分开**，否则同一组里两行图标看起来是同一款游戏。
- * 内置那个没有 `tint` 字段（`GameDef` 里没有这个概念），所以在调用处给默认值。
+ * 内置那个没有 `tint` 字段（`GameDef` 里没有这个概念），所以这里给默认值。
  */
-export const DEFAULT_TINT: StoreTint = 'sun'
+const DEFAULT_TINT: StoreTint = 'sun'
 
 export function GameIconArt({
   id,
@@ -94,8 +95,9 @@ export function GameIconArt({
 function Farm({ deep }: { deep: string }) {
   return (
     <g>
-      <path d="M0 42c10-6 20-6 30-1s22-3 34-1v24H0Z" fill={deep} opacity=".4" />
-      <path d="M0 51c12-6 24-6 34-1s20-2 30-1v15H0Z" fill={deep} opacity=".78" />
+      {/* 两道丘压得很轻：压深了这块金色就从「麦田」变成「沙丘」 */}
+      <path d="M0 42c10-6 20-6 30-1s22-3 34-1v24H0Z" fill={deep} opacity=".3" />
+      <path d="M0 51c12-6 24-6 34-1s20-2 30-1v15H0Z" fill={deep} opacity=".55" />
       <circle cx="46" cy="15" r="10" fill="#FFF6C4" opacity=".5" />
       <circle cx="46" cy="15" r="6.2" fill="#FFD645" />
 
