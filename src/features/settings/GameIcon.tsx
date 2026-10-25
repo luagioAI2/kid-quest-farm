@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react'
 import type { StoreTint } from '../../games/storefront'
 
 /**
@@ -62,6 +63,8 @@ export function GameIconArt({
   const uid = `${id}-${tint}`
   const bgId = `gi-${uid}-bg`
   const glossId = `gi-${uid}-gloss`
+  /** 没有专属图形就用兜底那支 —— 不在表里 ≠ 报错，但也不假装是那个游戏 */
+  const Art = ART[id] ?? Fallback
 
   return (
     <svg viewBox="0 0 64 64" className={className} aria-hidden focusable="false">
@@ -80,14 +83,30 @@ export function GameIconArt({
       <rect width="64" height="64" fill={`url(#${bgId})`} />
       <rect width="64" height="64" fill={`url(#${glossId})`} />
 
-      {id === 'farm' && <Farm deep={deep} />}
-      {id === 'cloudfarm' && <CloudFarm deep={deep} />}
-      {id === 'prizepark' && <PrizePark deep={deep} />}
-      {id === 'claw3d' && <ClawMachine />}
-      {!['farm', 'cloudfarm', 'prizepark', 'claw3d'].includes(id) && <Fallback deep={deep} />}
+      <Art deep={deep} />
     </svg>
   )
 }
+
+/**
+ * id → 主体。**这是唯一的清单**。
+ *
+ * 原来写的是「四个 `id === 'x' && <X/>` + 一个 `!['a','b','c','d'].includes(id)`
+ * 才画兜底」—— 同一份 id 列表写了两遍。加一支新主体却忘了改那个数组时，
+ * 新图形和兜底**会同时画出来**（叠在一起），而且不报错。
+ *
+ * 换成表之后只有一个事实：不在表里就是兜底。`GameIcon.test.tsx` 钉着
+ * 「商店里的每一款都有自己那一支」，漏了会红。
+ */
+const ART: Record<string, (p: { deep: string }) => ReactElement> = {
+  farm: Farm,
+  cloudfarm: CloudFarm,
+  prizepark: PrizePark,
+  claw3d: ClawMachine,
+}
+
+/** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
+export const GAME_ART_IDS: string[] = Object.keys(ART)
 
 /* ============================ 四支主体 ============================ */
 
