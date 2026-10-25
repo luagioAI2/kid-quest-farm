@@ -3,8 +3,11 @@ import type { ReactNode } from 'react'
 import { useApp } from '../../store/useApp'
 import { Card } from './ui'
 import { Portal } from '../../components/Portal'
-import { LOCAL_GAMES } from '../../games/localGames'
+import { LOCAL_GAMES, type LocalGameEntry } from '../../games/localGames'
 import {
+  GAME_KINDS,
+  GAME_KIND_ORDER,
+  STOREFRONT,
   storefrontOf,
   type StorefrontEntry,
   type StoreShot,
@@ -128,78 +131,180 @@ function InstallAction({
 }
 
 /* ============================================================
-   ① 设置页里的入口卡
+   ① 设置页里的游戏市场 —— **列表直接摊在页面上**（2026-10-25）
    ============================================================ */
-export function GameStoreEntry({ gateOpen }: { gateOpen: boolean }) {
-  const [open, setOpen] = useState(false)
-  const shown = LOCAL_GAMES.map((g) => storefrontOf(g.id)).filter(
-    (g): g is StorefrontEntry => !!g,
+/**
+ * 为什么不再有「进入游戏市场」按钮 + 弹层列表
+ * ------------------------------------------------------------
+ * 原来这里是一张「三张封面 + 进入游戏市场」的卡，列表 / 详情 / 截图全在
+ * `Portal` 全屏层里。家长原话：
+ *
+ *   「为啥还要点进入游戏市场，直接在游戏页展示不行吗。装上就能在底部那个
+ *     游戏按钮里玩。每一款都写了它是让孩子练什么的。在这展示列表就行了吧。」
+ *
+ * 说得对：**列表本来就是这张卡的内容**，中间那一次点击什么也没换来。
+ * 所以列表摊平到页面上；弹层只留「详情（截图 + 关于）」—— 那是真的
+ * 需要更多地方才放得下的东西。
+ *
+ * ⚠️ 锚点：`data-local-row` / `data-local-install` / `data-local-installed` /
+ *   `data-store-detail` 是 e2e 与截图脚本在用的，**不能改名**。
+ *   `data-open-store` 随按钮一起没了（脚本那边同步改成「确认列表在页面上」）。
+ */
+export function GameMarketList({ gateOpen }: { gateOpen: boolean }) {
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const { install, installingId } = useInstall()
+  const installedGames = useApp((s) => s.installedGames)
+
+  // 顺序跟 `storefront.ts` 的书写顺序走 —— 那是**内容文件**，谁先谁后是有意的
+  // （农场在前、娃娃机在后）。`LOCAL_GAMES` 是打包清单，顺序没有含义。
+  const rows = STOREFRONT.map((g) => ({ g, local: LOCAL_GAMES.find((x) => x.id === g.id) })).filter(
+    (r): r is { g: StorefrontEntry; local: LocalGameEntry } => !!r.local,
   )
 
   return (
     <>
       <Card title="游戏市场" emoji="🏬">
         <p className="text-sm leading-relaxed text-ink-500">
-          装上就能在底部那个游戏按钮里玩。每一款都写了它是让孩子练什么的。
+          装上就能在底部那个游戏按钮里玩（装完在下面「已下载」点一下「设为当前」）。
+          每一款都写了它是让孩子练什么的。
         </p>
 
-        <div className="mt-3 flex gap-2">
-          {shown.map((g) => (
-            <div key={g.id} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-              <GameIcon g={g} />
-              <p className="w-full truncate text-center text-[11px] font-extrabold text-ink-700">
-                {g.name}
-              </p>
-            </div>
-          ))}
-        </div>
+        {GAME_KIND_ORDER.map((kind) => {
+          const group = rows.filter((r) => r.g.kind === kind)
+          // 空分类**不渲染**：摆一个「暂无」的栏目就是在说「我们没做完」
+          if (group.length === 0) return null
+          return (
+            <section key={kind} data-market-kind={kind} className="mt-4">
+              <h3 className="font-display text-base font-extrabold text-ink-900">
+                {GAME_KINDS[kind].label}
+              </h3>
+              <p className="mt-0.5 text-xs leading-snug text-ink-500">{GAME_KINDS[kind].note}</p>
 
-        <button
-          disabled={!gateOpen}
-          data-open-store
-          onClick={() => setOpen(true)}
-          className="btn mt-3 h-12 w-full rounded-2xl bg-sky-300 text-sm font-extrabold text-ink-900 shadow-flat active:btn-press disabled:opacity-50"
-        >
-          进入游戏市场
-        </button>
+              <ul className="mt-2 space-y-2.5">
+                {group.map(({ local, g }) => {
+                  // 只有装过才谈得上「参数异常」—— 没装时没有 manifest 可校验
+                  const m = installedGames[local.id]
+                  const issue = m ? !!checkPluginEconomy(m.economy) : false
+                  return (
+                    <li
+                      key={local.id}
+                      data-local-row={local.id}
+                      className="rounded-2xl border-3 border-ink-900/10 bg-paper-2 p-2.5"
+                    >
+                      <div className="flex items-start gap-2.5">
+                        {/* 图标是「看详情」的入口。整卡都可点会和「安装」按钮抢命中区 */}
+                        <button
+                          data-store-detail={local.id}
+                          onClick={() => setDetailId(local.id)}
+                          aria-label={'查看 ' + g.name + ' 的详情'}
+                          className="shrink-0 active:scale-[.97]"
+                        >
+                          <GameIcon g={g} />
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate font-display text-base font-extrabold text-ink-900">
+                              {g.name}
+                            </span>
+                            <span className="shrink-0 text-[11px] font-bold text-ink-500">
+                              v{local.version}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs leading-snug text-ink-600">{g.pitch}</p>
+                          <p className="mt-1 text-[11px] font-bold text-ink-500">
+                            {g.age} · {g.session} · {formatSize(local.bytes)}
+                            {issue && <span className="ml-1 text-berry-500">· 参数异常</span>}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/*
+                        「练什么」是家长真正要看的一栏，所以**不折叠、不截断**。
+                        数据来自 `storefront.ts` 的 `learn`，每条都必须是这个游戏里
+                        真的会发生的事（「买种子先花钱」可观察，「培养延迟满足」不是）。
+                      */}
+                      <div className="mt-2 rounded-xl bg-white/70 px-2.5 py-2">
+                        <p className="text-[11px] font-extrabold text-ink-500">练什么</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {g.learn.map((line) => (
+                            <li key={line} className="text-[11.5px] leading-snug text-ink-700">
+                              · {line}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setDetailId(local.id)}
+                          className="btn shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press"
+                        >
+                          看截图
+                        </button>
+                        <InstallAction
+                          id={local.id}
+                          gateOpen={gateOpen}
+                          installingId={installingId}
+                          onInstall={install}
+                        />
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )
+        })}
+
+        <p className="mt-4 text-[11px] leading-snug text-ink-500">
+          装之前会核对包的内容（本地包对内置哈希）。核对不过的一律不装。
+        </p>
       </Card>
 
-      {open && <GameStoreSheet gateOpen={gateOpen} onClose={() => setOpen(false)} />}
+      {detailId && (
+        <GameDetailSheet id={detailId} gateOpen={gateOpen} onClose={() => setDetailId(null)} />
+      )}
     </>
   )
 }
 
 /* ============================================================
-   ② 商店（全屏）：列表 → 详情
+   ② 详情（截图 + 关于）—— 唯一还留在弹层里的东西
    ============================================================ */
-function GameStoreSheet({ gateOpen, onClose }: { gateOpen: boolean; onClose: () => void }) {
-  const [detailId, setDetailId] = useState<string | null>(null)
+function GameDetailSheet({
+  id,
+  gateOpen,
+  onClose,
+}: {
+  id: string
+  gateOpen: boolean
+  onClose: () => void
+}) {
   const { install, installingId } = useInstall()
+  const g = storefrontOf(id)
 
   // Esc 关闭：桌面/平板上家长很自然会按
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (detailId) setDetailId(null)
-      else onClose()
+      if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [detailId, onClose])
+  }, [onClose])
 
-  const detail = detailId ? storefrontOf(detailId) : null
+  if (!g) return null
 
   return (
     <Portal>
       <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center md:p-6">
         <button
-          aria-label="关闭游戏市场"
+          aria-label="关闭游戏详情"
           onClick={onClose}
           className="anim-fade-in fixed inset-0 bg-ink-900/40 backdrop-blur-[2px]"
         />
         <div
           role="dialog"
-          aria-label="游戏市场"
+          aria-label="游戏详情"
           className="anim-sheet-up relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-paper shadow-2xl md:max-h-[85vh] md:max-w-2xl md:rounded-3xl"
         >
           {/* 抓手：手机上表示「能往下拉」，平板居中对话框上没有意义 */}
@@ -207,124 +312,16 @@ function GameStoreSheet({ gateOpen, onClose }: { gateOpen: boolean; onClose: () 
             <div className="mx-auto h-1.5 w-10 rounded-full bg-ink-900/15" />
           </div>
 
-          {detail ? (
-            <DetailView
-              g={detail}
-              gateOpen={gateOpen}
-              installingId={installingId}
-              onInstall={install}
-              onBack={() => setDetailId(null)}
-              onClose={onClose}
-            />
-          ) : (
-            <ListView
-              gateOpen={gateOpen}
-              installingId={installingId}
-              onInstall={install}
-              onOpenDetail={setDetailId}
-              onClose={onClose}
-            />
-          )}
+          <DetailView
+            g={g}
+            gateOpen={gateOpen}
+            installingId={installingId}
+            onInstall={install}
+            onClose={onClose}
+          />
         </div>
       </div>
     </Portal>
-  )
-}
-
-function ListView({
-  gateOpen,
-  installingId,
-  onInstall,
-  onOpenDetail,
-  onClose,
-}: {
-  gateOpen: boolean
-  installingId: string | null
-  onInstall: (id: string) => void
-  onOpenDetail: (id: string) => void
-  onClose: () => void
-}) {
-  // 订阅已安装清单：装完之后「参数异常」要跟着更新，不能停在旧值
-  const installedGames = useApp((s) => s.installedGames)
-  return (
-    <>
-      <header className="flex items-start gap-3 px-4 pb-3 pt-3 md:pt-5">
-        <div className="min-w-0 flex-1">
-          <h2 className="font-display text-xl font-extrabold text-ink-900">🏬 游戏市场</h2>
-          <p className="mt-0.5 text-xs leading-snug text-ink-500">
-            点开任意一款，能看到它让孩子练什么、里面长什么样。
-          </p>
-        </div>
-        <button
-          onClick={onClose}
-          aria-label="关闭"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-900/5 text-lg text-ink-700 active:bg-ink-900/10"
-        >
-          ✕
-        </button>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5">
-        <ul className="space-y-3">
-          {LOCAL_GAMES.map((local) => {
-            const g = storefrontOf(local.id)
-            if (!g) return null
-            // 只有装过才谈得上「参数异常」—— 没装时没有 manifest 可校验
-            const m = installedGames[local.id]
-            const issue = m ? !!checkPluginEconomy(m.economy) : false
-            return (
-              <li
-                key={local.id}
-                data-local-row={local.id}
-                className="flex items-center gap-3 rounded-2xl border-3 border-ink-900/10 bg-paper-2 p-2.5"
-              >
-                {/* 图标本身就是「点开详情」的按钮 —— 应用市场里整张卡都能点 */}
-                <button
-                  data-store-detail={local.id}
-                  onClick={() => onOpenDetail(local.id)}
-                  aria-label={'查看 ' + g.name + ' 的详情'}
-                  className="shrink-0 active:scale-[.97]"
-                >
-                  <GameIcon g={g} />
-                </button>
-
-                <button
-                  onClick={() => onOpenDetail(local.id)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate font-display text-base font-extrabold text-ink-900">
-                      {g.name}
-                    </span>
-                    <span className="shrink-0 text-[11px] font-bold text-ink-500">
-                      v{local.version}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-ink-600">
-                    {g.pitch}
-                  </span>
-                  <span className="mt-1 block text-[11px] font-bold text-ink-500">
-                    {g.age} · {g.session} · {formatSize(local.bytes)}
-                    {issue && <span className="ml-1 text-berry-500">· 参数异常</span>}
-                  </span>
-                </button>
-
-                <InstallAction
-                  id={local.id}
-                  gateOpen={gateOpen}
-                  installingId={installingId}
-                  onInstall={onInstall}
-                />
-              </li>
-            )
-          })}
-        </ul>
-
-        <p className="mt-4 text-[11px] leading-snug text-ink-500">
-          装之前会核对包的内容（本地包对内置哈希）。核对不过的一律不装。
-        </p>
-      </div>
-    </>
   )
 }
 
@@ -333,14 +330,12 @@ function DetailView({
   gateOpen,
   installingId,
   onInstall,
-  onBack,
   onClose,
 }: {
   g: StorefrontEntry
   gateOpen: boolean
   installingId: string | null
   onInstall: (id: string) => void
-  onBack: () => void
   onClose: () => void
 }) {
   const [zoom, setZoom] = useState<StoreShot | null>(null)
@@ -349,17 +344,11 @@ function DetailView({
   return (
     <>
       <header className="flex items-center gap-2 px-4 pb-2 pt-3 md:pt-5">
-        <button
-          data-store-back
-          onClick={onBack}
-          className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-ink-900/5 px-3 text-sm font-extrabold text-ink-700 active:bg-ink-900/10"
-        >
-          ← 返回
-        </button>
-        <span className="min-w-0 flex-1 truncate text-center text-xs font-extrabold text-ink-500">
-          游戏市场
+        <span className="min-w-0 flex-1 truncate text-sm font-extrabold text-ink-700">
+          游戏详情
         </span>
         <button
+          data-store-close
           onClick={onClose}
           aria-label="关闭"
           className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-900/5 text-lg text-ink-700 active:bg-ink-900/10"

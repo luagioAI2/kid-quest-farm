@@ -567,26 +567,18 @@ try {
   await wait(900)
   await shot('11b-games-settings')
 
-  // 进市场（Portal 全屏层，2026-10-24 起本地游戏都在这里面）
-  const storeOpened = await page.evaluate(() => {
-    const b = document.querySelector('[data-open-store]')
-    if (!b) return false
-    b.click()
-    return true
+  // 列表已经摊在设置页上（2026-10-25 改，不再有「进入游戏市场」弹层）
+  await page.waitForFunction(() => !!document.querySelector('[data-local-row]'), {
+    timeout: 10000,
   })
-  if (!storeOpened) throw new Error('截图脚本找不到「进入游戏市场」按钮（入口卡没渲染？）')
-  await page.waitForFunction(
-    () => !!document.querySelector('[role="dialog"][aria-label="游戏市场"]'),
-    { timeout: 10000 },
-  )
-  await wait(600)
+  await wait(400)
   await shot('11b2-games-market')
 
   // 详情页（第一款的「帮助孩子 / 截图 / 关于」）
   await page.evaluate(() => document.querySelector('[data-store-detail]')?.click())
   await wait(900)
   await shot('11b3-games-detail')
-  await page.evaluate(() => document.querySelector('[data-store-back]')?.click())
+  await page.evaluate(() => document.querySelector('[data-store-close]')?.click())
   await wait(600)
 
   const localInstallClicked = await page.evaluate(() => {
@@ -609,11 +601,8 @@ try {
   const installedId = await page.evaluate(
     () => document.querySelector('[data-local-installed]')?.getAttribute('data-local-installed') ?? '',
   )
-  // 装完把市场关掉，否则 11c 拍到的还是弹层，看不到「已下载」和「经济参数」
-  await page.evaluate(() => {
-    const b = document.querySelector('[role="dialog"][aria-label="游戏市场"] [aria-label="关闭"]')
-    if (b) b.click()
-  })
+  // 2026-10-25 起没有市场弹层了（列表就在页面上），这里不用关任何东西。
+  // 详情弹层已经在上面用 `[data-store-close]` 关掉了。
   await wait(600)
   await page.evaluate(() => {
     document.querySelector('[data-plugin-economy]')?.scrollIntoView({ block: 'center' })

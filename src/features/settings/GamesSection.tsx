@@ -3,7 +3,7 @@ import { useApp } from '../../store/useApp'
 import { GAMES } from '../../games/registry'
 import { Card } from './ui'
 import { PluginStoreCard } from './PluginStoreCard'
-import { GameStoreEntry } from './GameStore'
+import { GameMarketList } from './GameStore'
 import { CURRENCY } from '../../domain/currency'
 
 /**
@@ -194,16 +194,16 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
       </Card>
 
       {/*
-        ②″ 游戏市场 —— **应用市场形态的浏览入口**（2026-10-24）。
+        ②″ 游戏市场 —— **列表直接摊在这一页上**（2026-10-25 改）。
 
-        列表 / 详情 / 截图都在那一层的全屏页里（`GameStore.tsx`），
-        设置页只留一张「三张封面 + 进入」的卡 —— 否则这一页会变成
-        「什么都有、什么都找不到」。
+        原来是一张「三张封面 + 进入游戏市场」的卡，列表在弹层里；家长问
+        「为啥还要点进去，直接展示不行吗」。中间那一次点击确实什么也没换来，
+        所以列表摊平、按玩法性质分组，弹层只留详情（截图 + 关于）。
 
         安装仍然走 `installLocalGame`，和下面那张「在线商店」是两条来源、
         同一个落库口（`commitPluginBundle`）。
       */}
-      <GameStoreEntry gateOpen={gateOpen} />
+      <GameMarketList gateOpen={gateOpen} />
 
       {/*
         ②‴ 在线商店 —— 从**已签名目录**里装远程包（spec §12.4 / P2）。

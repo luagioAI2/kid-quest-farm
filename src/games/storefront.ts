@@ -27,6 +27,33 @@
 /** 图标底色档位（对应 `theme.css` 的色板）。三款游戏要能一眼分开 */
 export type StoreTint = 'grass' | 'sky' | 'sun' | 'berry'
 
+/**
+ * 分类口径：**按玩法性质**，不按「有没有产出」。
+ *
+ * 为什么不是按产出分：现在这三款**都**会产出兑换券（积分 → 游戏币 → 券），
+ * 按产出分的话「纯玩」那一类是空的，等于白设一个分类。
+ * 所以分类回答的是「玩起来是什么感觉」，而每一款卡片上照样标真实的
+ * 适龄 / 时长 / 体积 —— **分类是判断，数字是事实，两者不混**。
+ *
+ * ⚠️ 改这个字段之前先想清楚：它出现在家长看的那一页上，
+ * 而家长用这一栏决定「给不给孩子玩」。
+ */
+export type GameKind = 'think' | 'play'
+
+/** 分类的标题与一句说明。顺序由 `GAME_KIND_ORDER` 定，不靠对象键序。 */
+export const GAME_KINDS: Record<GameKind, { label: string; note: string }> = {
+  think: {
+    label: '动脑 · 有产出',
+    note: '花积分换游戏币，玩出来的东西能换成兑换券。攒不攒得下来，看得见。',
+  },
+  play: {
+    label: '纯玩 · 图个乐',
+    note: '同样是花积分换币，但产出看运气 —— 别指望靠它攒券。',
+  },
+}
+
+export const GAME_KIND_ORDER: GameKind[] = ['think', 'play']
+
 export interface StoreShot {
   /** 相对 `public/` 的路径 */
   src: string
@@ -46,6 +73,8 @@ export interface StorefrontEntry {
    * —— 列表给图标，截图留到详情页。
    */
   tint: StoreTint
+  /** 玩法性质（分类用，见 `GameKind`）。**必须和游戏真实的经济一致** */
+  kind: GameKind
   /** 一句话：这个游戏里孩子会做什么 */
   pitch: string
   /** 「帮助孩子」——3~4 条，必须是游戏里真的会发生的事 */
@@ -65,6 +94,7 @@ export const STOREFRONT: StorefrontEntry[] = [
     name: '云边小农场',
     emoji: '🌾',
     tint: 'grass',
+    kind: 'think',
     pitch: '种菜、养动物、把收成拿到市场上卖掉。',
     learn: [
       '买种子要先花钱，收成要等 —— 投入在前，回报在后',
@@ -91,6 +121,7 @@ export const STOREFRONT: StorefrontEntry[] = [
     name: '奖品公园',
     emoji: '🎁',
     tint: 'berry',
+    kind: 'think',
     pitch: '用币换奖品，换到的东西收进背包。',
     learn: [
       '每件奖品都有标价 —— 先看价，再决定买不买',
@@ -115,6 +146,7 @@ export const STOREFRONT: StorefrontEntry[] = [
     name: '爪爪乐',
     emoji: '🕹️',
     tint: 'sky',
+    kind: 'play',
     pitch: '一台 3D 娃娃机，看准了再下爪。',
     learn: [
       '换个角度看，爪子和娃娃的位置就不一样',

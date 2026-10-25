@@ -208,35 +208,27 @@ async function openGameSettings() {
 /**
  * 打开「设置 → 游戏 → 游戏市场」。
  *
- * ⚠️ 2026-10-24 起本地游戏收进了「游戏市场」弹层（`GameStore.tsx`，Portal 全屏）。
- *   `[data-local-*]` 锚点没改名，但**必须先点开市场**才在 DOM 里 ——
- *   否则红字会写成「没找到那一行」，看着像列表丢了，其实是没进门。
+ * ⚠️ 2026-10-25 起本地游戏列表**直接摊在「设置 → 游戏」页上**（`GameStore.tsx`），
+ *   不再有「进入游戏市场」弹层。`[data-local-*]` 锚点没改名，但到达这一页之后
+ *   才在 DOM 里 —— 否则红字会写成「没找到那一行」，看着像列表丢了。
  */
 async function openGameStore() {
   const err = await openGameSettings()
   if (err) return err
-  const opened = await page.evaluate(() => {
-    const b = document.querySelector('[data-open-store]')
-    if (!b) return false
-    b.click()
-    return true
-  })
-  if (!opened) return '设置页里没有「进入游戏市场」按钮'
+  // 2026-10-25 起列表**直接摊在设置页上**，不再有「进入游戏市场」按钮和弹层。
+  // 这一步改成「确认列表真的在 DOM 里」—— 少了它，后面 querySelector 拿到 null
+  // 会报「没找到那一行」，看着像游戏列表丢了，其实是市场那张卡没渲染。
   const shown = await page
-    .waitForFunction(() => !!document.querySelector('[role="dialog"][aria-label="游戏市场"]'), {
-      timeout: 8000,
-    })
+    .waitForFunction(() => !!document.querySelector('[data-local-row]'), { timeout: 8000 })
     .then(() => true, () => false)
-  return shown ? null : '游戏市场没打开'
+  return shown ? null : '设置页上没有游戏列表（游戏市场那张卡没渲染？）'
 }
 
 /** 关掉市场弹层（装完就关，后面每一步都该在设置页上做） */
 async function closeGameStore() {
-  await page.evaluate(() => {
-    const b = document.querySelector('[role="dialog"][aria-label="游戏市场"] [aria-label="关闭"]')
-    if (b) b.click()
-  })
-  await wait(500)
+  // 列表已经摊平在设置页上，没有弹层要关。保留这个函数是因为调用点很多 ——
+  // 直接删掉会让 diff 看不出「这里为什么不需要关了」。
+  await wait(100)
 }
 
 async function leaveSettings() {

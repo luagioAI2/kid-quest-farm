@@ -223,31 +223,23 @@ async function openGameSettings() {
  * 打开「设置 → 游戏 → 游戏市场」。
  *
  * ⚠️ 2026-10-24 起，本地游戏不再直接铺在设置页上，而是收进了**游戏市场弹层**
- *   （`GameStore.tsx`，Portal 全屏）。`[data-local-*]` 这些锚点名字没改，
- *   但**必须先点开市场**才在 DOM 里 —— 否则 `querySelector` 拿到 null，
- *   报错会写成「没找到那一行」，看着像游戏列表丢了，其实是没进门。
+ *   （`GameStore.tsx`，2026-10-25 起摊平在页面上、不再是弹层）。
+ *   `[data-local-*]` 这些锚点名字没改，但**到达这一页之后**才在 DOM 里 ——
+ *   否则 `querySelector` 拿到 null，报错会写成「没找到那一行」。
  */
 async function openGameStore() {
   const err = await openGameSettings()
   if (err) return err
-  const opened = await page.evaluate(() => {
-    const b = document.querySelector('[data-open-store]')
-    if (!b) return false
-    b.click()
-    return true
-  })
-  if (!opened) return '设置页里没有「进入游戏市场」按钮'
-  const shown = await waitFor('[role="dialog"][aria-label="游戏市场"]', 8000)
-  return shown ? null : '游戏市场没打开'
+  // 2026-10-25 起列表直接摊在设置页上，不再有「进入游戏市场」按钮和弹层
+  const shown = await waitFor('[data-local-row]', 8000)
+  return shown ? null : '设置页上没有游戏列表（游戏市场那张卡没渲染？）'
 }
 
 /** 关掉市场弹层。装完之后要关，否则后面每一步都隔着一层遮罩（点击照样能中，但截图全是被盖住的）。 */
 async function closeGameStore() {
-  await page.evaluate(() => {
-    const b = document.querySelector('[role="dialog"][aria-label="游戏市场"] [aria-label="关闭"]')
-    if (b) b.click()
-  })
-  await wait(500)
+  // 列表已经摊平在设置页上，没有弹层要关。保留这个函数是因为调用点很多 ——
+  // 直接删掉会让 diff 看不出「这里为什么不需要关了」。
+  await wait(100)
 }
 
 async function leaveSettings() {
