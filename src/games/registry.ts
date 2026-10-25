@@ -29,10 +29,15 @@ import { GAME_FARM, GAME_FISHING } from './ids'
  *
  * ## 这一轮做到哪
  *
- * **农场**和**娃娃机**是真游戏（`status: 'available'`）。钓鱼池还是**占位**：
- * 它会出现在家长栏的「游戏」列表里，但标「敬请期待」、**不渲染购买按钮、
+ * **农场**是唯一的内置真游戏（`status: 'available'`，首款免费、默认已拥有）。
+ * 娃娃机 2026-10-23 从内置删掉了（`332511b`），现在是 `public/games/` 里的插件包，
+ * 由 `localGames.ts` 提供、和内置游戏排在**同一张市场表**里（`GameStore.tsx`）。
+ *
+ * 钓鱼池还是**占位**：它会出现在那张表里，但标「敬请期待」、**不渲染购买按钮、
  * 也不显示价格** —— 因为买了也没得玩，那正是「界面承诺了它做不到的事」。
  */
+
+import type { GameKind } from './kind'
 
 export type GameStatus = 'available' | 'comingSoon'
 
@@ -44,6 +49,8 @@ export interface GameDef {
   emoji: string
   /** 给家长看的一句话：这游戏是干什么的。陈述句，别写广告词。 */
   tagline: string
+  /** 分类（见 `games/kind.ts`）。设置页把内置游戏和插件排在同一张表里，靠它分组 */
+  kind: GameKind
   status: GameStatus
   /** 钻石售价。`0` = 免费 */
   priceMall: number
@@ -57,6 +64,7 @@ export const GAMES: GameDef[] = [
     name: '农场',
     emoji: '🌾',
     tagline: '买种子种地、养动物、看行情。收成能换成兑换券。',
+    kind: 'think',
     status: 'available',
     // 首款免费并且默认已拥有 —— 家长 2026-10-14 拍板。
     priceMall: 0,
@@ -67,6 +75,7 @@ export const GAMES: GameDef[] = [
     name: '钓鱼池',
     emoji: '🎣',
     tagline: '钓鱼、养鱼。',
+    kind: 'play',
     status: 'comingSoon',
     priceMall: 150,
     defaultOwned: false,

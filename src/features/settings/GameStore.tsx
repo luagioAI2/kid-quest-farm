@@ -4,16 +4,16 @@ import { useApp } from '../../store/useApp'
 import { Card } from './ui'
 import { Portal } from '../../components/Portal'
 import { LOCAL_GAMES, type LocalGameEntry } from '../../games/localGames'
+import { GAME_KINDS, GAME_KIND_ORDER, type GameKind } from '../../games/kind'
 import {
-  GAME_KINDS,
-  GAME_KIND_ORDER,
   STOREFRONT,
   storefrontOf,
   type StorefrontEntry,
   type StoreShot,
   type StoreTint,
 } from '../../games/storefront'
-import { gameById } from '../../games/registry'
+import { GAMES, gameById, type GameDef } from '../../games/registry'
+import { CURRENCY } from '../../domain/currency'
 import { formatSize } from '../../games/size'
 import { checkPluginEconomy } from '../../domain/pluginEconomy'
 
@@ -131,11 +131,13 @@ function InstallAction({
 }
 
 /* ============================================================
-   ① 设置页里的游戏市场 —— **列表直接摊在页面上**（2026-10-25）
+   ① 游戏市场 —— **所有游戏一张表，状态写在行上**（2026-10-25）
    ============================================================ */
 /**
- * 为什么不再有「进入游戏市场」按钮 + 弹层列表
- * ------------------------------------------------------------
+ * 这张卡两天里被家长改了两次，两次都是同一件事：**少一层、少一处**。
+ *
+ * ### 第一次：不要「进入游戏市场」按钮 + 弹层列表
+ *
  * 原来这里是一张「三张封面 + 进入游戏市场」的卡，列表 / 详情 / 截图全在
  * `Portal` 全屏层里。家长原话：
  *
@@ -144,34 +146,85 @@ function InstallAction({
  *
  * 说得对：**列表本来就是这张卡的内容**，中间那一次点击什么也没换来。
  * 所以列表摊平到页面上；弹层只留「详情（截图 + 关于）」—— 那是真的
- * 需要更多地方才放得下的东西。
+ * 需要更多地方才放得下的东西。（`data-open-store` 随那个按钮一起没了，
+ * 脚本那边同步改成「确认列表在页面上」。）
+ *
+ * ### 第二次：不要「已购买 / 已下载 / 敬请期待」三张卡
+ *
+ * 原来同一款游戏会在两三处出现：买了在「已购买」、装好了在「已下载」、
+ * 没做的在「敬请期待」，而且**每处都能改它的状态**（买 / 装 / 设为当前 / 卸载）。
+ * 家长原话：
+ *
+ *   「感觉没必要 单独 已购买，已下载，敬请期待，直接 在 游戏市场。
+ *     每个游戏 不同状态呗。」
+ *
+ * ⇒ 一款游戏一行。状态是**这一行上的一个事实**（当前 / 已装 / 可装 / 要买 /
+ *   敬请期待），改状态的按钮也只在这一行上 —— 两处能改，就一定会走散。
+ *
+ * ## 两种来源，一张表
+ *
+ * | 来源 | 从哪来 | 谁决定它的状态 |
+ * | --- | --- | --- |
+ * | 内置 | `registry.ts`，编译进 App | `ownedGameIds`（买没买）+ `activeGameId` |
+ * | 插件 | `public/games/`，随包发 | `installedGames`（装没装）+ `activeGameId` |
  *
  * ⚠️ 锚点：`data-local-row` / `data-local-install` / `data-local-installed` /
- *   `data-store-detail` 是 e2e 与截图脚本在用的，**不能改名**。
- *   `data-open-store` 随按钮一起没了（脚本那边同步改成「确认列表在页面上」）。
+ *   `data-store-detail` 是 e2e 与截图脚本在用的，**不能改名**；
+ *   `data-plugin-installed-row` / `data-plugin-set-current` / `data-plugin-uninstall*`
+ *   也一样（原来在「已下载」卡上，现在挪到这一行上）。
  */
-export function GameMarketList({ gateOpen }: { gateOpen: boolean }) {
-  const [detailId, setDetailId] = useState<string | null>(null)
-  const { install, installingId } = useInstall()
-  const installedGames = useApp((s) => s.installedGames)
+type BuiltinRow = { src: 'builtin'; game: GameDef; kind: GameKind }
+type PluginRow = { src: 'plugin'; local: LocalGameEntry; g: StorefrontEntry; kind: GameKind }
+type MarketRow = BuiltinRow | PluginRow
 
-  // 顺序跟 `storefront.ts` 的书写顺序走 —— 那是**内容文件**，谁先谁后是有意的
-  // （农场在前、娃娃机在后）。`LOCAL_GAMES` 是打包清单，顺序没有含义。
-  const rows = STOREFRONT.map((g) => ({ g, local: LOCAL_GAMES.find((x) => x.id === g.id) })).filter(
-    (r): r is { g: StorefrontEntry; local: LocalGameEntry } => !!r.local,
-  )
+export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
+  const [detailId, setDetailId] = useState<string | null>(null)
+  /** 正在等二次确认的插件 id —— 卸载会连存档一起删，不能一下点掉 */
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const { install, installingId } = useInstall()
+
+  const installedGames = useApp((s) => s.installedGames)
+  const activeGameId = useApp((s) => s.activeGameId)
+  const ownedGameIds = useApp((s) => s.ownedGameIds)
+  const setActiveGame = useApp((s) => s.setActiveGame)
+  const buyGame = useApp((s) => s.buyGame)
+  const uninstallGame = useApp((s) => s.uninstallGame)
+  const pushToast = useApp((s) => s.pushToast)
+
+  // 内置在前（农场是首款），插件按 `storefront.ts` 的书写顺序跟在后面。
+  // 分组顺序由 `GAME_KIND_ORDER` 定，空分类不渲染。
+  const rows: MarketRow[] = [
+    ...GAMES.map((game) => ({ src: 'builtin' as const, game, kind: game.kind })),
+    ...STOREFRONT.map((g) => {
+      const local = LOCAL_GAMES.find((x) => x.id === g.id)
+      return local ? { src: 'plugin' as const, local, g, kind: g.kind } : null
+    }).filter((r): r is PluginRow => r !== null),
+  ]
+
+  const buy = async (id: string) => {
+    const res = await buyGame(id)
+    pushToast({
+      kind: res.ok ? 'success' : 'warn',
+      title: res.ok ? '买好了' : '没买成',
+      detail: res.message,
+      emoji: res.ok ? '✅' : '⚠️',
+    })
+  }
+
+  const uninstall = async (id: string) => {
+    setConfirmingId(null)
+    await uninstallGame(id)
+  }
 
   return (
     <>
       <Card title="游戏市场" emoji="🏬">
         <p className="text-sm leading-relaxed text-ink-500">
-          装上就能在底部那个游戏按钮里玩（装完在下面「已下载」点一下「设为当前」）。
-          每一款都写了它是让孩子练什么的。
+          每一款都写了它是让孩子练什么的。装好之后在这一行点「设为当前」，底部那个游戏按钮就是它。
         </p>
 
         {GAME_KIND_ORDER.map((kind) => {
-          const group = rows.filter((r) => r.g.kind === kind)
-          // 空分类**不渲染**：摆一个「暂无」的栏目就是在说「我们没做完」
+          const group = rows.filter((r) => r.kind === kind)
           if (group.length === 0) return null
           return (
             <section key={kind} data-market-kind={kind} className="mt-4">
@@ -181,18 +234,92 @@ export function GameMarketList({ gateOpen }: { gateOpen: boolean }) {
               <p className="mt-0.5 text-xs leading-snug text-ink-500">{GAME_KINDS[kind].note}</p>
 
               <ul className="mt-2 space-y-2.5">
-                {group.map(({ local, g }) => {
+                {group.map((row) => {
+                  /* ---------- 内置游戏：状态只有「当前 / 设为当前 / 要买 / 敬请期待」 ---------- */
+                  if (row.src === 'builtin') {
+                    const { game } = row
+                    const owned = ownedGameIds.includes(game.id)
+                    const isCurrent = activeGameId === game.id
+                    return (
+                      <li
+                        key={game.id}
+                        data-market-builtin={game.id}
+                        className="rounded-2xl border-3 border-ink-900/10 bg-paper-2 p-2.5"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span
+                            aria-hidden
+                            className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-3 border-ink-900/10 bg-paper text-2xl shadow-flat"
+                          >
+                            {game.emoji}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-display text-base font-extrabold text-ink-900">
+                                {game.name}
+                              </span>
+                              <span className="shrink-0 rounded-full bg-ink-900/5 px-1.5 py-0.5 text-[10px] font-extrabold text-ink-500">
+                                自带
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-xs leading-snug text-ink-600">{game.tagline}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 flex items-center justify-end gap-2">
+                          {/*
+                            `comingSoon` **只显示状态**：不写价格、不给购买按钮 ——
+                            买了也没得玩，那就是「界面承诺了它做不到的事」。
+                          */}
+                          {game.status === 'comingSoon' ? (
+                            <span className="rounded-full bg-ink-900/5 px-3 py-1 text-xs font-extrabold text-ink-500">
+                              敬请期待
+                            </span>
+                          ) : !owned ? (
+                            <button
+                              disabled={!gateOpen}
+                              data-buy-game={game.id}
+                              onClick={() => void buy(game.id)}
+                              className="btn h-10 shrink-0 rounded-full bg-sun-300 px-3.5 text-xs font-extrabold text-ink-900 shadow-flat active:btn-press disabled:opacity-50"
+                            >
+                              {CURRENCY.mall.emoji} {game.priceMall}
+                            </button>
+                          ) : isCurrent ? (
+                            <span className="rounded-full bg-grass-300 px-3 py-1 text-xs font-extrabold text-ink-900">
+                              当前
+                            </span>
+                          ) : (
+                            <button
+                              disabled={!gateOpen}
+                              onClick={() => void setActiveGame(game.id)}
+                              className="btn h-10 shrink-0 rounded-full bg-white px-3.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press disabled:opacity-50"
+                            >
+                              设为当前
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    )
+                  }
+
+                  /* ---------- 插件：可装 / 已装 / 当前 ---------- */
+                  const { local, g } = row
+                  const installed = installedGames[local.id]
+                  const upToDate = !!installed && installed.version === local.version
+                  const isCurrent = activeGameId === local.id
+                  const confirming = confirmingId === local.id
                   // 只有装过才谈得上「参数异常」—— 没装时没有 manifest 可校验
-                  const m = installedGames[local.id]
-                  const issue = m ? !!checkPluginEconomy(m.economy) : false
+                  const issue = installed ? !!checkPluginEconomy(installed.economy) : false
+
                   return (
                     <li
                       key={local.id}
                       data-local-row={local.id}
+                      data-plugin-installed-row={installed ? local.id : undefined}
                       className="rounded-2xl border-3 border-ink-900/10 bg-paper-2 p-2.5"
                     >
                       <div className="flex items-start gap-2.5">
-                        {/* 图标是「看详情」的入口。整卡都可点会和「安装」按钮抢命中区 */}
+                        {/* 图标是「看详情」的入口。整卡可点会和按钮抢命中区 */}
                         <button
                           data-store-detail={local.id}
                           onClick={() => setDetailId(local.id)}
@@ -220,8 +347,8 @@ export function GameMarketList({ gateOpen }: { gateOpen: boolean }) {
 
                       {/*
                         「练什么」是家长真正要看的一栏，所以**不折叠、不截断**。
-                        数据来自 `storefront.ts` 的 `learn`，每条都必须是这个游戏里
-                        真的会发生的事（「买种子先花钱」可观察，「培养延迟满足」不是）。
+                        每条都必须是这个游戏里真的会发生的事
+                        （「买种子先花钱」可观察，「培养延迟满足」不是）。
                       */}
                       <div className="mt-2 rounded-xl bg-white/70 px-2.5 py-2">
                         <p className="text-[11px] font-extrabold text-ink-500">练什么</p>
@@ -234,19 +361,76 @@ export function GameMarketList({ gateOpen }: { gateOpen: boolean }) {
                         </ul>
                       </div>
 
-                      <div className="mt-2 flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => setDetailId(local.id)}
-                          className="btn shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press"
-                        >
-                          看截图
-                        </button>
-                        <InstallAction
-                          id={local.id}
-                          gateOpen={gateOpen}
-                          installingId={installingId}
-                          onInstall={install}
-                        />
+                      {/*
+                        这一条 bar 上带着 `data-local-installed` —— 装好之后行尾显示的是
+                        「当前 / 设为当前」（不再是 `InstallAction` 里的「已安装」），
+                        但 e2e 要判的仍然是「界面上这一行变成已装了没有」。
+                        挂在 bar 上而不是挂在那两个控件上：一行只该有一个。
+                      */}
+                      <div
+                        className="mt-2 flex items-center justify-end gap-2"
+                        data-local-installed={upToDate ? local.id : undefined}
+                      >
+                        {/* 二次确认时只留这两个 —— 四个按钮挤在 390 上会点错 */}
+                        {confirming ? (
+                          <>
+                            <button
+                              data-plugin-uninstall-confirm={local.id}
+                              onClick={() => void uninstall(local.id)}
+                              className="btn h-10 shrink-0 rounded-full bg-berry-500 px-3.5 text-xs font-extrabold text-white shadow-flat active:btn-press"
+                            >
+                              确认卸载
+                            </button>
+                            <button
+                              onClick={() => setConfirmingId(null)}
+                              className="btn h-10 shrink-0 rounded-full bg-white px-3.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press"
+                            >
+                              取消
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => setDetailId(local.id)}
+                              className="btn h-10 shrink-0 rounded-full bg-white px-3.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press"
+                            >
+                              详情
+                            </button>
+                            {installed && (
+                              <button
+                                data-plugin-uninstall={local.id}
+                                onClick={() => setConfirmingId(local.id)}
+                                aria-label={`卸载 ${g.name}`}
+                                className="btn h-10 shrink-0 rounded-full bg-white px-3 text-xs font-extrabold text-ink-500 shadow-flat active:btn-press"
+                              >
+                                卸载
+                              </button>
+                            )}
+                            {upToDate ? (
+                              isCurrent ? (
+                                <span className="rounded-full bg-grass-300 px-3 py-1 text-xs font-extrabold text-ink-900">
+                                  当前
+                                </span>
+                              ) : (
+                                <button
+                                  disabled={!gateOpen}
+                                  data-plugin-set-current={local.id}
+                                  onClick={() => void setActiveGame(local.id)}
+                                  className="btn h-10 shrink-0 rounded-full bg-white px-3.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press disabled:opacity-50"
+                                >
+                                  设为当前
+                                </button>
+                              )
+                            ) : (
+                              <InstallAction
+                                id={local.id}
+                                gateOpen={gateOpen}
+                                installingId={installingId}
+                                onInstall={install}
+                              />
+                            )}
+                          </>
+                        )}
                       </div>
                     </li>
                   )
@@ -257,7 +441,7 @@ export function GameMarketList({ gateOpen }: { gateOpen: boolean }) {
         })}
 
         <p className="mt-4 text-[11px] leading-snug text-ink-500">
-          装之前会核对包的内容（本地包对内置哈希）。核对不过的一律不装。
+          装之前会核对包的内容（本地包对内置哈希）。卸载会把这个游戏的存档一起删掉，下次装回来是重新开始。
         </p>
       </Card>
 

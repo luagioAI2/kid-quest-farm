@@ -372,6 +372,17 @@ let pointsAfterPlant = 0
       parentH: r(box?.parentElement),
       canvas: box?.querySelectorAll('canvas').length ?? 0,
       canvasH: r(cv),
+      /*
+        ⚠️ 「个数必须 = 1」是**过期的期望**，不是不变量：云边小农场自己会建多个
+        canvas（`createElement('canvas')` 在包里出现 5 次 —— 主画面之外还有效果层）。
+        2026-10-25 实测：盒子里有 2 个 canvas，两个都 698 高，画面完全正常，
+        而这一条红在「个数」上，报错还只打两个高度 ⇒ 看着像通过的数。
+        ➜ 改回它本来的意思：**最大的那块画布要铺满盒子**，且没有 0×0 的画布。
+      */
+      canvases: [...(box?.querySelectorAll('canvas') ?? [])].map((c) => {
+        const b = c.getBoundingClientRect()
+        return { w: Math.round(b.width), h: Math.round(b.height) }
+      }),
       uiH: r(ui),
       uiOnBody: !!document.body.querySelector(':scope > #ui'),
       // HUD 上不该再有 🪙 / 🎟️（宿主顶栏都有）和「＋」按钮
@@ -404,10 +415,14 @@ let pointsAfterPlant = 0
     shape.hostH > 100 && Math.abs(shape.hostH - shape.parentH) <= 1,
     `父容器 ${shape.parentH} · 插件盒 ${shape.hostH}`,
   )
+  const mainCanvasH = Math.max(0, ...shape.canvases.map((c) => c.h))
   check(
     'canvas 填满插件盒子',
-    shape.canvas === 1 && Math.abs(shape.canvasH - shape.hostH) <= 2,
-    `盒子 ${shape.hostH} · canvas ${shape.canvasH}`,
+    shape.canvases.length > 0 &&
+      Math.abs(mainCanvasH - shape.hostH) <= 2 &&
+      shape.canvases.every((c) => c.w > 0 && c.h > 0),
+    `盒子 ${shape.hostH} · 最大 canvas ${mainCanvasH} · ` +
+      `共 ${shape.canvases.length} 个 ${JSON.stringify(shape.canvases)}`,
   )
   check('UI 层在容器里（没漏到 body 上）', shape.uiH > 0 && shape.uiOnBody === false, `ui ${shape.uiH}`)
   check('★ HUD 上没有「＋」按钮', shape.plus === 0, `plus=${shape.plus}`)

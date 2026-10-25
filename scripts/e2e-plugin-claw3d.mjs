@@ -279,7 +279,7 @@ let pointsBefore = 0
 
   const after = await snap()
   check(`装上的版本是 v${GAME_VERSION}`, (await page.evaluate((id) => window.__kqf__.plugin.installed()[id]?.version, GAME_ID)) === GAME_VERSION)
-  check('「已下载」卡片里出现了它', await waitFor(`[data-plugin-installed-row="${GAME_ID}"]`, 5000))
+  check('市场里那一行变成「已装」', await waitFor(`[data-plugin-installed-row="${GAME_ID}"]`, 5000))
   check('已安装清单里有 claw3d', after.installed.includes(GAME_ID), after.installed.join(','))
 
   /*

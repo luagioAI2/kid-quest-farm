@@ -1,20 +1,25 @@
 import { useState } from 'react'
 import { useApp } from '../../store/useApp'
-import { GAMES } from '../../games/registry'
 import { Card } from './ui'
 import { PluginStoreCard } from './PluginStoreCard'
-import { GameMarketList } from './GameStore'
+import { GameMarket } from './GameStore'
 import { CURRENCY } from '../../domain/currency'
 
 /**
- * 家长栏 → 「游戏」。
+ * 家长栏 → 「游戏」。三块，各回答一个问题：
  *
- * 五块，各回答一个问题：
  *   ① **钻石** —— 有多少、从哪来（含手动发放）；
- *   ② **已购买** —— 内置游戏里我有哪些、现在玩的是哪一个（可切换）；
- *   ②′ **游戏商店** —— 从已签名目录装第三方游戏（`PluginStoreCard`，没配地址时只有一句说明）；
- *   ③ **已下载** —— 运行时装进来的游戏（装了才显示，见那边的注释）；
- *   ④ **敬请期待** —— 还没做的。
+ *   ② **游戏市场** —— 所有游戏一张表：内置的 + 随包发的插件，**状态写在行上**
+ *      （当前 / 已装 / 可装 / 要买 / 敬请期待）；
+ *   ③ **在线商店** —— 从已签名目录装远程包（`PluginStoreCard`，没配地址时只有一句说明）。
+ *
+ * ## ⚠️ 2026-10-25 合并了三张卡
+ *
+ * 原来是「已购买 / 已下载 / 敬请期待」三张，同一款游戏会在两三处出现，
+ * 而且**每处都能改它的状态**。家长原话：
+ *   「感觉没必要 单独 已购买，已下载，敬请期待，直接 在 游戏市场。
+ *     每个游戏 不同状态呗。」
+ * ⇒ 合并进 ②。**加新状态时改 `GameMarket` 里那一行的状态机，不要再开一张卡。**
  *
  * ## 文案口径（这个项目被家长点过名）
  *
@@ -24,11 +29,7 @@ import { CURRENCY } from '../../domain/currency'
  * ## ⚠️ 不许承诺做不到的事
  *
  * `comingSoon` 的游戏**不显示价格、也不渲染购买按钮** —— 买了也没得玩。
- * 同理 ③ 整块是「有才渲染」，而不是摆一个空栏目 + 一个点了会失败的按钮。
- *
- * ⚠️ 历史：① 曾经写着「现在还没有地方能拿到钻石」。2026-10-16 娃娃机
- * 上线（用钻石买）之后那句就不成立了 —— 没有发币入口的话，购买按钮
- * 按下去必然失败。所以加了「手动发放」，文案也一起改了。
+ * 在线商店没配地址时只有一句说明，不摆一个按下去必然失败的按钮。
  */
 
 /**
@@ -43,33 +44,10 @@ const MALL_COIN_EMOJI = CURRENCY.mall.emoji
 
 export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
   const mallBalance = useApp((s) => s.mallBalance)
-  const ownedGameIds = useApp((s) => s.ownedGameIds)
-  const activeGameId = useApp((s) => s.activeGameId)
-  const setActiveGame = useApp((s) => s.setActiveGame)
-  const buyGame = useApp((s) => s.buyGame)
-  const pushToast = useApp((s) => s.pushToast)
-  const installedGames = useApp((s) => s.installedGames)
-  const uninstallGame = useApp((s) => s.uninstallGame)
   const mintMall = useApp((s) => s.mintMall)
-
-  /** 正在等二次确认的插件游戏 id —— 卸载会连存档一起删，不能一下点掉 */
-  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const pushToast = useApp((s) => s.pushToast)
   /** 发放按钮的防重入：连点两下会发两次（每次都是一笔真的账） */
   const [busyMint, setBusyMint] = useState(false)
-
-  const owned = GAMES.filter((g) => ownedGameIds.includes(g.id))
-  const notOwned = GAMES.filter((g) => !ownedGameIds.includes(g.id))
-  const installed = Object.values(installedGames)
-
-  const buy = async (id: string) => {
-    const res = await buyGame(id)
-    pushToast({
-      kind: res.ok ? 'success' : 'warn',
-      title: res.ok ? '买好了' : '没买成',
-      detail: res.message,
-      emoji: res.ok ? '✅' : '⚠️',
-    })
-  }
 
   const mint = async (n: number) => {
     if (busyMint) return
@@ -110,9 +88,11 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
         {/*
           手动发放（2026-10-16 加）。
 
-          ★ 为什么必须有：娃娃机**用钻石买**，而钻石的余额是从账本算出来的，
-            在此之前**没有任何发币入口** ⇒ 余额恒为 0 ⇒ 那个购买按钮按下去
-            一定失败。那就成了「界面摆了一个必然失败的按钮」。
+          ★ 为什么必须有：**内置游戏标价用的是钻石**（`registry.ts` 的 `priceMall`），
+            而钻石的余额是从账本算出来的，在此之前**没有任何发币入口** ⇒ 余额恒为 0
+            ⇒ 那个购买按钮按下去一定失败。那就成了「界面摆了一个必然失败的按钮」。
+            （2026-10-23 起娃娃机改成了插件包，走的是「积分 → 游戏币」，不再吃钻石；
+            现在唯一标价的内置游戏是还没上线的钓鱼池 150 钻石。）
             付费购买和兑换码还没做（家长 2026-10-14：「以后支付购买。或者兑换码。」），
             所以先给家长一个手动的口子；等真入口接上，这一段删掉即可。
 
@@ -148,201 +128,17 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
         </div>
       </Card>
 
-      {/* ② 已购买 */}
-      <Card title="已购买" emoji="✅">
-        {owned.length === 0 ? (
-          <p className="text-sm text-ink-500">还没有已购买的游戏。</p>
-        ) : (
-          <ul className="space-y-2">
-            {owned.map((g) => {
-              const isCurrent = g.id === activeGameId
-              return (
-                <li
-                  key={g.id}
-                  className="flex items-center gap-3 rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-3 py-2.5"
-                >
-                  <span className="text-2xl">{g.emoji}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-display text-base font-extrabold text-ink-900">
-                      {g.name}
-                    </span>
-                    <span className="block text-xs leading-snug text-ink-500">{g.tagline}</span>
-                  </span>
-                  {isCurrent ? (
-                    /* 「当前」是个状态，不是按钮 —— 别做成 disabled 的按钮，
-                       那会让人以为「点一下能取消当前」。 */
-                    <span className="shrink-0 rounded-full bg-grass-300 px-3 py-1 text-xs font-extrabold text-ink-900">
-                      当前
-                    </span>
-                  ) : (
-                    <button
-                      disabled={!gateOpen}
-                      onClick={() => void setActiveGame(g.id)}
-                      className="btn shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press disabled:opacity-50"
-                    >
-                      设为当前
-                    </button>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-        <p className="mt-3 text-xs leading-snug text-ink-500">
-          「当前」的那款会出现在孩子底部的那个游戏按钮上。
-        </p>
-      </Card>
+      {/* ② 游戏市场 —— 所有游戏一张表，状态在行上（含内置 + 插件） */}
+      <GameMarket gateOpen={gateOpen} />
 
       {/*
-        ②″ 游戏市场 —— **列表直接摊在这一页上**（2026-10-25 改）。
+        ③ 在线商店 —— 从**已签名目录**里装远程包（spec §12.4 / P2）。
 
-        原来是一张「三张封面 + 进入游戏市场」的卡，列表在弹层里；家长问
-        「为啥还要点进去，直接展示不行吗」。中间那一次点击确实什么也没换来，
-        所以列表摊平、按玩法性质分组，弹层只留详情（截图 + 关于）。
-
-        安装仍然走 `installLocalGame`，和下面那张「在线商店」是两条来源、
-        同一个落库口（`commitPluginBundle`）。
-      */}
-      <GameMarketList gateOpen={gateOpen} />
-
-      {/*
-        ②‴ 在线商店 —— 从**已签名目录**里装远程包（spec §12.4 / P2）。
-
-        ⚠️ 本地包（随 App 附带的那三款）已经搬到「游戏市场」里了，
-        这张卡只剩**远程目录**这一件事，所以标题改成了「在线商店」——
-        继续叫「游戏商店」会让人以为本地那三款也在这里。
+        和 ② 的区别：② 里的插件是**随 App 发**的本地包（哈希烧在代码里），
+        这里是从远端目录下载、靠 Ed25519 目录签名兜底的另一条来源。
+        没配托管地址时只有一句说明，**不摆按钮**。
       */}
       <PluginStoreCard gateOpen={gateOpen} />
-
-      {/*
-        ③ 已下载 —— **运行时装进来的游戏**（spec §12）。
-
-        和 ② 的区别：② 是编译进 App 的内置游戏，③ 是家长自己装进来的包。
-        P1 还没有托管地址，所以正常装不出东西来；这一段**只有装了才渲染**，
-        不摆一个永远空着的栏目 —— 那就是「界面承诺了它做不到的事」。
-        等 P2 接上托管，这一段会自己出现。
-      */}
-      {installed.length > 0 && (
-        <Card title="已下载" emoji="📦">
-          <ul className="space-y-2">
-            {installed.map((m) => {
-              const isCurrent = m.id === activeGameId
-              const isConfirming = confirmingId === m.id
-              return (
-                <li
-                  key={m.id}
-                  data-plugin-installed-row={m.id}
-                  className="flex items-center gap-3 rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-3 py-2.5"
-                >
-                  <span className="text-2xl">{m.emoji}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-display text-base font-extrabold text-ink-900">
-                      {m.name}
-                      <span className="ml-1.5 text-xs font-bold text-ink-500">v{m.version}</span>
-                    </span>
-                    <span className="block text-xs leading-snug text-ink-500">
-                      游戏币：{m.coin.emoji} {m.coin.name}
-                    </span>
-                  </span>
-                  {isConfirming ? (
-                    <>
-                      <button
-                        disabled={!gateOpen}
-                        data-plugin-uninstall-confirm={m.id}
-                        onClick={() => {
-                          setConfirmingId(null)
-                          void uninstallGame(m.id)
-                        }}
-                        className="btn shrink-0 rounded-full bg-berry-500 px-3 py-1.5 text-xs font-extrabold text-white shadow-flat active:btn-press disabled:opacity-50"
-                      >
-                        确认卸载
-                      </button>
-                      <button
-                        onClick={() => setConfirmingId(null)}
-                        className="btn shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press"
-                      >
-                        取消
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {isCurrent ? (
-                        <span className="shrink-0 rounded-full bg-grass-300 px-3 py-1 text-xs font-extrabold text-ink-900">
-                          当前
-                        </span>
-                      ) : (
-                        <button
-                          disabled={!gateOpen}
-                          data-plugin-set-current={m.id}
-                          onClick={() => void setActiveGame(m.id)}
-                          className="btn shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-ink-700 shadow-flat active:btn-press disabled:opacity-50"
-                        >
-                          设为当前
-                        </button>
-                      )}
-                      <button
-                        disabled={!gateOpen}
-                        data-plugin-uninstall={m.id}
-                        onClick={() => setConfirmingId(m.id)}
-                        aria-label={`卸载 ${m.name}`}
-                        className="btn shrink-0 rounded-full bg-white px-2.5 py-1.5 text-xs font-extrabold text-ink-500 shadow-flat active:btn-press disabled:opacity-50"
-                      >
-                        卸载
-                      </button>
-                    </>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-          <p className="mt-3 text-xs leading-snug text-ink-500">
-            卸载会把这个游戏的存档一起删掉，下次装回来是重新开始。
-          </p>
-        </Card>
-      )}
-
-      {/* ④ 敬请期待 */}
-      <Card title="敬请期待" emoji="🔜">
-        {notOwned.length === 0 ? (
-          <p className="text-sm text-ink-500">没有别的游戏了。</p>
-        ) : (
-          <ul className="space-y-2">
-            {notOwned.map((g) => (
-              <li
-                key={g.id}
-                className="flex items-center gap-3 rounded-2xl border-3 border-ink-900/10 px-3 py-2.5"
-              >
-                <span className="text-2xl opacity-60">{g.emoji}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-display text-base font-extrabold text-ink-500">
-                    {g.name}
-                  </span>
-                  <span className="block text-xs leading-snug text-ink-500">{g.tagline}</span>
-                </span>
-                {/*
-                  `comingSoon` 的游戏**只显示状态**：不写价格、不给购买按钮。
-                  摆一个买了也没得玩的东西，就是「界面承诺了它做不到的事」。
-                  `available` 的游戏才会走到下面这个购买按钮 ——
-                  那一支现在是**空跑**（没有这种游戏），留着是为了上线时不用改结构。
-                */}
-                {g.status === 'available' && g.priceMall > 0 ? (
-                  <button
-                    disabled={!gateOpen}
-                    onClick={() => void buy(g.id)}
-                    className="btn shrink-0 rounded-full bg-sun-300 px-3 py-1.5 text-xs font-extrabold text-ink-900 shadow-flat active:btn-press disabled:opacity-50"
-                  >
-                    {MALL_COIN_EMOJI} {g.priceMall}
-                  </button>
-                ) : (
-                  <span className="shrink-0 rounded-full bg-ink-900/5 px-3 py-1 text-xs font-extrabold text-ink-500">
-                    敬请期待
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
     </>
   )
 }

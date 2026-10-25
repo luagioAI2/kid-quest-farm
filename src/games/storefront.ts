@@ -25,34 +25,9 @@
  */
 
 /** 图标底色档位（对应 `theme.css` 的色板）。三款游戏要能一眼分开 */
+import type { GameKind } from './kind'
+
 export type StoreTint = 'grass' | 'sky' | 'sun' | 'berry'
-
-/**
- * 分类口径：**按玩法性质**，不按「有没有产出」。
- *
- * 为什么不是按产出分：现在这三款**都**会产出兑换券（积分 → 游戏币 → 券），
- * 按产出分的话「纯玩」那一类是空的，等于白设一个分类。
- * 所以分类回答的是「玩起来是什么感觉」，而每一款卡片上照样标真实的
- * 适龄 / 时长 / 体积 —— **分类是判断，数字是事实，两者不混**。
- *
- * ⚠️ 改这个字段之前先想清楚：它出现在家长看的那一页上，
- * 而家长用这一栏决定「给不给孩子玩」。
- */
-export type GameKind = 'think' | 'play'
-
-/** 分类的标题与一句说明。顺序由 `GAME_KIND_ORDER` 定，不靠对象键序。 */
-export const GAME_KINDS: Record<GameKind, { label: string; note: string }> = {
-  think: {
-    label: '动脑 · 有产出',
-    note: '花积分换游戏币，玩出来的东西能换成兑换券。攒不攒得下来，看得见。',
-  },
-  play: {
-    label: '纯玩 · 图个乐',
-    note: '同样是花积分换币，但产出看运气 —— 别指望靠它攒券。',
-  },
-}
-
-export const GAME_KIND_ORDER: GameKind[] = ['think', 'play']
 
 export interface StoreShot {
   /** 相对 `public/` 的路径 */

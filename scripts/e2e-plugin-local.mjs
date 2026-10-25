@@ -25,7 +25,7 @@
  * ## 断言的骨架：**每一环都要有能失败的前提**
  *
  * ① 动手前「一款都没装」——否则后面每条「装上了」都可能恒真；
- * ② 装完不是看返回值，而是看**界面上那一行变成「已安装」**（返回值对、界面没变 = 没接上）；
+ * ② 装完不是看返回值，而是看**界面上那一行变成已装**（返回值对、界面没变 = 没接上）；
  * ③ 玩一局不是看按钮点得动，而是看**积分 -5、币 +5**（钱真的走了）；
  * ④ 换券不是看提示文字，而是看**兑换券余额 +4**（券真的进了账本）；
  * ⑤ 切走之后 `window.__debug` 必须**消失**（destroy 真跑了）—— 这条只有真宿主能给；
@@ -340,7 +340,7 @@ let pointsBefore = 0
 
   // 判据是**界面那一行变成「已安装」**，不是 store 的返回值
   const installedTag = await waitFor(`[data-local-installed="${GAME_ID}"]`, 20000)
-  check('★ 界面上那一行变成了「已安装」', installedTag)
+  check('★ 界面上那一行变成了已装', installedTag)
 
   const after = await snap()
   check(
@@ -348,7 +348,7 @@ let pointsBefore = 0
     (await page.evaluate((id) => window.__kqf__.plugin.installed()[id]?.version, GAME_ID)) ===
       GAME_VERSION,
   )
-  check('「已下载」卡片里出现了它', await waitFor(`[data-plugin-installed-row="${GAME_ID}"]`, 5000))
+  check('市场里那一行变成「已装」', await waitFor(`[data-plugin-installed-row="${GAME_ID}"]`, 5000))
   check('已安装清单里有 prizepark', after.installed.includes(GAME_ID), after.installed.join(','))
 
   /*
@@ -370,7 +370,7 @@ let pointsBefore = 0
 }
 
 /* ============================================================
-   ② 设为当前（走「已下载」那一行上的按钮）
+   ② 设为当前（走市场里那一行上的按钮）
    ============================================================ */
 console.log('\n【② 设为当前】')
 {

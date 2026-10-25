@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LOCAL_GAMES } from './localGames'
-import { GAME_KINDS, GAME_KIND_ORDER, STOREFRONT, storefrontOf } from './storefront'
+import { GAME_KINDS, GAME_KIND_ORDER } from './kind'
+import { STOREFRONT, storefrontOf } from './storefront'
 
 /**
  * 游戏市场内容的护栏。

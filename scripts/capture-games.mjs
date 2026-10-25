@@ -16,7 +16,7 @@
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { MALL } from './lib/currency.mjs'
 
 /* ⚠️ 变量名**别叫 `URL`** —— 那会遮住全局的 `URL` 构造器（本项目踩过）。 */
@@ -138,7 +138,9 @@ for (const vp of VIEWPORTS) {
     await wait(180)
   }
   const unlocked = await page
-    .waitForFunction(() => document.body.innerText.includes('已购买'), { timeout: 6000 })
+    .waitForFunction(() => document.querySelector('[data-market-builtin]') !== null, {
+      timeout: 6000,
+    })
     .then(() => true, () => false)
   check('输 0000 后进入游戏栏', unlocked)
   await wait(400)
@@ -158,8 +160,18 @@ for (const vp of VIEWPORTS) {
       rows,
       buttons,
       hasMallCard: txt.includes('钻石'),
-      hasOwned: txt.includes('已购买'),
-      hasSoon: txt.includes('敬请期待'),
+      /*
+        2026-10-25 起**没有**「已购买 / 已下载 / 敬请期待」三张卡了 ——
+        所有游戏（内置 + 插件）排在同一张表里，状态写在每一行上。
+        所以这里直接量那张表里各来源有几行，不再找那三个标题。
+      */
+      builtinRows: [...document.querySelectorAll('[data-market-builtin]')].map((li) =>
+        (li.innerText ?? '').trim(),
+      ),
+      pluginRows: [...document.querySelectorAll('[data-local-row]')].map((li) =>
+        (li.innerText ?? '').trim(),
+      ),
+      activeGameId: window.__kqf__?.getState?.().activeGameId ?? '',
       games: window.__kqf__?.games?.() ?? [],
       owned: window.__kqf__?.getState?.().ownedGameIds ?? [],
       hasMint: document.querySelector('[data-mall-mint]') !== null,
@@ -176,12 +188,33 @@ for (const vp of VIEWPORTS) {
   )
 
   check('有「钻石」一块', info.hasMallCard)
-  check('有「已购买」一块', info.hasOwned)
-  check('有「敬请期待」一块', info.hasSoon)
+
+  /* ★ 这一条钉的就是家长的第二次要求：「感觉没必要 单独 已购买，已下载，
+     敬请期待，直接 在 游戏市场。每个游戏 不同状态呗。」
+     ⇒ 一张表、两种来源都在里面，那三张卡一个都不许回来。 */
+  const expectedPlugins = JSON.parse(
+    readFileSync('public/games/index.json', 'utf8'),
+  ).games ?? []
   check(
-    '已购买里是农场，并且标了「当前」',
-    info.rows.some((r) => r.includes('农场') && r.includes('当前')),
-    info.rows.find((r) => r.includes('农场'))?.replace(/\n/g, ' / ') ?? '（没有农场的行）',
+    '★ 内置游戏和插件游戏排在同一张表里',
+    info.builtinRows.length === info.games.length && info.pluginRows.length === expectedPlugins.length,
+    `内置 ${info.builtinRows.length}/${info.games.length} 行，` +
+      `插件 ${info.pluginRows.length}/${expectedPlugins.length} 行`,
+  )
+  check(
+    '★ 那三张单独的卡没有回来',
+    !info.txt.includes('已购买') && !info.txt.includes('已下载'),
+    ['已购买', '已下载'].filter((w) => info.txt.includes(w)).join(' / ') || '（都没有）',
+  )
+
+  /* 农场那一行的状态必须和 store 一致 —— 当前是它就得写「当前」，
+     不是它就得写「设为当前」。两边都从同一个事实派生，对不上就是有一处写死了。 */
+  const farmRow = info.builtinRows.find((r) => r.includes('农场')) ?? ''
+  check(
+    '农场那一行的状态和 activeGameId 一致',
+    farmRow !== '' &&
+      (info.activeGameId === 'farm' ? farmRow.includes('当前') : farmRow.includes('设为当前')),
+    `activeGameId=${info.activeGameId || '(空)'} 行=${farmRow.replace(/\n/g, ' / ') || '（没有农场的行）'}`,
   )
   check(
     `占位游戏在列表里，且都标「敬请期待」（注册表现状 ${soonGames.length} 条）`,

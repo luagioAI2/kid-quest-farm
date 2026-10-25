@@ -328,7 +328,7 @@ log(`
   应该失败 —— 目录不是我们签的（签名对不上）：
     await __kqf__.plugin.installFromCatalog('${base}/forged/catalog.json', '${GAME_ID}')
 
-  装成功之后：设置 → 游戏 → 「已下载」里会多出「${GAME_NAME}」，
+  装成功之后：设置 → 游戏 → 市场里「${GAME_NAME}」那一行变成「已装」，
   可以直接切过去玩（那是个真的能玩的小游戏）。
 
   想再看一遍「装成功」：先在设置里卸载，或者刷新页面重跑第一条。
