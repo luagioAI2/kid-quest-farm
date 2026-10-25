@@ -6,26 +6,33 @@ import { catalogPublicKeyRaw } from '../../games/catalogKey'
 import { fetchVerifiedCatalog } from '../../games/install'
 import type { CatalogGame } from '../../games/verify'
 import { gameById } from '../../games/registry'
-import { LOCAL_GAMES } from '../../games/localGames'
-import { checkPluginEconomy, vouchersPerPlay } from '../../domain/pluginEconomy'
+import { formatSize } from '../../games/size'
+import { vouchersPerPlay } from '../../domain/pluginEconomy'
 
 /**
  * 家长栏 → 「游戏商店」：把游戏装进来（spec §12.4）。
  *
- * ## 两个来源，两种信任根，**同一个落库口**
+ * ## 这张卡现在只管**远程**
  *
- * | 来源 | 从哪来 | 凭什么信 | 什么时候能用 |
+ * 2026-10-24 起，「随 App 附带」那三款搬到了**游戏市场**（`GameStore.tsx`，
+ * 应用市场形态：列表 / 详情 / 截图）。所以这里只剩远程目录一件事，
+ * 标题也从「游戏商店」改成「在线商店」—— 继续叫「游戏商店」会让人
+ * 以为本地那三款也在这儿。
+ *
+ * | 来源 | 从哪来 | 凭什么信 | 在哪 |
  * | --- | --- | --- | --- |
- * | **本地**（本卡片上半） | `public/games/`，随 App 发布 | SHA-256 烧在 `localGames.ts` 里 | 一直可用，**不需要联网** |
- * | **远程**（下半） | 已签名 `catalog.json` + 包 | Ed25519 目录签名 → 目录里的 SHA-256 | 配了托管地址才显示按钮 |
+ * | **本地** | `public/games/`，随 App 发布 | SHA-256 烧在 `localGames.ts` 里 | `GameStore.tsx`（不需要联网） |
+ * | **远程**（本卡片） | 已签名 `catalog.json` + 包 | Ed25519 目录签名 → 目录里的 SHA-256 | 配了托管地址才显示按钮 |
  *
  * 两条路最后都走 `commitPluginBundle`（拦内置 id / 校验经济 / 写 `__bundle`+`__assets`）。
  *
- * ## 为什么本地那一栏**不能**跟着 `catalogConfigured()` 一起藏起来
+ * ## ⚠️ 搬走的时候别把那条规矩一起丢了
  *
- * 本地包根本不需要商店地址。跟着一起藏的话，「没配托管地址的版本」
- * 就等于「一个游戏都装不了」—— 而它明明带着一个包。这就是本项目
- * 反复写的「界面承诺了它做不到的事」的**反面**：明明做得到，界面却说做不到。
+ * 本地包**不能**跟着 `catalogConfigured()` 一起藏起来：它根本不需要商店地址。
+ * 跟着藏的话，「没配托管地址的版本」就等于「一个游戏都装不了」—— 而它明明
+ * 带着三个包。这是本项目反复写的「界面承诺了它做不到的事」的**反面**：
+ * 明明做得到，界面却说做不到。所以 `GameStore.tsx` 里的入口**永远渲染**，
+ * 只有按钮受家长闸门（`gateOpen`）控制。
  *
  * ## 远程那一栏的三种状态（不是同一种界面的三种文案）
  *
@@ -52,7 +59,6 @@ import { checkPluginEconomy, vouchersPerPlay } from '../../domain/pluginEconomy'
 export function PluginStoreCard({ gateOpen }: { gateOpen: boolean }) {
   const installedGames = useApp((s) => s.installedGames)
   const installFromCatalog = useApp((s) => s.installFromCatalog)
-  const installLocalGame = useApp((s) => s.installLocalGame)
   const pushToast = useApp((s) => s.pushToast)
 
   const [checking, setChecking] = useState(false)
@@ -89,17 +95,6 @@ export function PluginStoreCard({ gateOpen }: { gateOpen: boolean }) {
       emoji: ok ? '✅' : '⚠️',
     })
 
-  const installLocal = async (id: string) => {
-    if (installingId) return
-    setInstallingId(id)
-    try {
-      const res = await installLocalGame(id)
-      toast(res.ok, res.message)
-    } finally {
-      setInstallingId(null)
-    }
-  }
-
   const installRemote = async (id: string) => {
     if (installingId) return
     setInstallingId(id)
@@ -112,66 +107,11 @@ export function PluginStoreCard({ gateOpen }: { gateOpen: boolean }) {
   }
 
   return (
-    <Card title="游戏商店" emoji="📥">
-      {/* ---------------- ① 本地包：随 App 附带，不联网就能装 ---------------- */}
-      <p className="text-xs font-extrabold text-ink-500">随 App 附带</p>
-      <ul className="mt-2 space-y-2">
-        {LOCAL_GAMES.map((g) => {
-          const installed = installedGames[g.id]
-          const upToDate = installed && installed.version === g.version
-          const clashes = !!gameById(g.id)
-          // 只有装过才谈得上「参数异常」—— 没装时没有 manifest 可校验。
-          const issue = installed ? checkPluginEconomy(installed.economy) : null
-          return (
-            <li
-              key={g.id}
-              data-local-row={g.id}
-              className="flex items-center gap-3 rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-3 py-2.5"
-            >
-              <span className="text-2xl">{installed?.emoji ?? '🧩'}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block font-display text-base font-extrabold text-ink-900">
-                  {g.name}
-                  <span className="ml-1.5 text-xs font-bold text-ink-500">v{g.version}</span>
-                </span>
-                <span className="block text-xs leading-snug text-ink-500">
-                  {clashes ? '和自带游戏重名，不能装' : `${formatSize(g.bytes)} · 已内置，不用下载`}
-                </span>
-              </span>
-              {clashes ? (
-                <span className="shrink-0 rounded-full bg-ink-900/5 px-3 py-1 text-xs font-extrabold text-ink-500">
-                  跳过
-                </span>
-              ) : upToDate ? (
-                <span
-                  data-local-installed={g.id}
-                  className="shrink-0 rounded-full bg-grass-300 px-3 py-1 text-xs font-extrabold text-ink-900"
-                >
-                  已安装
-                </span>
-              ) : (
-                <button
-                  disabled={!gateOpen || installingId !== null}
-                  data-local-install={g.id}
-                  onClick={() => void installLocal(g.id)}
-                  className="btn shrink-0 rounded-full bg-sun-300 px-3 py-1.5 text-xs font-extrabold text-ink-900 shadow-flat active:btn-press disabled:opacity-50"
-                >
-                  {installingId === g.id ? '正在装…' : installed ? '更新' : '安装'}
-                </button>
-              )}
-              {issue && (
-                <span className="shrink-0 text-[11px] font-bold text-berry-500">经济参数异常</span>
-              )}
-            </li>
-          )
-        })}
-        {LOCAL_GAMES.length === 0 && (
-          <li className="text-sm text-ink-500">这个版本没有附带任何游戏包。</li>
-        )}
-      </ul>
-
-      {/* ---------------- ② 远程商店 ---------------- */}
-      <p className="mt-4 text-xs font-extrabold text-ink-500">在线商店</p>
+    <Card title="在线商店" emoji="📥">
+      {/* ---------------- 远程商店 ----------------
+          ⚠️ 这里原来还有一行小标题「在线商店」，和卡片标题重复了。
+          那张小标题是「游戏商店」当标题时留下的分区标签；标题改名之后
+          就变成同一句话印两遍（走查图 11c 里一眼能看到）。 */}
       {!catalogConfigured() ? (
         <p data-plugin-store="off" className="mt-2 text-sm leading-relaxed text-ink-500">
           这个版本没有配置游戏商店，装不了新的在线游戏。
@@ -276,16 +216,12 @@ export function PluginStoreCard({ gateOpen }: { gateOpen: boolean }) {
       )}
 
       <p className="mt-3 text-xs leading-snug text-ink-500">
-        装之前会核对包的内容（本地包对内置哈希、在线包对发布方签名）。核对不过的一律不装。
+        装之前会核对包的内容（对发布方签名）。核对不过的一律不装。
       </p>
     </Card>
   )
 }
 
-/** `size` 是目录里给的可选提示（不是校验依据），没有就不显示。 */
-function formatSize(bytes?: number): string {
-  if (!bytes || bytes <= 0) return '大小未知'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+/** `size` 是目录里给的可选提示（不是校验依据），没有就不显示。
+ *  实现搬去了 `games/size.ts` —— 游戏市场那边也要显示同一个数字，
+ *  两处各写一份必然走散（同一个包显示两个大小）。 */

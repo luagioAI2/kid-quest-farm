@@ -121,6 +121,6 @@ describe('游戏商店：配好地址之后', () => {
     const btn = document.querySelector('[data-plugin-check]') as HTMLButtonElement
     expect(btn).toBeTruthy()
     expect(btn.disabled).toBe(true)
-    expect(screen.getByRole('heading', { name: /游戏商店/ })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: /在线商店/ })).toBeTruthy()
   })
 })

@@ -238,6 +238,52 @@ async function openGameSettings() {
   return stillLocked ? '家长密码没过（PIN 不是 0000？）' : null
 }
 
+/**
+ * 只点开市场弹层 —— **已经在「设置 → 游戏」页时用**。
+ *
+ * ⚠️ 不要在已到达的页面上再调 `openGameStore()`：它会重新点顶栏「设置」和「游戏」，
+ *   设置页的这两步不是幂等的（再点一次可能退回上一页），
+ *   于是失败会表现成「游戏市场没打开」，而真正的原因是点多了。
+ */
+async function openStoreSheet() {
+  const opened = await page.evaluate(() => {
+    const b = document.querySelector('[data-open-store]')
+    if (!b) return false
+    b.click()
+    return true
+  })
+  if (!opened) return '设置页里没有「进入游戏市场」按钮'
+  const shown = await page
+    .waitForFunction(() => !!document.querySelector('[role="dialog"][aria-label="游戏市场"]'), {
+      timeout: 8000,
+    })
+    .then(() => true, () => false)
+  return shown ? null : '游戏市场没打开'
+}
+
+/**
+ * 打开「设置 → 游戏 → 游戏市场」。
+ *
+ * ⚠️ 2026-10-24 起本地游戏收进了「游戏市场」弹层（`GameStore.tsx`，Portal 全屏）。
+ *   `[data-local-*]` 锚点没改名，但**必须先点开市场**才在 DOM 里 ——
+ *   否则 querySelector 拿到 null，红字会写成「没找到那一行」，
+ *   看着像游戏列表丢了，其实是没进门。
+ */
+async function openGameStore() {
+  const err = await openGameSettings()
+  if (err) return err
+  return openStoreSheet()
+}
+
+/** 关掉市场弹层（装完就关，后面每一步都该在设置页上做） */
+async function closeGameStore() {
+  await page.evaluate(() => {
+    const b = document.querySelector('[role="dialog"][aria-label="游戏市场"] [aria-label="关闭"]')
+    if (b) b.click()
+  })
+  await wait(500)
+}
+
 /** 从设置页回到孩子的界面 */
 async function leaveSettings() {
   await page.evaluate(() => {
@@ -277,11 +323,11 @@ console.log('【⓪ 基线】')
 /* ============================================================
    ① 安装（走家长真实会点的那个按钮）
    ============================================================ */
-console.log('\n【① 安装：设置 → 游戏 → 随 App 附带 → 安装】')
+console.log('\n【① 安装：设置 → 游戏 → 游戏市场 → 安装】')
 let pointsBefore = 0
 {
-  const err = await openGameSettings()
-  check('打开「设置 → 游戏」并过了家长密码', err === null, err ?? '')
+  const err = await openGameStore()
+  check('打开「设置 → 游戏 → 游戏市场」并过了家长密码', err === null, err ?? '')
 
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
@@ -293,7 +339,7 @@ let pointsBefore = 0
       disabled: btn ? btn.disabled : true,
     }
   }, GAME_ID)
-  check('「随 App 附带」里列出了奖品公园', !!row, row?.text ?? '(没找到那一行)')
+  check('游戏市场里列出了奖品公园', !!row, row?.text ?? '(没找到那一行)')
   check('安装按钮在、而且是可点的', !!row?.hasButton && row?.disabled === false, JSON.stringify(row))
   // 体积是清单里给的提示值，不是校验依据；这里只确认它**不是「大小未知」**
   check('那一行写了包体大小（说明清单里带着 bytes）', /MB|KB/.test(row?.text ?? ''), row?.text ?? '')
@@ -327,6 +373,9 @@ let pointsBefore = 0
   check('家长能看到「1 娃娃机币 = 1 兑换券」', /1\s*娃娃机币\s*=\s*1\s*兑换券/.test(econ), econ)
 
   pointsBefore = after.balance
+
+  // 装完关掉市场：② 之后都在设置页 / 孩子界面上走，遮罩留着只会盖住截图
+  await closeGameStore()
 }
 
 /* ============================================================
@@ -813,7 +862,19 @@ console.log('\n【⑥ 卸载】')
   check('已安装清单里没有了', !after.installed.includes(GAME_ID), after.installed.join(',') || '(空)')
   check('当前游戏回落到农场（否则底栏会指向一个不存在的游戏）', after.active === 'farm', after.active)
   check('★ `gameKv` 里一条 prizepark 的行都不剩（存档也清了）', !(await kvOwners()).includes(GAME_ID), (await kvOwners()).join(',') || '(空)')
-  check('「随 App 附带」那一行又变回可安装', await waitFor(`[data-local-install="${GAME_ID}"]`, 5000))
+  /*
+   * 「又变回可安装」这个判据现在得看**市场里**那一行：
+   * 本地包已经搬进游戏市场弹层，设置页上没有 `[data-local-*]` 了。
+   * ⚠️ 这里用 `openStoreSheet()` 而不是 `openGameStore()` —— 人已经在
+   *   「设置 → 游戏」页上了，再走一遍「点设置 / 点游戏」会把页面点乱。
+   */
+  const sheetErr = await openStoreSheet()
+  check('打开游戏市场（看那一行还在不在）', sheetErr === null, sheetErr ?? '')
+  check(
+    '「游戏市场」里那一行又变回可安装',
+    await waitFor(`[data-local-install="${GAME_ID}"]`, 5000),
+  )
+  await closeGameStore()
 
   await leaveSettings()
   await waitForApp(page)

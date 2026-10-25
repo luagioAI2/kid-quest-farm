@@ -28,6 +28,7 @@ import {
   Sheet,
   SheetHead,
   TIMER_ENABLED,
+  TONE_BG,
   TONE_TEXT,
   timerTone,
   useLiveSeconds,
@@ -519,36 +520,48 @@ function TaskCard({
               ) : null}
               {running ? (
                 <div className="flex items-center gap-2">
-                  <span
+                  {/*
+                    时间胶囊（2026-10-24 用户要求：暂停按钮放进胶囊里）。
+
+                    原来是三个元素抢一行：[秒表 flex-1][⏸️ 44×44][✅ 我做完啦]。
+                    胶囊自己承担「看时间 + 停表」两件事之后，右边只留一个动作按钮，
+                    「我做完啦」在 390 的屏上不再被挤窄。
+
+                    ⚠️ 触控目标没有变小：按钮 `w-11`（44px）、胶囊 `h-11`，
+                    点下去仍是 44×44。`overflow-hidden` 让按钮右缘自动跟着圆角走。
+                    ⚠️ 暂停时只把**数字**调灰，不灰按钮 —— 暂停中唯一要点的就是它。
+                  */}
+                  <div
                     className={clsx(
-                      'tnum flex-1 rounded-pill border px-3 py-2 text-center font-display text-lg font-extrabold',
-                      TONE_TEXT[timerTone(seconds / 60, inst.plannedMinutes)],
-                      timerTone(seconds / 60, inst.plannedMinutes) === 'grass'
-                        ? 'border-grass-300 bg-grass-100'
-                        : timerTone(seconds / 60, inst.plannedMinutes) === 'tangerine'
-                          ? 'border-tangerine-300 bg-tangerine-100'
-                          : 'border-berry-300 bg-berry-100',
-                      // 暂停时把秒表调灰，和"在走"一眼区分开
-                      paused && 'opacity-50',
+                      'flex h-11 min-w-0 flex-1 items-stretch overflow-hidden rounded-pill border',
+                      TONE_BG[timerTone(seconds / 60, inst.plannedMinutes)],
                     )}
                   >
-                    {String(Math.floor(seconds / 60)).padStart(2, '0')}:
-                    {String(seconds % 60).padStart(2, '0')}
-                  </span>
-                  {/* 暂停 / 继续。卡片上放在秒表和「我做完啦」中间 ——
-                      孩子中途去吃饭时不用点进详情页就能冻住时间。
-                      ⚠️ 暂停中**不禁用「我做完啦」**：暂停只是冻时长，不是锁提交。 */}
-                  <button
-                    type="button"
-                    data-testid="card-timer-toggle"
-                    aria-label={paused ? '继续计时' : '暂停计时'}
-                    onClick={() => {
-                      void (paused ? resumeTimer(inst.id) : pauseTimer(inst.id))
-                    }}
-                    className="btn active:btn-press grid size-11 shrink-0 place-items-center rounded-2xl border border-ink-200 bg-white text-lg"
-                  >
-                    {paused ? '▶️' : '⏸️'}
-                  </button>
+                    <span
+                      className={clsx(
+                        'tnum flex-1 self-center text-center font-display text-lg font-extrabold',
+                        TONE_TEXT[timerTone(seconds / 60, inst.plannedMinutes)],
+                        // 暂停时把秒表调灰，和"在走"一眼区分开
+                        paused && 'opacity-50',
+                      )}
+                    >
+                      {String(Math.floor(seconds / 60)).padStart(2, '0')}:
+                      {String(seconds % 60).padStart(2, '0')}
+                    </span>
+                    {/* 暂停 / 继续。孩子中途去吃饭时不用点进详情页就能冻住时间。
+                        ⚠️ 暂停中**不禁用「我做完啦」**：暂停只是冻时长，不是锁提交。 */}
+                    <button
+                      type="button"
+                      data-testid="card-timer-toggle"
+                      aria-label={paused ? '继续计时' : '暂停计时'}
+                      onClick={() => {
+                        void (paused ? resumeTimer(inst.id) : pauseTimer(inst.id))
+                      }}
+                      className="grid w-11 shrink-0 place-items-center border-l border-ink-900/10 text-lg active:bg-ink-900/5"
+                    >
+                      {paused ? '▶️' : '⏸️'}
+                    </button>
+                  </div>
                   <Btn tone="grass" size="md" onClick={onOpen}>
                     ✅ 我做完啦！
                   </Btn>

@@ -175,38 +175,53 @@ export function TaskDetail({
                   <p className="text-xs font-bold text-ink-500">
                     {paused ? '已暂停，时间不走了' : running ? '正在计时中…' : '实际用了多少分钟？'}
                   </p>
-                  <p
-                    className={clsx(
-                      'tnum font-display text-4xl font-extrabold',
-                      TONE_TEXT[tone],
-                      // 暂停时把秒表调灰一点，和"在走"一眼区分开
-                      paused && 'opacity-50',
-                    )}
-                  >
-                    {running && !result
-                      ? formatClock(liveSeconds)
-                      : `${Math.round(minutes)} 分钟`}
-                  </p>
-                  {/* 暂停 / 继续。只在"正在计时"时出现 —— 没开始计时的话
-                      没有东西可暂停，摆个按钮只会让孩子困惑。
+                  {/* 时间胶囊（2026-10-24 用户要求：暂停按钮放进胶囊里）。
+                      和任务卡上那个胶囊同一套做法：**数字和停表是同一个控件**，
+                      不再是一个大数字 + 底下另挂一颗「⏸️ 暂停一下」小药丸。
+
+                      ⚠️ 只有「正在计时」才画胶囊：没开始计时就没有东西可暂停，
+                      这时只显示「N 分钟」的读数（孩子还在手填）。
+                      ⚠️ 触控目标没变小：按钮 `w-11`（44px），高度跟着 4xl 数字走（≈52px）。
                       ⚠️ 暂停中**不禁用「我做完啦」**：孩子可能就是想现在交，
                       暂停只是为了冻住时长，不是把提交锁住。 */}
-                  {running && !result && (
-                    <button
-                      type="button"
-                      data-testid="timer-toggle"
-                      onClick={() => {
-                        if (busy) return
-                        setBusy(true)
-                        void (paused ? resumeTimer(inst.id) : pauseTimer(inst.id)).finally(() =>
-                          setBusy(false),
-                        )
-                      }}
-                      disabled={busy}
-                      className="btn active:btn-press mt-1.5 min-h-[36px] rounded-pill border border-ink-200 bg-white/80 px-3 text-xs font-extrabold text-ink-700 disabled:opacity-40"
+                  {running && !result ? (
+                    <div className="mt-1 inline-flex items-stretch overflow-hidden rounded-pill border border-ink-900/10 bg-white/70">
+                      <span
+                        className={clsx(
+                          'tnum py-1 pl-4 pr-3 font-display text-4xl font-extrabold',
+                          TONE_TEXT[tone],
+                          // 暂停时把秒表调灰一点，和"在走"一眼区分开
+                          paused && 'opacity-50',
+                        )}
+                      >
+                        {formatClock(liveSeconds)}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="timer-toggle"
+                        aria-label={paused ? '继续计时' : '暂停计时'}
+                        onClick={() => {
+                          if (busy) return
+                          setBusy(true)
+                          void (paused ? resumeTimer(inst.id) : pauseTimer(inst.id)).finally(() =>
+                            setBusy(false),
+                          )
+                        }}
+                        disabled={busy}
+                        className="grid w-11 shrink-0 place-items-center border-l border-ink-900/10 text-lg active:bg-ink-900/5 disabled:opacity-40"
+                      >
+                        {paused ? '▶️' : '⏸️'}
+                      </button>
+                    </div>
+                  ) : (
+                    <p
+                      className={clsx(
+                        'tnum font-display text-4xl font-extrabold',
+                        TONE_TEXT[tone],
+                      )}
                     >
-                      {paused ? '▶️ 继续计时' : '⏸️ 暂停一下'}
-                    </button>
+                      {`${Math.round(minutes)} 分钟`}
+                    </p>
                   )}
                 </div>
                 <div className="text-right">

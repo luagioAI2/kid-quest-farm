@@ -102,6 +102,17 @@ try {
   if (!started) throw new Error('起不了计时，后面的都验不了')
 
   await sleep(600)
+  /* 把计时中的那张卡滚进视口再拍。
+     ⚠️ 不滚的话 `1-running` 拍到的是一屏「▶️ 开始」—— 卡在列表下方，
+     走查图里根本看不到胶囊，图就白拍了（第一版就是这样）。 */
+  const cardScrolled = await page.evaluate(() => {
+    const btn = document.querySelector('[data-testid="card-timer-toggle"]')
+    if (!btn) return false
+    btn.scrollIntoView({ block: 'center' })
+    return true
+  })
+  check('计时中的卡滚进了视口（走查图拍的是胶囊本身）', cardScrolled)
+  await sleep(400)
   await shot('1-running')
 
   /* ---- ② 秒表读数的取法 ----

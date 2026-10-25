@@ -80,7 +80,7 @@ function WalletPills() {
   const harvestBalance = useApp((s) => s.harvestBalance)
   return (
     <div className="flex items-center gap-1.5">
-      <CoinPill amount={harvestBalance} icon="🎟️" tone="grass" />
+      <CoinPill amount={harvestBalance} icon="🎫" tone="grass" />
       <CoinPill amount={balance} />
     </div>
   )
@@ -159,7 +159,7 @@ export function RedeemBody() {
               <p className="rounded-2xl bg-sun-50 px-3 py-2 text-xs font-bold text-ink-700">
                 换完就扣币，想清楚再点哦～
                 <span className="mt-1 block text-[11px] font-normal leading-snug text-ink-500">
-                  🎟️ 兑换券先花，不够再用 🪙 积分 —— 两种币 1 比 1 等价，可以一起付。
+                  🎫 兑换券先花，不够再用 🪙 积分 —— 两种币 1 比 1 等价，可以一起付。
                 </span>
               </p>
               {grouped.map((g) => (
@@ -235,7 +235,7 @@ export function RedeemBody() {
 /* ---------------- 孩子视角：一键兑换 ---------------- */
 
 /**
- * 付款拆分：`🎟️ 30 + 🪙 20`。只出一种币时不显示另一种的 0。
+ * 付款拆分：`🎫 30 + 🪙 20`。只出一种币时不显示另一种的 0。
  *
  * ⚠️ 不把 🪙 渲染成**独占一个叶子节点**（`<span>🪙</span>`）——
  * e2e-check §8 靠「textContent 恰好等于 🪙 的叶子」来定位余额牌，
@@ -245,7 +245,7 @@ function PaySplit({ plan }: { plan: RedeemPayment }) {
   return (
     <span className="tnum">
       {plan.harvestPaid > 0 ? (
-        <span className="font-extrabold text-grass-700">🎟️ {plan.harvestPaid}</span>
+        <span className="font-extrabold text-grass-700">🎫 {plan.harvestPaid}</span>
       ) : null}
       {plan.harvestPaid > 0 && plan.pointsPaid > 0 ? (
         <span className="font-normal text-ink-400"> + </span>
@@ -274,7 +274,7 @@ function RedeemRow({
 
   /**
    * 分账。**和 store 扣款调的是同一个函数** —— 所以按钮上写的
-   * 「🎟️ 30 + 🪙 20」跟实际扣的一定是同一组数，不会各算各的。
+   * 「🎫 30 + 🪙 20」跟实际扣的一定是同一组数，不会各算各的。
    */
   const plan = planRedeemPayment(item.cost, harvestBalance, balance)
   const affordable = plan.affordable
@@ -308,7 +308,7 @@ function RedeemRow({
             {/* ⚠️ 这里原来还有一句「≈ ¥12」的现金参考（2026-09-21 加的）。
                 2026-09-30 用户要求去掉，原话：
                   「🪙120 ≈¥12 兑换页 这种感觉不用显示。有付款了。」
-                理由成立：下面那行「付款：🎟️ x + 🪙 y」已经把「这件东西
+                理由成立：下面那行「付款：🎫 x + 🪙 y」已经把「这件东西
                 怎么付」说清楚了，再标一个人民币数字只是卡片上的噪音 ——
                 而且孩子要理解的是「我攒的币够不够」，不是「值几块钱」。
                 ⚠️ 家长端（RedeemEditor）的定价参照**保留** —— 那是家长
@@ -342,7 +342,7 @@ function RedeemRow({
             <span className="text-xs font-normal text-ink-500">
               付款：{describeRedeemPayment({ cost: item.cost, ...plan })}
               <br />
-              换完还剩 🎟️ {harvestBalance - plan.harvestPaid} · 🪙 {balance - plan.pointsPaid}
+              换完还剩 🎫 {harvestBalance - plan.harvestPaid} · 🪙 {balance - plan.pointsPaid}
             </span>
           </p>
           <div className="flex gap-2">
@@ -391,9 +391,9 @@ function RedeemRow({
 /* ---------------- 家长视角：管理 ---------------- */
 
 const EMOJI_CHOICES = [
-  // ⚠️ 这里**故意不放货币图标**（`🪙` 积分 / `🎟️` 兑换券 / `🛍️` 钻石 / `🕹️` 娃娃机币，
+  // ⚠️ 这里**故意不放货币图标**（`🪙` 积分 / `🎫` 兑换券 / `🛍️` 钻石 / `🕹️` 娃娃机币，
   //    见 `domain/currency.ts`）。理由：奖励卡和付款行
-  //    （「付款：🎟️ 250 + 🪙 10」）在**同一个列表**里，奖励图标要是长成一张票，
+  //    （「付款：🎫 250 + 🪙 10」）在**同一个列表**里，奖励图标要是长成一张票，
   //    孩子就分不出哪个是钱。2026-10-16 之前这里放的是 `🎫`，已换成 `🧹`（家务）。
   '🍪','🧃','🍕','🍦','🍫','🎂','📱','📺','🎮','🎬','🧸','🎁',
   '🎡','🏊','🚲','🏃','🌙','⭐','🧹','💛','🧩','🛴','⚽','🎨',

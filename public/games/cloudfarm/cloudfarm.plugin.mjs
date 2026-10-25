@@ -44160,8 +44160,8 @@ function XG(e) {
 			vh: e.height || window.innerHeight
 		};
 	}, u = () => {
-		let { vw: e, vh: t } = l();
-		return Math.min(e, Math.max(360, Math.min(600, t * .62)));
+		let { vw: e, vh: t } = l(), n = e > t * 1.05, r = n ? 900 : 780, i = t * .87, a = t * .62;
+		return Math.min(e, Math.max(360, Math.min(r, n ? i : a)));
 	}, d = document.createElement("div");
 	d.className = "rail glass";
 	let f = document.createElement("div");
@@ -46134,7 +46134,7 @@ var RK = {
 	name: "云边小农场",
 	emoji: "🌾",
 	tabLabel: "农场",
-	version: "1.1.3",
+	version: "1.1.4",
 	minHostApi: 4,
 	coin: {
 		id: "cloudfarm-harvest",

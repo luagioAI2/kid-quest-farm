@@ -2706,7 +2706,7 @@ export const useApp = create<AppState>((set, get) => ({
             : dropPct < -1
               ? `卖得多了，价格跌到 ${newPrice} 兑换券（${dropPct}%）`
               : `当前单价 ${current} 兑换券`,
-        emoji: '🎟️',
+        emoji: '🎫',
       })
     }
     await get().refresh()
@@ -2799,7 +2799,7 @@ export const useApp = create<AppState>((set, get) => ({
         kind: 'warn',
         title: '还差一点点',
         detail: `兑换券和积分加起来还差 ${preview.shortfall}，加油攒一攒`,
-        emoji: '🎟️',
+        emoji: '🎫',
       })
       return false
     }
@@ -2897,7 +2897,7 @@ export const useApp = create<AppState>((set, get) => ({
         kind: 'warn',
         title: '兑换券和积分不够啦',
         detail: '再攒一攒吧',
-        emoji: '🎟️',
+        emoji: '🎫',
       })
       return false
     }

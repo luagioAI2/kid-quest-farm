@@ -80,10 +80,10 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
         {/* 这一轮的额度 —— 把「闸门」讲给孩子听 */}
         <div className="rounded-2xl bg-grass-100/70 p-3">
           <p className="tnum font-display text-sm font-extrabold text-grass-700">
-            这一轮还能卖 {fmt(remaining)} 🎟️
+            这一轮还能卖 {fmt(remaining)} 🎫
           </p>
           <p className="mt-1 text-xs text-ink-500">
-            这棵已经收回 {fmt(earned)} 🎟️，最多能收回 {fmt(cap)} 🎟️。
+            这棵已经收回 {fmt(earned)} 🎫，最多能收回 {fmt(cap)} 🎫。
             卖满了就换点别的种 —— 种子随时都能再买。
           </p>
         </div>
@@ -123,7 +123,7 @@ export function HarvestSheet({ plot, onClose }: { plot: Plot | null; onClose: ()
             )}
           >
             <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-sun-200 text-2xl" aria-hidden>
-              🎟️
+              🎫
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-display text-base font-extrabold text-ink-900">

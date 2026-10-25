@@ -738,7 +738,7 @@ export interface RedeemRecord {
   /** 总价 = harvestPaid + pointsPaid */
   cost: number
   /**
-   * 这次用兑换券付掉的部分（🎟️）。
+   * 这次用兑换券付掉的部分（🎫）。
    *
    * 可选：2026-09-30 之前的老记录没有这个字段 —— 那时候只能用积分付，
    * 所以「缺省」必须读成 **0**，而不是 `cost`。读取处请一律走

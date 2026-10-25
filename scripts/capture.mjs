@@ -547,28 +547,47 @@ try {
   await wait(800)
   await shot('12c-cash-ratio')
 
-  /* 11b / 11c. 设置 · 游戏 tab：游戏商店（2026-10-22 新增）
+  /* 11b / 11c. 设置 · 游戏 tab：游戏市场（2026-10-24 改成应用商店形态）
      ------------------------------------------------------------
-     这一屏是**家长真的会点**的地方，三块内容全是新的：
-       · ①「随 App 附带」—— 本地包，不联网就能装
-       · ②「在线商店」—— 没配托管地址时只有一句说明，**不摆按钮**
-       · ③「已安装游戏的经济参数」—— 一局几分、期望产出多少、几币换一张券
+     这一屏是**家长真的会点**的地方，四块内容全是新的：
+       · ① 设置页上的「游戏市场」入口卡（三款游戏的图标）
+       · ② 市场列表 —— 每款一行：图标 / 名字 / 一句话 / 适龄 / 安装
+       · ③ 详情页 —— 帮助孩子 / 截图（可点开放大）/ 关于这款游戏
+       · ④ 装完之后「已下载」+「经济参数」
      不把它们放进图集，第 4 层走查对这一屏就等于没验（§12b / §13 同一个坑）。
 
-     ★ 两张图，不是一张：**装之前**和**装之后**是两种界面。
-       只拍装之前会漏掉 ③ 整块（它「装了才渲染」），
-       而 ③ 正是这次改动里唯一给家长看数字的地方。
+     ★ 两张图不够了：**装之前**和**装之后**是两种界面。
+       只拍装之前会漏掉 ④ 整块（它「装了才渲染」），
+       而 ④ 正是唯一给家长看数字的地方。
      ★ 走的是家长那条路（点「安装」按钮），不是 `plugin.installFromUrl` ——
        截图脚本要拍的是**界面**，用调试句柄绕过去就拍不到「正在装…」这些状态。
      ★ 拍完**卸掉**：后面的图不该带着一个装进来的游戏。
        （底栏和当前游戏不受影响 —— 安装不会自动切成当前。） */
   await clickByText('游戏')
   await wait(900)
-  await page.evaluate(() => {
-    document.querySelector('[data-local-row]')?.scrollIntoView({ block: 'center' })
+  await shot('11b-games-settings')
+
+  // 进市场（Portal 全屏层，2026-10-24 起本地游戏都在这里面）
+  const storeOpened = await page.evaluate(() => {
+    const b = document.querySelector('[data-open-store]')
+    if (!b) return false
+    b.click()
+    return true
   })
-  await wait(400)
-  await shot('11b-games-store')
+  if (!storeOpened) throw new Error('截图脚本找不到「进入游戏市场」按钮（入口卡没渲染？）')
+  await page.waitForFunction(
+    () => !!document.querySelector('[role="dialog"][aria-label="游戏市场"]'),
+    { timeout: 10000 },
+  )
+  await wait(600)
+  await shot('11b2-games-market')
+
+  // 详情页（第一款的「帮助孩子 / 截图 / 关于」）
+  await page.evaluate(() => document.querySelector('[data-store-detail]')?.click())
+  await wait(900)
+  await shot('11b3-games-detail')
+  await page.evaluate(() => document.querySelector('[data-store-back]')?.click())
+  await wait(600)
 
   const localInstallClicked = await page.evaluate(() => {
     const b = document.querySelector('[data-local-install]')
@@ -579,20 +598,29 @@ try {
   })
   // 找不到就**炸掉**，别静默拍一张「没装成」的图（静默的错图比缺图更糟）
   if (!localInstallClicked) {
-    throw new Error('截图脚本找不到「随 App 附带」里的安装按钮（本地包清单是空的？）')
+    throw new Error('截图脚本找不到游戏市场里的安装按钮（本地包清单是空的？）')
   }
   await page.waitForFunction(() => !!document.querySelector('[data-local-installed]'), {
     timeout: 25000,
   })
+  // ⚠️ 必须在关掉市场**之前**读这一行：弹层一关就整体卸载，
+  //    `[data-local-installed]` 会从 DOM 里消失 ⇒ 读成空串 ⇒ 静默不卸载 ⇒
+  //    后面每一张图都带着一个装进来的游戏。
+  const installedId = await page.evaluate(
+    () => document.querySelector('[data-local-installed]')?.getAttribute('data-local-installed') ?? '',
+  )
+  // 装完把市场关掉，否则 11c 拍到的还是弹层，看不到「已下载」和「经济参数」
+  await page.evaluate(() => {
+    const b = document.querySelector('[role="dialog"][aria-label="游戏市场"] [aria-label="关闭"]')
+    if (b) b.click()
+  })
+  await wait(600)
   await page.evaluate(() => {
     document.querySelector('[data-plugin-economy]')?.scrollIntoView({ block: 'center' })
   })
   await wait(600)
   await shot('11c-games-installed')
 
-  const installedId = await page.evaluate(
-    () => document.querySelector('[data-local-installed]')?.getAttribute('data-local-installed') ?? '',
-  )
   if (installedId) {
     await page.evaluate((id) => window.__kqf__.plugin.uninstall(id), installedId)
     await wait(700)

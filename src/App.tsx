@@ -273,7 +273,7 @@ export default function App() {
               {/*
                 两个币种并排。**图标和底色必须能区分开**：
                   🪙 积分 = 奖励色（sun），能买种子/幼崽/地块，也能进兑换商城
-                  🎟️ 兑换券 = 草色（grass），只能进兑换商城的丰收档，买不了农场投入
+                  🎫 兑换券 = 草色（grass），只能进兑换商城的丰收档，买不了农场投入
                 用农场页同一个色（bg-grass-100 / text-grass-700），
                 孩子从农场切到任务页时不会觉得是两个东西。
               */}
@@ -296,14 +296,14 @@ export default function App() {
                 所以兑换券是 App 级的，不是某一款游戏的。
 
                 这条也是「插件 HUD 别重复画宿主已有的币种」的另一半：
-                宿主在这里把 🎟️ 画全，插件里就不用再画一枚
+                宿主在这里把 🎫 画全，插件里就不用再画一枚
                 （云边小农场 2026-10-24 已经把它从自己的顶栏删掉了）。
               */}
               <div
                 className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
                 aria-label={`兑换券 ${harvestBalance}`}
               >
-                <span className="text-base leading-none">🎟️</span>
+                <span className="text-base leading-none">🎫</span>
                 <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">
                   {harvestBalance}
                 </span>

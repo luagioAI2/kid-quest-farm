@@ -18,7 +18,7 @@
    ============================================================ */
 
 export interface RedeemPayment {
-  /** 用兑换券付掉多少（🎟️） */
+  /** 用兑换券付掉多少（🎫） */
   harvestPaid: number
   /** 用积分付掉多少（🪙） */
   pointsPaid: number

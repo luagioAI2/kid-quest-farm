@@ -3,6 +3,7 @@ import { useApp } from '../../store/useApp'
 import { GAMES } from '../../games/registry'
 import { Card } from './ui'
 import { PluginStoreCard } from './PluginStoreCard'
+import { GameStoreEntry } from './GameStore'
 import { CURRENCY } from '../../domain/currency'
 
 /**
@@ -193,12 +194,23 @@ export function GamesSection({ gateOpen }: { gateOpen: boolean }) {
       </Card>
 
       {/*
-        ②″ 游戏商店 —— 从**已签名目录**里装游戏（spec §12.4 / P2）。
+        ②″ 游戏市场 —— **应用市场形态的浏览入口**（2026-10-24）。
 
-        放在 ③「已下载」**上面**：先「去哪装」，再「装了什么」。
-        没配托管地址时它只显示一句说明、**不摆按钮**（判据在 `PluginStoreCard`
-        的文件头）。⚠️ 这里接的是 `installFromCatalog`，**不是**
-        `installGameFromUrl`（后者无任何校验，只给本地走查用）。
+        列表 / 详情 / 截图都在那一层的全屏页里（`GameStore.tsx`），
+        设置页只留一张「三张封面 + 进入」的卡 —— 否则这一页会变成
+        「什么都有、什么都找不到」。
+
+        安装仍然走 `installLocalGame`，和下面那张「在线商店」是两条来源、
+        同一个落库口（`commitPluginBundle`）。
+      */}
+      <GameStoreEntry gateOpen={gateOpen} />
+
+      {/*
+        ②‴ 在线商店 —— 从**已签名目录**里装远程包（spec §12.4 / P2）。
+
+        ⚠️ 本地包（随 App 附带的那三款）已经搬到「游戏市场」里了，
+        这张卡只剩**远程目录**这一件事，所以标题改成了「在线商店」——
+        继续叫「游戏商店」会让人以为本地那三款也在这里。
       */}
       <PluginStoreCard gateOpen={gateOpen} />
 

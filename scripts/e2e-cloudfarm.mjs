@@ -219,6 +219,37 @@ async function openGameSettings() {
   return stillLocked ? '家长密码没过（PIN 不是 0000？）' : null
 }
 
+/**
+ * 打开「设置 → 游戏 → 游戏市场」。
+ *
+ * ⚠️ 2026-10-24 起，本地游戏不再直接铺在设置页上，而是收进了**游戏市场弹层**
+ *   （`GameStore.tsx`，Portal 全屏）。`[data-local-*]` 这些锚点名字没改，
+ *   但**必须先点开市场**才在 DOM 里 —— 否则 `querySelector` 拿到 null，
+ *   报错会写成「没找到那一行」，看着像游戏列表丢了，其实是没进门。
+ */
+async function openGameStore() {
+  const err = await openGameSettings()
+  if (err) return err
+  const opened = await page.evaluate(() => {
+    const b = document.querySelector('[data-open-store]')
+    if (!b) return false
+    b.click()
+    return true
+  })
+  if (!opened) return '设置页里没有「进入游戏市场」按钮'
+  const shown = await waitFor('[role="dialog"][aria-label="游戏市场"]', 8000)
+  return shown ? null : '游戏市场没打开'
+}
+
+/** 关掉市场弹层。装完之后要关，否则后面每一步都隔着一层遮罩（点击照样能中，但截图全是被盖住的）。 */
+async function closeGameStore() {
+  await page.evaluate(() => {
+    const b = document.querySelector('[role="dialog"][aria-label="游戏市场"] [aria-label="关闭"]')
+    if (b) b.click()
+  })
+  await wait(500)
+}
+
 async function leaveSettings() {
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find((x) =>
@@ -258,10 +289,10 @@ console.log('【⓪ 基线】')
 /* ============================================================
    ① 安装
    ============================================================ */
-console.log('\n【① 安装：设置 → 游戏 → 随 App 附带 → 安装】')
+console.log('\n【① 安装：设置 → 游戏 → 游戏市场 → 安装】')
 {
-  const err = await openGameSettings()
-  check('打开「设置 → 游戏」并过了家长密码', err === null, err ?? '')
+  const err = await openGameStore()
+  check('打开「设置 → 游戏 → 游戏市场」并过了家长密码', err === null, err ?? '')
 
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
@@ -273,7 +304,7 @@ console.log('\n【① 安装：设置 → 游戏 → 随 App 附带 → 安装�
       disabled: btn ? btn.disabled : true,
     }
   }, GAME_ID)
-  check('「随 App 附带」里列出了云边小农场', !!row, row?.text ?? '(没找到那一行)')
+  check('游戏市场里列出了云边小农场', !!row, row?.text ?? '(没找到那一行)')
   check('安装按钮在、而且是可点的', !!row?.hasButton && row?.disabled === false, JSON.stringify(row))
 
   check('点了「安装」', await clickSel(`[data-local-install="${GAME_ID}"]`))
@@ -296,6 +327,14 @@ console.log('\n【① 安装：设置 → 游戏 → 随 App 附带 → 安装�
   const after = await snap()
   check('已安装清单里有 cloudfarm', after.installed.includes(GAME_ID), after.installed.join(','))
   check('安装本身没花积分', after.balance === P0, String(after.balance))
+
+  // 装完把市场关掉：后面几步（设为当前 / 返回 / 进游戏）都是家长在设置页上的动作，
+  // 隔着一层遮罩点也能中（`el.click()` 不走命中测试），但截图会全被盖住。
+  await closeGameStore()
+  const stillOpen = await page.evaluate(
+    () => !!document.querySelector('[role="dialog"][aria-label="游戏市场"]'),
+  )
+  check('装完市场能关掉', !stillOpen)
 }
 
 /* ============================================================

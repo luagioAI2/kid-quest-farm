@@ -205,6 +205,40 @@ async function openGameSettings() {
   return stillLocked ? '家长密码没过（PIN 不是 0000？）' : null
 }
 
+/**
+ * 打开「设置 → 游戏 → 游戏市场」。
+ *
+ * ⚠️ 2026-10-24 起本地游戏收进了「游戏市场」弹层（`GameStore.tsx`，Portal 全屏）。
+ *   `[data-local-*]` 锚点没改名，但**必须先点开市场**才在 DOM 里 ——
+ *   否则红字会写成「没找到那一行」，看着像列表丢了，其实是没进门。
+ */
+async function openGameStore() {
+  const err = await openGameSettings()
+  if (err) return err
+  const opened = await page.evaluate(() => {
+    const b = document.querySelector('[data-open-store]')
+    if (!b) return false
+    b.click()
+    return true
+  })
+  if (!opened) return '设置页里没有「进入游戏市场」按钮'
+  const shown = await page
+    .waitForFunction(() => !!document.querySelector('[role="dialog"][aria-label="游戏市场"]'), {
+      timeout: 8000,
+    })
+    .then(() => true, () => false)
+  return shown ? null : '游戏市场没打开'
+}
+
+/** 关掉市场弹层（装完就关，后面每一步都该在设置页上做） */
+async function closeGameStore() {
+  await page.evaluate(() => {
+    const b = document.querySelector('[role="dialog"][aria-label="游戏市场"] [aria-label="关闭"]')
+    if (b) b.click()
+  })
+  await wait(500)
+}
+
 async function leaveSettings() {
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find((x) =>
@@ -233,11 +267,11 @@ console.log('【⓪ 基线】')
 /* ============================================================
    ① 安装
    ============================================================ */
-console.log('\n【① 安装：设置 → 游戏 → 随 App 附带 → 安装】')
+console.log('\n【① 安装：设置 → 游戏 → 游戏市场 → 安装】')
 let pointsBefore = 0
 {
-  const err = await openGameSettings()
-  check('打开「设置 → 游戏」并过了家长密码', err === null, err ?? '')
+  const err = await openGameStore()
+  check('打开「设置 → 游戏 → 游戏市场」并过了家长密码', err === null, err ?? '')
 
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
@@ -245,7 +279,7 @@ let pointsBefore = 0
     const btn = li.querySelector('[data-local-install]')
     return { text: (li.innerText ?? '').replace(/\s+/g, ' ').trim(), hasButton: !!btn, disabled: btn ? btn.disabled : true }
   }, GAME_ID)
-  check('「随 App 附带」里列出了爪爪乐', !!row, row?.text ?? '(没找到那一行)')
+  check('游戏市场里列出了爪爪乐', !!row, row?.text ?? '(没找到那一行)')
   check('安装按钮在、而且可点', !!row?.hasButton && row?.disabled === false, JSON.stringify(row))
 
   check('点了「安装」', await clickSel(`[data-local-install="${GAME_ID}"]`))
@@ -269,6 +303,9 @@ let pointsBefore = 0
   check('家长能看到「1 爪爪币 = 1 兑换券」', /1\s*爪爪币\s*=\s*1\s*兑换券/.test(econ), econ)
 
   pointsBefore = after.balance
+
+  // 装完关掉市场：② 之后都在设置页 / 孩子界面上走，遮罩留着只会盖住截图
+  await closeGameStore()
 }
 
 /* ============================================================
@@ -644,7 +681,21 @@ console.log('\n【⑤ 卸载】')
   check('已安装清单里没有 claw3d 了', !after.installed.includes(GAME_ID), after.installed.join(',') || '(空)')
   check('`gameKv` 里一条 claw3d 的行都不剩', !(await kvOwners()).includes(GAME_ID), (await kvOwners()).join(',') || '(空)')
   check('当前游戏回到农场', after.active === 'farm', after.active)
-  check('★ 兑换券没被卸载带走（那是孩子的钱）', after.vouchers === vouchersBefore, `${vouchersBefore} → ${after.vouchers}`)
+  /*
+   * ⚠️ 判据是「**没有变少**」，不是「完全相等」。
+   *
+   * 设置页是**盖在游戏上**的一层（`showSettings`），下面的娃娃机还活着 ——
+   * 所以这个窗口里它随时可能再抓中一只、发一张券。2026-10-24 实测红过一次：
+   * `1 → 2`，而那是**多发了**，跟「卸载把券带走」正好相反。
+   * 用 `===` 守这条，就会在「孩子运气好」的时候随机红。
+   * 而真正要防的那个 bug（卸载把孩子的券清零）会让 `after < before`，
+   * `>=` 照样抓得住。
+   */
+  check(
+    '★ 兑换券没被卸载带走（那是孩子的钱）',
+    after.vouchers >= vouchersBefore,
+    `${vouchersBefore} → ${after.vouchers}`,
+  )
 }
 
 /* ============================================================
