@@ -52,7 +52,7 @@ export interface StorefrontEntry {
   kind: GameKind
   /** 一句话：这个游戏里孩子会做什么 */
   pitch: string
-  /** 「帮助孩子」——3~4 条，必须是游戏里真的会发生的事 */
+  /** 「练什么」——3~4 条，必须是游戏里真的会发生的事（只在详情里展示） */
   learn: string[]
   /** 适龄（软性建议，不是硬门槛） */
   age: string

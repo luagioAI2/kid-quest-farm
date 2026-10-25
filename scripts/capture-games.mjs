@@ -275,6 +275,55 @@ for (const vp of VIEWPORTS) {
   await page.screenshot({ path: `${OUT}/${vp.name}-2-家长栏游戏.png`, fullPage: true })
   console.log(`  · 已存图 ${OUT}/${vp.name}-2-家长栏游戏.png`)
 
+  /* ---- ⑤ 「练什么」只在详情里（2026-10-25 家长要求） ----
+     ★ 两边都要判：行上**没有**、详情里**有**。
+       只判一边的话，「两边都没有」也会绿 —— 那等于这一栏被删了。 */
+  const rowsText = [...info.builtinRows, ...info.pluginRows].join('\n')
+  check(
+    '★ 「练什么」不在列表行里',
+    !rowsText.includes('练什么'),
+    rowsText.includes('练什么') ? '有一行还带着它' : '（列表里没有）',
+  )
+
+  const openedDetail = await page
+    .evaluate(() => {
+      const b = document.querySelector('[data-store-detail]')
+      b?.click()
+      return !!b
+    })
+    .then((ok) => ok)
+  await page
+    .waitForFunction(() => !!document.querySelector('[role="dialog"][aria-label="游戏详情"]'), {
+      timeout: 5000,
+    })
+    .catch(() => {})
+  const detail = await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
+    if (!d) return null
+    const h = [...d.querySelectorAll('h4')].find((x) => x.textContent?.includes('练什么'))
+    // 「练什么」那一节下面的 li 条数（找不到标题就记 -1，好和「0 条」分开）
+    const lis = h ? (h.parentElement?.querySelectorAll('li').length ?? 0) : -1
+    return {
+      hasSection: !!h,
+      lis,
+      heads: [...d.querySelectorAll('h4')].map((x) => (x.textContent ?? '').trim()),
+    }
+  })
+  check(
+    '★ 详情里有「练什么」这一节',
+    detail?.hasSection === true,
+    detail ? `小标题 ${[...detail.heads].join(' / ')}` : '没打开详情',
+  )
+  check(
+    '★ 详情里「练什么」至少 3 条（不是空标题）',
+    (detail?.lis ?? 0) >= 3,
+    `li=${detail?.lis}`,
+  )
+  await page.screenshot({ path: `${OUT}/${vp.name}-3-详情.png` })
+  console.log(`  · 已存图 ${OUT}/${vp.name}-3-详情.png`)
+  await page.evaluate(() => document.querySelector('[data-store-close]')?.click())
+  await wait(300)
+
   check('控制台无错误', consoleErrors.length === 0, consoleErrors.slice(0, 2).join(' | '))
 
   await browser.close()

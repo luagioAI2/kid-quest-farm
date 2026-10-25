@@ -27,22 +27,47 @@ export function PluginGameHost({ gameId }: { gameId: string }) {
   const manifest = useApp((s) => s.installedGames[gameId])
 
   const boxRef = useRef<HTMLDivElement | null>(null)
+  /** 「上一局收干净」和「这一局开始挂」之间的先后顺序，见下面 effect 的注释 */
+  const chainRef = useRef<Promise<void>>(Promise.resolve())
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const el = boxRef.current
     if (!el) return
 
+    /*
+     * ★★ 两次挂载**不许重叠**（2026-10-25）。
+     *
+     * `StrictMode` 在开发环境会把 effect 跑两遍（mount → cleanup → mount）。
+     * 两次 `mountGame()` 是**并发**的，而且都往同一个容器里塞东西。第一遍的
+     * unmount 回来得晚（爪爪乐要等 Rapier 的 WASM），它里面那句
+     * `container.replaceChildren()` 就把**第二遍刚挂上去的根节点一起清掉了**。
+     *
+     * 症状特别误导人：`__claw.ready === true`、插件内部一切正常，但
+     * `box.querySelectorAll('.claw-root')` 和 `canvas` 都是 0 —— 看着像
+     * 「打包把类名弄丢了」，其实 DOM 是被自己人扫掉的。2026-10-25 实测：
+     * 关掉 StrictMode 后 claw3d 的 e2e 22 条红全绿，就是这条。
+     *
+     * ➜ 用一条 promise 链把「上一局的卸载」和「这一局的挂载」排成先后：
+     *   容器**还是原来那个**（插件看到的 DOM 父节点不变，契约不变），
+     *   只是第二局一定等第一局收干净才动手。
+     *
+     * ⚠️ 别改成「每次挂载给一个自己的子 div」：那样容器身份变了，
+     *   把 `<style>` 塞进 `document.head`、给 `container` 加类名的插件
+     *   （奖品公园就是）会开始互相摘样式 —— 2026-10-25 试过，三条断言当场红。
+     */
     let disposed = false
     let unmount: (() => void) | null = null
     setError(null)
 
-    void (async () => {
+    const run = chainRef.current.then(async () => {
+      // 上一局还没收完，这一局就已经被切走了 —— 连挂都不用挂
+      if (disposed) return
       try {
         const u = await mountGame(gameId, el)
         if (disposed) {
-          // 已经切走了 —— 这一局白挂了，立刻收掉。
-          u()
+          // 已经切走了 —— 这一局白挂了，立刻收掉（它可能是异步的，要等）
+          await Promise.resolve(u() as unknown)
           return
         }
         unmount = u
@@ -52,7 +77,9 @@ export function PluginGameHost({ gameId }: { gameId: string }) {
         // 分不清是哪个游戏坏了。这里把游戏名和原因直接写出来。
         if (!disposed) setError(e instanceof Error ? e.message : String(e))
       }
-    })()
+    })
+    // 链本身不能因为某一局抛错就断掉
+    chainRef.current = run.catch(() => {})
 
     return () => {
       disposed = true

@@ -21,16 +21,15 @@ import { checkPluginEconomy } from '../../domain/pluginEconomy'
  * 游戏市场 —— 手机应用市场那种形态（2026-10-24 用户要求）。
  *
  * ```
- *   设置页           「游戏市场」卡片：三张封面 + 「进入游戏市场」
- *     └─ 商店（全屏）  列表：封面 / 名字 / 一句话 / 适龄 / 安装
- *          └─ 详情     大图 + 帮助孩子 + 截图（可点开放大）+ 关于
+ *   设置页 → 游戏   「游戏市场」卡片：所有游戏一张表，状态写在行上
+ *     └─ 详情       大图 + 练什么 + 截图（可点开放大）+ 关于 + 安装
  * ```
  *
- * ## 为什么商店是**全屏页**，不是设置页里的一张大卡片
- *
- * 设置页已经是一长串卡片（钻石 / 已购买 / 在线商店 / 已下载 / 敬请期待）。
- * 再把三张带封面的游戏卡塞进去，那一页就变成「什么都有、什么都找不到」。
- * 应用市场的做法是**把浏览和设置分开**：设置里只留一个入口。
+ * ⚠️ 这张卡 2026-10-25 被家长改了三次，三次都是「少一层、少一处」：
+ *   ① 去掉「进入游戏市场」按钮 + 全屏列表（列表本来就是这张卡的内容）
+ *   ② 「已购买 / 已下载 / 敬请期待」三张卡并进来（一款游戏一行，状态在行上）
+ *   ③ 「练什么」从每一行挪进详情（一行四条子弹会把列表撑过一整屏）
+ *   来龙去脉写在下面 ① 的注释里 —— 改结构时先读那一段，别只改代码。
  *
  * ## ⚠️ 全屏层必须走 `Portal`
  *
@@ -161,6 +160,12 @@ function InstallAction({
  * ⇒ 一款游戏一行。状态是**这一行上的一个事实**（当前 / 已装 / 可装 / 要买 /
  *   敬请期待），改状态的按钮也只在这一行上 —— 两处能改，就一定会走散。
  *
+ * ### 第三次：「练什么」挪进详情
+ *
+ * 一行四条子弹（`learn`）把每行撑到 ~200px，三款游戏就超过一屏 —— 列表是
+ * 用来挑的，不是用来读的。家长原话：「练什么也放详情吧。」
+ * ⇒ 行上只留 `pitch` 一句话 + 状态；`learn` 全文在详情里，标题就叫「练什么」。
+ *
  * ## 两种来源，一张表
  *
  * | 来源 | 从哪来 | 谁决定它的状态 |
@@ -220,7 +225,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
     <>
       <Card title="游戏市场" emoji="🏬">
         <p className="text-sm leading-relaxed text-ink-500">
-          每一款都写了它是让孩子练什么的。装好之后在这一行点「设为当前」，底部那个游戏按钮就是它。
+          点「详情」看每一款是让孩子练什么的。装好之后在这一行点「设为当前」，底部那个游戏按钮就是它。
         </p>
 
         {GAME_KIND_ORDER.map((kind) => {
@@ -346,20 +351,16 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                       </div>
 
                       {/*
-                        「练什么」是家长真正要看的一栏，所以**不折叠、不截断**。
-                        每条都必须是这个游戏里真的会发生的事
-                        （「买种子先花钱」可观察，「培养延迟满足」不是）。
+                        「练什么」**只在详情里**（2026-10-25 家长要求）。
+
+                        原来这一栏摊在每一行上，四条子弹把一行撑到 ~200px，
+                        三款游戏就把「游戏市场」撑过一整屏 —— 而列表本来只是
+                        用来挑的。家长原话：「练什么也放详情吧。」
+                        ⇒ 列表留一句话（`pitch`）+ 状态，练什么点「详情」看。
+
+                        ⚠️ 别把它挪回来：详情里那一节标题也叫「练什么」，
+                          内容同一个 `g.learn`，两处都画就是同一件事写两遍。
                       */}
-                      <div className="mt-2 rounded-xl bg-white/70 px-2.5 py-2">
-                        <p className="text-[11px] font-extrabold text-ink-500">练什么</p>
-                        <ul className="mt-1 space-y-0.5">
-                          {g.learn.map((line) => (
-                            <li key={line} className="text-[11.5px] leading-snug text-ink-700">
-                              · {line}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
 
                       {/*
                         这一条 bar 上带着 `data-local-installed` —— 装好之后行尾显示的是
@@ -576,9 +577,9 @@ function DetailView({
           />
         </div>
 
-        {/* 帮助孩子 */}
+        {/* 练什么 —— 列表里已经不放这一栏了，家长要看就点进详情（2026-10-25） */}
         <section className="mt-5">
-          <h4 className="font-display text-base font-extrabold text-ink-900">帮助孩子</h4>
+          <h4 className="font-display text-base font-extrabold text-ink-900">练什么</h4>
           <ul className="mt-2 space-y-2">
             {g.learn.map((line) => (
               <li key={line} className="flex gap-2 text-sm leading-snug text-ink-700">
