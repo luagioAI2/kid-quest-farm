@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --port 4180",
     "lint": "tsc -b --noEmit",
+    "check:registry": "node scripts/check-game-registry.mjs",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:ui": "vitest --config vitest.config.ts --ui",

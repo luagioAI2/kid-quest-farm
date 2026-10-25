@@ -283,15 +283,22 @@ public/store/<id>/<n>.webp  ← 商城详情页直接引用
 
 体积参考：11 张合计 **291 KB**（单张 13~20 KB）。别直接引用 780×1688 的 PNG（单张 300~600 KB）。
 
-### 6.4 两道自动闸门
+### 6.4 三道自动闸门
 
 ```bash
+npm run check:registry          # 四处登记一次性对齐（见下）
 npm test -- storefront          # 双向反查 + 分类合法 + 「练什么」非空且不空话
 node scripts/capture-store-detail.mjs http://127.0.0.1:4393/ .e2e-scratch/store-detail
 #   · 每一款都点开、都截图
 #   · 每款截图 ≥3 张、每张 <img> 真的解码出来（naturalWidth > 0）
 #   · 每张都有说明文字
 ```
+
+`check:registry`（`scripts/check-game-registry.mjs`）查的是**四份文件之间的一致性**：
+`index.json` ↔ `localGames.ts`（含包体 sha256 / 字节数 / 包里 manifest 的版本）↔
+`storefront.ts`（kind / pitch / 练什么 ≥3 条 / about / 截图 ≥3 张且文件真的在）↔
+`build-store-shots.py` 的 `PLAN`（**漏一行 = 详情页的图永远是旧的，而且零报错**）。
+它带 `--self-test`：把 8 类变异逐个喂进去，证明**每一条检查都会红**（不是恒真）。
 
 ⚠️ 结构断言盖不住「图对、说明错」。**图片类走查必须自己看图** —— 断言只能查
 「张数 / 是否真解码 / 有没有说明」，查不出「这张图是货架，说明写的是机台」。
@@ -354,6 +361,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 □ storefront.ts 写了（pitch / learn / age / session / shots / about）
 □ 截图 ≥3 张，第一张是「这是什么游戏」，每张有 caption
 □ build-store-shots.py 的 PLAN 加了一行，重跑过
+□ npm run check:registry 绿（四处登记一致；加 --self-test 确认检查不是恒真）
 □ npm run lint / npm test 全绿
 □ e2e phone + tablet 各跑一遍
 □ capture-store-detail 跑过，**自己看了图**
