@@ -15,7 +15,6 @@
  */
 
 export const GAME_FARM = 'farm'
-export const GAME_FISHING = 'fishing'
 
 /**
  * 首款游戏（免费、默认已拥有）。

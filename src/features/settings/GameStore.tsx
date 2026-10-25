@@ -16,6 +16,7 @@ import { GAMES, gameById, type GameDef } from '../../games/registry'
 import { CURRENCY } from '../../domain/currency'
 import { formatSize } from '../../games/size'
 import { checkPluginEconomy } from '../../domain/pluginEconomy'
+import { GameIconArt } from './GameIcon'
 
 /**
  * 游戏市场 —— 手机应用市场那种形态（2026-10-24 用户要求）。
@@ -198,17 +199,14 @@ const PILL_SOFT = PILL_BASE + ' border border-ink-200 bg-white text-ink-700'
 const PILL_MUTE =
   'grid h-8 shrink-0 place-items-center rounded-full bg-ink-100 px-3.5 text-[12.5px] font-extrabold text-ink-500'
 
-/** 列表行左边的图标：插件用着色方块，内置用纸色方块 + emoji */
-function RowIcon({ emoji, tint }: { emoji: string; tint?: StoreTint }) {
+/** 列表行左边的图标：矢量插画（见 `GameIcon.tsx`），内置的用默认底色 */
+function RowIcon({ id, tint }: { id: string; tint?: StoreTint }) {
   return (
     <span
       aria-hidden
-      className={
-        'grid h-[58px] w-[58px] shrink-0 place-items-center rounded-[15px] border-2 border-ink-900/10 text-2xl shadow-flat ' +
-        (tint ? TINT_BG[tint] : 'bg-paper-2')
-      }
+      className="h-[58px] w-[58px] shrink-0 overflow-hidden rounded-[15px] border-2 border-ink-900/10 shadow-flat"
     >
-      {emoji}
+      <GameIconArt id={id} tint={tint} className="h-full w-full" />
     </span>
   )
 }
@@ -375,7 +373,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                       <RowShell
                         key={game.id}
                         builtinId={game.id}
-                        icon={<RowIcon emoji={game.emoji} />}
+                        icon={<RowIcon id={game.id} />}
                         name={game.name}
                         note="自带"
                         subtitle={game.tagline}
@@ -425,7 +423,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                       pluginId={local.id}
                       installedRowId={installed ? local.id : undefined}
                       upToDateId={upToDate ? local.id : undefined}
-                      icon={<RowIcon emoji={g.emoji} tint={g.tint} />}
+                      icon={<RowIcon id={g.id} tint={g.tint} />}
                       name={g.name}
                       note={`v${local.version}`}
                       subtitle={g.pitch}
@@ -745,36 +743,26 @@ function Chip({ children }: { children: ReactNode }) {
 }
 
 /**
- * 游戏图标 = 一块着色方块 + emoji。
+ * 详情页顶部那颗大图标 —— 和列表行里的是**同一支插画**，只是尺寸不同。
  *
- * 为什么不是截图缩略图（第一版就是那么做的，试过）：
- * 真机截图是 9:16，塞进 72px 宽的小方格里只剩一条竖着的窄缝 ——
- * 放大到列表尺寸后是一团花掉的颜色，家长根本认不出是什么游戏。
+ * 为什么不用截图当图标（第一版就是那么做的，试过）：
+ * 真机截图是 9:16，塞进方形图标里只剩一条竖着的窄缝 ——
+ * 缩小到列表尺寸后是一团花掉的颜色，家长根本认不出是什么游戏。
  * 应用商店也是这个做法：**列表给图标，截图留到详情页**（那里有 132px 宽 + 能点开放大）。
  *
- * 底色跟游戏主题走（`tint` 在 `storefront.ts` 里声明），
- * 这样三款游戏在列表里一眼能分开，又不用引入图片资源。
+ * 所以图标是**手画的**，主体按游戏挑（见 `GameIcon.tsx` 头注释），
+ * 底色仍跟 `tint` 走 —— 两款农场（内置 / 云边）靠底色区分。
  */
-const TINT_BG: Record<StoreTint, string> = {
-  grass: 'bg-grass-200',
-  sky: 'bg-sky-200',
-  sun: 'bg-sun-200',
-  berry: 'bg-berry-200',
-}
-
 function GameIcon({ g, size = 'md' }: { g: StorefrontEntry; size?: 'md' | 'lg' }) {
-  const box = size === 'lg' ? 'h-20 w-20 rounded-[22px] text-4xl' : 'h-14 w-14 rounded-2xl text-2xl'
+  const box = size === 'lg' ? 'h-20 w-20 rounded-[22px]' : 'h-14 w-14 rounded-2xl'
   return (
     <span
       aria-hidden
       className={
-        'grid shrink-0 place-items-center border-3 border-ink-900/10 shadow-flat ' +
-        box +
-        ' ' +
-        TINT_BG[g.tint]
+        'shrink-0 overflow-hidden border-3 border-ink-900/10 shadow-flat ' + box
       }
     >
-      {g.emoji}
+      <GameIconArt id={g.id} tint={g.tint} className="h-full w-full" />
     </span>
   )
 }

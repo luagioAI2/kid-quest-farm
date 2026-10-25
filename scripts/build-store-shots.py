@@ -34,15 +34,24 @@ PLAN = [
         (os.path.join(UP, "cloudfarm/screenshots/14-market.png"), "3"),
         (os.path.join(UP, "cloudfarm/screenshots/18-pond.png"), "4"),
     ]),
+    # ⚠️ 2026-10-25：第一张原来是 ui-01-home（奖品货架九宫格），家长看完说
+    # 「详情页没有娃娃机截图」—— 货架看着像电商，看不出这是个抓取游戏。
+    # 换成 ui-06-play（真机台 + 正面/侧面切换），货架挪到第 2 张当「奖池」。
     ("prizepark", [
-        (os.path.join(UP, "prize-park-local/shots/ui-01-home.png"), "1"),
-        (os.path.join(UP, "prize-park-local/shots/ui-03-collection.png"), "2"),
-        (os.path.join(UP, "prize-park-local/shots/ui-04-bag-sell.png"), "3"),
+        (os.path.join(UP, "prize-park-local/shots/ui-06-play.png"), "1"),
+        (os.path.join(UP, "prize-park-local/shots/ui-01-home.png"), "2"),
+        (os.path.join(UP, "prize-park-local/shots/ui-03-collection.png"), "3"),
+        (os.path.join(UP, "prize-park-local/shots/ui-04-bag-sell.png"), "4"),
     ]),
+    # ⚠️ 2026-10-25：原来用的是 `ref-*.png` —— 那是**原版游戏**的参考截图
+    # （机台上印的还是别人的海报）。而且第一张 `ref-0-home` 是奖品货架，
+    # 说明却写「一台真的能转视角的娃娃机」—— 图和话对不上。
+    # 换成 `smoke-*.png`：`npm run smoke` 对**当前构建**真跑一遍拍下来的，
+    # 机台上的字就是现在的「抓娃娃」。
     ("claw3d", [
-        (os.path.join(UP, "claw-machine/shots/ref-0-home.png"), "1"),
-        (os.path.join(UP, "claw-machine/shots/ref-1-play.png"), "2"),
-        (os.path.join(UP, "claw-machine/shots/ref-2-side.png"), "3"),
+        (os.path.join(UP, "claw-machine/shots/smoke-1-idle.png"), "1"),
+        (os.path.join(UP, "claw-machine/shots/smoke-2-play.png"), "2"),
+        (os.path.join(UP, "claw-machine/shots/smoke-3-side.png"), "3"),
     ]),
 ]
 

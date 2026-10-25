@@ -19,7 +19,7 @@
  *
  * ```json
  * { "games": [
- *     { "id": "prizepark", "name": "奖品公园", "version": "1.1.0",
+ *     { "id": "prizepark", "name": "抓奖乐园", "version": "1.6.2",
  *       "file": "prizepark/prizepark.plugin.mjs", "assetBase": "prizepark/" }
  * ] }
  * ```

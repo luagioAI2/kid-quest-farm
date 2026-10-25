@@ -1,5 +1,5 @@
 /**
- * **爪爪乐（claw3d）作为插件在真 App 里走一遍**：
+ * **抓娃娃（claw3d）作为插件在真 App 里走一遍**：
  * 安装 → 设为当前 → 挂载 → 买币 → 开局 → 抓一件奖品发券 → 切走 → 切回 → 卸载。
  *
  * ```bash
@@ -54,6 +54,26 @@ const GAME_VERSION = (() => {
   return m[1]
 })()
 
+/**
+ * 市场里那一行的名字、底部导航格上那两三个字 —— **都从产物里读**，不写死。
+ *
+ * 2026-10-25 家长把这款从「爪爪乐」改名成「抓娃娃」，写死的断言全红，
+ * 而界面完全正常 —— 和上面版本号是同一类假报警（红的原因和产品无关）。
+ * 读不到就抛，不兜底：静默兜底会让断言变成恒真。
+ */
+const GAME_NAME = (() => {
+  const src = readFileSync(new URL('../src/games/storefront.ts', import.meta.url), 'utf8')
+  const m = src.match(/id: 'claw3d',\s*\n\s*name: '([^']+)'/)
+  if (!m) throw new Error('在 storefront.ts 里找不到 claw3d 的 name')
+  return m[1]
+})()
+const TAB_LABEL = (() => {
+  const src = readFileSync(new URL('../public/games/claw3d/claw3d.plugin.mjs', import.meta.url), 'utf8')
+  const m = src.match(/tabLabel: "([^"]{1,3})"/)
+  if (!m) throw new Error('读不到包里的 tabLabel —— 包没打？还是打包格式变了？')
+  return m[1]
+})()
+
 /** 一局 1 币、1 币 = 1 积分（`src/plugin/index.ts` 的 PLAY_COST / POINTS_PER_COIN） */
 const PLAY_COST = 1
 const POINTS_PER_COIN = 1
@@ -93,7 +113,7 @@ function check(name, ok, detail = '') {
   if (!ok) failed++
 }
 
-console.log(`\n爪爪乐插件接入走查（${VIEWPORT} ${size.width}×${size.height}）`)
+console.log(`\n${GAME_NAME}插件接入走查（${VIEWPORT} ${size.width}×${size.height}）`)
 console.log(`目标 App：${TARGET}\n`)
 
 const browser = await puppeteer.launch({
@@ -251,7 +271,7 @@ console.log('【⓪ 基线】')
 
   const before = await snap()
   check('动手前一款插件游戏都没装', before.installed.length === 0, before.installed.join(',') || '(空)')
-  check('动手前底部没有爪爪乐那一格', !(await page.$(`[data-tour="tab-${GAME_ID}"]`)))
+  check(`动手前底部没有「${TAB_LABEL}」那一格`, !(await page.$(`[data-tour="tab-${GAME_ID}"]`)))
   check('动手前 `gameKv` 里没有 claw3d 的行', !(await kvOwners()).includes(GAME_ID), (await kvOwners()).join(',') || '(空)')
   check('动手前当前游戏是农场', before.active === 'farm', before.active)
 }
@@ -271,7 +291,7 @@ let pointsBefore = 0
     const btn = li.querySelector('[data-local-install]')
     return { text: (li.innerText ?? '').replace(/\s+/g, ' ').trim(), hasButton: !!btn, disabled: btn ? btn.disabled : true }
   }, GAME_ID)
-  check('游戏市场里列出了爪爪乐', !!row, row?.text ?? '(没找到那一行)')
+  check(`游戏市场里列出了「${GAME_NAME}」`, !!row, row?.text ?? '(没找到那一行)')
   check('安装按钮在、而且可点', !!row?.hasButton && row?.disabled === false, JSON.stringify(row))
 
   check('点了「安装」', await clickSel(`[data-local-install="${GAME_ID}"]`))
@@ -319,7 +339,7 @@ await waitForApp(page)
     const b = document.querySelector(`[data-tour="tab-${id}"]`)
     return b ? (b.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
   }, GAME_ID)
-  check('底部导航多出「爪爪乐」那一格', tab.includes('爪爪乐'), tab || '(没有这一格)')
+  check(`底部导航多出「${TAB_LABEL}」那一格`, tab.includes(TAB_LABEL), tab || '(没有这一格)')
 }
 
 /* ============================================================
@@ -335,7 +355,7 @@ console.log('\n【③ 挂载】')
  */
 let canvasesFirst = 0
 {
-  check('点了底部「爪爪乐」那一格', await clickSel(`[data-tour="tab-${GAME_ID}"]`))
+  check(`点了底部「${TAB_LABEL}」那一格`, await clickSel(`[data-tour="tab-${GAME_ID}"]`))
   check('宿主给插件开出了容器', await waitFor(`[data-plugin-host="${GAME_ID}"]`, 20000))
 
   // 5MB 的包 + rapier wasm 解码 + 着色器编译，慢一点是正常的
@@ -587,7 +607,7 @@ console.log('\n【④ 切走 → 切回】')
   }), GAME_ID)
   check('根节点 / 样式 / canvas 都没残留', left.roots === 0 && left.styles === 0 && left.canvases === 0, JSON.stringify(left))
 
-  check('切回「爪爪乐」', await clickSel(`[data-tour="tab-${GAME_ID}"]`))
+  check(`切回「${TAB_LABEL}」`, await clickSel(`[data-tour="tab-${GAME_ID}"]`))
   check('容器又开出来了', await waitFor(`[data-plugin-host="${GAME_ID}"]`, 20000))
 
   const again = await page

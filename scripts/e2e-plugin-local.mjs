@@ -69,6 +69,32 @@ const GAME_VERSION = (() => {
   if (!m) throw new Error('在 localGames.ts 里找不到 prizepark 的 version —— 清单没生成？')
   return m[1]
 })()
+/**
+ * 底部导航格上那两个字，**从包里的 manifest 读**，不写死。
+ *
+ * 2026-10-25 写死过一次（「奖品园」）：家长把游戏改名成「抓奖乐园」、格上
+ * 改成了「抓奖」，这一条就红了 —— 界面完全正常，红的原因只是脚本里那三个字
+ * 过期了。和上面版本号是同一类假报警。
+ *
+ * 读不到就**直接退出**（不是跳过）：静默兜底会让这条断言变成恒真。
+ */
+const TAB_LABEL = (() => {
+  const src = readFileSync(
+    new URL('../public/games/prizepark/prizepark.plugin.mjs', import.meta.url),
+    'utf8',
+  )
+  const m = src.match(/tabLabel:\s*"([^"]{1,3})"/)
+  if (!m) throw new Error('读不到包里的 tabLabel —— 包没打？还是打包格式变了？')
+  return m[1]
+})()
+/** 市场里那一行的名字（从 `storefront.ts` 读，改名不该让断言红） */
+const GAME_NAME = (() => {
+  const src = readFileSync(new URL('../src/games/storefront.ts', import.meta.url), 'utf8')
+  const m = src.match(/id: 'prizepark',\s*\n\s*name: '([^']+)'/)
+  if (!m) throw new Error('在 storefront.ts 里找不到 prizepark 的 name')
+  return m[1]
+})()
+
 /** 一局买几个币（`openBuySheet` 里写死 `Math.min(5, affordable)`，这里跟着它） */
 const BUY_COINS = 5
 /** 1 币 = 1 积分（`wallet.js` 的 POINTS_PER_COIN；打包脚本会核对） */
@@ -330,7 +356,7 @@ let pointsBefore = 0
       disabled: btn ? btn.disabled : true,
     }
   }, GAME_ID)
-  check('游戏市场里列出了奖品公园', !!row, row?.text ?? '(没找到那一行)')
+  check(`游戏市场里列出了「${GAME_NAME}」`, !!row, row?.text ?? '(没找到那一行)')
   check('安装按钮在、而且是可点的', !!row?.hasButton && row?.disabled === false, JSON.stringify(row))
   /*
     体积是清单里给的提示值，不是校验依据；这里只确认它**不是「大小未知」**。
@@ -410,7 +436,7 @@ await waitForApp(page)
     return b ? (b.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
   }, GAME_ID)
   // tabLabel 是 3 个字（导航格上限）。这里顺带证明 manifest 的 tabLabel 真被用了
-  check('底部导航多出「奖品园」那一格', tab.includes('奖品园'), tab || '(没有这一格)')
+  check(`底部导航多出「${TAB_LABEL}」那一格`, tab.includes(TAB_LABEL), tab || '(没有这一格)')
 }
 
 /* ============================================================
@@ -419,7 +445,7 @@ await waitForApp(page)
 console.log('\n【③ 玩一局（含买币）】')
 let coinsAfterPlay = 0
 {
-  check('点了底部「奖品园」那一格', await clickSel(`[data-tour="tab-${GAME_ID}"]`))
+  check(`点了底部「${TAB_LABEL}」那一格`, await clickSel(`[data-tour="tab-${GAME_ID}"]`))
 
   const host = await waitFor(`[data-plugin-host="${GAME_ID}"]`, 20000)
   check('宿主给插件开出了容器（`data-plugin-host`）', host)
@@ -793,7 +819,7 @@ console.log('\n【⑤ 切走 → 切回】')
   )
   check('★★ 插件塞进 `<head>` 的样式表也被移除了（不残留未分层的 CSS）', styleGone)
 
-  check('切到「奖品园」那一格（回来）', await clickSel(`[data-tour="tab-${GAME_ID}"]`))
+  check(`切到「${TAB_LABEL}」那一格（回来）`, await clickSel(`[data-tour="tab-${GAME_ID}"]`))
   const hostBack = await waitFor(`[data-plugin-host="${GAME_ID}"]`, 20000)
   check('容器又开出来了', hostBack)
   const again = await page
@@ -889,7 +915,7 @@ console.log('\n【⑥ 卸载】')
 
   await leaveSettings()
   await waitForApp(page)
-  check('底部「奖品园」那一格没了', !(await page.$(`[data-tour="tab-${GAME_ID}"]`)))
+  check(`底部「${TAB_LABEL}」那一格没了`, !(await page.$(`[data-tour="tab-${GAME_ID}"]`)))
 
   /* 刷新之后仍然「没装」—— 证明清的是库，不是内存 */
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 })

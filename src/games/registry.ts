@@ -1,4 +1,4 @@
-import { GAME_FARM, GAME_FISHING } from './ids'
+import { GAME_FARM } from './ids'
 
 /**
  * 游戏注册表 —— 插件骨架。**纯数据，不许 import 任何 UI。**
@@ -29,12 +29,13 @@ import { GAME_FARM, GAME_FISHING } from './ids'
  *
  * ## 这一轮做到哪
  *
- * **农场**是唯一的内置真游戏（`status: 'available'`，首款免费、默认已拥有）。
+ * **农场**是唯一的内置游戏（`status: 'available'`，首款免费、默认已拥有）。
  * 娃娃机 2026-10-23 从内置删掉了（`332511b`），现在是 `public/games/` 里的插件包，
  * 由 `localGames.ts` 提供、和内置游戏排在**同一张市场表**里（`GameStore.tsx`）。
  *
- * 钓鱼池还是**占位**：它会出现在那张表里，但标「敬请期待」、**不渲染购买按钮、
- * 也不显示价格** —— 因为买了也没得玩，那正是「界面承诺了它做不到的事」。
+ * 2026-10-25：**钓鱼池删掉了**（家长：「去掉钓鱼池」）。它是最后一个
+ * `comingSoon` 占位 —— 一个永远停在「敬请期待」的条目，除了让列表长一格，
+ * 没有别的作用。`GameStatus` 仍然保留：插件/内置将来都还可能有占位。
  */
 
 import type { GameKind } from './kind'
@@ -69,16 +70,6 @@ export const GAMES: GameDef[] = [
     // 首款免费并且默认已拥有 —— 家长 2026-10-14 拍板。
     priceMall: 0,
     defaultOwned: true,
-  },
-  {
-    id: GAME_FISHING,
-    name: '钓鱼池',
-    emoji: '🎣',
-    tagline: '钓鱼、养鱼。',
-    kind: 'play',
-    status: 'comingSoon',
-    priceMall: 150,
-    defaultOwned: false,
   },
 ]
 

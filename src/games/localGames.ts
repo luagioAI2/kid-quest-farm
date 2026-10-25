@@ -35,19 +35,19 @@ export interface LocalGameEntry {
 export const LOCAL_GAMES: LocalGameEntry[] = [
   {
     "id": "prizepark",
-    "name": "奖品公园",
-    "version": "1.6.1",
+    "name": "抓奖乐园",
+    "version": "1.6.2",
     "url": "/games/prizepark/prizepark.plugin.mjs",
-    "sha256": "d3967ea5c7ae261862c12833ffc9f5feb8e2a089dfe645f1f516bb491bf9d8a5",
-    "bytes": 3396736,
+    "sha256": "9ae0f5473e3940b87655f65ba2a56755e3b0fce7dc2a3d7e3746f02bab15fe86",
+    "bytes": 3396733,
     "assetBase": "/games/prizepark/"
   },
   {
     "id": "claw3d",
-    "name": "爪爪乐",
-    "version": "1.0.0",
+    "name": "抓娃娃",
+    "version": "1.0.1",
     "url": "/games/claw3d/claw3d.plugin.mjs",
-    "sha256": "1cd4e343352d3612d5b2f9a68fa72b90a2c672089908397cd8a182631ea6a7d6",
+    "sha256": "99e8e82061696134a871dc594fdd721a919492c36513d047570b2e1484657f69",
     "bytes": 5225796,
     "assetBase": "/games/claw3d/"
   },

@@ -685,7 +685,7 @@ export async function spendGameCoin(
  * 返回 `false` = 积分不够，**一分不扣、一个币不发**。
  *
  * 2026-10-22：从「一次一个」扩成「一次 n 个」。原因是插件游戏
- * （奖品公园）要一次买 5 个，而分 5 次调就是 5 个独立事务 —— 见上。
+ * （抓奖乐园，当时还叫奖品公园）要一次买 5 个，而分 5 次调就是 5 个独立事务 —— 见上。
  */
 export async function buyGameCoins(
   gameId: string,

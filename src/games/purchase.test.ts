@@ -16,11 +16,28 @@ vi.mock('./registry', async (importOriginal) => {
     name: '测试游戏',
     emoji: '🧪',
     tagline: '只在测试里存在',
+    kind: 'play' as const,
     status: 'available' as const,
     priceMall: 50,
     defaultOwned: false,
   }
-  const games = [...actual.GAMES, testGame]
+  /*
+    「还没做好」的那款也**注入**（2026-10-25）。
+    原来是从真注册表里 `find(status === 'comingSoon')` —— 钓鱼池删掉之后
+    一条都没有了，四条断言当场失去对照组。注入之后，不管注册表里有什么，
+    「comingSoon 买不了 / 切不过去」都在被真的验。
+  */
+  const testSoon = {
+    id: 'test-soon',
+    name: '占位游戏',
+    emoji: '🧪',
+    tagline: '还没做好',
+    kind: 'play' as const,
+    status: 'comingSoon' as const,
+    priceMall: 150,
+    defaultOwned: false,
+  }
+  const games = [...actual.GAMES, testGame, testSoon]
   return {
     ...actual,
     GAMES: games,
@@ -41,15 +58,15 @@ const { GAME_FARM } = await import('./ids')
 const { GAMES } = await import('./registry')
 
 /**
- * 「还没做好的那款游戏」——**从注册表里找**，不写死 id。
+ * 「还没做好的那款游戏」——**由上面的 mock 注入**，不从真注册表里找。
  *
- * ⚠️ 这个文件原来写死 `GAME_CLAW`。2026-10-16 娃娃机上线
- * （`comingSoon` → `available`）之后，三条断言当场就红了 ——
- * 而它们红的原因是「例子过期了」，不是「功能坏了」。
- * 写死 id 就会这样：**上线一款游戏，就要来修一遍无关的测试**。
- * 从注册表推导之后，将来钓鱼池上线也不用再动这里。
+ * ⚠️ 这段历史值得留着：原来写死 `GAME_CLAW`，2026-10-16 娃娃机上线
+ * （`comingSoon` → `available`）之后三条断言当场就红了，红的原因是
+ * 「例子过期了」，不是「功能坏了」；改成从注册表 `find(comingSoon)` 之后，
+ * 2026-10-25 钓鱼池一删，注册表里**一条 comingSoon 都没有**，四条又红了。
+ * ➜ 结论：**对照组要在用例里自己造**，不能指望生产数据里刚好有。
  */
-const SOON = GAMES.find((g) => g.status === 'comingSoon')
+const SOON = GAMES.find((g) => g.id === 'test-soon')
 
 /* ============================================================
    买游戏 / 切当前 —— 插件骨架的经济闭环
@@ -85,11 +102,11 @@ describe('默认状态', () => {
     expect(useApp.getState().mallBalance).toBe(0)
   })
 
-  it('★ 注册表里至少有一款「还没做好」的游戏 —— 下面几条断言的对照组', () => {
-    // 没有这一条的话，将来所有游戏都上线了，`SOON` 变成 undefined，
-    // 那几条「买不了 / 切不过去」就会**因为别的原因**通过（拿 undefined
-    // 去调 buyGame 当然失败），看着全绿，其实什么都没验。
-    expect(SOON, '注册表里一款 comingSoon 都没有了，这几条断言失去了意义').toBeTruthy()
+  it('★ 注入的占位游戏真的在注册表里 —— 下面几条断言的对照组', () => {
+    // 没有这一条的话，`SOON` 一旦变成 undefined，那几条「买不了 / 切不过去」
+    // 就会**因为别的原因**通过（拿 undefined 去调 buyGame 当然失败），
+    // 看着全绿，其实什么都没验。
+    expect(SOON, '占位游戏没被注入 GAMES，下面几条断言会假绿').toBeTruthy()
   })
 })
 
