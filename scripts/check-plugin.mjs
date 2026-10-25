@@ -3,7 +3,7 @@
  *
  * ```bash
  * node scripts/check-plugin.mjs public/games/prizepark/prizepark.plugin.mjs
- * node scripts/check-plugin.mjs ../prize-park-local/dist-plugin/prizepark.plugin.mjs --assets ../prize-park-local/assets
+ * node scripts/check-plugin.mjs ../task-games/prize-park-local/dist-plugin/prizepark.plugin.mjs --assets ../task-games/prize-park-local/assets
  * ```
  *
  * ## 为什么要有它
