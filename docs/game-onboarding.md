@@ -200,8 +200,14 @@ node scripts/check-plugin.mjs ../task-games/<项目>/dist-plugin/<id>.plugin.mjs
      --assets ../task-games/<项目>/assets
 
 # ③ 拷进宿主（包 + 资源）
+#    拷什么，看项目里有什么 —— 三款现有游戏的差别就是这三行：
+#      包              dist-plugin/<id>.plugin.mjs    必拷
+#      贴图/音频资源    assets/                        有就拷成 public/games/<id>/assets/
+#      声音包          sound.pack + sound.manifest.json 有就拷到 public/games/<id>/ 根
 cp ../task-games/<项目>/dist-plugin/<id>.plugin.mjs public/games/<id>/
-cp -r ../task-games/<项目>/assets public/games/<id>/assets   # 有音频的还要 sound.pack
+cp -r ../task-games/<项目>/assets public/games/<id>/assets        # 没有 assets 就跳过
+cp ../task-games/<项目>/sound.* public/games/<id>/ 2>/dev/null    # 没有声音包就跳过
+ls public/games/<id>    # 判据：包 + 它运行时要的每个文件都在这一层或 assets/ 下
 
 # ④ 登记清单（id / 名字 / 版本 / 路径）
 #    编辑 public/games/index.json —— version 必须等于包里的 manifest.version
