@@ -282,7 +282,7 @@ async function flush() { await host.storage.set('save', latest) }
 4. 判据不是"看着没坏"，而是浏览器里的**对照元素**：
    在挂载前后量一个宿主自己的 `.grid` 的 `cursor` / `overflow-y`，必须**没变**。
 
-现成实现：`prize-park-local/scope-css.js`（含 5 个坑的注释），可直接抄。
+现成实现：`task-games/prize-park-local/scope-css.js`（含 5 个坑的注释），可直接抄。
 
 ## 7. 卸载：漏一个就"切回来跑两遍"
 
@@ -309,7 +309,7 @@ return () => {
 | --- | --- | --- | --- |
 | 1 静态规则 | `node scripts/check-plugin.mjs <包>` | 裸说明符 / 动态 import / manifest / 经济 / id 劫持 / 资源哈希 | 运行期、CSS 作用域、观感 |
 | 2 类型 + 单测 | `npm run lint` · `npm test` | 宿主侧改动 | 插件产物（另一份构建） |
-| 3 假宿主挂载 | `prize-park-local/scripts/plugin-test.cjs` | blob 加载 / 卸载 / 经济链 / **样式对照** | 真实宿主的 TabBar、Portal、动画层 |
+| 3 假宿主挂载 | `task-games/prize-park-local/scripts/plugin-test.cjs` | blob 加载 / 卸载 / 经济链 / **样式对照** | 真实宿主的 TabBar、Portal、动画层 |
 | 4 真 App e2e | `node scripts/e2e-plugin-local.mjs <url> phone\|tablet` | 装 → 设为当前 → 买币 → 玩一局 → 换券 → 切走切回 → 卸载（含**根节点高度 = 容器高度**） | 观感 |
 | 5 截图走查 | `capture*.mjs` | 排版 / 错位 / 遮挡 | 不会断言 |
 
@@ -321,17 +321,23 @@ return () => {
 所以第 4 层里那条「根节点高度**等于**容器高度」不是重复劳动 ——
 它是**唯一**能抓到「整屏空白而全部断言全绿」的判据（2026-10-22 实测）。
 
-## 9. 接一款新游戏：五步
+## 9. 接一款新游戏
+
+> **完整流程（含扒站、压资源、经济选型、商城详情与截图）→ `docs/game-onboarding.md`。**
+> 这一节只留「宿主侧」那几步，别把它当全流程用。
 
 ```bash
 # ① 改造：根节点外部传入、gp 桥到 host、rAF 加 alive 守卫、末尾 return { destroy }
-#    （参考 prize-park-local 的 plugin.js / gp-bridge.js / wallet.js）
+#    （参考 task-games/prize-park-local 的 plugin.js / gp-bridge.js / wallet.js）
 
 # ② 打包成单文件 ESM（0 裸说明符 / 0 动态 import）
-node scripts/build-plugin.mjs
+cd ../task-games/<新游戏>
+CODEBUDDY_SAFE_DELETE_ENABLED=0 node scripts/build-plugin.mjs
 
 # ③ 静态规则校验（不通过别往下走）
-node scripts/check-plugin.mjs ../<新游戏>/dist-plugin/<x>.plugin.mjs --assets=../<新游戏>/assets
+cd ../../kid-quest-farm-2d
+node scripts/check-plugin.mjs ../task-games/<新游戏>/dist-plugin/<x>.plugin.mjs \
+     --assets=../task-games/<新游戏>/assets
 
 # ④ 放进 App 的本地包目录，重新生成清单（哈希烧进代码）
 cp <包> public/games/<id>/ && cp -r <资源> public/games/<id>/assets/
@@ -339,7 +345,7 @@ cp <包> public/games/<id>/ && cp -r <资源> public/games/<id>/assets/
 node scripts/make-local-catalog.mjs
 
 # ⑤ 真 App 里走一遍（两档都跑：容器高度 / 底栏文案在这两档上不一样）
-npm run build
+CODEBUDDY_SAFE_DELETE_ENABLED=0 npm run build
 CODEBUDDY_SAFE_DELETE_ENABLED=0 npx vite preview --port 4393 --strictPort
 node scripts/e2e-plugin-local.mjs http://127.0.0.1:4393/ phone
 node scripts/e2e-plugin-local.mjs http://127.0.0.1:4393/ tablet
@@ -349,8 +355,9 @@ node scripts/e2e-plugin-local.mjs http://127.0.0.1:4393/ tablet
 > `--strictPort` 绑不上而 `curl` 照样 200，整套 e2e 会跑在**别人的 App** 上。
 > 起完先确认服务的是本次构建：`dist/assets/index-*.js` 的文件名要和页面里引用的一致。
 
-装进 App 之后：设置 → 游戏 → 游戏商店 → 「随 App 附带」里点安装 →
-「已下载」里设为当前 → 底部导航出现这一格。
+装进 App 之后：设置 → 游戏 → **游戏市场**里那一行点「安装」→
+同一行点「设为当前」→ 底部导航出现这一格。
+（2026-10-25 起没有「随 App 附带 / 已下载」两张卡了，本地包和内置游戏排在同一张表里。）
 
 ## 10. 已知的取舍（写下来，免得以后当成 bug）
 

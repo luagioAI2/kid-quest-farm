@@ -10,9 +10,13 @@
 
 ## 为什么源图在外面
 
-`cloudfarm/` / `prize-park-local/` / `claw-machine/` 都不在本仓库里（它们是
-独立的游戏工程）。这个脚本是**开发期工具**，产出物（`public/store/`）才是随
-App 发布的东西 —— 所以别人 clone 本仓库不需要跑它。
+游戏工程都在 `../task-games/<项目名>/`（**不在本仓库里**，各自一个 git 仓库）。
+这个脚本是**开发期工具**，产出物（`public/store/`）才是随 App 发布的东西 ——
+所以别人 clone 本仓库不需要跑它。
+
+⚠️ 目录名 ≠ 插件 id：`prize-park-local` 的 id 是 `prizepark`，`claw-machine` 是
+`claw3d`。映射写死在下面的 `PLAN` 里，**加游戏必须在这里加一行**，否则详情页
+那几张图永远是旧的（脚本不会报错，它只转 PLAN 里列出来的）。
 
 用法：python scripts/build-store-shots.py [--check]
   --check 只比对，不写文件（判据：每张产物的 mtime 都比源图新）
@@ -24,34 +28,35 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UP = os.path.dirname(ROOT)
+GAMES = os.path.join(UP, "task-games")
 OUT_ROOT = os.path.join(ROOT, "public", "store")
 
-# (游戏 id, [(源文件, 输出名), ...])
+# (游戏 id, task-games 下的项目目录, [(源文件相对项目根, 输出名), ...])
 PLAN = [
-    ("cloudfarm", [
-        (os.path.join(UP, "cloudfarm/screenshots/11-farm.png"), "1"),
-        (os.path.join(UP, "cloudfarm/screenshots/13-animals.png"), "2"),
-        (os.path.join(UP, "cloudfarm/screenshots/14-market.png"), "3"),
-        (os.path.join(UP, "cloudfarm/screenshots/18-pond.png"), "4"),
+    ("cloudfarm", "cloudfarm", [
+        ("screenshots/11-farm.png", "1"),
+        ("screenshots/13-animals.png", "2"),
+        ("screenshots/14-market.png", "3"),
+        ("screenshots/18-pond.png", "4"),
     ]),
     # ⚠️ 2026-10-25：第一张原来是 ui-01-home（奖品货架九宫格），家长看完说
     # 「详情页没有娃娃机截图」—— 货架看着像电商，看不出这是个抓取游戏。
     # 换成 ui-06-play（真机台 + 正面/侧面切换），货架挪到第 2 张当「奖池」。
-    ("prizepark", [
-        (os.path.join(UP, "prize-park-local/shots/ui-06-play.png"), "1"),
-        (os.path.join(UP, "prize-park-local/shots/ui-01-home.png"), "2"),
-        (os.path.join(UP, "prize-park-local/shots/ui-03-collection.png"), "3"),
-        (os.path.join(UP, "prize-park-local/shots/ui-04-bag-sell.png"), "4"),
+    ("prizepark", "prize-park-local", [
+        ("shots/ui-06-play.png", "1"),
+        ("shots/ui-01-home.png", "2"),
+        ("shots/ui-03-collection.png", "3"),
+        ("shots/ui-04-bag-sell.png", "4"),
     ]),
     # ⚠️ 2026-10-25：原来用的是 `ref-*.png` —— 那是**原版游戏**的参考截图
     # （机台上印的还是别人的海报）。而且第一张 `ref-0-home` 是奖品货架，
     # 说明却写「一台真的能转视角的娃娃机」—— 图和话对不上。
     # 换成 `smoke-*.png`：`npm run smoke` 对**当前构建**真跑一遍拍下来的，
     # 机台上的字就是现在的「抓娃娃」。
-    ("claw3d", [
-        (os.path.join(UP, "claw-machine/shots/smoke-1-idle.png"), "1"),
-        (os.path.join(UP, "claw-machine/shots/smoke-2-play.png"), "2"),
-        (os.path.join(UP, "claw-machine/shots/smoke-3-side.png"), "3"),
+    ("claw3d", "claw-machine", [
+        ("shots/smoke-1-idle.png", "1"),
+        ("shots/smoke-2-play.png", "2"),
+        ("shots/smoke-3-side.png", "3"),
     ]),
 ]
 
@@ -64,11 +69,12 @@ def main() -> int:
     missing = []
     stale = []
     total = 0
-    for game, items in PLAN:
+    for game, proj, items in PLAN:
         out_dir = os.path.join(OUT_ROOT, game)
         if not check_only:
             os.makedirs(out_dir, exist_ok=True)
-        for src, name in items:
+        for rel, name in items:
+            src = os.path.join(GAMES, proj, rel)
             dst = os.path.join(out_dir, name + ".webp")
             if not os.path.exists(src):
                 missing.append(src)

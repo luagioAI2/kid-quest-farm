@@ -11,12 +11,16 @@
 > - **`docs/plugin-architecture.md` = 规则与架构**（本地/远程两种来源、安装链路、
 >   数据桥、货币三段、`mount` 契约、卸载、五层验收）
 >
+> ★★ **2026-10-25 起再加一份入口**：**`docs/game-onboarding.md` = 从地址到上架的全流程**
+> （扒站 → 起名 → 压资源 → 经济选型 → 打包落库 → 商城详情与截图 → 五层验收 + 总清单）。
+> **接一款新游戏从那篇开始**，本文和架构那篇是它的细节补充。
+>
 > 换一款新扒的游戏，**先读架构那份的 §9 五步**，再回来看本文的画布与排版。
 >
 > ⚠️ **2026-10-23：内置娃娃机已整台移除。** 本文多处拿它当「画布游戏」的例子
 > （体积 / 取景 / 懒加载 / 卸载），那些**结论仍然有效**，但凡是提到
 > `src/features/claw/ClawPage` 这类路径的地方都已经是历史 —— 文件不在了。
-> 娃娃机现在是一个**插件**（`claw-machine` 那套代码，走 `public/games/` 那条链）。
+> 娃娃机现在是一个**插件**（`task-games/claw-machine` 那套代码，走 `public/games/` 那条链）。
 
 ---
 
@@ -570,7 +574,7 @@ economy: { playCost: 10, expectedPayout: 6.7, capPerPrize: 2000, voucherPerCoin:
 
 **判据要按「这一个东西从买到卖完」算，不是按「一局」算**：`满产券 ÷ 成本`
 必须和其余项同一条带（0.40~0.67）。云边小农场为此加了常驻脚本
-`cloudfarm/scripts/check-economy-table.mjs`：逐项算、任何一项出带就红，同时校验
+`task-games/cloudfarm/scripts/check-economy-table.mjs`：逐项算、任何一项出带就红，同时校验
 「`expectedPayout` ≥ 最坏一项 × `playCost`」（这条正是能抓住上面那个 365 轮 bug 的判据）。
 
 教训：**改币种 / 改单价时，凡是「总量 = 次数 × 单次产量 × 单价」的字段，三样都要重算**。
@@ -604,7 +608,7 @@ economy: { playCost: 10, expectedPayout: 6.7, capPerPrize: 2000, voucherPerCoin:
 判据怎么写才对：`wallet.enabled`（有没有真账本）决定弹层画不画 ——
 **独立网页没有宿主顶栏，必须照画**，所以两种形态都要各测一遍。
 只测宿主形态会漏掉「独立网页上那枚券没了」；只测 HUD 会漏掉
-「弹层里换个地方又长回来」（`cloudfarm/scripts/e2e-economy.mjs` 里两组都写了）。
+「弹层里换个地方又长回来」（`task-games/cloudfarm/scripts/e2e-economy.mjs` 里两组都写了）。
 
 「＋ 加积分」这类**入口**一律删掉 —— 积分只能由 App 发（任务 / 打卡 / 家长）。
 
@@ -730,7 +734,7 @@ economy: { playCost: 10, expectedPayout: 6.7, capPerPrize: 2000, voucherPerCoin:
 - [ ] `npm run lint` 干净
 - [ ] `npm test` 全绿（新逻辑要有单测）
 - [ ] `node scripts/check-plugin.mjs <包> --assets=<资源目录>` 通过
-- [ ] 假宿主挂载：`prize-park-local/scripts/plugin-test.cjs <port>` 通过（含**样式对照**与卸载）
+- [ ] 假宿主挂载：`task-games/prize-park-local/scripts/plugin-test.cjs <port>` 通过（含**样式对照**与卸载）
 - [ ] 真 App 里装一次：设为当前 → 玩一局 → 换券 → 切走切回 → 卸载
       （`node scripts/e2e-plugin-local.mjs <url> phone|tablet`，**两档都跑**）
 - [ ] 走查脚本：**390×844 和 834×1112 两档**，量过几何，有遮挡探针 + 自检

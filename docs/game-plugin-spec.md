@@ -1085,7 +1085,7 @@ export const GAMES: GamePlugin[] = [farmPlugin, clawPlugin]
 | **A** | 抽 `src/games/registry.ts` + `GameDef` 类型；农场改成第一个实现（**行为零变化**） | ✅ **已完成**。注册表是**纯数据**，页面在 `src/games/pages.ts` —— 理由见下 |
 | **B** | `RedeemItem` 加 `coin?` 字段 + 迁移；`planRedeemPayment` 按币种分发 | ⬜ 未做 |
 | **C** | 底部导航改成遍历注册表 | ✅ **已完成**（固定 3 格 + 游戏格运行时算；`data-tour` 见 §7.2） |
-| **D** | 家长栏的「游戏」页：商城币钱包 + 已购买 + 当前游戏 + 购买动作 | ✅ **已完成**（购买按钮目前走不到，见 §2.1 末尾） |
+| **D** | 家长栏的「游戏」页：**一张「游戏市场」列表**（内置 + 本地包排在同一张表里，状态写在行上：当前 / 设为当前 / 安装·更新 / 卸载 / 敬请期待），点行进详情 | ✅ **已完成**（2026-10-25 改成应用市场形态；购买按钮目前走不到，见 §2.1 末尾） |
 | **E** | 农场美术补到 QQ 农场级（§8.5 的待做清单） | 🟡 **进行中**（2026-10-15）：**动物精灵已完成** —— 8 种 × 2 帧 = 16 帧，`animalSprites.tsx`；**昼夜已完成** —— 四档色调 + 内联 SVG 日月（在时钟条里）+ 草地按档压暗，`Sky.tsx` + `domain/farmClock.ts`；**收获特效已完成** —— 产出从土里蹦出来（`FarmPage.tsx` 的 `PlotBurst`），走查 `capture-harvest-fx.mjs`；作物 24 帧本来就有；**地块皮 / 雨雪粒子被前置状态卡住**，**浇水 / 施肥特效被「状态走不到」卡住**（见 §8.5 校正表） |
 | **F** | 第二个游戏（娃娃机）按 §9 实现 | ⬜ 未开始 |
 
@@ -1694,7 +1694,7 @@ interface HostApi {
 | 运行时加载器 + 三道门 + `validateBundle` | `src/games/loader.ts` |
 | 下载来的游戏在 App 里的挂载点 | `src/games/PluginGameHost.tsx` |
 | 样板游戏「许愿池」（零依赖）+ 独立构建 | `games-src/demo/index.ts`、`games-src/vite.config.ts` |
-| 家长栏「已下载」区块（**装了才渲染**） | `src/features/settings/GamesSection.tsx` |
+| 家长栏「游戏市场」列表（内置 + 本地包同一张表，状态在行上） | `src/features/settings/GameStore.tsx`（`GamesSection.tsx` 只留三张卡：钻石 / 市场 / 在线商店） |
 | 走查脚本（47 条断言，含遮挡探针自检） | `scripts/capture-game-bundle.mjs` |
 
 两条**P1 期间新加的守卫**（都是「静默失效」型的，值得单独记）：
@@ -1708,7 +1708,7 @@ interface HostApi {
 ### 12.6 离线与降级（现在是零网络应用，别把它弄丢）
 
 - **农场永远内置**，离线永远可用（它是首款、免费、默认拥有）；
-- 已下载的游戏**存本地**，离线可用；
+- 装进 App 的游戏**存本地**（`gameKv` + 包体），离线可用；
 - 拉不到 `catalog.json` → **只显示已安装的**，不报错、不空转、不摆灰按钮
   （沿用 §2.1 末尾那条纪律：不承诺做不到的事）。
 

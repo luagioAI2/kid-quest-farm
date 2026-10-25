@@ -12,7 +12,10 @@
 > 本文保留下来的价值是**当时的判断依据**：为什么选插件而不是 iframe、资源怎么从 63.7MB
 > 压到 5.2MB、经济模型为什么要重写。这些数字都是实测的，别重复测。
 
-> 目标：把 `E:\plan\test25\prize-park-local` 这个扒下来的 MakePlay 游戏，接进 `kid-quest-farm-2d`。
+> 目标：把 `E:\plan\test25\task-games\prize-park-local` 这个扒下来的 MakePlay 游戏，接进 `kid-quest-farm-2d`。
+>
+> ⚠️ 本文是**当时的实施方案**（历史存档），路径里的 `prize-park-local/` 现在都在
+> `task-games/` 下。要接**新**游戏请看 `docs/game-onboarding.md`（现行流程）。
 > 要求：**既能本地内置，也能远程下载**。
 > 本文所有数字都是在这台机器上实测的，不是估的。
 
