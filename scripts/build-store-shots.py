@@ -58,6 +58,14 @@ PLAN = [
         ("shots/smoke-2-play.png", "2"),
         ("shots/smoke-3-side.png", "3"),
     ]),
+    # 2026-10-25 新增。源图是 `node scripts/capture.mjs` 拍的（DPR 2，780×1688）。
+    # 顺序按「先看它是什么 → 再看怎么玩」：标题 / 进化 / 关卡 / 棋盘。
+    ("sugar", "sugar", [
+        ("shots/01-title.png", "1"),
+        ("shots/02-evolve.png", "2"),
+        ("shots/03-map.png", "3"),
+        ("shots/04-board.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

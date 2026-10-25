@@ -1,0 +1,340 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 66,
+  "bytes": 2539669
+ },
+ "assets": [
+  {
+   "file": "bg-classroom.webp",
+   "bytes": 21356,
+   "sha256": "c6cfb14a9336405eada06b003925ae56564cfdc373696777217051a80d23aa63"
+  },
+  {
+   "file": "bgm-main.m4a",
+   "bytes": 367572,
+   "sha256": "917c61bb1ea594dcbcf4599a86efd980adce84d72c5c9861cf6a9781b073ea53"
+  },
+  {
+   "file": "cast-attack.mp3",
+   "bytes": 12911,
+   "sha256": "ae49b1e09e9df0d99700f9513f14825b7486dce436778dbb2249ac5f89c33d7f"
+  },
+  {
+   "file": "char-blue-large.webp",
+   "bytes": 48980,
+   "sha256": "7c962c011e1377eb5f5f7d74116ef3797bb76a6348f019d3c33c26a9895b2587"
+  },
+  {
+   "file": "char-blue-medium.webp",
+   "bytes": 28252,
+   "sha256": "e7906c4ed3250d207b5a59cc0a02cd59e7e1198016db7f29cb8e31bf028d21cc"
+  },
+  {
+   "file": "char-blue.webp",
+   "bytes": 22684,
+   "sha256": "c368f66ced10a666247d6b0b6b407f8371bd0c806ada3d7534cb567a787f5179"
+  },
+  {
+   "file": "char-green-large.webp",
+   "bytes": 37772,
+   "sha256": "820fd5d6bf63fcda29686a371c8915e17e58dc0079be292639ea4ff8471888ee"
+  },
+  {
+   "file": "char-green-medium.webp",
+   "bytes": 34210,
+   "sha256": "66de37746d2e183b112409df5e7bc7215732840e4b9a7aacd340f940cfbf70ab"
+  },
+  {
+   "file": "char-green.webp",
+   "bytes": 22096,
+   "sha256": "0300751bd21c058e76be05e147134ea964982a924fa4b3bba4d72f7d21d090fb"
+  },
+  {
+   "file": "char-pink-large.webp",
+   "bytes": 31716,
+   "sha256": "fab5f27caa4b995cc7756b62990869802987e0f3d144e10090d65ed035f2ad91"
+  },
+  {
+   "file": "char-pink-medium.webp",
+   "bytes": 21478,
+   "sha256": "266a3782a129270fe8dac0e774a2ed4fd565313d5ad84dbfa5e9cb310551581f"
+  },
+  {
+   "file": "char-pink.webp",
+   "bytes": 22816,
+   "sha256": "87a5d38e8aaf1f24f443664f11bca66a46c629427b9c3113fbdfa8bd6c3d2580"
+  },
+  {
+   "file": "char-red-large.webp",
+   "bytes": 41672,
+   "sha256": "949ed4a629b3402e713696b8ace8ae571967251569230a78cf5c7cfbdf9d8ce1"
+  },
+  {
+   "file": "char-red-medium.webp",
+   "bytes": 31928,
+   "sha256": "9779ef8e7e166bc56e705bc1e9f436aa81599f8bbb4a89c9ae2fc205a24c5fcb"
+  },
+  {
+   "file": "char-red.webp",
+   "bytes": 26828,
+   "sha256": "69f3b731cdc2a3ed00897bbfd722244ee85cef0a9719aa11ca7569dfe87c042b"
+  },
+  {
+   "file": "char-yellow-large.webp",
+   "bytes": 38560,
+   "sha256": "aa573a2f919304fcb7f814d14004efc8828a32c516ffd421b2e6db736b8f79f3"
+  },
+  {
+   "file": "char-yellow-medium.webp",
+   "bytes": 27638,
+   "sha256": "4da452b2cce25d430cfaaaa1a45cf816e3f61d353ffc5f04ada3b14febb80c2b"
+  },
+  {
+   "file": "char-yellow.webp",
+   "bytes": 24652,
+   "sha256": "d2e264f92b7cf4b7dabfce38a5a0d3e679e9f77e1d9ecfe8246038ea729583e1"
+  },
+  {
+   "file": "combo-tricolor.mp3",
+   "bytes": 12911,
+   "sha256": "bab8cc43e622215e5212a783f051f6f0b57e6a3dc0bfe4e9a5bdf299b6eababd"
+  },
+  {
+   "file": "enemy-bat.webp",
+   "bytes": 11180,
+   "sha256": "b8dcbcaf082274c69b26c85c2c0f182f61465a40d0613c4dde6656d7de2dc240"
+  },
+  {
+   "file": "enemy-boss.webp",
+   "bytes": 20990,
+   "sha256": "8406bdd170f174ae82305f02f153c6edfdfee40f284a1e7c6b03d3c02403a248"
+  },
+  {
+   "file": "enemy-choco.webp",
+   "bytes": 11138,
+   "sha256": "8a21d63dd79daf64ddfc2bddcb60831d3ac98e85b1a2c8dab7c92b343776357e"
+  },
+  {
+   "file": "enemy-donut.webp",
+   "bytes": 13902,
+   "sha256": "b5854a9686756418d505d5bbd5b21862ece1d9dd817f39a77641b604ca563a40"
+  },
+  {
+   "file": "enemy-elite.webp",
+   "bytes": 16476,
+   "sha256": "d2e99a98431eb4cd99dc1c2fff828c8dd2aa614ed91ffccfe53ef1e886fa5bc4"
+  },
+  {
+   "file": "enemy-ginger.webp",
+   "bytes": 12538,
+   "sha256": "9f9689b1edd00dcd80335bf1a67e682abdb47a00ba1f8e04f37b40ac980a4875"
+  },
+  {
+   "file": "enemy-honey.webp",
+   "bytes": 22572,
+   "sha256": "b608de89fcdb93d112843c9053a38901ce4ed8728792d7f60ad5dcbb459b3da2"
+  },
+  {
+   "file": "enemy-icecream.webp",
+   "bytes": 11748,
+   "sha256": "c1909971a20ea4692a11a189f3bdc309dd391e6be201af966145848f9d2f698e"
+  },
+  {
+   "file": "enemy-macaron.webp",
+   "bytes": 13386,
+   "sha256": "7ac233c75df3ff97137d9ead57ae8f2b93e9fce068c82b276b8cc554882890ec"
+  },
+  {
+   "file": "enemy-mallow.webp",
+   "bytes": 6796,
+   "sha256": "eb09310b4a97885d43651f93ebdb1270f4d8f133e223e13abe03aabd183fba6a"
+  },
+  {
+   "file": "enemy-pet.webp",
+   "bytes": 10800,
+   "sha256": "be8b7c1073cf2c4febaafcd1bd1ac4f724d3257a2b648e3f61c40328fbbc974f"
+  },
+  {
+   "file": "enemy-puff-blue.webp",
+   "bytes": 10248,
+   "sha256": "dea13c116e105878c65c615535524d376de196c4bfa74baff89d324a39aca899"
+  },
+  {
+   "file": "enemy-puff-green.webp",
+   "bytes": 10998,
+   "sha256": "00563a6e56ca731c96a622e9c9eb54a9b69c865720befa39c0e805df5f9fe550"
+  },
+  {
+   "file": "enemy-puff-red.webp",
+   "bytes": 11090,
+   "sha256": "71e1a7f88f05cd2735fb28a407c5b54e2509c2656a81f04e1b45855379dd0f29"
+  },
+  {
+   "file": "enemy-slime.webp",
+   "bytes": 9290,
+   "sha256": "a178b06f2cf2f8f82028af8222c20202522fdf7f76d954d9047d8b058f1ab447"
+  },
+  {
+   "file": "enemy-warn.mp3",
+   "bytes": 7151,
+   "sha256": "211bd8f8bb594f2ffc9412f25e6a9724b3e1d36f341f19f9c5b9ad0b487ee9a9"
+  },
+  {
+   "file": "floor-bell.mp3",
+   "bytes": 16751,
+   "sha256": "cde6d6c6bdd191b979b9f63e73877d989c2ae19cb399da62e6a567e8147240f0"
+  },
+  {
+   "file": "heal-chime.mp3",
+   "bytes": 12911,
+   "sha256": "c72cf23d08c0c41483e9783134ef8f61582f65f50ebf2afd85236e4fe7c08c30"
+  },
+  {
+   "file": "jingle-fail.mp3",
+   "bytes": 32879,
+   "sha256": "a5150c8c68794934328cc9f2f54edd07160f15c6c53c5a926111ec05c77e9d07"
+  },
+  {
+   "file": "jingle-victory.mp3",
+   "bytes": 40751,
+   "sha256": "4c0e188cc1498774efaf76fe3f33488b026ac93bc372bd7b4637dcbdf8fd8cad"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/audioOff.webp",
+   "bytes": 240,
+   "sha256": "2075ab3c05eb9bc56da503c68843c98a0a43d776eab647958ff8b06fd1c0aa51"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/audioOn.webp",
+   "bytes": 386,
+   "sha256": "432e8453b4eda842a0dc85526983e575d41c1b225215c7564d8728c9625840e1"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/musicOff.webp",
+   "bytes": 434,
+   "sha256": "4d9460a4dfcdea2db85caf070f0772486dd3187ee6074d91b63784d224d153ab"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/musicOn.webp",
+   "bytes": 338,
+   "sha256": "5692c9e4535c7ceabfed47c52e3b96623df255b377ed52a90d031203199a523a"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/pause.webp",
+   "bytes": 196,
+   "sha256": "9c54df674313b6626deef92da7c44418c82f026d2a33139a568d21332332c1c4"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/star.webp",
+   "bytes": 398,
+   "sha256": "7f1b5075a5d5cd621d67f8d6a773f0603f27f130a51f4d978996c9b97499fd3e"
+  },
+  {
+   "file": "lib/smiley-sans/SmileySans-Oblique.woff2",
+   "bytes": 1150924,
+   "sha256": "731f22973349404b15a88a99ef3b5dd4104c0965c23b7e485c1f11e84fea99e2"
+  },
+  {
+   "file": "match-pop.mp3",
+   "bytes": 10415,
+   "sha256": "f835b1909b1f4c5f61488b8e30a9434b595f05fe7ed59a17c5910ada0698000c"
+  },
+  {
+   "file": "orb-blue.webp",
+   "bytes": 5374,
+   "sha256": "642df84890c63332f5f0d295e32fc62d9311be3c4b28aa827c03a049015e217e"
+  },
+  {
+   "file": "orb-green.webp",
+   "bytes": 4752,
+   "sha256": "6eb36de91171ef0ca723cf57d99c7bd17d548d00494884411a1dfc40e265ec48"
+  },
+  {
+   "file": "orb-heart.webp",
+   "bytes": 5008,
+   "sha256": "29b8ffd1f8edac3a83e9ae4edc238414c15ccbaaa02c8c97b23749115c06cc4b"
+  },
+  {
+   "file": "orb-land.mp3",
+   "bytes": 5615,
+   "sha256": "5f619ea7ea565f90dd08c2e49002b64d6aa9288935b8a5ef911d83b7638bedb4"
+  },
+  {
+   "file": "orb-red.webp",
+   "bytes": 5782,
+   "sha256": "461fb2e8514e3d2e4a285415440e808ed2fec44cbaa15c7b32d1b9c5cea00c2b"
+  },
+  {
+   "file": "orb-step.mp3",
+   "bytes": 4847,
+   "sha256": "47b9fe84b680824bcf03aae501ec60635444abc497105b4dea2f802c3e3cb093"
+  },
+  {
+   "file": "orb-yellow.webp",
+   "bytes": 5436,
+   "sha256": "cef174756d82e33adafd7ca71df69ebe074bfef2d4bafbdde02a3bdd8fbcbd6c"
+  },
+  {
+   "file": "party-hit.mp3",
+   "bytes": 8879,
+   "sha256": "3efa63b4dc63aab0114eda8773c01bd0aee91d2ef702e22bf65f40cc68114e15"
+  },
+  {
+   "file": "prop-bubble.webp",
+   "bytes": 4618,
+   "sha256": "4af2d84b671f6016f7b44900346a721644198ea992ee8f4443665d60f702cd22"
+  },
+  {
+   "file": "prop-leaf.webp",
+   "bytes": 3342,
+   "sha256": "deb2899fbbea634415d6678d3b1a3f362d9faa2a1b3a57f3aa19064910dc4d44"
+  },
+  {
+   "file": "prop-star.webp",
+   "bytes": 5442,
+   "sha256": "e5ef0b60e5beb06637b8fbc15a7e6a21584aef10033014927889e74fc6f0e133"
+  },
+  {
+   "file": "prop-strawberry.webp",
+   "bytes": 6434,
+   "sha256": "6a129bb69dc633880933f206dcb9809b87f9f29f2d717bdb4400e1c071e0f621"
+  },
+  {
+   "file": "rainbow-slam.mp3",
+   "bytes": 20783,
+   "sha256": "ef20ae3f1f0e4bd1b7e940aad405ae2a4a7cdd4d9b5b5c9087e6144fc68b9bd8"
+  },
+  {
+   "file": "rainbow-sundae.webp",
+   "bytes": 21434,
+   "sha256": "15438aa0a794e7079c0731d7f461bd1a59d94145a5525e5df37e98becdc3500d"
+  },
+  {
+   "file": "seal-break.mp3",
+   "bytes": 8879,
+   "sha256": "79dbb0fd2b7141ace3a97d81b9d0b6880c9ea6f6c51576a43c1bd34c64d4f019"
+  },
+  {
+   "file": "shield-break.mp3",
+   "bytes": 10415,
+   "sha256": "e9ef7750c7f0de5faaeb780fec238af1e7e5b96e5f80ec97dd6919a9c593d027"
+  },
+  {
+   "file": "skill-cast.mp3",
+   "bytes": 12911,
+   "sha256": "2fd8b4f829381f3ff24d923e718ac75d3c77a87c815346781849c30f32e70554"
+  },
+  {
+   "file": "ui/menu-icons.webp",
+   "bytes": 24288,
+   "sha256": "1da1979387e21244968ec0702d57c3b145be976fc3ef89308dc60fbfb2cebf84"
+  },
+  {
+   "file": "ui/menu-pedestal.webp",
+   "bytes": 32472,
+   "sha256": "3f4ba53132bf875deec9aa4dbc889adc1ff6de2967be186b87562e102d9266dd"
+  }
+ ]
+}

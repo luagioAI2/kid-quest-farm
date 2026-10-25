@@ -387,12 +387,18 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 
 ---
 
-## 附录：现有三款（2026-10-25 快照）
+## 附录：现有四款（2026-10-26 快照）
 
 | id | 目录 | 包 | 经济 | 商城分类 |
 | --- | --- | --- | --- | --- |
 | `prizepark` | `task-games/prize-park-local` | 3.24 MB | 积分 → 币 → 奖品 → 券 | `think` |
 | `cloudfarm` | `task-games/cloudfarm` | 4.29 MB | 积分直接花 → 收成卖券 | `think` |
 | `claw3d` | `task-games/claw-machine` | 4.98 MB | 积分 → 币 → 抓到即发券 | `play` |
+| `sugar` | `task-games/sugar` | 0.97 MB | 积分直接花（**不设币、不发券**，开局 20） | `chill` |
 
 `HOST_API = 4`（10-23 加 `mintVoucher`：抓到奖品**直接发券**，不经过币）。
+
+`sugar` 是第一款**完全不产出**的游戏，所以 `kind` 多了第三类 `chill`
+（`think`/`play` 的说明都写着「花积分换币」，对它就是假话）。
+它的「进化经验」存在**游戏自己的存档**里，不进宿主账本 ——
+`manifest.coin` 只是闸门要求必填的占位。

@@ -59,6 +59,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "e9470d0f9f2080cdc288e8f9d9437dff81d0985d8eb69915f295f597c490557d",
     "bytes": 4493618,
     "assetBase": "/games/cloudfarm/"
+  },
+  {
+    "id": "sugar",
+    "name": "甜点魔法学院",
+    "version": "1.0.0",
+    "url": "/games/sugar/sugar.plugin.mjs",
+    "sha256": "ee351fe13ead7f418e4f9c9e10ab16a2238975be5777142e933b4d77a8f5c758",
+    "bytes": 1021949,
+    "assetBase": "/games/sugar/"
   }
 ]
 

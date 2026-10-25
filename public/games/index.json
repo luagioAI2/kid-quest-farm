@@ -20,6 +20,13 @@
       "version": "1.1.4",
       "file": "cloudfarm/cloudfarm.plugin.mjs",
       "assetBase": "cloudfarm/"
+    },
+    {
+      "id": "sugar",
+      "name": "甜点魔法学院",
+      "version": "1.0.0",
+      "file": "sugar/sugar.plugin.mjs",
+      "assetBase": "sugar/"
     }
   ]
 }

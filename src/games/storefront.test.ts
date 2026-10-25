@@ -48,6 +48,9 @@ describe('游戏市场的内容', () => {
   })
 
   it('分类顺序固定，不依赖对象键序', () => {
-    expect(GAME_KIND_ORDER).toEqual(['think', 'play'])
+    // ⚠️ 这条**故意钉死**：加/删分类必须手动改这里，等于强制一次「想清楚」。
+    // 2026-10-25 加了 `chill`（甜点魔法学院：花积分、零产出），
+    // 因为 `play` 的说明写着「花积分换币，产出看运气」，而它连币都没有。
+    expect(GAME_KIND_ORDER).toEqual(['think', 'play', 'chill'])
   })
 })

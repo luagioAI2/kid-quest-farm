@@ -103,12 +103,13 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   cloudfarm: CloudFarm,
   prizepark: PrizePark,
   claw3d: ClawMachine,
+  sugar: Sugar,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
 export const GAME_ART_IDS: string[] = Object.keys(ART)
 
-/* ============================ 四支主体 ============================ */
+/* ============================ 各支主体 ============================ */
 
 /** 农场：太阳 + 两道丘 + 一束麦穗（金黄 → 麦田，和云边小农场的绿色分开） */
 function Farm({ deep }: { deep: string }) {
@@ -277,6 +278,45 @@ function ClawMachine() {
       <circle cx="30.4" cy="33.7" r=".72" fill="#4A3728" />
       <circle cx="33.6" cy="33.7" r=".72" fill="#4A3728" />
       <circle cx="32" cy="35.5" r=".6" fill="#8B5E34" />
+    </g>
+  )
+}
+
+/**
+ * 甜点魔法学院：一碟布丁（焦糖顶 + 樱桃），底下两颗糖珠。
+ *
+ * 为什么画布丁而不是画「棋盘」：前四支都是**机器 / 田地**（摇杆、爪子、田垄），
+ * 72px 的小格里画格子盘会糊成一片马赛克；而布丁的**梯形剪影**在小尺寸下
+ * 依然一眼可辨，也和「甜点」这个名字对得上。
+ *
+ * 底下那两颗糖珠是唯一的玩法提示（这是个三消游戏），**只放两颗**：
+ * 放一排就变成「棋盘」，又回到糊掉那条路上了。
+ */
+function Sugar({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 盘子 */}
+      <ellipse cx="32" cy="53" rx="18" ry="3.8" fill={deep} opacity=".26" />
+
+      {/* 布丁主体：上窄下宽的梯形 */}
+      <path d="M19.5 29h25l4 17.2c.5 2.1-1.1 4-3.3 4H18.8c-2.2 0-3.8-1.9-3.3-4Z" fill="#FFF0D2" />
+      {/* 左侧高光：不加的话整块奶油色是平的 */}
+      <path d="M23 32h5.4l-3 14.6h-4.3Z" fill="#FFFFFF" opacity=".6" />
+
+      {/* 焦糖顶：上缘圆、下缘挂两滴 */}
+      <path
+        d="M18.6 29c0-3.5 2.8-6.3 6.3-6.3h14.2c3.5 0 6.3 2.8 6.3 6.3 0 2.3-1.9 3.3-3.5 2.1-1.6-1.2-2.5.4-4.2.4-2.5 0-2.8-2.1-5.2-2.1s-2.7 2.1-5.2 2.1c-1.7 0-2.6-1.6-4.2-.4-1.6 1.2-3.5.2-3.5-2.1Z"
+        fill="#C4833F"
+      />
+
+      {/* 樱桃 + 梗 */}
+      <circle cx="32" cy="16.6" r="4.8" fill="#E24B4A" />
+      <circle cx="30.4" cy="15" r="1.4" fill="#FFFFFF" opacity=".55" />
+      <path d="M32 11.8c.5-2.4 2-3.7 4-4.1" stroke="#5C8B3A" strokeWidth="1.7" fill="none" strokeLinecap="round" />
+
+      {/* 两颗糖珠：唯一的玩法提示 */}
+      <circle cx="10.5" cy="50.5" r="3.1" fill="#8FD3EE" />
+      <circle cx="53.5" cy="50.5" r="3.1" fill="#FFE38A" />
     </g>
   )
 }
