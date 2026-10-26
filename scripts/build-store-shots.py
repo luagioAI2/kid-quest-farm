@@ -53,10 +53,15 @@ PLAN = [
     # 说明却写「一台真的能转视角的娃娃机」—— 图和话对不上。
     # 换成 `smoke-*.png`：`npm run smoke` 对**当前构建**真跑一遍拍下来的，
     # 机台上的字就是现在的「抓娃娃」。
+    # ⚠️ 源图必须在**已入库**的目录里。原来这里写的是 `shots/smoke-*.png`，
+    # 而 `claw-machine/.gitignore` 里明确 ignore 了 `shots`（那是走查临时目录，
+    # 「要留的图进 screenshots/」）⇒ 详情页这 3 张图的**唯一来源没有版本控制**，
+    # 一旦 `shots/` 被清就再也生成不出来，而且不会有任何报错。
+    # 现在这 3 张原封不动复制进 `screenshots/store-*.png`（字节相同，webp 逐字节不变）。
     ("claw3d", "claw-machine", [
-        ("shots/smoke-1-idle.png", "1"),
-        ("shots/smoke-2-play.png", "2"),
-        ("shots/smoke-3-side.png", "3"),
+        ("screenshots/store-1-machine.png", "1"),
+        ("screenshots/store-2-front.png", "2"),
+        ("screenshots/store-3-side.png", "3"),
     ]),
     # 2026-10-25 新增。源图是 `node scripts/capture.mjs` 拍的（DPR 2，780×1688）。
     # 顺序按「先看它是什么 → 再看怎么玩」：标题 / 进化 / 关卡 / 棋盘。
