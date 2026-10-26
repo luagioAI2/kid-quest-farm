@@ -104,6 +104,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   prizepark: PrizePark,
   claw3d: ClawMachine,
   sugar: Sugar,
+  anthill: Anthill,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -317,6 +318,43 @@ function Sugar({ deep }: { deep: string }) {
       {/* 两颗糖珠：唯一的玩法提示 */}
       <circle cx="10.5" cy="50.5" r="3.1" fill="#8FD3EE" />
       <circle cx="53.5" cy="50.5" r="3.1" fill="#FFE38A" />
+    </g>
+  )
+}
+
+/**
+ * 蚂蚁搬家：一座蚁丘（洞口朝右下）+ 一只扛着叶子的蚂蚁。
+ *
+ * 为什么画「丘 + 叶子」而不是画蚂蚁特写：蚂蚁的**剪影**在小尺寸下和一只蜘蛛、
+ * 一只苍蝇分不开（都是「三个小球 + 几条腿」）；而**土丘的弧线**加一片明显
+ * 比蚂蚁大的叶子，72px 下才认得出「这是在搬东西」。
+ *
+ * 洞口那块深色是必要的：没有它，土丘就是一团米色，看着像个石头。
+ */
+function Anthill({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 地面阴影 */}
+      <ellipse cx="32" cy="54" rx="20" ry="3.4" fill={deep} opacity=".26" />
+
+      {/* 蚁丘：后面一小丘 + 前面一大丘（两层才有体积） */}
+      <path d="M8.4 53c0-5.4 4.4-9.6 9.8-9.6S28 47.6 28 53Z" fill="#C99C64" />
+      <path d="M20 53c0-8.6 7.4-15 16.4-15S52.8 44.4 52.8 53Z" fill="#E0B87F" />
+
+      {/* 洞口 */}
+      <ellipse cx="37" cy="48.6" rx="4.6" ry="3.8" fill="#4B3023" />
+
+      {/* 扛着叶子的蚂蚁：头 / 胸 / 腹 + 两条腿 */}
+      <g fill="#3E2A20">
+        <circle cx="28.6" cy="30.6" r="2.5" />
+        <circle cx="33.2" cy="28.9" r="2.1" />
+        <ellipse cx="37.8" cy="30.7" rx="3.2" ry="2.6" />
+      </g>
+      <path d="M30.8 32.6 27.6 35.6M34.6 32.2 36.2 35.8" stroke="#3E2A20" strokeWidth="1.1" strokeLinecap="round" fill="none" />
+
+      {/* 叶子：比蚂蚁明显大一圈，才看得出「在搬」 */}
+      <path d="M33.6 25.2c2.6-5.2 9.4-7.2 13.4-5 2.4 1.3 2.2 4.4-.6 6-4.4 2.6-10.2 1.8-12.8-1Z" fill="#7CB342" />
+      <path d="M34.6 25.6c3.8 1.2 8 1 11.2-.8" stroke="#5E8F32" strokeWidth="1" fill="none" strokeLinecap="round" />
     </g>
   )
 }

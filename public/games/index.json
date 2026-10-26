@@ -27,6 +27,13 @@
       "version": "1.0.0",
       "file": "sugar/sugar.plugin.mjs",
       "assetBase": "sugar/"
+    },
+    {
+      "id": "anthill",
+      "name": "蚂蚁搬家",
+      "version": "1.0.0",
+      "file": "anthill/anthill.plugin.mjs",
+      "assetBase": "anthill/"
     }
   ]
 }

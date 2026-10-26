@@ -68,6 +68,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "ee351fe13ead7f418e4f9c9e10ab16a2238975be5777142e933b4d77a8f5c758",
     "bytes": 1021949,
     "assetBase": "/games/sugar/"
+  },
+  {
+    "id": "anthill",
+    "name": "蚂蚁搬家",
+    "version": "1.0.0",
+    "url": "/games/anthill/anthill.plugin.mjs",
+    "sha256": "314b721d24981279a2302445afd348402fabc80c49df808b74caadffd3407f70",
+    "bytes": 4310548,
+    "assetBase": "/games/anthill/"
   }
 ]
 

@@ -1,0 +1,122 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 18,
+  "bytes": 1814094
+ },
+ "assets": [
+  {
+   "file": "audio/bgm_garden.m4a",
+   "bytes": 958737,
+   "sha256": "61c0b0510bac97e3db68b0913858bec63223e04e329480542861d48a3afb7df4"
+  },
+  {
+   "file": "item-acorn-5316c373.glb",
+   "bytes": 140664,
+   "sha256": "0f670edee43881eb8606a047619648c98ad984d19e2f80f455e31cb2c393241f"
+  },
+  {
+   "file": "item-croissant-1cead571.glb",
+   "bytes": 144208,
+   "sha256": "957daf3133e6e5d8ede4947772641245e3e67b4325959651911dda7dae44ab04"
+  },
+  {
+   "file": "item-cupcake-cbbf380f.glb",
+   "bytes": 212892,
+   "sha256": "00298b111bf7aea043b659fe272e79fac2dfaa8b5ca74acad794e1753e7f5931"
+  },
+  {
+   "file": "item-pretzel-58ef2ee3.glb",
+   "bytes": 214476,
+   "sha256": "f52e64b1af010afe03769da76c923fd7c59a08d56a19c51b1e2919d50ee53771"
+  },
+  {
+   "file": "sound.manifest.json",
+   "bytes": 6198,
+   "sha256": "56c329db301227f8c95e5100d98b1913e075d6f0ac01462face796e8b07fbb78"
+  },
+  {
+   "file": "ui/ant_golden.png",
+   "bytes": 10185,
+   "sha256": "689a1581306e00b3bec4f6543339bb8023c44b1ae20cbf84b6ff283da36da557",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/ant_soldier.png",
+   "bytes": 9530,
+   "sha256": "b60ddb69f2ad893b7cd974b61d975e19f9ae8af0dbe3688a062285fd429ada89",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/ant_strong.png",
+   "bytes": 11038,
+   "sha256": "4aa2563aedfe645c5029711be0954d2a74e64f3facc40ad03f973117577fde9b",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/icon_ant.png",
+   "bytes": 10697,
+   "sha256": "a803941f62cd1aff9aafc9b45af0c96245859bc3751c1b5e7e0de92e441b2489",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/icon_cash.png",
+   "bytes": 13789,
+   "sha256": "facf31ee1c96c91a2db79a005819ae7205d4a8bb6b12c9d7ba600205fe5edca3",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/icon_coin.svg",
+   "bytes": 2403,
+   "sha256": "0361d00ce4b1cb591c555e97414089c98018e803ca2d15ef41eadacbb049e828"
+  },
+  {
+   "file": "ui/icon_gear.png",
+   "bytes": 13132,
+   "sha256": "a51fe707f90bf041346f952c299c330bfff039a005224e0392c98e1814dce535",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/icon_shop.png",
+   "bytes": 16761,
+   "sha256": "fd7b357670693744ee0760de1bd30ccb6a493612d49637eccb25b0b917866d14",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/icon_speed.png",
+   "bytes": 7477,
+   "sha256": "d81a56053f3e3818718c12edd6ac57a60818c7d0eec444d715f851281787e94b",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/icon_strength.png",
+   "bytes": 11701,
+   "sha256": "0675a093ec1222e46d74616416337bc5d03677070fecf8b64e6182419da37939",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/icon_trophy.png",
+   "bytes": 13624,
+   "sha256": "941eebd7b15315699bbca4493383de71860e4ddc7b82901983fe6bacaf91c1f9",
+   "w": 192,
+   "h": 192
+  },
+  {
+   "file": "ui/icon_world.png",
+   "bytes": 16582,
+   "sha256": "b3383ad82513f0a26b93b476389f3c3ce9d1befffb37ab7a64a8a3a6acbf2b31",
+   "w": 192,
+   "h": 192
+  }
+ ]
+}

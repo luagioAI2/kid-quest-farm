@@ -66,6 +66,14 @@ PLAN = [
         ("shots/03-map.png", "3"),
         ("shots/04-board.png", "4"),
     ]),
+    # 2026-10-26 新增。源图是 `node scripts/capture.mjs` 拍的（DPR 1，390×844）。
+    # 顺序：先看它是什么（草地 + 蚂蚁搬叶子）→ 商店 / 设置 → 换世界。
+    ("anthill", "anthill", [
+        ("shots/01-main.png", "1"),
+        ("shots/02-shop.png", "2"),
+        ("shots/03-settings.png", "3"),
+        ("shots/04-world2.png", "4"),
+    ]),
 ]
 
 WIDTH = 360
