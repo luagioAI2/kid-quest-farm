@@ -501,7 +501,7 @@ manifest: {
   id: string          // ★ 不许占用内置游戏的 id（会被判为劫持，spec §12.5.1）
   name: string
   emoji: string
-  tabLabel: string    // 底部导航文字，≤3 字，多了会挤；**也不能和内置游戏同名**
+  tabLabel: string    // 底部导航文字，≤5 字，多了会挤出导航格；**也不能和内置游戏同名**
   version: string     // 语义化版本，用来判断「可更新」
   minHostApi: number  // 要求的最低宿主 API 版本，现在是 3
   coin: { id, name, emoji }                        // 自己的币
@@ -696,7 +696,7 @@ economy: { playCost: 10, expectedPayout: 6.7, capPerPrize: 2000, voucherPerCoin:
 **动手前**
 
 - [ ] 玩法一句话说清；**这个状态用户怎么走到**？（「状态存在 ≠ 用户走得到」）
-- [ ] `id` 不撞内置游戏；`tabLabel` ≤3 字
+- [ ] `id` 不撞内置游戏；`tabLabel` ≤5 字
 - [ ] `playCost` / `expectedPayout` / `capPerPrize` 定好，`expectedPayout < playCost`
 - [ ] 素材清单：哪些帧共用、哪些各画一张
 
@@ -815,7 +815,7 @@ async function mount(
 const bundle: GameBundle = {
   manifest: {
     id: 'demo', name: '许愿池', emoji: '🌟',
-    tabLabel: '许愿池',      // ★ 底部导航用的是**这个**（≤3 字），不是 name
+    tabLabel: '许愿池',      // ★ 底部导航用的是**这个**（≤5 字），不是 name
     version: '1.0.0',
     minHostApi: 3,          // 3 = 有 ctx / 异步 mount / redeemGameCoin
     coin: { id: 'star', name: '星币', emoji: '⭐' },
@@ -839,7 +839,7 @@ export default bundle
 | `mount` 里 `await` 之后才建 DOM，却不给加载态 | 3D 包要 2~5 秒，孩子看到的是**空白** |
 | 根节点写 `min-height:100vh` | 算上宿主顶栏 / 底栏，把底栏盖掉一截 |
 | 卸载时只清 `container.innerHTML` | 定时器 / `<style>` / WebGL context 全留着，切回来「跑两遍」 |
-| `tabLabel` 写成 `name` | 4 个字的游戏名挤进底栏（导航格只按 3 个字设计） |
+| `tabLabel` 写成 `name` | 6 个字以上的游戏名会挤出底栏（导航格按 5 个字设计） |
 
 > ⚠️ `demo` 那份**故意不写** `voucherPerCoin`：它没有兑换入口，
 > 写了就等于在家长栏承诺「这游戏能换券」，而孩子找不到那颗按钮。

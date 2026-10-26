@@ -167,7 +167,7 @@ export default function App() {
    *
    * ★ 下载来的游戏用 **`tabLabel`**，不是 `name`（2026-10-22 补）。
    *
-   * 契约里 `tabLabel` 是「底部导航上的文字，≤3 字」，`check-plugin.mjs` 也在卡这个
+   * 契约里 `tabLabel` 是「底部导航上的文字，≤5 字」（2026-10-26 从 3 放宽），`check-plugin.mjs` 也在卡这个
    * 上限 —— 但这里原来读的是 `activePlugin.name`，于是那个字段**从来没被用过**：
    * 「抓奖乐园」（4 字）直接上了导航格，而它自己的 `tabLabel` 是「抓奖」。
    * 一个被校验、被写进文档、却没人读的字段，比没有这个字段更糟 ——

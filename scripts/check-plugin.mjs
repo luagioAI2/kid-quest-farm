@@ -25,7 +25,7 @@
  * | manifest 形状 | 复用宿主的 `describeManifestProblem`（**同一份实现**） |
  * | 宿主版本门 | `minHostApi ≤ HOST_API` |
  * | 经济闸门 | 复用 `checkPluginEconomy`（含「一局期望换出的券 < 成本」） |
- * | id 劫持 / 导航文案 | 撞内置 id、`tabLabel` 超 3 字 |
+ * | id 劫持 / 导航文案 | 撞内置 id、`tabLabel` 超 5 字 |
  * | 币的图标撞车 | 🪙 / 🎟️ / 💎 / 🕹️ 已经被占用 |
  * | 资源清单 | `assets/manifest.json` 每条的 sha256 与实际文件**逐字节对得上** |
  * | 体积 | 单文件 JS 的 gzip 估算 |
@@ -129,8 +129,11 @@ if (bundle) {
     }
 
     // 4. 导航文案
+    // 2026-10-26 上限从 3 字放宽到 5 字（用户要求：「3 字实在太不方便了」）。
+    // 实测 390 宽手机上每格 90px、文字 12px，5 个字 60px —— 有余量；
+    // 6 个字就 72px，加上内边距开始贴边，所以卡在 5。
     const len = [...String(m.tabLabel ?? '')].length
-    len <= 3 ? pass(`tabLabel「${m.tabLabel}」${len} 字`) : fail(`tabLabel「${m.tabLabel}」${len} 字，超过 3 字会挤`)
+    len <= 5 ? pass(`tabLabel「${m.tabLabel}」${len} 字（上限 5）`) : fail(`tabLabel「${m.tabLabel}」${len} 字，超过 5 字会挤出导航格`)
 
     // 5. id 劫持：内置 id 从 ids.ts 里读（不 import —— 那个文件是无扩展名相对导入）
     const idsSrc = fs.readFileSync(path.join(ROOT, 'src/games/ids.ts'), 'utf8')

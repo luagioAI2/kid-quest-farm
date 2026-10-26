@@ -322,7 +322,7 @@ export const CLAW_MANIFEST = {
   id: 'claw',                      // 唯一 id，也是表前缀、meta 键前缀
   name: '娃娃机',
   emoji: '🕹️',
-  tabLabel: '娃娃机',               // 底部导航文字（≤3 字，多了会挤）
+  tabLabel: '娃娃机',               // 底部导航文字（≤5 字，多了会挤出导航格）
   /** 本游戏的币 */
   coin: { id: 'claw', name: '游戏币', emoji: '🎟️' },
   /** 经济参数 —— 家长要能看见 */

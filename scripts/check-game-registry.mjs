@@ -52,7 +52,12 @@ function parseStorefront() {
   const src = read('src/games/storefront.ts')
   const start = src.indexOf('export const STOREFRONT')
   const body = src.slice(start, src.indexOf('\n]', start))
-  const chunks = body.split(/\n  \{\n/).slice(1)
+  // ⚠️ `\r?\n` 不能省：仓库开了 `core.autocrlf`，工作区里的换行是 CRLF，
+  //    只用 `\n  {\n` 切**一条都切不出来** ⇒ 报表显示「商城条目 0 条」，
+  //    外加每款游戏一条「没有 storefront 条目」的假错。2026-10-26 真踩过一次：
+  //    某个脚本把 storefront.ts 改写成 CRLF，这个检查就从「通过」变成「6 条不一致」，
+  //    而文件内容其实一个字都没错。
+  const chunks = body.split(/\r?\n  \{\r?\n/).slice(1)
   const entries = []
   for (const c of chunks) {
     const id = c.match(/^\s*id:\s*'([^']+)'/m)?.[1]

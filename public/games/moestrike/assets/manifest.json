@@ -1,0 +1,307 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 57,
+  "bytes": 9975441
+ },
+ "assets": [
+  {
+   "file": "audio/bgm_battle.m4a",
+   "bytes": 977124,
+   "sha256": "a364e118970e682b66ba1e021b114cd5af985f08a41414d2a740cbf0a1bfef9a"
+  },
+  {
+   "file": "audio/bgm_boss.m4a",
+   "bytes": 977203,
+   "sha256": "8a629f151344c748e5c991f555e679c9709fb7b96b340197a9d71962d1e27bec"
+  },
+  {
+   "file": "audio/bgm_home.m4a",
+   "bytes": 976247,
+   "sha256": "b7cd4329f78f3f8a0080a87e1b433aa774d2e7ca7eb7d8c2d88815b68afac600"
+  },
+  {
+   "file": "bg/area_festival.webp",
+   "bytes": 181010,
+   "sha256": "4b84cc2cdb5ff1b1c63544ae7b12387c32c9b4b4610761e16bc87d88a3efc30b"
+  },
+  {
+   "file": "bg/area_lake.webp",
+   "bytes": 192400,
+   "sha256": "addc7fb4d4e11e419c6b8c3810902eb0790df7cc868b1716babff50d6988110a"
+  },
+  {
+   "file": "bg/area_ruins.webp",
+   "bytes": 206498,
+   "sha256": "f978ff4023b08d027da692627d4790015601c51f446e5c0b6e238087c34f4f92"
+  },
+  {
+   "file": "bg/area_tower.webp",
+   "bytes": 169394,
+   "sha256": "6ac60aaef2407456b7cb5e4a25fcef85189e267f1a5edbed13368a3112d194cf"
+  },
+  {
+   "file": "bg/home.webp",
+   "bytes": 181182,
+   "sha256": "039897aad1374d1754c8eae92de292959f387585c007b5028853705f9832cf72"
+  },
+  {
+   "file": "bg/opt_forest.webp",
+   "bytes": 206726,
+   "sha256": "ce87f01ed47a4ebaae3293457e66db4de67de0fd9ce28493b093cc08fc30e6fb"
+  },
+  {
+   "file": "boss/dragon.webp",
+   "bytes": 106614,
+   "sha256": "4bbf5371e582eba9e92f525c2c9b7d2816fbca01158775a172b4ca6a56f3031e"
+  },
+  {
+   "file": "boss/fox.webp",
+   "bytes": 78112,
+   "sha256": "34a4159987d8d7a43d92004e1e8c108b55ef56c6ef621f0c6d85dba0074ca13a"
+  },
+  {
+   "file": "boss/golem.webp",
+   "bytes": 133398,
+   "sha256": "880b59fde1b8fdbcef822615c9839bb61dba98d452be635d56f9c2b2f43f34b1"
+  },
+  {
+   "file": "boss/jellyfish.webp",
+   "bytes": 107832,
+   "sha256": "bb2e0ef794d085766d861db5ff53202c3e9405d6b9aa56b2478749058d54585c"
+  },
+  {
+   "file": "boss/lion.webp",
+   "bytes": 101892,
+   "sha256": "d4aec852d0ccbed0aa0ae105d234ff54ab73c3ae9e1f5c282a16e7bb577fd41b"
+  },
+  {
+   "file": "boss/moonwitch.webp",
+   "bytes": 102952,
+   "sha256": "bd31c7f6bc282702b62a11ed61edcb10fe3530e81648f485a9b09942f5472a6f"
+  },
+  {
+   "file": "boss/pegasus.webp",
+   "bytes": 115354,
+   "sha256": "633a653756009287a2f12fcfde2ffa813beece26bc6841a0bff6e7052c8fcbaf"
+  },
+  {
+   "file": "boss/phoenix.webp",
+   "bytes": 117676,
+   "sha256": "a07a4094a9831a0c452dc0ba8c343690fe51ede2adb7e39bb9ba3e41b040d967"
+  },
+  {
+   "file": "boss/stag.webp",
+   "bytes": 110136,
+   "sha256": "a5b46f7d99eb12e30d260b2d0eecb197c3d758fc3760eb19ba1deae97cfd90ef"
+  },
+  {
+   "file": "boss/whale.webp",
+   "bytes": 124792,
+   "sha256": "a1763e3ec6d55579144d29d04dcdf0003bea723d1f171a0b1a495c492375585a"
+  },
+  {
+   "file": "chara/akari_0.webp",
+   "bytes": 200540,
+   "sha256": "01d8c0ae46ef2c939abd1e02e0f55e4c625e4b68fe4ee4f65573ac6905ed0593"
+  },
+  {
+   "file": "chara/akari_1.webp",
+   "bytes": 268368,
+   "sha256": "4c68343e8c8fde4d3b6ed010c540bf28c640e97b46c237c3bb6352c0b58995ad"
+  },
+  {
+   "file": "chara/amane_0.webp",
+   "bytes": 192624,
+   "sha256": "69337251a9a43bad674a3dd353c9a4462959cc56d50047a6a0888c066215a9d5"
+  },
+  {
+   "file": "chara/amane_1.webp",
+   "bytes": 218934,
+   "sha256": "4faac4b955d419ea712eba41bd96dd08e11c1c382326823e7e299342a223f46d"
+  },
+  {
+   "file": "chara/hina_0.webp",
+   "bytes": 206310,
+   "sha256": "dbeb800d01bdea935311cc0041b0e4c02f2154daa09aa75345fc3307e5ec8339"
+  },
+  {
+   "file": "chara/hina_1.webp",
+   "bytes": 233416,
+   "sha256": "d5925f14eb2f19957c770338875bfb893b724f1c7ab7affbb79ae3828169e470"
+  },
+  {
+   "file": "chara/karin_0.webp",
+   "bytes": 161636,
+   "sha256": "695aada8d27a9888605b9787f70cf5bc57559830ed1ee40e8834a7cba2ca1b81"
+  },
+  {
+   "file": "chara/karin_1.webp",
+   "bytes": 248616,
+   "sha256": "f867f897bb2921e13a8bcd15ed59088a7e6d026ab9877c35a980398aaa500f14"
+  },
+  {
+   "file": "chara/kureha_0.webp",
+   "bytes": 216870,
+   "sha256": "f3511aa8b243cfa69dde0a47c4aa5fa94e07ed81327bfc2bbc230d74e0de4a30"
+  },
+  {
+   "file": "chara/kureha_1.webp",
+   "bytes": 253516,
+   "sha256": "716aad3b759f742608aec39fe6649d23037192670c33074eb4732555e9f85dac"
+  },
+  {
+   "file": "chara/mira_0.webp",
+   "bytes": 195416,
+   "sha256": "f7d9d73a7dab3aff917c35203ba6a8fa84a7e332c8f1584f5e6d4ec4d50a2524"
+  },
+  {
+   "file": "chara/mira_1.webp",
+   "bytes": 240968,
+   "sha256": "94c094d1fec5f45198929c796f8b1e6ad608fae1b9098f0af45b2e895d04e0b0"
+  },
+  {
+   "file": "chara/shion_0.webp",
+   "bytes": 203598,
+   "sha256": "162a3128e9c5e5e56ac49fc1ec30d4e1b80f73d95795935a0851ec105bb0bb14"
+  },
+  {
+   "file": "chara/shion_1.webp",
+   "bytes": 234756,
+   "sha256": "5246023e471687b2e92a8f59480f0bf09972e32d7741f370a6f63d8d498cdc3e"
+  },
+  {
+   "file": "chara/shizuku_0.webp",
+   "bytes": 185204,
+   "sha256": "726c7e5a25fac1b8b9a38d4012eff9a428cea2004abaaea8828a590997ca798b"
+  },
+  {
+   "file": "chara/shizuku_1.webp",
+   "bytes": 212280,
+   "sha256": "542520170357184a0a0336be2d28427109323fc07ff8c36567bd74363e94a029"
+  },
+  {
+   "file": "chara/wakaba_0.webp",
+   "bytes": 191498,
+   "sha256": "6bee0301925487c4c20ff9333e0ef5a3d17ffab78e29b0488a81a7eb56c54247"
+  },
+  {
+   "file": "chara/wakaba_1.webp",
+   "bytes": 257076,
+   "sha256": "b530a7c8eaeccd81eb8f011ca0f50f28af06fb8b5967ae48a8857f4c45956ab3"
+  },
+  {
+   "file": "chara/yoruka_0.webp",
+   "bytes": 183400,
+   "sha256": "2e2986c97f9de3799bea0908d8551c7758206bee57c6f7c15dbc8559c41b2e39"
+  },
+  {
+   "file": "chara/yoruka_1.webp",
+   "bytes": 272372,
+   "sha256": "d1cf24ea427a56f845eb45e2b8a8cbdf84eece59c5d47445d4dc06b889daa980"
+  },
+  {
+   "file": "mon/angelpuff.webp",
+   "bytes": 20784,
+   "sha256": "6574a251a98107936b0f6f7a67f7ceb0896eb80b25d77f7bc0393b1e8e5f13b6"
+  },
+  {
+   "file": "mon/bubblefish.webp",
+   "bytes": 24346,
+   "sha256": "df72b2deeddd20e68df16254bb8cd2e738c173aa489b2995877da48c0806488f"
+  },
+  {
+   "file": "mon/candle.webp",
+   "bytes": 18384,
+   "sha256": "6be8c1b367ab07e10e0b3558c6202a1c7c43c3e01eece15d661fa202be7fe762"
+  },
+  {
+   "file": "mon/cloud.webp",
+   "bytes": 14390,
+   "sha256": "1957b447022f217822ebe15c6f00f51f7d685db6d89b397c8a211b4b191d755a"
+  },
+  {
+   "file": "mon/flowerbud.webp",
+   "bytes": 20746,
+   "sha256": "d77baf5d388046ba9929640b929656b06cc98a1cfec594d04e1e81b9c5c4328f"
+  },
+  {
+   "file": "mon/ghost.webp",
+   "bytes": 21976,
+   "sha256": "b992bfe50a72494e344dc48172795da6eceba14d16ff281848f8c87b193d5fe2"
+  },
+  {
+   "file": "mon/jelly.webp",
+   "bytes": 16254,
+   "sha256": "45e840ec9f931d79eb48be187093d4d040fde9641b1fe251795252ad5e75052d"
+  },
+  {
+   "file": "mon/mushroom.webp",
+   "bytes": 21470,
+   "sha256": "bec5839c1807f1eb2e30867dfe1b20dde66813e0e7effcc2a35b43b641682a0a"
+  },
+  {
+   "file": "mon/pudding.webp",
+   "bytes": 19172,
+   "sha256": "5da8f41ccf7e98b705fcd3b7ea83dedf56677ab96371d9409a72c58c04666dce"
+  },
+  {
+   "file": "mon/shadowcat.webp",
+   "bytes": 26914,
+   "sha256": "728fe27e88be076c0cf81b9ae55de9c121cee29e5d184fc12571aaa648f262b5"
+  },
+  {
+   "file": "mon/starbat.webp",
+   "bytes": 17298,
+   "sha256": "f38d2b0328d2f7e2bd0dd205e51771fce6183bb0869876d4774fbc97306a3b7f"
+  },
+  {
+   "file": "ui-gem/frame-00.png",
+   "bytes": 29755,
+   "sha256": "4daec70257a85120166aebed3255920762dbc70be1e1522ebfd48a377d4b605d",
+   "w": 204,
+   "h": 204
+  },
+  {
+   "file": "ui-gem/frame-01.png",
+   "bytes": 30700,
+   "sha256": "3a82875caeedb202f2a15bc179a54e18e510c752a8f2fa4b7b0d46eee5b90e79",
+   "w": 204,
+   "h": 204
+  },
+  {
+   "file": "ui-gem/frame-02.png",
+   "bytes": 31132,
+   "sha256": "f212a63097d9d8c1f7a245d24257c4db054f72a46e80e11ce9fe60f84d3a89f9",
+   "w": 204,
+   "h": 204
+  },
+  {
+   "file": "ui-gem/frame-03.png",
+   "bytes": 29381,
+   "sha256": "75d256314a0a219ce4a39be1ded818513e26b338e78bb97460e7e0a6226c6638",
+   "w": 204,
+   "h": 204
+  },
+  {
+   "file": "ui-gem/frame-04.png",
+   "bytes": 29973,
+   "sha256": "7320d9e276a8507852aae46dc67121985e0c5011c6ce8ee5a997ad5597830a6f",
+   "w": 204,
+   "h": 204
+  },
+  {
+   "file": "ui-gem/prism.png",
+   "bytes": 56423,
+   "sha256": "b8940abb669b319bdfe1a042c6afa160d8aadfb2e5c91b047b4eb0fabd69e693",
+   "w": 204,
+   "h": 204
+  },
+  {
+   "file": "ui/icon_coin_selected.svg",
+   "bytes": 2403,
+   "sha256": "0361d00ce4b1cb591c555e97414089c98018e803ca2d15ef41eadacbb049e828"
+  }
+ ]
+}

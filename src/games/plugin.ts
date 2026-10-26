@@ -109,7 +109,7 @@ export interface GameManifestV2 {
   id: string
   name: string
   emoji: string
-  /** 底部导航上的文字。≤3 字，多了会挤（spec §4.1） */
+  /** 底部导航上的文字。≤5 字（2026-10-26 从 3 放宽），多了会挤出导航格（spec §4.1） */
   tabLabel: string
   /** 语义化版本，用来判断「可更新」 */
   version: string

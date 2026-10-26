@@ -83,7 +83,8 @@ const TAB_LABEL = (() => {
     new URL('../public/games/prizepark/prizepark.plugin.mjs', import.meta.url),
     'utf8',
   )
-  const m = src.match(/tabLabel:\s*"([^"]{1,3})"/)
+  // `{1,5}`：2026-10-26 起导航文案上限是 5 字，写死 3 会让 4~5 字的包解析失败
+  const m = src.match(/tabLabel:\s*"([^"]{1,5})"/)
   if (!m) throw new Error('读不到包里的 tabLabel —— 包没打？还是打包格式变了？')
   return m[1]
 })()

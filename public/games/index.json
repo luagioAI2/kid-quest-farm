@@ -34,6 +34,13 @@
       "version": "1.0.0",
       "file": "anthill/anthill.plugin.mjs",
       "assetBase": "anthill/"
+    },
+    {
+      "id": "moestrike",
+      "name": "少女战记",
+      "version": "1.0.0",
+      "file": "moestrike/moestrike.plugin.mjs",
+      "assetBase": "moestrike/"
     }
   ]
 }

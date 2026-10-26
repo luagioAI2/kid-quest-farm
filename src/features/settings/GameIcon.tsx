@@ -105,6 +105,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   claw3d: ClawMachine,
   sugar: Sugar,
   anthill: Anthill,
+  moestrike: Moestrike,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -355,6 +356,48 @@ function Anthill({ deep }: { deep: string }) {
       {/* 叶子：比蚂蚁明显大一圈，才看得出「在搬」 */}
       <path d="M33.6 25.2c2.6-5.2 9.4-7.2 13.4-5 2.4 1.3 2.2 4.4-.6 6-4.4 2.6-10.2 1.8-12.8-1Z" fill="#7CB342" />
       <path d="M34.6 25.6c3.8 1.2 8 1 11.2-.8" stroke="#5E8F32" strokeWidth="1" fill="none" strokeLinecap="round" />
+    </g>
+  )
+}
+
+/**
+ * 少女战记：一把剑 + 两点星芒。
+ *
+ * 这一款的画面是「粉紫天空 + 城堡 + 少女」，战斗本身是弹弓式的，
+ * 但**弹弓在 58px 下认不出来**（三根皮筋糊成一团）。剑的剪影更稳：
+ * 一条竖线 + 一道横挡，缩到 58px 依然一眼是「战斗」。
+ *
+ * 星芒只加两点、而且不对称 —— 对称摆会变成「装饰花纹」，不像战记。
+ * 底色用 `berry`（粉紫），和它的实际配色一致，也和另外五款的绿/蓝/金分开。
+ */
+function Moestrike({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 地面阴影：先画，压住剑首下方的浮空感 */}
+      <ellipse cx="32" cy="58" rx="12" ry="3" fill={deep} opacity=".24" />
+
+      {/* 剑身：上窄下宽的一点锥度，纯直条会像「一根棍子」 */}
+      <path d="M32 5.6 35.9 17v22.6H28.1V17Z" fill="#EEF4FF" />
+      {/* 受光侧：只占剑身左侧 1/3，是「金属」和「纸片」的分界 */}
+      <path d="M32 7.6 33.7 17v20.6h-1.7Z" fill="#FFFFFF" opacity=".8" />
+      {/* 背光侧压一点冷色，剑身才有厚度 */}
+      <path d="M35.9 17v22.6h-1.6V17Z" fill="#A9BCE8" opacity=".75" />
+
+      {/* 护手：金色，下沿一道深色 —— 缺了它就是一块黄油 */}
+      <rect x="20.4" y="39.6" width="23.2" height="5" rx="2.5" fill="#F5C64B" />
+      <rect x="20.4" y="42.8" width="23.2" height="1.8" rx=".9" fill="#C9922A" opacity=".8" />
+      {/* 护手中央那颗宝石：这一款的水晶是彩虹星，一颗小石头就够了 */}
+      <circle cx="32" cy="42.1" r="2.2" fill="#FFF3C6" />
+      <circle cx="32" cy="42.1" r="1.15" fill="#7A4FB5" opacity=".55" />
+
+      {/* 握把 + 剑首（剑首比握把宽一圈，不然像棒棒糖） */}
+      <rect x="29.7" y="44.6" width="4.6" height="9" rx="2.3" fill="#7A4FB5" />
+      <circle cx="32" cy="55.4" r="2.7" fill="#F5C64B" />
+      <circle cx="31.2" cy="54.5" r=".95" fill="#FFF2C9" />
+
+      {/* 星芒：一大一小、不对称 —— 对称摆会变成装饰花纹 */}
+      <path d="M14.6 12.2l1.5 4.1 4.1 1.5-4.1 1.5-1.5 4.1-1.5-4.1-4.1-1.5 4.1-1.5Z" fill="#FFE9A8" />
+      <path d="M49 20.4l.9 2.5 2.5.9-2.5.9-.9 2.5-.9-2.5-2.5-.9 2.5-.9Z" fill="#FFE9A8" opacity=".9" />
     </g>
   )
 }

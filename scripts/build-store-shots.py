@@ -74,6 +74,15 @@ PLAN = [
         ("shots/03-settings.png", "3"),
         ("shots/04-world2.png", "4"),
     ]),
+    # 2026-10-26 新增。源图是 `node scripts/capture.mjs` 拍的（DPR 1，390×844）。
+    # 顺序：先看它是什么（标题 + 主视觉）→ 关卡地图 → 打起来是什么样 → 有哪些人。
+    # ⚠️ 第 3 张必须是**战斗**：家长要看的是「玩起来是什么」，不是菜单。
+    ("moestrike", "moestrike", [
+        ("shots/01-home.png", "1"),
+        ("shots/02-stages.png", "2"),
+        ("shots/03-battle.png", "3"),
+        ("shots/04-chars.png", "4"),
+    ]),
 ]
 
 WIDTH = 360
