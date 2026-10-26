@@ -103,6 +103,16 @@ PLAN = [
         ("shots/03-shop.png", "3"),
         ("shots/04-skins.png", "4"),
     ]),
+    # 2026-10-26 新增。源图是 `node scripts/capture.mjs` 拍的（DPR 2，780×1688）。
+    # 顺序：先看它是什么（草地上的一群羊）→ 跳起来是什么样 → 结算 → 牧场升级。
+    # ⚠️ 第 2 张必须是**对局中、羊在跳、有分数**：只拍标题，家长看不出这是节奏游戏。
+    # ⚠️ 第 4 张要先 `P.wool = 260` 再拍：全新档羊毛为 0，升级按钮全是灰的（像坏了）。
+    ("ropeland", "ropeland", [
+        ("shots/store-1.png", "1"),
+        ("shots/store-2.png", "2"),
+        ("shots/store-3.png", "3"),
+        ("shots/store-4.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

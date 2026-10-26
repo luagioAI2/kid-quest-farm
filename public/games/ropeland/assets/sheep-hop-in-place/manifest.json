@@ -1,0 +1,80 @@
+{
+  "schema": "makeplay.sprite-anim/2",
+  "name": "sheep-hop-in-place",
+  "files": [
+    {
+      "path": "preview.gif",
+      "sha256": "af3f641c493f467bf6baa25942e9c02db3e080b2788c58c37ed1307bc2855a63",
+      "size": 92281
+    },
+    {
+      "path": "sheet-00.webp",
+      "sha256": "c24a68ba5bccf67593fbc131bdfb35e88d8d4ef9ca1e5e873a528abd8401bd76",
+      "size": 200666
+    },
+    {
+      "path": "sheet-01.webp",
+      "sha256": "35a30c226416c8458ca2cea1a046098f08ebc95f781c15679a0e9bb893789bdf",
+      "size": 208714
+    },
+    {
+      "path": "sheet-02.webp",
+      "sha256": "25d5c4e37eb2b73b8a4a3bcfc03808ec26f2aaf35b6e6ff8e493ff84c948a829",
+      "size": 211864
+    }
+  ],
+  "action_id": "hop_in_place",
+  "kind": "oneshot_return",
+  "frame": {
+    "w": 391,
+    "h": 505,
+    "count": 12,
+    "cols": 2,
+    "rows": 2
+  },
+  "pages": [
+    "sheet-00.webp",
+    "sheet-01.webp",
+    "sheet-02.webp"
+  ],
+  "fps": 7.22,
+  "frame_ms": 139,
+  "duration_ms": 1662,
+  "loop": false,
+  "facing": "right",
+  "mirrorable": true,
+  "anchor": {
+    "x": 0.5,
+    "y": 0.9723
+  },
+  "events": {
+    "impact_frame": null,
+    "release_frame": null,
+    "apex_frame": 4
+  },
+  "qa": {
+    "seam_union_mae": 15.29,
+    "still_mae": null,
+    "bg_worst": 0,
+    "edge_touch": 0,
+    "first_hit_frame": null,
+    "matte_first_iou": 0.9937,
+    "alpha_semi_share": 0.0288,
+    "mirror_mismatch_px": 0,
+    "holes_filled_px_max": 0,
+    "event_source": "geometric",
+    "event_amplitude": 0.547
+  },
+  "provenance": {
+    "lane": "realistic",
+    "conditioning": "i2v",
+    "action_confidence": "compiled",
+    "seed": 214473150,
+    "attempt": 2,
+    "source_frames": 33,
+    "backdrop": "gray",
+    "matting": "matanyone2",
+    "frame_scale": 1,
+    "fit": null
+  }
+}

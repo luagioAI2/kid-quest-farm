@@ -48,6 +48,7 @@ import {
   loadSettings,
   logFarmEvents,
   harvestTip,
+  gameCoinBalanceOf,
   postHarvest,
   postLedger,
   postMall,
@@ -3794,6 +3795,13 @@ declare global {
          * 拿到了不该拿的 gameId）—— 而那**不会报错**，只会静默串味。
          */
         kvOwnerIds: () => Promise<string[]>
+        /**
+         * 某款游戏的**币余额**（账本 delta 之和，和 `gameCoinBalanceOf` 同一个口径）。
+         *
+         * 走查脚本要断言「玩完真的拿到币」—— 顶栏数字在插件全屏时不显示，
+         * 没有读数就只能靠猜。
+         */
+        gameCoins: (gameId: string) => Promise<number>
       }
       /** 注册表的纯数据快照（见实现处的注释）—— 走查脚本用来推导期望条数 */
       games: () => {
@@ -3938,6 +3946,13 @@ if (typeof window !== 'undefined') {
       // 打进日志只会淹掉真正要看的东西。
       kv: async (gameId) => Object.keys(await listGameKv(gameId)),
       kvOwnerIds: () => listGameKvOwnerIds(),
+      /**
+       * 某款游戏的币余额（账本 delta 之和）。
+       *
+       * 加这个是因为 e2e 要断言「玩完真的拿到币」—— 没有读数就只能靠
+       * 「顶栏数字变没变」猜，而顶栏在插件全屏时根本不显示。
+       */
+      gameCoins: (gameId) => gameCoinBalanceOf(gameId),
     },
     /**
      * 注册表的**纯数据快照**（2026-10-16 加）。

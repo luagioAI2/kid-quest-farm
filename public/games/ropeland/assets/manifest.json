@@ -1,0 +1,130 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 24,
+  "bytes": 4407887
+ },
+ "assets": [
+  {
+   "file": "_ext/static.makeplay.ai/fonts/v1/open-huninn/OpenHuninn.woff2",
+   "bytes": 2180736,
+   "sha256": "22ff654dc1678b4b14949e55466b76048e68f9bdb52b8f9f1b076d478cc4715e"
+  },
+  {
+   "file": "audio/bgm_meadow.m4a",
+   "bytes": 969261,
+   "sha256": "d22efe8fda2c3ea02baba81c3533c61986c3be24a51d4bfa182a452d5b24234e"
+  },
+  {
+   "file": "bg/meadow.webp",
+   "bytes": 118324,
+   "sha256": "f9a59845caa6d0a4b77c0a989d008bd71096a24c3e3e10180e970a8bdea6bcdf"
+  },
+  {
+   "file": "bg/snow.webp",
+   "bytes": 91480,
+   "sha256": "a01c3c5506199f2ee55214d00ad431c6839643d80c9123c2bb1d9d9c5cbe6e83"
+  },
+  {
+   "file": "scarecrow-turn/sheet-00.webp",
+   "bytes": 108356,
+   "sha256": "fb80bbcb794e4ba5155bfe02f72192eeddb3ade2475196c335197a6bdff37945"
+  },
+  {
+   "file": "scarecrow-turn/sheet-01.webp",
+   "bytes": 108672,
+   "sha256": "f627fb4144b7d18eba4c6e9e9621d770b7c3a7ff4a47f060d87a93446602544e"
+  },
+  {
+   "file": "sheep-hop-in-place/sheet-00.webp",
+   "bytes": 43030,
+   "sha256": "3047fb7e894ee17d553dd3d51047932bf797dce874154f7dd17ce0768a5e8ba3"
+  },
+  {
+   "file": "sheep-hop-in-place/sheet-01.webp",
+   "bytes": 44024,
+   "sha256": "e3928acb397aa2a5630c51209248083fd4b861cbaec328cade2f236a4ee9316a"
+  },
+  {
+   "file": "sheep-hop-in-place/sheet-02.webp",
+   "bytes": 44902,
+   "sha256": "8bb8c3a9be7dae388bc46290912665568133cbb9723d5f0bf81aa24e41da28e1"
+  },
+  {
+   "file": "sheep-idle/sheet-00.webp",
+   "bytes": 75162,
+   "sha256": "2ddc64e0c25c6ce9163f1827d93c55c506d0eee7101b3835336b5627bc11ecdb"
+  },
+  {
+   "file": "sheep-idle/sheet-01.webp",
+   "bytes": 75414,
+   "sha256": "e34ac97211646c0573dcac114feee4435f2ac0c3d11d40776e5f5059b3b5f133"
+  },
+  {
+   "file": "sheep-walk/sheet-00.webp",
+   "bytes": 44668,
+   "sha256": "a4cddfe4ac56e918163a14835d3542b9a912c800c5139fe4505fb190a3d046df"
+  },
+  {
+   "file": "sheep-walk/sheet-01.webp",
+   "bytes": 46274,
+   "sha256": "ef2a62254a5dd2a59ea1b2138cb040b0b775373cfd2aa10e67e05bba3f0536be"
+  },
+  {
+   "file": "sheep-walk/sheet-02.webp",
+   "bytes": 43718,
+   "sha256": "3a078ca32da9fffb48c38fdcb42b67b43d1577298d71f8dc5aed14243d231b34"
+  },
+  {
+   "file": "snowman-turn/sheet-00.webp",
+   "bytes": 56294,
+   "sha256": "fa3c204399769aa336f89ccc3faa6eb9eb000588d1f6b9c7804134d0562ded2d"
+  },
+  {
+   "file": "snowman-turn/sheet-01.webp",
+   "bytes": 44662,
+   "sha256": "7e3a81c438e40f91d7fe94b5f588ef3750597562a4715d080da6d7e776f90676"
+  },
+  {
+   "file": "snowman-turn/sheet-02.webp",
+   "bytes": 45056,
+   "sha256": "603cac62c99da94e01c8f70a399cf7ed2702cbffd17690c0caaec3d39d5f473c"
+  },
+  {
+   "file": "sound.manifest.json",
+   "bytes": 11640,
+   "sha256": "5df3fe7e7c93b61b54d0cfa194f50f1b3b7179ecae87e03005fe8951f5f466fc"
+  },
+  {
+   "file": "sound.pack",
+   "bytes": 122144,
+   "sha256": "2613c5283bc1d2f0d8790dccebf840df3832c1744b42df939f85f7a28f8d3435"
+  },
+  {
+   "file": "sprites/dog.webp",
+   "bytes": 15144,
+   "sha256": "513ed2e4caa284b3aaa0d79bfdfa7be80aba15e43a3d3072f898bd0d658b46b0"
+  },
+  {
+   "file": "sprites/scarecrow.webp",
+   "bytes": 36656,
+   "sha256": "72b7e8b3a2c9d710495926a4828da938e96c8488dd53ea0b6deb52d0aae6bde5"
+  },
+  {
+   "file": "sprites/sheep.webp",
+   "bytes": 30348,
+   "sha256": "1688a2dbef8cb2774a5bef3e966f3793dae8a61b7934fda18e83d78ca5d78c50"
+  },
+  {
+   "file": "sprites/snowman.webp",
+   "bytes": 28724,
+   "sha256": "2e0a47f3c2e53e13bc741273e03030f04a1d0f3d13c47a246445a30972c5af1a"
+  },
+  {
+   "file": "sprites/windmill.webp",
+   "bytes": 23198,
+   "sha256": "f3bc25af79131a3bcf7bf25b95fc4262d6074f1309b07211c3b4831fde7b9158"
+  }
+ ]
+}

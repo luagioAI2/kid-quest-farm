@@ -55,6 +55,13 @@
       "version": "1.0.0",
       "file": "minergirl/minergirl.plugin.mjs",
       "assetBase": "minergirl/"
+    },
+    {
+      "id": "ropeland",
+      "name": "跳绳羊群",
+      "version": "1.0.0",
+      "file": "ropeland/ropeland.plugin.mjs",
+      "assetBase": "ropeland/"
     }
   ]
 }

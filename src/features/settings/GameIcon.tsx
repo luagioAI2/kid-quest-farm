@@ -108,6 +108,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   moestrike: Moestrike,
   melonjar: Melonjar,
   minergirl: Minergirl,
+  ropeland: Ropeland,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -488,6 +489,55 @@ function Minergirl({ deep }: { deep: string }) {
       <path d="M50.6 48.4 56.8 47.2 54.4 53.6Z" fill="#7E8CA3" />
       <circle cx="48.2" cy="47.4" r="1.5" fill="#FFD34E" />
       <circle cx="52" cy="50.4" r="1.1" fill="#FFD34E" />
+    </g>
+  )
+}
+
+/**
+ * 跳绳羊群：一根甩起来的绳子 + 一只离地的羊。
+ *
+ * 为什么不画一群羊：58px 下五只羊会糊成一条白带，读者只看得出「有团白色」。
+ * 一只悬空的羊 + 一道弧线，剪影清楚，而且「没踩在地上」这件事本身就说明它在跳。
+ * 绳子用**细**线（2.2）而不是粗线：粗了会变成一根杠，看着像个球拍。
+ */
+function Ropeland({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 地面：一条浅弧，给「离地」一个参照 */}
+      <path d="M0 55c14-4 26-4 38-1s22 1 26 0v9H0Z" fill={deep} opacity=".3" />
+
+      {/* 绳子：两端在下面（被人握着），中段甩到羊脚下 */}
+      <path
+        d="M9 55.5C13.6 39 26 30.4 40 30.4s25 8 27 25"
+        stroke="#B9834E"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        fill="none"
+      />
+      {/* 握把：两个小方块，否则绳子两端像断在空中 */}
+      <rect x="6.6" y="53.6" width="5.2" height="4.6" rx="2" fill="#8A5A32" />
+      <rect x="64.2" y="53.6" width="5.2" height="4.6" rx="2" fill="#8A5A32" />
+
+      {/* 羊身：云朵状，比正圆更像羊毛 */}
+      <path
+        d="M35 26.6c-3 0-5.2-1.8-5.2-4.2 0-1.9 1.2-3.4 3-4-.4-.7-.6-1.5-.6-2.3 0-2.7 2.4-4.9 5.4-4.9 1.4 0 2.7.5 3.6 1.3.9-2.1 3.1-3.6 5.7-3.6 2.3 0 4.3 1.1 5.4 2.8.5-.1 1.1-.2 1.7-.2 2.7 0 4.9 1.9 4.9 4.3 0 .7-.2 1.4-.5 2 1.5.7 2.5 2 2.5 3.6 0 2.4-2.3 5.2-5.3 5.2Z"
+        fill="#F7F4EC"
+      />
+      {/* 毛的暗部：只在下半圈，压一点就够 */}
+      <path d="M36 20.4c2.4 3.4 9.6 4.6 16.4 1.6" stroke="#D9D2C4" strokeWidth="1.6" fill="none" opacity=".9" />
+
+      {/* 头：偏右，别和身体重叠成一个团 */}
+      <ellipse cx="55.4" cy="14.4" rx="6.4" ry="5.6" fill="#4A3A2A" />
+      {/* 耳朵：两片向下垂，这是羊最好认的地方 */}
+      <ellipse cx="49.8" cy="14.2" rx="2.6" ry="4" fill="#3B2E21" transform="rotate(-18 49.8 14.2)" />
+      <ellipse cx="61.2" cy="14.6" rx="2.6" ry="4" fill="#3B2E21" transform="rotate(18 61.2 14.6)" />
+      {/* 眼睛：一颗白点，暗头上不点就像一坨墨 */}
+      <circle cx="56.4" cy="13.4" r="1.25" fill="#FFFFFF" />
+
+      {/* 腿：离地，四根短短的白线 */}
+      <path d="M33.6 26.2v6.4M39 26.6v6.8M47 26.4v6.6M52.4 26v6.4" stroke="#F7F4EC" strokeWidth="2.2" strokeLinecap="round" />
+      {/* 跳起的两道浪：有了它才读成「在跳」而不是「贴着绳子站着」 */}
+      <path d="M23 35.4h5M67.6 36.4h5" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" opacity=".75" />
     </g>
   )
 }

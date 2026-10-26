@@ -1,0 +1,73 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "sheep-idle",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "cb7452812721ed5b86c4380473ce37d8ca61ca8984724ea4e73e865c624e6348",
+   "size": 66695
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "0e4940fa5b7bcf6316f56581363d8e8c638943d85b85ca6b4ee69b2699778132",
+   "size": 211032
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "ae9475dcfad307b620958e1dbe6eda3d5cd07f822bff3a36376caa2a77463e1c",
+   "size": 214054
+  }
+ ],
+ "action_id": "idle",
+ "kind": "loop",
+ "frame": {
+  "w": 382,
+  "h": 336,
+  "count": 12,
+  "cols": 2,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 21.0,
+ "frame_ms": 48,
+ "duration_ms": 571,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9583
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 1.04,
+  "still_mae": null,
+  "bg_worst": 0.0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9942,
+  "alpha_semi_share": 0.0308,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 0,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "flf2v",
+  "action_confidence": "template",
+  "seed": 1448283819,
+  "attempt": 2,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1.0,
+  "fit": null
+ }
+}

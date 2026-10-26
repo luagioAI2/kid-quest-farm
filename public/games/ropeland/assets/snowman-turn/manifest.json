@@ -1,0 +1,79 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "snowman-turn",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "f45f5dfb7294597b5ac912a1dc79c6fcd56c7d57a8557236ddd8a518d12c42b6",
+   "size": 112485
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "e47077a648ddc5495f0859401232ad95c94f31c30f5a6f982667c667b950c085",
+   "size": 194068
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "74f6807c839312ac34fba821f14c467ea919d0ef6ba201d115043c9c047309e2",
+   "size": 170338
+  },
+  {
+   "path": "sheet-02.webp",
+   "sha256": "0804f9136b8cae21e8792c9924e56093ba057c858fa741973cc7d12f69f10a9d",
+   "size": 169752
+  }
+ ],
+ "action_id": "turn_rope",
+ "kind": "loop",
+ "frame": {
+  "w": 393,
+  "h": 387,
+  "count": 12,
+  "cols": 2,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp",
+  "sheet-02.webp"
+ ],
+ "fps": 7.7,
+ "frame_ms": 130,
+ "duration_ms": 1558,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9638
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 23.37,
+  "still_mae": null,
+  "bg_worst": 0.0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.989,
+  "alpha_semi_share": 0.0627,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 21,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 873164812,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1.0,
+  "fit": null
+ }
+}

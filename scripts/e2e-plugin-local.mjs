@@ -54,8 +54,8 @@ import { join } from 'node:path'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4393/'
 const VIEWPORT = process.argv[3] ?? 'phone'
-
-const GAME_ID = 'prizepark'
+/** 第 3 个参数指定测哪一款（默认 prizepark = 首款真机包，回归用） */
+const GAME_ID = process.argv[4] ?? 'prizepark'
 /**
  * 版本号**从清单里读**，不写死。
  *
@@ -65,8 +65,8 @@ const GAME_ID = 'prizepark'
  */
 const GAME_VERSION = (() => {
   const src = readFileSync(new URL('../src/games/localGames.ts', import.meta.url), 'utf8')
-  const m = src.match(/"id":\s*"prizepark"[\s\S]{0,200}?"version":\s*"([^"]+)"/)
-  if (!m) throw new Error('在 localGames.ts 里找不到 prizepark 的 version —— 清单没生成？')
+  const m = src.match(new RegExp(`"id":\\s*"${GAME_ID}"[\\s\\S]{0,200}?"version":\\s*"([^"]+)"`))
+  if (!m) throw new Error(`在 localGames.ts 里找不到 ${GAME_ID} 的 version —— 清单没生成？`)
   return m[1]
 })()
 /**
@@ -80,7 +80,7 @@ const GAME_VERSION = (() => {
  */
 const TAB_LABEL = (() => {
   const src = readFileSync(
-    new URL('../public/games/prizepark/prizepark.plugin.mjs', import.meta.url),
+    new URL(`../public/games/${GAME_ID}/${GAME_ID}.plugin.mjs`, import.meta.url),
     'utf8',
   )
   // `{1,5}`：2026-10-26 起导航文案上限是 5 字，写死 3 会让 4~5 字的包解析失败
@@ -91,8 +91,8 @@ const TAB_LABEL = (() => {
 /** 市场里那一行的名字（从 `storefront.ts` 读，改名不该让断言红） */
 const GAME_NAME = (() => {
   const src = readFileSync(new URL('../src/games/storefront.ts', import.meta.url), 'utf8')
-  const m = src.match(/id: 'prizepark',\s*\n\s*name: '([^']+)'/)
-  if (!m) throw new Error('在 storefront.ts 里找不到 prizepark 的 name')
+  const m = src.match(new RegExp(`id: '${GAME_ID}',\\s*\\n\\s*name: '([^']+)'`))
+  if (!m) throw new Error(`在 storefront.ts 里找不到 ${GAME_ID} 的 name`)
   return m[1]
 })()
 
@@ -334,7 +334,7 @@ console.log('【⓪ 基线】')
   const before = await snap()
   check('动手前一款插件游戏都没装', before.installed.length === 0, before.installed.join(',') || '(空)')
   check('动手前底部没有插件游戏那一格', !(await page.$(`[data-tour="tab-${GAME_ID}"]`)))
-  check('动手前 `gameKv` 里没有 prizepark 的行', !(await kvOwners()).includes(GAME_ID), (await kvOwners()).join(',') || '(空)')
+  check(`动手前 \`gameKv\` 里没有 ${GAME_ID} 的行`, !(await kvOwners()).includes(GAME_ID), (await kvOwners()).join(',') || '(空)')
   check('动手前当前游戏是农场', before.active === 'farm', before.active)
 }
 
@@ -390,7 +390,7 @@ let pointsBefore = 0
       GAME_VERSION,
   )
   check('市场里那一行变成「已装」', await waitFor(`[data-plugin-installed-row="${GAME_ID}"]`, 5000))
-  check('已安装清单里有 prizepark', after.installed.includes(GAME_ID), after.installed.join(','))
+  check(`已安装清单里有 ${GAME_ID}`, after.installed.includes(GAME_ID), after.installed.join(','))
 
   /*
    * 经济参数要**给家长看得见**（PluginStoreCard ③）。
@@ -420,7 +420,7 @@ console.log('\n【② 设为当前】')
   await wait(800)
 
   const after = await snap()
-  check('store 里当前游戏切成了 prizepark', after.active === GAME_ID, after.active)
+  check(`store 里当前游戏切成了 ${GAME_ID}`, after.active === GAME_ID, after.active)
 }
 
 await leaveSettings()
@@ -899,7 +899,7 @@ console.log('\n【⑥ 卸载】')
   const after = await snap()
   check('已安装清单里没有了', !after.installed.includes(GAME_ID), after.installed.join(',') || '(空)')
   check('当前游戏回落到农场（否则底栏会指向一个不存在的游戏）', after.active === 'farm', after.active)
-  check('★ `gameKv` 里一条 prizepark 的行都不剩（存档也清了）', !(await kvOwners()).includes(GAME_ID), (await kvOwners()).join(',') || '(空)')
+  check(`★ \`gameKv\` 里一条 ${GAME_ID} 的行都不剩（存档也清了）`, !(await kvOwners()).includes(GAME_ID), (await kvOwners()).join(',') || '(空)')
   /*
    * 「又变回可安装」这个判据现在得看**市场里**那一行：
    * 本地包已经搬进游戏市场弹层，设置页上没有 `[data-local-*]` 了。
