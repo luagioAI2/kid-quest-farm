@@ -106,6 +106,8 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   sugar: Sugar,
   anthill: Anthill,
   moestrike: Moestrike,
+  melonjar: Melonjar,
+  minergirl: Minergirl,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -398,6 +400,94 @@ function Moestrike({ deep }: { deep: string }) {
       {/* 星芒：一大一小、不对称 —— 对称摆会变成装饰花纹 */}
       <path d="M14.6 12.2l1.5 4.1 4.1 1.5-4.1 1.5-1.5 4.1-1.5-4.1-4.1-1.5 4.1-1.5Z" fill="#FFE9A8" />
       <path d="M49 20.4l.9 2.5 2.5.9-2.5.9-.9 2.5-.9-2.5-2.5-.9 2.5-.9Z" fill="#FFE9A8" opacity=".9" />
+    </g>
+  )
+}
+
+/**
+ * 爆汁瓜瓜罐：一只玻璃罐，里面一颗带条纹的西瓜。
+ *
+ * 画的顺序是**从里往外**：先西瓜，再玻璃罐身（半透明白 + 白描边），
+ * 最后罐口那圈盖子和左侧高光。反过来先画罐子的话，西瓜会盖在玻璃上，
+ * 看着像「西瓜贴在罐子外面」。
+ *
+ * ⚠️ 玻璃只用 `fillOpacity` 提亮，**不要**给它一个实色底：
+ *    58px 下实色会把西瓜糊掉，只剩一个灰方块。
+ */
+function Melonjar({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 罐底阴影：有它罐子才「落在地上」，否则像浮着 */}
+      <ellipse cx="32" cy="56.6" rx="13.6" ry="2.8" fill={deep} opacity=".42" />
+
+      {/* 西瓜（在罐里） */}
+      <circle cx="32" cy="44.6" r="9.6" fill="#3FAE5A" />
+      <circle cx="32" cy="44.6" r="9.6" fill="none" stroke="#2A7F42" strokeWidth="1.1" opacity=".85" />
+      {/* 深色条纹：三条竖弧，中间那条最长 */}
+      <g stroke="#237A3C" strokeWidth="1.5" fill="none" opacity=".8" strokeLinecap="round">
+        <path d="M27.2 37.8c-1.5 4.4-1.5 9.2 0 13.6" />
+        <path d="M32 35.5c-1.8 5.4-1.8 12.8 0 18.2" />
+        <path d="M36.8 37.8c1.5 4.4 1.5 9.2 0 13.6" />
+      </g>
+      <ellipse cx="28.5" cy="40.8" rx="2.4" ry="1.5" fill="#FFFFFF" opacity=".5" transform="rotate(-24 28.5 40.8)" />
+      <path d="M32 35.2c.1-1.5 1.1-2.5 2.5-2.8" stroke="#2A7F42" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+
+      {/* 玻璃罐身 */}
+      <path
+        d="M20 26h24v22.4a6.1 6.1 0 0 1-6.1 6.1H26.1A6.1 6.1 0 0 1 20 48.4Z"
+        fill="#FFFFFF"
+        fillOpacity=".15"
+        stroke="#FFFFFF"
+        strokeOpacity=".8"
+        strokeWidth="1.5"
+      />
+      {/* 左侧竖高光 */}
+      <path d="M23.4 29.8v17.6" stroke="#FFFFFF" strokeOpacity=".7" strokeWidth="1.5" strokeLinecap="round" />
+
+      {/* 罐口 + 盖子（盖子比罐身宽一圈，不然像瓶口） */}
+      <rect x="18.2" y="20.4" width="27.6" height="5.6" rx="2.5" fill="#EAF6FF" />
+      <rect x="18.2" y="20.4" width="27.6" height="2.1" rx="1.05" fill="#FFFFFF" />
+      <rect x="19.6" y="25.6" width="24.8" height="1.5" rx=".75" fill={deep} opacity=".32" />
+    </g>
+  )
+}
+
+/**
+ * 挖矿少女：一把镐，镐尖下压着一块矿。
+ *
+ * 为什么不画矿道剖面 / 矿车：剖面在 58px 下是一堆横线，会和 `anthill` 的土丘、
+ * `farm` 的田垄糊成一片；矿车是个小方块，也认不出。**镐的剪影**（一条斜柄 +
+ * 一道两端收尖的弯头）缩到 58px 依然一眼是「挖」。
+ *
+ * 镐头是「两条同向的弧围出来的一条月牙」—— 不是用 stroke 画一根弯条：
+ * stroke 的端头是圆的（像镰刀），而两端收尖才像镐。
+ *
+ * 那块矿不是装饰：没有它，镐是悬空的；有了它，画面讲的是「挖出来的东西」。
+ * 矿上两颗金点也是这一款的实际内容（挖矿石卖钱）。
+ */
+function Minergirl({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 地面阴影 */}
+      <ellipse cx="32" cy="57.4" rx="17" ry="3.2" fill={deep} opacity=".3" />
+
+      {/* 镐柄：右上 → 左下，斜着才不像一根竖棍 */}
+      <path d="M40 17 25.6 55" stroke="#C98A4B" strokeWidth="4.6" strokeLinecap="round" />
+      <path d="M39 18.6 24.8 55.4" stroke="#E7B47C" strokeWidth="1.3" strokeLinecap="round" opacity=".8" />
+
+      {/* 镐头：外弧（更弯）减内弧（较平）＝ 两端收尖的月牙 */}
+      <path d="M21 27.2Q40 5.4 59 27.2 40 16.2 21 27.2Z" fill="#D5DFEE" />
+      {/* 下沿压一道冷色，金属才有厚度 */}
+      <path d="M21 27.2Q40 16.2 59 27.2" stroke="#A9B8CE" strokeWidth="1.4" fill="none" />
+      {/* 上沿高光 */}
+      <path d="M24.8 24.4Q40 9.6 55.2 24.4" stroke="#FFFFFF" strokeWidth="1.3" fill="none" opacity=".65" />
+
+      {/* 矿石：三个面（亮 / 中 / 暗），58px 下才有体积 */}
+      <path d="M42.6 53.6 45.4 43.8 52.2 41.6 56.8 47.2 54.4 53.6Z" fill="#9BA8BC" />
+      <path d="M45.4 43.8 52.2 41.6 50.6 48.4Z" fill="#C4D0E2" />
+      <path d="M50.6 48.4 56.8 47.2 54.4 53.6Z" fill="#7E8CA3" />
+      <circle cx="48.2" cy="47.4" r="1.5" fill="#FFD34E" />
+      <circle cx="52" cy="50.4" r="1.1" fill="#FFD34E" />
     </g>
   )
 }

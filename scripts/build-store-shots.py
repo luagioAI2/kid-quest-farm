@@ -83,6 +83,26 @@ PLAN = [
         ("shots/03-battle.png", "3"),
         ("shots/04-chars.png", "4"),
     ]),
+    # 2026-10-26 新增。源图是 `node scripts/capture.mjs` 拍的（DPR 2，780×1688）。
+    # 顺序：先看它是什么（标题）→ 玩起来是什么样（罐里有果）→ 成长 → 长期目标。
+    # ⚠️ 第 2 张必须是**对局中且有果**：只截标题或空罐子，家长看不出这是合成游戏。
+    ("melonjar", "melonjar", [
+        ("shots/01-title.png", "1"),
+        ("shots/02-play.png", "2"),
+        ("shots/03-upgrade.png", "3"),
+        ("shots/04-achv.png", "4"),
+    ]),
+    # 2026-10-26 新增。源图是 `node scripts/capture.mjs` 拍的（DPR 2，780×1688）。
+    # 顺序：先看它是什么（矿道剖面 + 矿工在跑）→ 点矿道升级 → 重开矿场换投资人 → 皮肤阶梯。
+    # ⚠️ 第 1 张必须是**有矿工在跑的剖面**：全新档只有一条空矿道，拍出来像一张静态插图。
+    # ⚠️ 第 3 张投资人页的门槛是 $44.4B，全新档打开只有一个灰按钮（像坏了），
+    #    所以 capture.mjs 会把累计收入放到 $200B 再拍。
+    ("minergirl", "minergirl", [
+        ("shots/01-mine.png", "1"),
+        ("shots/02-level.png", "2"),
+        ("shots/03-shop.png", "3"),
+        ("shots/04-skins.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

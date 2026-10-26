@@ -86,6 +86,24 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "3edc2b77a658c79253c73603c3d8d953c5b7b7efa72ae7a476cbfbbf813b6918",
     "bytes": 4302668,
     "assetBase": "/games/moestrike/"
+  },
+  {
+    "id": "melonjar",
+    "name": "爆汁瓜瓜罐",
+    "version": "1.0.0",
+    "url": "/games/melonjar/melonjar.plugin.mjs",
+    "sha256": "22a3d9f52c8a8473d50923c38a9f140864a8436ee4fa652d9d31eb4f39b9e23c",
+    "bytes": 5993596,
+    "assetBase": "/games/melonjar/"
+  },
+  {
+    "id": "minergirl",
+    "name": "挖矿少女",
+    "version": "1.0.0",
+    "url": "/games/minergirl/minergirl.plugin.mjs",
+    "sha256": "f3feb3348691df5532894d71ed7753742353f9b76794f55fbda682d9f32b30a6",
+    "bytes": 1152167,
+    "assetBase": "/games/minergirl/"
   }
 ]
 

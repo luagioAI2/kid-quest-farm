@@ -1,0 +1,140 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 26,
+  "bytes": 2778812
+ },
+ "assets": [
+  {
+   "file": "achievements/chain5.webp",
+   "bytes": 23258,
+   "sha256": "1e55009659835824b178c969db364ff7a4f0a4983a4abed3cd494df2913e59ed"
+  },
+  {
+   "file": "achievements/daily7.webp",
+   "bytes": 18184,
+   "sha256": "fbeab8f3ba9b08433af884cd7b2a02055ec209c7773b23fce292860613925b1b"
+  },
+  {
+   "file": "achievements/double_watermelon.webp",
+   "bytes": 29076,
+   "sha256": "09279c95674899017831ee16f94bd394ed61b6615f47e9f6a22266738112edc1"
+  },
+  {
+   "file": "achievements/first_watermelon.webp",
+   "bytes": 14478,
+   "sha256": "027e27c4b9c63c4a404e58b6e9a4124a5915af99d7a0d1cfb040da76ff7b5929"
+  },
+  {
+   "file": "achievements/merges500.webp",
+   "bytes": 21592,
+   "sha256": "de8cc844fcc4b94b3a2d71ecafd9d4a8ecac0d355e3a0568ac66bba5fe570138"
+  },
+  {
+   "file": "achievements/revive_used.webp",
+   "bytes": 18278,
+   "sha256": "e0343b1c1504c508ed6d6d8125f32e3e5274f3a8f7b24ac3dc11bbecc70038bf"
+  },
+  {
+   "file": "achievements/score10k.webp",
+   "bytes": 17406,
+   "sha256": "ba0659089c45b4167f876a1f42b2a945878ff23029639f7991ab4b85821e1cb6"
+  },
+  {
+   "file": "achievements/score50k.webp",
+   "bytes": 35084,
+   "sha256": "5b9b06345b0bcd79e8ca4797b5322a2bbd863e55fb6d65bf8b46e9cdbcdf0253"
+  },
+  {
+   "file": "bg.webp",
+   "bytes": 34826,
+   "sha256": "b1598c4eea34f342275a4165069e883e96f4bbbb1e049d3a01aedeafebad4221"
+  },
+  {
+   "file": "fruits/f01.webp",
+   "bytes": 11082,
+   "sha256": "25829aa491e181cb57d92c5fefac2d33c5d6961e5eb92a515335ca848c89485f"
+  },
+  {
+   "file": "fruits/f02.webp",
+   "bytes": 13554,
+   "sha256": "b6a527974eb07e1377ec71de7901a14f297ecc58c3be566656013ad5d877aa2a"
+  },
+  {
+   "file": "fruits/f03.webp",
+   "bytes": 14420,
+   "sha256": "dba90ef368445cc36efb34f0237aa48bc36b88106134efb98338458df37fff0e"
+  },
+  {
+   "file": "fruits/f04.webp",
+   "bytes": 10428,
+   "sha256": "5ab5514cea2f3738bac8e4b80928b31133beb1b5eeaad53407a74a32ec19527a"
+  },
+  {
+   "file": "fruits/f05.webp",
+   "bytes": 8966,
+   "sha256": "b49f1419eb4c44723a07261516dea3acf7c6dbb0f3504e4f83e0924d2f738bb2"
+  },
+  {
+   "file": "fruits/f06.webp",
+   "bytes": 12664,
+   "sha256": "203e0c9604bc072b9820aa47f717e21e761ac434424cd4dde1be810582e28fe3"
+  },
+  {
+   "file": "fruits/f07.webp",
+   "bytes": 10906,
+   "sha256": "71354e87b2bf42e8d6f1eed5dc8daa50d8c24f2a75abe69a093fe5336a02c792"
+  },
+  {
+   "file": "fruits/f08.webp",
+   "bytes": 25404,
+   "sha256": "d70d4c4422abc0aded95f9f707aab368d254c7badbc08aa1bff8d6446208c4fe"
+  },
+  {
+   "file": "fruits/f09.webp",
+   "bytes": 10332,
+   "sha256": "2e48e7bf0252d16ddfef03ef97b0c475b488ea37600780a6b779af3d314291a6"
+  },
+  {
+   "file": "fruits/f10.webp",
+   "bytes": 19426,
+   "sha256": "ee9af67cc9fab9a6c6f7a3da29504e30c923d06916f13a4dffce0439952b231b"
+  },
+  {
+   "file": "fruits/f11.webp",
+   "bytes": 18270,
+   "sha256": "ed3a17bfe3d4f9cf891724ff75d87474d503d3dbac153c3c093df2743cffb3f7"
+  },
+  {
+   "file": "jar.webp",
+   "bytes": 42774,
+   "sha256": "832d29daa23e76c0d15b43d42a44c5c54cc030af897f5b9b93f8478aa3ad736e"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/audioOff.webp",
+   "bytes": 242,
+   "sha256": "7fccdd72f4e2e9f2b6fd359dfec34cd8564e4f978c0d14ff489a1d43fb1ec814"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/audioOn.webp",
+   "bytes": 388,
+   "sha256": "c90305795f59c713a7e780862f9c220d6393531c77ba50cca27eaaffb8d6b3af"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/trophy.webp",
+   "bytes": 230,
+   "sha256": "1b547e57d8f3f9957ad3f4cb6aea7cb1b202e35ffe1812b16d531140980a882a"
+  },
+  {
+   "file": "lib/oga-music/audio/town/two-left-socks-happy.mp3",
+   "bytes": 2365141,
+   "sha256": "7fbe8ee63f6f49519c8de86d0399a5ecf1716c0d2d54484824181263cc3e3a2b"
+  },
+  {
+   "file": "ui/icon_coin_selected.svg",
+   "bytes": 2403,
+   "sha256": "0361d00ce4b1cb591c555e97414089c98018e803ca2d15ef41eadacbb049e828"
+  }
+ ]
+}

@@ -41,6 +41,20 @@
       "version": "1.0.1",
       "file": "moestrike/moestrike.plugin.mjs",
       "assetBase": "moestrike/"
+    },
+    {
+      "id": "melonjar",
+      "name": "爆汁瓜瓜罐",
+      "version": "1.0.0",
+      "file": "melonjar/melonjar.plugin.mjs",
+      "assetBase": "melonjar/"
+    },
+    {
+      "id": "minergirl",
+      "name": "挖矿少女",
+      "version": "1.0.0",
+      "file": "minergirl/minergirl.plugin.mjs",
+      "assetBase": "minergirl/"
     }
   ]
 }

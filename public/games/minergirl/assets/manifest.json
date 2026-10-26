@@ -1,0 +1,960 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 190,
+  "bytes": 13928113
+ },
+ "assets": [
+  {
+   "file": "audio/bgm_deep.m4a",
+   "bytes": 1160509,
+   "sha256": "532bcd57dcc169a4e87418da6239402f7353bc212684108e935fe6d2ddede1ec"
+  },
+  {
+   "file": "audio/bgm_surface.m4a",
+   "bytes": 1168434,
+   "sha256": "5e38e9264ee483564149e2e35ca7531df23e439e527b431ae8756307eacabd65"
+  },
+  {
+   "file": "audio/bgm_woods.m4a",
+   "bytes": 1161502,
+   "sha256": "769d05f9326e2c6ba4a1805f08756808c8b0c11968f57448ca187113cc68c49a"
+  },
+  {
+   "file": "env/barrier.webp",
+   "bytes": 86778,
+   "sha256": "a62d2405d12a8564008b54fb3084bea4b3242be5e7acad5b3b940a6d8fdb9003"
+  },
+  {
+   "file": "env/cart.webp",
+   "bytes": 10732,
+   "sha256": "101bb472473faf4c46d18bbdd89c4b89e5df7eeba65e4072fd9ee36e9cccd85c"
+  },
+  {
+   "file": "env/crate.webp",
+   "bytes": 10338,
+   "sha256": "f27612f0680883789975f201615a7b44d3abb1f1db02e02e17d998198b750544"
+  },
+  {
+   "file": "env/gondola-2.webp",
+   "bytes": 23532,
+   "sha256": "ea7d65593014a28eca98561f3f32fd265d584b1ae03b96d3450a794306abb5f6"
+  },
+  {
+   "file": "env/gondola-3.webp",
+   "bytes": 28590,
+   "sha256": "e87cae0e5ee5d3d0fda58719fe34ac920004174943513a06f51045c5528aae66"
+  },
+  {
+   "file": "env/gondola-4.webp",
+   "bytes": 29932,
+   "sha256": "58a9205d7c02ee03d2f45954da957b2d83c784e4b396e81348ad038320c499e4"
+  },
+  {
+   "file": "env/gondola-5.webp",
+   "bytes": 46992,
+   "sha256": "799f971695dc852dfc88b47b7c42fb2e3d8a53dc59a135770887ac73c3e22f3d"
+  },
+  {
+   "file": "env/gondola.webp",
+   "bytes": 22554,
+   "sha256": "88a1e1e3555c52a48cb9365f5af4076ac4887164b1268b158cd87f808c724164"
+  },
+  {
+   "file": "env/heap-coal.webp",
+   "bytes": 18172,
+   "sha256": "8984d0ece353211ea2c4cf63f952556c9631bc40a308ae52a077c0fc605fb95c"
+  },
+  {
+   "file": "env/heap-diamond.webp",
+   "bytes": 28042,
+   "sha256": "db61eabb4a71786a27e0872d25f5dc0a8e7c07b5b3e1f821613c682ece529258"
+  },
+  {
+   "file": "env/heap-gold.webp",
+   "bytes": 24336,
+   "sha256": "b5fa34dfa89048414a878094ec98c9517a2c947af859799606890aacbc77f733"
+  },
+  {
+   "file": "env/index.json",
+   "bytes": 10606,
+   "sha256": "25128ea42007a350ea22ce8c87a853afe23b6a8a460f016f9686d152f46fbb31"
+  },
+  {
+   "file": "env/station-2.webp",
+   "bytes": 30136,
+   "sha256": "7296bd2eba551d5a66fba250a702b17af395e537b2d00797ab4cf77ca3b73591"
+  },
+  {
+   "file": "env/station-3.webp",
+   "bytes": 27070,
+   "sha256": "6562e6f88771ecdc3e6f82ae0d27553a299ecab057be4bc342971c3351c4f274"
+  },
+  {
+   "file": "env/station-4.webp",
+   "bytes": 29716,
+   "sha256": "18eadc10cdf997ae5f628683ad0fdf35c58c50543d97176b41e5990efdf7bc81"
+  },
+  {
+   "file": "env/station-5.webp",
+   "bytes": 41658,
+   "sha256": "7e57a259beb445d95626e16b4bc24ea5325b3294e0db301f5fa79e3d130cd1b0"
+  },
+  {
+   "file": "env/station.webp",
+   "bytes": 41436,
+   "sha256": "570cf0df3f7e44a629dd18527e96e082091065401cb9a830580f363e8f43575c"
+  },
+  {
+   "file": "env/town-2.webp",
+   "bytes": 247326,
+   "sha256": "1495fc997366a99702aa0adfb3c85fb0fdcce2d1b99c64aa54dbff1a6779ed4e"
+  },
+  {
+   "file": "env/town-3.webp",
+   "bytes": 234078,
+   "sha256": "5e5e96b80531b521a4494bf70445f6c610514cdd93724c4dc40e58e30b1cb898"
+  },
+  {
+   "file": "env/town-4.webp",
+   "bytes": 234596,
+   "sha256": "28c0ccae44a3ae9be2e8456c88fe1c5acfed96aa57873b6ecce44f97381cc2ce"
+  },
+  {
+   "file": "env/town-5.webp",
+   "bytes": 310430,
+   "sha256": "ef1b4aa66aba85abf209be63d6d7a16a8510c790d125a7f9127ca1992255fa84"
+  },
+  {
+   "file": "env/town.webp",
+   "bytes": 217726,
+   "sha256": "14e0ce2e2f10c96c0a26d7ac6c49e780bb063662e5b4a4f70f8fc4fbcd3d78d6"
+  },
+  {
+   "file": "env/vein-coal.webp",
+   "bytes": 20086,
+   "sha256": "3bd93d6f5d35b95c37d5224619a6dc9c3590f89d56b564ad202a499967f32652"
+  },
+  {
+   "file": "env/vein-diamond.webp",
+   "bytes": 28468,
+   "sha256": "05dc45557ed00b142cad553504bd554d5279c836fc729fe2fc456e1873cb6ae7"
+  },
+  {
+   "file": "env/vein-gold.webp",
+   "bytes": 23268,
+   "sha256": "ac1d5a4d27b4ce7659d061d0385a0ef5f61ad5786748890b7d2081e364ba1716"
+  },
+  {
+   "file": "env/warehouse-2.webp",
+   "bytes": 58102,
+   "sha256": "ed196d59539a6e1b8b7dbf1995d15cdb614c8b6a513aea96c66932daa41c3e5d"
+  },
+  {
+   "file": "env/warehouse-3.webp",
+   "bytes": 54252,
+   "sha256": "04ec9e1d89f8e840c0bee32056f4914962a3e7127aa5aa8a516e4f7fc1d7ec54"
+  },
+  {
+   "file": "env/warehouse-4.webp",
+   "bytes": 63032,
+   "sha256": "6311786152f3ca2a9b74b9dbab63a9e37ef55f804090c90e9cfbaa975ee143d7"
+  },
+  {
+   "file": "env/warehouse-5.webp",
+   "bytes": 78600,
+   "sha256": "e0f61fd0a12de46ef18ccc7749742251a8fad6e69e97138c800d16bfc9365c0f"
+  },
+  {
+   "file": "env/warehouse.webp",
+   "bytes": 54996,
+   "sha256": "fb8a8eedd19dcb9c2cce9688e20684d9ddbd4bf3c4ad3a01c27c8aaac5bd0068"
+  },
+  {
+   "file": "fonts/baloo2-latin.woff2",
+   "bytes": 33188,
+   "sha256": "26fb4610d4bc976d2584ca15e66c11465dbc1f267a10dca668fcb3080dfe59c1"
+  },
+  {
+   "file": "sprites/carter-dump.webp",
+   "bytes": 77776,
+   "sha256": "c0b6f3ddbfe3beb66aabb1a1f601224ee578e8b67002183944fd6a028481221e"
+  },
+  {
+   "file": "sprites/carter-scoop.webp",
+   "bytes": 96776,
+   "sha256": "691d704edc084bfcf4fb36541c95841bafdfcc1662fed6a5ea7df21b471f08f9"
+  },
+  {
+   "file": "sprites/carter-sleep.webp",
+   "bytes": 15756,
+   "sha256": "59ea4fa5c288c9eef6935db876228a96ea6ddc3c0b38f1481b92a2e017d89c3f"
+  },
+  {
+   "file": "sprites/carter-stand.webp",
+   "bytes": 14692,
+   "sha256": "3cc40fc74e05f03ba9bcce757b2135655f4952dd2b5700c08710f3dac9b09302"
+  },
+  {
+   "file": "sprites/carter-walk.webp",
+   "bytes": 93200,
+   "sha256": "1340bf5d6d60acc68caf490bffe8f9b321b39141ade767de22d2ab055d5d2f6c"
+  },
+  {
+   "file": "sprites/crystal-carry.webp",
+   "bytes": 105178,
+   "sha256": "366f531bc94108b22ab894ef2e8c612855cd485d28ec807d97e15e053128312a"
+  },
+  {
+   "file": "sprites/crystal-mine.webp",
+   "bytes": 103720,
+   "sha256": "b26bba9966a7ce6036dd91d6483676759b6adc40689aca050a4ee9bed0b710ff"
+  },
+  {
+   "file": "sprites/crystal-sleep.webp",
+   "bytes": 18842,
+   "sha256": "e9e850adb8be59adf4bc12ff42ad1ed70d9f335c257280f4b099060b4383d099"
+  },
+  {
+   "file": "sprites/crystal-walk.webp",
+   "bytes": 125062,
+   "sha256": "b52b1784ced2191d5efb50735c283ed00126d7db82ba4ed3069fc69faad81a4a"
+  },
+  {
+   "file": "sprites/cyber-a-carry.webp",
+   "bytes": 97314,
+   "sha256": "3dcc2d5752d44fc50d07a005843f8034a674e23d8871ff3a68c1990d2eeecc74"
+  },
+  {
+   "file": "sprites/cyber-a-mine.webp",
+   "bytes": 76566,
+   "sha256": "29387f83c051d08213aace6c18b2f59fc80cf90ff5f6610ba7e3f722388d3310"
+  },
+  {
+   "file": "sprites/cyber-a-sleep.webp",
+   "bytes": 20996,
+   "sha256": "74e17a613e2083d359b428ac780ebdfe04c43a253eb1408b7df018278469811b"
+  },
+  {
+   "file": "sprites/cyber-a-walk.webp",
+   "bytes": 101908,
+   "sha256": "9fd522d06db2ffec027d8a83ffb2b0203b65ebec2103ca1066faef339a5b1c56"
+  },
+  {
+   "file": "sprites/cyber-b-carry.webp",
+   "bytes": 92958,
+   "sha256": "56b31405ec4dfee5d2a87184b79b792524cc4f146050c01efab16fcf44d1a30a"
+  },
+  {
+   "file": "sprites/cyber-b-mine.webp",
+   "bytes": 97814,
+   "sha256": "6f28ec76febdfaa1e39a98a78903519721e1557f144553151c4fd0d0a7bdf476"
+  },
+  {
+   "file": "sprites/cyber-b-sleep.webp",
+   "bytes": 20312,
+   "sha256": "c15dca1de0a3a4f8339002a1285d609694ecd4bbff2af9d2a178b8c164c42563"
+  },
+  {
+   "file": "sprites/cyber-b-walk.webp",
+   "bytes": 93464,
+   "sha256": "87fe039dbde8e2b0facd105e6f37060a08d7e069075b52808eb099e43b9a6ef8"
+  },
+  {
+   "file": "sprites/cyber-c-carry.webp",
+   "bytes": 99280,
+   "sha256": "33d8417ddbd4f0fd87180b98325e90bd99e7c5ccff7bd6cd136108bdefa2222d"
+  },
+  {
+   "file": "sprites/cyber-c-mine.webp",
+   "bytes": 96056,
+   "sha256": "4d23e17ca290b81f49768d534e844f68452786a9b085adc8faac5750be3be13e"
+  },
+  {
+   "file": "sprites/cyber-c-sleep.webp",
+   "bytes": 19498,
+   "sha256": "6f7684831d7c7fd1c741ca524395b2939cc744f52188c1285df8bba24d18bb77"
+  },
+  {
+   "file": "sprites/cyber-c-walk.webp",
+   "bytes": 105340,
+   "sha256": "2c40200e05a6d987b96e3b7a6b0b930a9dcb30da379b9a9d6425316485bc99f2"
+  },
+  {
+   "file": "sprites/drill-carry.webp",
+   "bytes": 120034,
+   "sha256": "600f2168adccd445573096aaa71e18748d0cda57236f8a589507671b0a615e20"
+  },
+  {
+   "file": "sprites/drill-mine.webp",
+   "bytes": 95922,
+   "sha256": "76f0a4a2ba8d3c781644cfa855ba740698efaa4e11273f43b177b63ad57d20a3"
+  },
+  {
+   "file": "sprites/drill-sleep.webp",
+   "bytes": 17964,
+   "sha256": "6023592ac5b5dee4ce9f7dd81cb066cc0529f52eacbd4a46cd614dbe8d080c4b"
+  },
+  {
+   "file": "sprites/drill-walk.webp",
+   "bytes": 101784,
+   "sha256": "87c0a674ed83bfe58a83cd7170bb6e161944722e8028e19792c62db1b5172dec"
+  },
+  {
+   "file": "sprites/face-akari.webp",
+   "bytes": 10494,
+   "sha256": "d401b8301e1ef0eccac2a06fb90946fb428ba81ead284d64e7691b12088f7c05"
+  },
+  {
+   "file": "sprites/face-akari@classic.webp",
+   "bytes": 10396,
+   "sha256": "d6694e1c9fd420cd40c04af51ae88bf667fbaadb7fc5b164feaca979bad8cdcc"
+  },
+  {
+   "file": "sprites/face-akari@kitsune.webp",
+   "bytes": 12298,
+   "sha256": "8448408026528512913522dabecc2f5d202421ed0e431fa52d4ee9a313362ba2"
+  },
+  {
+   "file": "sprites/face-aoi.webp",
+   "bytes": 12732,
+   "sha256": "996df0bb5b87a978f9d1033777b9be1dc7284ec615a9c12a45c6e16bca3441e9"
+  },
+  {
+   "file": "sprites/face-aya.webp",
+   "bytes": 9236,
+   "sha256": "3b60a75a07769e2dd5c16d32967622468e7f1aeccbd121359e05bb47c650fbb5"
+  },
+  {
+   "file": "sprites/face-aya@classic.webp",
+   "bytes": 9510,
+   "sha256": "36973aee3621cf327f4e888d20c170c9f367f08cb6e04d795e6e0795c768ee2e"
+  },
+  {
+   "file": "sprites/face-aya@miko.webp",
+   "bytes": 9784,
+   "sha256": "9f49897112aa5e752678282fc3cc58b2e3d3b8e85e2db1644f2ee7b88ba1f5a0"
+  },
+  {
+   "file": "sprites/face-carter.webp",
+   "bytes": 8890,
+   "sha256": "9bb00afc7efb47f262b48ba64fb4dfcfe2f8b0a04e4566e3de655fc253820723"
+  },
+  {
+   "file": "sprites/face-crystal.webp",
+   "bytes": 14134,
+   "sha256": "1fc509c55880ce9cdc2fb4eddf4e02b6ca4c30a3f0dde941f7ace9ac5028c07d"
+  },
+  {
+   "file": "sprites/face-cyber-a.webp",
+   "bytes": 10376,
+   "sha256": "32128d74fb6bf2f7abda7db2853fae6de2cf555ef8d79308007c754a7f391ba8"
+  },
+  {
+   "file": "sprites/face-cyber-b.webp",
+   "bytes": 10178,
+   "sha256": "ad62c815be54a6e7a433eec6fefadcc55164361a446c1c782d3c63f2f8271279"
+  },
+  {
+   "file": "sprites/face-cyber-c.webp",
+   "bytes": 10734,
+   "sha256": "de62f2b146c5216aef2298709514c8adb99911bd3b5bae9805563faf15ef93d7"
+  },
+  {
+   "file": "sprites/face-drill.webp",
+   "bytes": 11810,
+   "sha256": "2cd6bab0c057e19db63cfbbee36d8aa1b4152e00dcb3a16f25597dea1f1a4cb2"
+  },
+  {
+   "file": "sprites/face-komitsu.webp",
+   "bytes": 12850,
+   "sha256": "3240e5a42f7a979933f22340030396b19a902e0e8f0557f66bfba4e8c642d0b5"
+  },
+  {
+   "file": "sprites/face-komitsu@classic.webp",
+   "bytes": 13228,
+   "sha256": "0663c1ec8e6acf623bbd88c38ab21d2c9b25497927be86286576e95602b669ca"
+  },
+  {
+   "file": "sprites/face-komitsu@taiko.webp",
+   "bytes": 13574,
+   "sha256": "729987f01318cb86ca171b2261ca6a2a880901e4a4c11efd3c1a13f4f4f3efc9"
+  },
+  {
+   "file": "sprites/face-kuriko.webp",
+   "bytes": 10654,
+   "sha256": "e545a60204d09de79058350f589189b5ebcf1e3f89c6638f7c8a56a9da45ed31"
+  },
+  {
+   "file": "sprites/face-kuriko@classic.webp",
+   "bytes": 10052,
+   "sha256": "d36761c31be8f37850545a1b98251cfa4aa456fb2728eb24d8c8cbbf8dd32462"
+  },
+  {
+   "file": "sprites/face-kuriko@taisho.webp",
+   "bytes": 11076,
+   "sha256": "0ede04ba1af2034b7e56e68e82011c34569ba5a86723684ac9934c0266266aae"
+  },
+  {
+   "file": "sprites/face-mecha.webp",
+   "bytes": 9708,
+   "sha256": "d99a754e400700460d13fa6f9c9f680ca7d20b694542b2e2caff7020496a8664"
+  },
+  {
+   "file": "sprites/face-miner-a.webp",
+   "bytes": 9764,
+   "sha256": "c9ac8a4d700ea5b31e1c46275e05fd2a131e40ac227e907beb435603b79c466d"
+  },
+  {
+   "file": "sprites/face-miner-b.webp",
+   "bytes": 9978,
+   "sha256": "2c331d34061bb3609c626cca4de4ffe423f4187a7d1a050b21c3c73b9a59ed7c"
+  },
+  {
+   "file": "sprites/face-miner-c.webp",
+   "bytes": 11030,
+   "sha256": "8e871dc9d8facf3f8686a5b585e90cd1964f60061622cca072185a39304323d5"
+  },
+  {
+   "file": "sprites/face-operator.webp",
+   "bytes": 9606,
+   "sha256": "4e2eaec6612aef7226157f856e7ab38e69469b2710d3820e6414097b59fd44c0"
+  },
+  {
+   "file": "sprites/face-sakura.webp",
+   "bytes": 11808,
+   "sha256": "6b0373da4dccb3d443aaa865e2a08e0689042c305c008152fcc2908752bae9c6"
+  },
+  {
+   "file": "sprites/face-sakura@classic.webp",
+   "bytes": 11230,
+   "sha256": "1eab6c01583f0ad43d4673511e956de74307000ab8cefde667b1e391cebe1e2d"
+  },
+  {
+   "file": "sprites/face-sakura@yukata.webp",
+   "bytes": 11330,
+   "sha256": "1614a9a00cfb266802203e764b412a98a800801d5d85e6258b9baf6d5d6f3b5f"
+  },
+  {
+   "file": "sprites/face-shion.webp",
+   "bytes": 8156,
+   "sha256": "c7c45d4aa17a0b167a1caadfc2faaaced56254795c00be65cb947c701a0724a1"
+  },
+  {
+   "file": "sprites/face-shion@battle.webp",
+   "bytes": 9558,
+   "sha256": "78037fb5238a505e157d7fb3416244d5d1ba597929e6d375a7f8c8cef3194fed"
+  },
+  {
+   "file": "sprites/face-shion@classic.webp",
+   "bytes": 8494,
+   "sha256": "6b944696600b08620fe018d5fce2ef90625187d4fe3f040c60e2200d9bd9e040"
+  },
+  {
+   "file": "sprites/face-yukimi.webp",
+   "bytes": 11496,
+   "sha256": "33f031caf53d0f1efd2acc8c2582394a5df33a2f73b65b6587d46215521c5517"
+  },
+  {
+   "file": "sprites/face-yukimi@classic.webp",
+   "bytes": 12662,
+   "sha256": "16f8fba1b020f4f44e83fc23a7668c4d5d3491486b40a7237244204546ceb0c5"
+  },
+  {
+   "file": "sprites/face-yukimi@snow.webp",
+   "bytes": 12136,
+   "sha256": "6505c6afb20b70bbcb9687ba8f5783c758a83a733ec08a7d3afe633c594d43b3"
+  },
+  {
+   "file": "sprites/ghost.webp",
+   "bytes": 4440,
+   "sha256": "45b5dd7711846ca8c4d5347f46afc6482758c00d0d5c5294c81cdae59a1dffda"
+  },
+  {
+   "file": "sprites/guide-aoi.webp",
+   "bytes": 16126,
+   "sha256": "53de7d3cca8cca9f77ff862eeb16432ff5bf8d3a8da70a863dfda551dafb6262"
+  },
+  {
+   "file": "sprites/index.json",
+   "bytes": 31798,
+   "sha256": "e969ef2aedc47130ff0f2f4be177c2012b4d8fa1642e84b411d851fe6a95b738"
+  },
+  {
+   "file": "sprites/mecha-carry.webp",
+   "bytes": 96762,
+   "sha256": "38d076b2ad538bddeaf9f654b8519af69ae5f3c1098ebaa5fc68b779649c8477"
+  },
+  {
+   "file": "sprites/mecha-mine.webp",
+   "bytes": 79090,
+   "sha256": "24e8bff43fd5fbd5104bd62f9c04d9980d13b9704f54acd5b2cab7f63051b818"
+  },
+  {
+   "file": "sprites/mecha-sleep.webp",
+   "bytes": 17922,
+   "sha256": "0f6d8a04647d975befd45eb1bb989c2cb62d313d4e62de26735ca2cb90c59963"
+  },
+  {
+   "file": "sprites/mecha-walk.webp",
+   "bytes": 94772,
+   "sha256": "e96ca75a9191578a61cd1f5329d4b197d62393d12d0670177ddec1a663674369"
+  },
+  {
+   "file": "sprites/mgr-akari-cheer.webp",
+   "bytes": 59486,
+   "sha256": "15a08322639dbc074e3b1aac7af6fd68a1df38f432345e6fe51636b08a5e8ab0"
+  },
+  {
+   "file": "sprites/mgr-akari-gesture.webp",
+   "bytes": 80018,
+   "sha256": "4397426f29b7c5506d8f69093010ba05c5d9e4dcd92379f649ebe3e3f998bfac"
+  },
+  {
+   "file": "sprites/mgr-akari-idle.webp",
+   "bytes": 61656,
+   "sha256": "4f970225e3a2613b0231a8caf5018836c260ae31b20bc5bb1807000e40f61f18"
+  },
+  {
+   "file": "sprites/mgr-akari.webp",
+   "bytes": 11484,
+   "sha256": "b9ae61a23774c5617be7aeca83efdcff7fa3694a12f10d8fc87e5314a9f16b23"
+  },
+  {
+   "file": "sprites/mgr-akari@classic-cheer.webp",
+   "bytes": 56776,
+   "sha256": "59a485222c243f2b8ad49f6da9f2cd9e64297cbcf5785b57db56a4d1859b0199"
+  },
+  {
+   "file": "sprites/mgr-akari@classic-gesture.webp",
+   "bytes": 79662,
+   "sha256": "81ea931d6dfe4d9fc382ea5ecb8c3a81e04866d21e4bd584e011af8fcb2dcc6f"
+  },
+  {
+   "file": "sprites/mgr-akari@classic-idle.webp",
+   "bytes": 59476,
+   "sha256": "698c20adeba2b276277145b8929d68eaf22aadaf8e11042fd3e50dc772737b53"
+  },
+  {
+   "file": "sprites/mgr-akari@kitsune-cheer.webp",
+   "bytes": 76978,
+   "sha256": "6e7642ffb2261edb5819d1a298226fcc72e9412935df7cdd787fffa0647f36b8"
+  },
+  {
+   "file": "sprites/mgr-akari@kitsune-gesture.webp",
+   "bytes": 101090,
+   "sha256": "6101801dddc7be5ec0ec3d38c42e0657d493dbf2cfc700c1f0367b635641a396"
+  },
+  {
+   "file": "sprites/mgr-akari@kitsune-idle.webp",
+   "bytes": 85666,
+   "sha256": "cdbae473527ff00d6487641ef8fd0a962895b3195ac5ba02e7819a228966fb3b"
+  },
+  {
+   "file": "sprites/mgr-akari@kitsune.webp",
+   "bytes": 15966,
+   "sha256": "3628b5a9fc89769957d290b926cb78e4bafa1da2423280ff0aca8604c2e6bb3f"
+  },
+  {
+   "file": "sprites/mgr-aya-cheer.webp",
+   "bytes": 52694,
+   "sha256": "3466ad1a6eb0077e76fed481eeb4896fbd12e752f86d24fa81b6bf8f6024e6c6"
+  },
+  {
+   "file": "sprites/mgr-aya-gesture.webp",
+   "bytes": 65338,
+   "sha256": "6090c07657064edfa17b5374e9458b78336fe457889f41753c780a47d816625f"
+  },
+  {
+   "file": "sprites/mgr-aya-idle.webp",
+   "bytes": 57422,
+   "sha256": "f4fa37f90ab79354ac2ca7c72d56bef3132ed9a83d7c4bee72f7da241635b05c"
+  },
+  {
+   "file": "sprites/mgr-aya.webp",
+   "bytes": 10308,
+   "sha256": "066f939f629bb3f6e2fef21eacb2d0164a2509b2f7b51360ca8d0923500f50b1"
+  },
+  {
+   "file": "sprites/mgr-aya@classic-cheer.webp",
+   "bytes": 59604,
+   "sha256": "b9b12a508899c754c1803894d43cfdee2df881abf5555cdcd2eabba7795851a4"
+  },
+  {
+   "file": "sprites/mgr-aya@classic-gesture.webp",
+   "bytes": 68716,
+   "sha256": "c26865fa48cb2a97ab1aaebd57fc54e85da27cda8c4b6915025f2f7411d5934c"
+  },
+  {
+   "file": "sprites/mgr-aya@classic-idle.webp",
+   "bytes": 54060,
+   "sha256": "812df98c668e50e71c0f00ff4e6608667f9720590bc8e4890876124114cb75fd"
+  },
+  {
+   "file": "sprites/mgr-aya@miko-cheer.webp",
+   "bytes": 73688,
+   "sha256": "063de37c12601eef7eb345118701d9e2d952ece8b72b3e679dcd557d4029e293"
+  },
+  {
+   "file": "sprites/mgr-aya@miko-gesture.webp",
+   "bytes": 79790,
+   "sha256": "e85801f93de69240fe6784fda1716d3677cd9c7d41ee946f6b9d01eed68396af"
+  },
+  {
+   "file": "sprites/mgr-aya@miko-idle.webp",
+   "bytes": 70756,
+   "sha256": "b45774fbaa372fe928ddca669a61c1b14f330469ca308379e6cb1dda0eb482c7"
+  },
+  {
+   "file": "sprites/mgr-aya@miko.webp",
+   "bytes": 12232,
+   "sha256": "a68af6f1c372afcedf36f0922316ac8033427320f4b5a4c0d489e25587075edc"
+  },
+  {
+   "file": "sprites/mgr-komitsu-cheer.webp",
+   "bytes": 75286,
+   "sha256": "e05f335309a80aa90acca61a5d679cabc3578ee5359b958de913340873632a2b"
+  },
+  {
+   "file": "sprites/mgr-komitsu-gesture.webp",
+   "bytes": 75966,
+   "sha256": "6a4aecd13102d11dfbbed8988a4408e3d8644c6ae8999552c9c3559b92c53e29"
+  },
+  {
+   "file": "sprites/mgr-komitsu-idle.webp",
+   "bytes": 78556,
+   "sha256": "09cb285f3465da84d1ddbcfad5716cbe6f8d3750fd2cf369d5bcb5c80f8418b7"
+  },
+  {
+   "file": "sprites/mgr-komitsu.webp",
+   "bytes": 14074,
+   "sha256": "14930e5251d57e7fdf143273e4939348599023d15b7230f5d5234f35909bd4c5"
+  },
+  {
+   "file": "sprites/mgr-komitsu@classic-cheer.webp",
+   "bytes": 70188,
+   "sha256": "b49869976d80259ca0a8601ed09ae5261b3d73c4c73a39fc9f1ca2ca3aafcc26"
+  },
+  {
+   "file": "sprites/mgr-komitsu@classic-gesture.webp",
+   "bytes": 73560,
+   "sha256": "f506c7395591f4c80527d3ffed13eca3a032b7435d15033ec7ed4de1e3ee943a"
+  },
+  {
+   "file": "sprites/mgr-komitsu@classic-idle.webp",
+   "bytes": 78158,
+   "sha256": "5408812878db567c9204f8be1d83e63a630d4426b7a5c342303b77df9bd8a31a"
+  },
+  {
+   "file": "sprites/mgr-komitsu@taiko-cheer.webp",
+   "bytes": 81230,
+   "sha256": "1627ab14e6b1f59907f8a1e0ad85bff4d785fd1ed1ddc32955f995ff59fbff1e"
+  },
+  {
+   "file": "sprites/mgr-komitsu@taiko-gesture.webp",
+   "bytes": 102686,
+   "sha256": "13c06f9c41fcdc1862b609179a06a99f87d56bbe7bb15633762acee9a18b438b"
+  },
+  {
+   "file": "sprites/mgr-komitsu@taiko-idle.webp",
+   "bytes": 95782,
+   "sha256": "f8b7fecc495ccce2cb98674b2b2a0d4ec29f0b29f1aaa29e06a9a31d8518b74d"
+  },
+  {
+   "file": "sprites/mgr-komitsu@taiko.webp",
+   "bytes": 16664,
+   "sha256": "0df52e04dcb9584a71bd4a74c2b3fab070af0c48612ee3844e70fb33a420b658"
+  },
+  {
+   "file": "sprites/mgr-kuriko-cheer.webp",
+   "bytes": 68588,
+   "sha256": "a4aec8d8e998d0df6d149a420fb20196338f7846b1aab55fb4fbaf1b74622516"
+  },
+  {
+   "file": "sprites/mgr-kuriko-gesture.webp",
+   "bytes": 98144,
+   "sha256": "3883b29030b6df77004f876260a2d035b00d71afc2fc53d2e9374ccbb8f81d93"
+  },
+  {
+   "file": "sprites/mgr-kuriko-idle.webp",
+   "bytes": 76222,
+   "sha256": "7d56c83bae427d2f58540055109e6b322a98aaaf74bd7021b2ad403a1c9c6f2a"
+  },
+  {
+   "file": "sprites/mgr-kuriko.webp",
+   "bytes": 13686,
+   "sha256": "daa17fe0364150bef95ed9a0846089d63a3a2489ac5bcf764b3e72c7bf765aff"
+  },
+  {
+   "file": "sprites/mgr-kuriko@classic-cheer.webp",
+   "bytes": 77440,
+   "sha256": "8d649afaf9dd8658137215d86ab69af1085d3335d9e30126c216751b391cb8a2"
+  },
+  {
+   "file": "sprites/mgr-kuriko@classic-gesture.webp",
+   "bytes": 98918,
+   "sha256": "8f63e7e1590972f5dad63cca837d1cf1bd2b9a8ac0a0fe463f2d0993cc3e94eb"
+  },
+  {
+   "file": "sprites/mgr-kuriko@classic-idle.webp",
+   "bytes": 74688,
+   "sha256": "8708c9f4803fa1ef37e23fb1b2cf8c65443ca2fdf977f9808a34760300ffce0c"
+  },
+  {
+   "file": "sprites/mgr-kuriko@taisho-cheer.webp",
+   "bytes": 73100,
+   "sha256": "695f533154397e1e7318db6e9247c595723ee5c54a67caa995d342e0e9aaf06b"
+  },
+  {
+   "file": "sprites/mgr-kuriko@taisho-gesture.webp",
+   "bytes": 98446,
+   "sha256": "6b547561def5d3629763a7db781e3ecea705c3aeaf54e6572bc46c074de10d5f"
+  },
+  {
+   "file": "sprites/mgr-kuriko@taisho-idle.webp",
+   "bytes": 79862,
+   "sha256": "480444ef8639249fda09ac988edbb9348b017bbe143b96f648589c044a10a267"
+  },
+  {
+   "file": "sprites/mgr-kuriko@taisho.webp",
+   "bytes": 13974,
+   "sha256": "540e30ca4f480c012a69749d1a92244b7f8f14f1f536095917a5c16f5f21f2f4"
+  },
+  {
+   "file": "sprites/mgr-sakura-cheer.webp",
+   "bytes": 77464,
+   "sha256": "6e82a54b34a2534c96cf673a7d71bfe8f0946699f27cb879d4984a310649d7b3"
+  },
+  {
+   "file": "sprites/mgr-sakura-gesture.webp",
+   "bytes": 92780,
+   "sha256": "3ca24a8312f581847a69eb61658830011102c66f138533161d0927293706c2ce"
+  },
+  {
+   "file": "sprites/mgr-sakura-idle.webp",
+   "bytes": 91278,
+   "sha256": "f3b3e6afc74314fdd460b498d70eb5bc526e4dc7c2049ffd38d7b14ec1456816"
+  },
+  {
+   "file": "sprites/mgr-sakura.webp",
+   "bytes": 14404,
+   "sha256": "a61b3695c0aa952278edbc5062689cfb1afa2095cadd7d1838795afb04fcb8f5"
+  },
+  {
+   "file": "sprites/mgr-sakura@classic-cheer.webp",
+   "bytes": 68270,
+   "sha256": "c581792be4c227680eb67d32834bf7232bbeda8f9cea76bd1169bdb705bb9e87"
+  },
+  {
+   "file": "sprites/mgr-sakura@classic-gesture.webp",
+   "bytes": 100840,
+   "sha256": "9ec93eef8a71196f3053c0fd65ce829068a7d397ca90d0ceb22721ec24b26d0e"
+  },
+  {
+   "file": "sprites/mgr-sakura@classic-idle.webp",
+   "bytes": 87092,
+   "sha256": "e6bc72392cf15b59a46a6c56eafac92ea2b783914a78b960070ed16e2a1f045f"
+  },
+  {
+   "file": "sprites/mgr-sakura@yukata-cheer.webp",
+   "bytes": 84170,
+   "sha256": "31b74289d027a72817d5c0d15448c2740b8026f85931027f2c183e2afd01fe08"
+  },
+  {
+   "file": "sprites/mgr-sakura@yukata-gesture.webp",
+   "bytes": 108676,
+   "sha256": "641e929439c1a000a5889b6f9c9dbc6501fd938aef7e80c18b86e0ac1e0b4719"
+  },
+  {
+   "file": "sprites/mgr-sakura@yukata-idle.webp",
+   "bytes": 103916,
+   "sha256": "b64615933d16b083b0cdc278de8d035ec18242fa8f2f8bc9f689ef582b0b1eff"
+  },
+  {
+   "file": "sprites/mgr-sakura@yukata.webp",
+   "bytes": 16790,
+   "sha256": "3d11e07d4fcca79766e44507ff6c7bc592fef6c2bdfe5849cb436a4e0121335a"
+  },
+  {
+   "file": "sprites/mgr-shion-cheer.webp",
+   "bytes": 44710,
+   "sha256": "44e1ede83bff62e6200a7a5420d68e3b841168f6f6417b184f044a5ce66be73b"
+  },
+  {
+   "file": "sprites/mgr-shion-gesture.webp",
+   "bytes": 51890,
+   "sha256": "d6b6dc8df7370b66b6c68369a49b6833ef1c6043d39464d4b51ba3aca95cd00e"
+  },
+  {
+   "file": "sprites/mgr-shion-idle.webp",
+   "bytes": 48092,
+   "sha256": "eda652511a0bb0a8784d43d406663e93e9b3ba9b42ae1689ff0e976c8cf9e0a1"
+  },
+  {
+   "file": "sprites/mgr-shion.webp",
+   "bytes": 9438,
+   "sha256": "38c4b659646073f080b07da047b7cb85df1fc04d0b4f6b347e0c87babaa8e09d"
+  },
+  {
+   "file": "sprites/mgr-shion@battle-cheer.webp",
+   "bytes": 51076,
+   "sha256": "9bbc26c421685174608139f984edb4cb76f619dfc49de1f91557771ea2587d71"
+  },
+  {
+   "file": "sprites/mgr-shion@battle-gesture.webp",
+   "bytes": 66190,
+   "sha256": "33df79d59ff5541c82f9b2501ebbc2040daf39e3c640a8d07fa08eba5c147389"
+  },
+  {
+   "file": "sprites/mgr-shion@battle-idle.webp",
+   "bytes": 59366,
+   "sha256": "b91924df3776a7cc1ef6c8bb8a409b7d64a52a037bf78877ebebb32ddbcb8e27"
+  },
+  {
+   "file": "sprites/mgr-shion@battle.webp",
+   "bytes": 11284,
+   "sha256": "49f56aec9175d1e427332adf9c9bd8dc5f0f0247b8277f0379aaae11246d2022"
+  },
+  {
+   "file": "sprites/mgr-shion@classic-cheer.webp",
+   "bytes": 45562,
+   "sha256": "ac829ff3a7d70793f8eae193053310ede02b47fb3035021cbf8a5fc74d58d0a3"
+  },
+  {
+   "file": "sprites/mgr-shion@classic-gesture.webp",
+   "bytes": 61172,
+   "sha256": "866cfb59767a34199babfeae2fed7c541e6dd52900b72d50a67c209e751cfd52"
+  },
+  {
+   "file": "sprites/mgr-shion@classic-idle.webp",
+   "bytes": 41094,
+   "sha256": "5203d60cee70baa7319984a77f93b3f44541dcb9a133d51f482b9c2bf8dccd65"
+  },
+  {
+   "file": "sprites/mgr-yukimi-cheer.webp",
+   "bytes": 53512,
+   "sha256": "a11af463fe36225943154788863370f435c36bd9b5f36d3c15d7034e496e12b3"
+  },
+  {
+   "file": "sprites/mgr-yukimi-gesture.webp",
+   "bytes": 68092,
+   "sha256": "93740a6323ae50b85c10b3a342bd7e9a09982f09f2f28f3113eae7f9f1fb8201"
+  },
+  {
+   "file": "sprites/mgr-yukimi-idle.webp",
+   "bytes": 58478,
+   "sha256": "95cd2ce53fe39eaaf585bfd41a74a6fe34df9102db273c75f06c1998d0a11327"
+  },
+  {
+   "file": "sprites/mgr-yukimi.webp",
+   "bytes": 10186,
+   "sha256": "25654101aced984c1be39c7cdacf32df2a3c097737000bf2462a574cefa43f80"
+  },
+  {
+   "file": "sprites/mgr-yukimi@classic-cheer.webp",
+   "bytes": 48142,
+   "sha256": "13ddda6f97913618f3695d22a3c7a6c1d9fc895d5f5655e58cca31670e29b587"
+  },
+  {
+   "file": "sprites/mgr-yukimi@classic-gesture.webp",
+   "bytes": 62110,
+   "sha256": "156c2378d856910ddb63c1f40d4e50061b88f66381d4c8f3b7fdcf910f5f2da8"
+  },
+  {
+   "file": "sprites/mgr-yukimi@classic-idle.webp",
+   "bytes": 55574,
+   "sha256": "2cd453314d9468eab9aa759e2560cc1cf5519e11c6c8e129e324c0a5306e799f"
+  },
+  {
+   "file": "sprites/mgr-yukimi@snow-cheer.webp",
+   "bytes": 61830,
+   "sha256": "b6aa264d3829b18cfbf7178007142a03b1e89088fd26a4ab1ba47e6eb92a2b5c"
+  },
+  {
+   "file": "sprites/mgr-yukimi@snow-gesture.webp",
+   "bytes": 80554,
+   "sha256": "6db5a8e81e84952b67a6a9b610ec73ff45fef234f81c11a7c1fbc6144d84fa9c"
+  },
+  {
+   "file": "sprites/mgr-yukimi@snow-idle.webp",
+   "bytes": 83598,
+   "sha256": "52e93d1718534710aa5c28c8c50fd3cacbbae560dab2f810e42daa17a1c2f04c"
+  },
+  {
+   "file": "sprites/mgr-yukimi@snow.webp",
+   "bytes": 13110,
+   "sha256": "10de099730729db9e539b59ee434d3e319ea5c8dcdb703523fb544035422e6a9"
+  },
+  {
+   "file": "sprites/miner-a-carry.webp",
+   "bytes": 94824,
+   "sha256": "5cf4b45d674b8a73e2cc654618d116aad6aa107e21e95c9a1106ba4297f55d98"
+  },
+  {
+   "file": "sprites/miner-a-mine.webp",
+   "bytes": 89964,
+   "sha256": "0b781f42c7594d37af6ba8d049f74526a3244624b5d277147421581629fab83d"
+  },
+  {
+   "file": "sprites/miner-a-sleep.webp",
+   "bytes": 17440,
+   "sha256": "6f75eed4304a700df6c808ce19c1432d9ca13602a7baa131dfd0589ea0fac98b"
+  },
+  {
+   "file": "sprites/miner-a-walk.webp",
+   "bytes": 100916,
+   "sha256": "a83340120473e780ab077969cff1cd832304226482bf44ee83f5972272eac6da"
+  },
+  {
+   "file": "sprites/miner-b-carry.webp",
+   "bytes": 103430,
+   "sha256": "2810d93c3d9397ee9ca4e09e7e000d16c0fb555f507a01af4398beb0d1c8ac9c"
+  },
+  {
+   "file": "sprites/miner-b-mine.webp",
+   "bytes": 85690,
+   "sha256": "69be889246a140e558b1eb37e9541288d1043e4d4f20af8cc3318cd40e5257f5"
+  },
+  {
+   "file": "sprites/miner-b-sleep.webp",
+   "bytes": 19240,
+   "sha256": "b932d6f525d71153f420946793bdb22e235e9760ab48828668473a039fc5af8c"
+  },
+  {
+   "file": "sprites/miner-b-walk.webp",
+   "bytes": 104126,
+   "sha256": "41b7eaed8a6b5b4fcf0e1057dd181d47a9f3779aed50ec21f5601b0910f62fe1"
+  },
+  {
+   "file": "sprites/miner-c-carry.webp",
+   "bytes": 87272,
+   "sha256": "099fa663f1983bc90e929822d099cccb3091076fc3b41133e4c1d21442acef69"
+  },
+  {
+   "file": "sprites/miner-c-mine.webp",
+   "bytes": 73180,
+   "sha256": "60d7f1ebf89e23c0ea40f63e219ed86b6cf35783fffa3dfe8c1c2235267ad849"
+  },
+  {
+   "file": "sprites/miner-c-sleep.webp",
+   "bytes": 15728,
+   "sha256": "8c2ba35c2cee396d077885d4a435bfa65040957e7d56a3e7cc43885f11529231"
+  },
+  {
+   "file": "sprites/miner-c-walk.webp",
+   "bytes": 86904,
+   "sha256": "ef8aafda27834ebae4b204bee31d2cd74828fe496f866f6d64b7153e9690c223"
+  },
+  {
+   "file": "sprites/operator-sleep.webp",
+   "bytes": 10454,
+   "sha256": "7379705549f9ca72f57eb44944a6c6cf5468cfaa7ee934b5a52395900151d594"
+  },
+  {
+   "file": "sprites/operator.webp",
+   "bytes": 12824,
+   "sha256": "fc0171e5f2f7a94ab0fd5c60686e18022d4517942611bf0cd48046bf63e10674"
+  }
+ ]
+}

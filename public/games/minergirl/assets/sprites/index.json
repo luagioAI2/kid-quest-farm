@@ -1,0 +1,1806 @@
+{
+ "anims": {
+  "miner-a-walk": {
+   "file": "assets/sprites/miner-a-walk.webp",
+   "srcH": 418,
+   "w": 138,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 19.25,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9665
+   },
+   "subjectH": 162,
+   "impact": null
+  },
+  "miner-a-mine": {
+   "file": "assets/sprites/miner-a-mine.webp",
+   "srcH": 431,
+   "w": 158,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9675
+   },
+   "subjectH": 144,
+   "impact": 7
+  },
+  "miner-a-carry": {
+   "file": "assets/sprites/miner-a-carry.webp",
+   "srcH": 424,
+   "w": 122,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 19.25,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.967
+   },
+   "subjectH": 163,
+   "impact": null
+  },
+  "miner-b-walk": {
+   "file": "assets/sprites/miner-b-walk.webp",
+   "srcH": 418,
+   "w": 139,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 16.5,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9665
+   },
+   "subjectH": 163,
+   "impact": null
+  },
+  "miner-b-mine": {
+   "file": "assets/sprites/miner-b-mine.webp",
+   "srcH": 482,
+   "w": 151,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.971
+   },
+   "subjectH": 142,
+   "impact": 7
+  },
+  "miner-b-carry": {
+   "file": "assets/sprites/miner-b-carry.webp",
+   "srcH": 424,
+   "w": 125,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.7,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.967
+   },
+   "subjectH": 159,
+   "impact": null
+  },
+  "miner-c-walk": {
+   "file": "assets/sprites/miner-c-walk.webp",
+   "srcH": 424,
+   "w": 111,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 16.5,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.967
+   },
+   "subjectH": 163,
+   "impact": null
+  },
+  "miner-c-mine": {
+   "file": "assets/sprites/miner-c-mine.webp",
+   "srcH": 468,
+   "w": 134,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9701
+   },
+   "subjectH": 134,
+   "impact": 5
+  },
+  "miner-c-carry": {
+   "file": "assets/sprites/miner-c-carry.webp",
+   "srcH": 423,
+   "w": 119,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 14.44,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9669
+   },
+   "subjectH": 161,
+   "impact": null
+  },
+  "cyber-a-walk": {
+   "file": "assets/sprites/cyber-a-walk.webp",
+   "srcH": 421,
+   "w": 141,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 14.44,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9667
+   },
+   "subjectH": 161,
+   "impact": null
+  },
+  "cyber-a-mine": {
+   "file": "assets/sprites/cyber-a-mine.webp",
+   "srcH": 498,
+   "w": 155,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9719
+   },
+   "subjectH": 137,
+   "impact": 9
+  },
+  "cyber-a-carry": {
+   "file": "assets/sprites/cyber-a-carry.webp",
+   "srcH": 424,
+   "w": 122,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 13.59,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.967
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "cyber-b-walk": {
+   "file": "assets/sprites/cyber-b-walk.webp",
+   "srcH": 419,
+   "w": 133,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 11.55,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9666
+   },
+   "subjectH": 163,
+   "impact": null
+  },
+  "cyber-b-mine": {
+   "file": "assets/sprites/cyber-b-mine.webp",
+   "srcH": 420,
+   "w": 192,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9667
+   },
+   "subjectH": 163,
+   "impact": 9
+  },
+  "cyber-b-carry": {
+   "file": "assets/sprites/cyber-b-carry.webp",
+   "srcH": 424,
+   "w": 120,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 14.44,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.967
+   },
+   "subjectH": 162,
+   "impact": null
+  },
+  "cyber-c-walk": {
+   "file": "assets/sprites/cyber-c-walk.webp",
+   "srcH": 419,
+   "w": 137,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 14.44,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9666
+   },
+   "subjectH": 159,
+   "impact": null
+  },
+  "cyber-c-mine": {
+   "file": "assets/sprites/cyber-c-mine.webp",
+   "srcH": 429,
+   "w": 172,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9674
+   },
+   "subjectH": 159,
+   "impact": 8
+  },
+  "cyber-c-carry": {
+   "file": "assets/sprites/cyber-c-carry.webp",
+   "srcH": 425,
+   "w": 127,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 14.44,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9671
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "carter-walk": {
+   "file": "assets/sprites/carter-walk.webp",
+   "srcH": 444,
+   "w": 163,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 9.62,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9685
+   },
+   "subjectH": 153,
+   "impact": null
+  },
+  "carter-scoop": {
+   "file": "assets/sprites/carter-scoop.webp",
+   "srcH": 504,
+   "w": 187,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9722
+   },
+   "subjectH": 136,
+   "impact": null
+  },
+  "carter-dump": {
+   "file": "assets/sprites/carter-dump.webp",
+   "srcH": 423,
+   "w": 119,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9669
+   },
+   "subjectH": 162,
+   "impact": null
+  },
+  "mecha-walk": {
+   "file": "assets/sprites/mecha-walk.webp",
+   "srcH": 423,
+   "w": 141,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 19.25,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9669
+   },
+   "subjectH": 161,
+   "impact": null
+  },
+  "mecha-mine": {
+   "file": "assets/sprites/mecha-mine.webp",
+   "srcH": 479,
+   "w": 142,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9708
+   },
+   "subjectH": 143,
+   "impact": 6
+  },
+  "mecha-carry": {
+   "file": "assets/sprites/mecha-carry.webp",
+   "srcH": 423,
+   "w": 110,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 16.5,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9669
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "drill-walk": {
+   "file": "assets/sprites/drill-walk.webp",
+   "srcH": 425,
+   "w": 143,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 12.16,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9671
+   },
+   "subjectH": 161,
+   "impact": null
+  },
+  "drill-mine": {
+   "file": "assets/sprites/drill-mine.webp",
+   "srcH": 450,
+   "w": 154,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9689
+   },
+   "subjectH": 152,
+   "impact": 8
+  },
+  "drill-carry": {
+   "file": "assets/sprites/drill-carry.webp",
+   "srcH": 431,
+   "w": 152,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 19.25,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9675
+   },
+   "subjectH": 158,
+   "impact": null
+  },
+  "crystal-walk": {
+   "file": "assets/sprites/crystal-walk.webp",
+   "srcH": 424,
+   "w": 128,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 10.04,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.967
+   },
+   "subjectH": 161,
+   "impact": null
+  },
+  "crystal-mine": {
+   "file": "assets/sprites/crystal-mine.webp",
+   "srcH": 439,
+   "w": 176,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9681
+   },
+   "subjectH": 156,
+   "impact": 6
+  },
+  "crystal-carry": {
+   "file": "assets/sprites/crystal-carry.webp",
+   "srcH": 426,
+   "w": 126,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 11.55,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9671
+   },
+   "subjectH": 163,
+   "impact": null
+  },
+  "mgr-aya-idle": {
+   "file": "assets/sprites/mgr-aya-idle.webp",
+   "srcH": 416,
+   "w": 96,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "mgr-aya-gesture": {
+   "file": "assets/sprites/mgr-aya-gesture.webp",
+   "srcH": 420,
+   "w": 100,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9667
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-aya-cheer": {
+   "file": "assets/sprites/mgr-aya-cheer.webp",
+   "srcH": 488,
+   "w": 102,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9713
+   },
+   "subjectH": 127,
+   "impact": null
+  },
+  "mgr-komitsu-idle": {
+   "file": "assets/sprites/mgr-komitsu-idle.webp",
+   "srcH": 416,
+   "w": 101,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "mgr-komitsu-gesture": {
+   "file": "assets/sprites/mgr-komitsu-gesture.webp",
+   "srcH": 485,
+   "w": 114,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9711
+   },
+   "subjectH": 141,
+   "impact": null
+  },
+  "mgr-komitsu-cheer": {
+   "file": "assets/sprites/mgr-komitsu-cheer.webp",
+   "srcH": 490,
+   "w": 121,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9714
+   },
+   "subjectH": 140,
+   "impact": null
+  },
+  "mgr-yukimi-idle": {
+   "file": "assets/sprites/mgr-yukimi-idle.webp",
+   "srcH": 416,
+   "w": 78,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 19.25,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-yukimi-gesture": {
+   "file": "assets/sprites/mgr-yukimi-gesture.webp",
+   "srcH": 416,
+   "w": 99,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-yukimi-cheer": {
+   "file": "assets/sprites/mgr-yukimi-cheer.webp",
+   "srcH": 489,
+   "w": 106,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9714
+   },
+   "subjectH": 127,
+   "impact": null
+  },
+  "mgr-kuriko-idle": {
+   "file": "assets/sprites/mgr-kuriko-idle.webp",
+   "srcH": 416,
+   "w": 107,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "mgr-kuriko-gesture": {
+   "file": "assets/sprites/mgr-kuriko-gesture.webp",
+   "srcH": 416,
+   "w": 158,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.97,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-kuriko-cheer": {
+   "file": "assets/sprites/mgr-kuriko-cheer.webp",
+   "srcH": 507,
+   "w": 130,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9724
+   },
+   "subjectH": 123,
+   "impact": null
+  },
+  "mgr-sakura-idle": {
+   "file": "assets/sprites/mgr-sakura-idle.webp",
+   "srcH": 416,
+   "w": 111,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 14.44,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-sakura-gesture": {
+   "file": "assets/sprites/mgr-sakura-gesture.webp",
+   "srcH": 419,
+   "w": 113,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9666
+   },
+   "subjectH": 163,
+   "impact": null
+  },
+  "mgr-sakura-cheer": {
+   "file": "assets/sprites/mgr-sakura-cheer.webp",
+   "srcH": 501,
+   "w": 120,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9721
+   },
+   "subjectH": 136,
+   "impact": null
+  },
+  "mgr-akari-idle": {
+   "file": "assets/sprites/mgr-akari-idle.webp",
+   "srcH": 416,
+   "w": 98,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-akari-gesture": {
+   "file": "assets/sprites/mgr-akari-gesture.webp",
+   "srcH": 416,
+   "w": 123,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-akari-cheer": {
+   "file": "assets/sprites/mgr-akari-cheer.webp",
+   "srcH": 483,
+   "w": 107,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.971
+   },
+   "subjectH": 129,
+   "impact": null
+  },
+  "mgr-shion-idle": {
+   "file": "assets/sprites/mgr-shion-idle.webp",
+   "srcH": 416,
+   "w": 73,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-shion-gesture": {
+   "file": "assets/sprites/mgr-shion-gesture.webp",
+   "srcH": 470,
+   "w": 109,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9702
+   },
+   "subjectH": 145,
+   "impact": 7
+  },
+  "mgr-shion-cheer": {
+   "file": "assets/sprites/mgr-shion-cheer.webp",
+   "srcH": 526,
+   "w": 70,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9734
+   },
+   "subjectH": 130,
+   "impact": null
+  },
+  "mgr-shion@battle-idle": {
+   "file": "assets/sprites/mgr-shion@battle-idle.webp",
+   "srcH": 417,
+   "w": 83,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9664
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "mgr-shion@battle-gesture": {
+   "file": "assets/sprites/mgr-shion@battle-gesture.webp",
+   "srcH": 494,
+   "w": 97,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9717
+   },
+   "subjectH": 138,
+   "impact": 7
+  },
+  "mgr-shion@battle-cheer": {
+   "file": "assets/sprites/mgr-shion@battle-cheer.webp",
+   "srcH": 549,
+   "w": 81,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9745
+   },
+   "subjectH": 125,
+   "impact": null
+  },
+  "mgr-sakura@yukata-idle": {
+   "file": "assets/sprites/mgr-sakura@yukata-idle.webp",
+   "srcH": 417,
+   "w": 127,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 15.4,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9664
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "mgr-sakura@yukata-gesture": {
+   "file": "assets/sprites/mgr-sakura@yukata-gesture.webp",
+   "srcH": 418,
+   "w": 154,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9665
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-sakura@yukata-cheer": {
+   "file": "assets/sprites/mgr-sakura@yukata-cheer.webp",
+   "srcH": 534,
+   "w": 110,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9738
+   },
+   "subjectH": 129,
+   "impact": null
+  },
+  "mgr-aya@miko-idle": {
+   "file": "assets/sprites/mgr-aya@miko-idle.webp",
+   "srcH": 416,
+   "w": 98,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-aya@miko-gesture": {
+   "file": "assets/sprites/mgr-aya@miko-gesture.webp",
+   "srcH": 421,
+   "w": 106,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9667
+   },
+   "subjectH": 163,
+   "impact": null
+  },
+  "mgr-aya@miko-cheer": {
+   "file": "assets/sprites/mgr-aya@miko-cheer.webp",
+   "srcH": 482,
+   "w": 110,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.971
+   },
+   "subjectH": 142,
+   "impact": null
+  },
+  "mgr-komitsu@taiko-idle": {
+   "file": "assets/sprites/mgr-komitsu@taiko-idle.webp",
+   "srcH": 416,
+   "w": 108,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-komitsu@taiko-gesture": {
+   "file": "assets/sprites/mgr-komitsu@taiko-gesture.webp",
+   "srcH": 426,
+   "w": 136,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 19.25,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9671
+   },
+   "subjectH": 162,
+   "impact": null
+  },
+  "mgr-komitsu@taiko-cheer": {
+   "file": "assets/sprites/mgr-komitsu@taiko-cheer.webp",
+   "srcH": 519,
+   "w": 124,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.973
+   },
+   "subjectH": 132,
+   "impact": null
+  },
+  "mgr-yukimi@snow-idle": {
+   "file": "assets/sprites/mgr-yukimi@snow-idle.webp",
+   "srcH": 416,
+   "w": 98,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 12.83,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "mgr-yukimi@snow-gesture": {
+   "file": "assets/sprites/mgr-yukimi@snow-gesture.webp",
+   "srcH": 428,
+   "w": 109,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9673
+   },
+   "subjectH": 160,
+   "impact": null
+  },
+  "mgr-yukimi@snow-cheer": {
+   "file": "assets/sprites/mgr-yukimi@snow-cheer.webp",
+   "srcH": 512,
+   "w": 104,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9727
+   },
+   "subjectH": 122,
+   "impact": null
+  },
+  "mgr-kuriko@taisho-idle": {
+   "file": "assets/sprites/mgr-kuriko@taisho-idle.webp",
+   "srcH": 416,
+   "w": 109,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-kuriko@taisho-gesture": {
+   "file": "assets/sprites/mgr-kuriko@taisho-gesture.webp",
+   "srcH": 416,
+   "w": 133,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 8.88,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-kuriko@taisho-cheer": {
+   "file": "assets/sprites/mgr-kuriko@taisho-cheer.webp",
+   "srcH": 507,
+   "w": 111,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9724
+   },
+   "subjectH": 123,
+   "impact": null
+  },
+  "mgr-akari@kitsune-idle": {
+   "file": "assets/sprites/mgr-akari@kitsune-idle.webp",
+   "srcH": 416,
+   "w": 100,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-akari@kitsune-gesture": {
+   "file": "assets/sprites/mgr-akari@kitsune-gesture.webp",
+   "srcH": 423,
+   "w": 124,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9669
+   },
+   "subjectH": 162,
+   "impact": null
+  },
+  "mgr-akari@kitsune-cheer": {
+   "file": "assets/sprites/mgr-akari@kitsune-cheer.webp",
+   "srcH": 490,
+   "w": 120,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9714
+   },
+   "subjectH": 127,
+   "impact": null
+  },
+  "mgr-aya@classic-idle": {
+   "file": "assets/sprites/mgr-aya@classic-idle.webp",
+   "srcH": 416,
+   "w": 99,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "mgr-aya@classic-gesture": {
+   "file": "assets/sprites/mgr-aya@classic-gesture.webp",
+   "srcH": 423,
+   "w": 110,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9669
+   },
+   "subjectH": 162,
+   "impact": null
+  },
+  "mgr-aya@classic-cheer": {
+   "file": "assets/sprites/mgr-aya@classic-cheer.webp",
+   "srcH": 498,
+   "w": 115,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9719
+   },
+   "subjectH": 138,
+   "impact": null
+  },
+  "mgr-komitsu@classic-idle": {
+   "file": "assets/sprites/mgr-komitsu@classic-idle.webp",
+   "srcH": 416,
+   "w": 100,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-komitsu@classic-gesture": {
+   "file": "assets/sprites/mgr-komitsu@classic-gesture.webp",
+   "srcH": 492,
+   "w": 101,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9715
+   },
+   "subjectH": 140,
+   "impact": null
+  },
+  "mgr-komitsu@classic-cheer": {
+   "file": "assets/sprites/mgr-komitsu@classic-cheer.webp",
+   "srcH": 513,
+   "w": 114,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9727
+   },
+   "subjectH": 134,
+   "impact": null
+  },
+  "mgr-yukimi@classic-idle": {
+   "file": "assets/sprites/mgr-yukimi@classic-idle.webp",
+   "srcH": 417,
+   "w": 79,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9664
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-yukimi@classic-gesture": {
+   "file": "assets/sprites/mgr-yukimi@classic-gesture.webp",
+   "srcH": 416,
+   "w": 83,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "mgr-yukimi@classic-cheer": {
+   "file": "assets/sprites/mgr-yukimi@classic-cheer.webp",
+   "srcH": 512,
+   "w": 93,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9727
+   },
+   "subjectH": 121,
+   "impact": null
+  },
+  "mgr-kuriko@classic-idle": {
+   "file": "assets/sprites/mgr-kuriko@classic-idle.webp",
+   "srcH": 416,
+   "w": 110,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 165,
+   "impact": null
+  },
+  "mgr-kuriko@classic-gesture": {
+   "file": "assets/sprites/mgr-kuriko@classic-gesture.webp",
+   "srcH": 428,
+   "w": 141,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9673
+   },
+   "subjectH": 160,
+   "impact": null
+  },
+  "mgr-kuriko@classic-cheer": {
+   "file": "assets/sprites/mgr-kuriko@classic-cheer.webp",
+   "srcH": 517,
+   "w": 126,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9729
+   },
+   "subjectH": 133,
+   "impact": null
+  },
+  "mgr-sakura@classic-idle": {
+   "file": "assets/sprites/mgr-sakura@classic-idle.webp",
+   "srcH": 416,
+   "w": 113,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-sakura@classic-gesture": {
+   "file": "assets/sprites/mgr-sakura@classic-gesture.webp",
+   "srcH": 418,
+   "w": 130,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9665
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-sakura@classic-cheer": {
+   "file": "assets/sprites/mgr-sakura@classic-cheer.webp",
+   "srcH": 500,
+   "w": 118,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.972
+   },
+   "subjectH": 124,
+   "impact": null
+  },
+  "mgr-akari@classic-idle": {
+   "file": "assets/sprites/mgr-akari@classic-idle.webp",
+   "srcH": 416,
+   "w": 100,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-akari@classic-gesture": {
+   "file": "assets/sprites/mgr-akari@classic-gesture.webp",
+   "srcH": 418,
+   "w": 122,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9665
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-akari@classic-cheer": {
+   "file": "assets/sprites/mgr-akari@classic-cheer.webp",
+   "srcH": 493,
+   "w": 109,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9716
+   },
+   "subjectH": 126,
+   "impact": null
+  },
+  "mgr-shion@classic-idle": {
+   "file": "assets/sprites/mgr-shion@classic-idle.webp",
+   "srcH": 416,
+   "w": 59,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 21,
+   "loop": true,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9663
+   },
+   "subjectH": 164,
+   "impact": null
+  },
+  "mgr-shion@classic-gesture": {
+   "file": "assets/sprites/mgr-shion@classic-gesture.webp",
+   "srcH": 451,
+   "w": 147,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.969
+   },
+   "subjectH": 152,
+   "impact": 7
+  },
+  "mgr-shion@classic-cheer": {
+   "file": "assets/sprites/mgr-shion@classic-cheer.webp",
+   "srcH": 514,
+   "w": 100,
+   "h": 176,
+   "count": 12,
+   "cols": 6,
+   "fps": 7.22,
+   "loop": false,
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9728
+   },
+   "subjectH": 133,
+   "impact": null
+  }
+ },
+ "statics": {
+  "miner-a-sleep": {
+   "file": "assets/sprites/miner-a-sleep.webp",
+   "w": 188,
+   "h": 240
+  },
+  "miner-b-sleep": {
+   "file": "assets/sprites/miner-b-sleep.webp",
+   "w": 210,
+   "h": 240
+  },
+  "miner-c-sleep": {
+   "file": "assets/sprites/miner-c-sleep.webp",
+   "w": 182,
+   "h": 240
+  },
+  "cyber-a-sleep": {
+   "file": "assets/sprites/cyber-a-sleep.webp",
+   "w": 214,
+   "h": 240
+  },
+  "cyber-b-sleep": {
+   "file": "assets/sprites/cyber-b-sleep.webp",
+   "w": 246,
+   "h": 240
+  },
+  "cyber-c-sleep": {
+   "file": "assets/sprites/cyber-c-sleep.webp",
+   "w": 189,
+   "h": 240
+  },
+  "mecha-sleep": {
+   "file": "assets/sprites/mecha-sleep.webp",
+   "w": 192,
+   "h": 240
+  },
+  "drill-sleep": {
+   "file": "assets/sprites/drill-sleep.webp",
+   "w": 228,
+   "h": 240
+  },
+  "crystal-sleep": {
+   "file": "assets/sprites/crystal-sleep.webp",
+   "w": 221,
+   "h": 240
+  },
+  "carter-stand": {
+   "file": "assets/sprites/carter-stand.webp",
+   "w": 201,
+   "h": 240
+  },
+  "carter-sleep": {
+   "file": "assets/sprites/carter-sleep.webp",
+   "w": 218,
+   "h": 240
+  },
+  "operator": {
+   "file": "assets/sprites/operator.webp",
+   "w": 125,
+   "h": 240
+  },
+  "operator-sleep": {
+   "file": "assets/sprites/operator-sleep.webp",
+   "w": 112,
+   "h": 240
+  },
+  "mgr-aya": {
+   "file": "assets/sprites/mgr-aya.webp",
+   "w": 122,
+   "h": 240
+  },
+  "mgr-komitsu": {
+   "file": "assets/sprites/mgr-komitsu.webp",
+   "w": 129,
+   "h": 240
+  },
+  "mgr-yukimi": {
+   "file": "assets/sprites/mgr-yukimi.webp",
+   "w": 96,
+   "h": 240
+  },
+  "mgr-kuriko": {
+   "file": "assets/sprites/mgr-kuriko.webp",
+   "w": 138,
+   "h": 240
+  },
+  "mgr-sakura": {
+   "file": "assets/sprites/mgr-sakura.webp",
+   "w": 141,
+   "h": 240
+  },
+  "mgr-akari": {
+   "file": "assets/sprites/mgr-akari.webp",
+   "w": 125,
+   "h": 240
+  },
+  "mgr-shion": {
+   "file": "assets/sprites/mgr-shion.webp",
+   "w": 88,
+   "h": 240
+  },
+  "guide-aoi": {
+   "file": "assets/sprites/guide-aoi.webp",
+   "w": 155,
+   "h": 240
+  },
+  "mgr-shion@battle": {
+   "file": "assets/sprites/mgr-shion@battle.webp",
+   "w": 104,
+   "h": 240
+  },
+  "mgr-sakura@yukata": {
+   "file": "assets/sprites/mgr-sakura@yukata.webp",
+   "w": 164,
+   "h": 240
+  },
+  "mgr-aya@miko": {
+   "file": "assets/sprites/mgr-aya@miko.webp",
+   "w": 125,
+   "h": 240
+  },
+  "mgr-komitsu@taiko": {
+   "file": "assets/sprites/mgr-komitsu@taiko.webp",
+   "w": 141,
+   "h": 240
+  },
+  "mgr-yukimi@snow": {
+   "file": "assets/sprites/mgr-yukimi@snow.webp",
+   "w": 125,
+   "h": 240
+  },
+  "mgr-kuriko@taisho": {
+   "file": "assets/sprites/mgr-kuriko@taisho.webp",
+   "w": 141,
+   "h": 240
+  },
+  "mgr-akari@kitsune": {
+   "file": "assets/sprites/mgr-akari@kitsune.webp",
+   "w": 129,
+   "h": 240
+  },
+  "ghost": {
+   "file": "assets/sprites/ghost.webp",
+   "w": 129,
+   "h": 240
+  }
+ },
+ "portraits": {
+  "cyber-a": {
+   "file": "assets/sprites/face-cyber-a.webp",
+   "w": 160,
+   "h": 160
+  },
+  "cyber-b": {
+   "file": "assets/sprites/face-cyber-b.webp",
+   "w": 160,
+   "h": 160
+  },
+  "cyber-c": {
+   "file": "assets/sprites/face-cyber-c.webp",
+   "w": 160,
+   "h": 160
+  },
+  "mecha": {
+   "file": "assets/sprites/face-mecha.webp",
+   "w": 160,
+   "h": 160
+  },
+  "drill": {
+   "file": "assets/sprites/face-drill.webp",
+   "w": 160,
+   "h": 160
+  },
+  "crystal": {
+   "file": "assets/sprites/face-crystal.webp",
+   "w": 160,
+   "h": 160
+  },
+  "aya": {
+   "file": "assets/sprites/face-aya.webp",
+   "w": 160,
+   "h": 160
+  },
+  "komitsu": {
+   "file": "assets/sprites/face-komitsu.webp",
+   "w": 160,
+   "h": 160
+  },
+  "yukimi": {
+   "file": "assets/sprites/face-yukimi.webp",
+   "w": 160,
+   "h": 160
+  },
+  "kuriko": {
+   "file": "assets/sprites/face-kuriko.webp",
+   "w": 160,
+   "h": 160
+  },
+  "sakura": {
+   "file": "assets/sprites/face-sakura.webp",
+   "w": 160,
+   "h": 160
+  },
+  "akari": {
+   "file": "assets/sprites/face-akari.webp",
+   "w": 160,
+   "h": 160
+  },
+  "shion": {
+   "file": "assets/sprites/face-shion.webp",
+   "w": 160,
+   "h": 160
+  },
+  "aoi": {
+   "file": "assets/sprites/face-aoi.webp",
+   "w": 160,
+   "h": 160
+  },
+  "shion@battle": {
+   "file": "assets/sprites/face-shion@battle.webp",
+   "w": 160,
+   "h": 160
+  },
+  "sakura@yukata": {
+   "file": "assets/sprites/face-sakura@yukata.webp",
+   "w": 160,
+   "h": 160
+  },
+  "aya@miko": {
+   "file": "assets/sprites/face-aya@miko.webp",
+   "w": 160,
+   "h": 160
+  },
+  "komitsu@taiko": {
+   "file": "assets/sprites/face-komitsu@taiko.webp",
+   "w": 160,
+   "h": 160
+  },
+  "yukimi@snow": {
+   "file": "assets/sprites/face-yukimi@snow.webp",
+   "w": 160,
+   "h": 160
+  },
+  "kuriko@taisho": {
+   "file": "assets/sprites/face-kuriko@taisho.webp",
+   "w": 160,
+   "h": 160
+  },
+  "akari@kitsune": {
+   "file": "assets/sprites/face-akari@kitsune.webp",
+   "w": 160,
+   "h": 160
+  },
+  "aya@classic": {
+   "file": "assets/sprites/face-aya@classic.webp",
+   "w": 160,
+   "h": 160
+  },
+  "komitsu@classic": {
+   "file": "assets/sprites/face-komitsu@classic.webp",
+   "w": 160,
+   "h": 160
+  },
+  "yukimi@classic": {
+   "file": "assets/sprites/face-yukimi@classic.webp",
+   "w": 160,
+   "h": 160
+  },
+  "kuriko@classic": {
+   "file": "assets/sprites/face-kuriko@classic.webp",
+   "w": 160,
+   "h": 160
+  },
+  "sakura@classic": {
+   "file": "assets/sprites/face-sakura@classic.webp",
+   "w": 160,
+   "h": 160
+  },
+  "akari@classic": {
+   "file": "assets/sprites/face-akari@classic.webp",
+   "w": 160,
+   "h": 160
+  },
+  "shion@classic": {
+   "file": "assets/sprites/face-shion@classic.webp",
+   "w": 160,
+   "h": 160
+  },
+  "miner-a": {
+   "file": "assets/sprites/face-miner-a.webp",
+   "w": 160,
+   "h": 160
+  },
+  "miner-b": {
+   "file": "assets/sprites/face-miner-b.webp",
+   "w": 160,
+   "h": 160
+  },
+  "miner-c": {
+   "file": "assets/sprites/face-miner-c.webp",
+   "w": 160,
+   "h": 160
+  },
+  "operator": {
+   "file": "assets/sprites/face-operator.webp",
+   "w": 160,
+   "h": 160
+  },
+  "carter": {
+   "file": "assets/sprites/face-carter.webp",
+   "w": 160,
+   "h": 160
+  }
+ }
+}
