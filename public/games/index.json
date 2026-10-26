@@ -38,7 +38,7 @@
     {
       "id": "moestrike",
       "name": "少女战记",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "file": "moestrike/moestrike.plugin.mjs",
       "assetBase": "moestrike/"
     }

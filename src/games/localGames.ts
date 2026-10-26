@@ -81,10 +81,10 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
   {
     "id": "moestrike",
     "name": "少女战记",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "url": "/games/moestrike/moestrike.plugin.mjs",
-    "sha256": "62cf73c331ed66513afe89039558ff3e9311ff0daf034e3eb1d9064caf2aab4c",
-    "bytes": 4303847,
+    "sha256": "3edc2b77a658c79253c73603c3d8d953c5b7b7efa72ae7a476cbfbbf813b6918",
+    "bytes": 4302668,
     "assetBase": "/games/moestrike/"
   }
 ]
