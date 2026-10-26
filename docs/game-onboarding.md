@@ -387,7 +387,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 
 ---
 
-## 附录：现有六款（2026-10-26 快照）
+## 附录：现有九款（2026-10-27 快照）
 
 | id | 目录 | 包 | 经济 | 商城分类 |
 | --- | --- | --- | --- | --- |
@@ -397,6 +397,12 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `sugar` | `task-games/sugar` | 0.97 MB | 积分直接花（**不设币、不发券**，开局 20） | `chill` |
 | `anthill` | `task-games/anthill` | 4.11 MB | 积分直接花（**不设币、不发券**，进场 15 + 10 分钟宽限） | `chill` |
 | `moestrike` | `task-games/moestrike` | 4.10 MB | 积分直接花（**不设币、不发券**，出击 10，每场都收） | `chill` |
+| `melonjar` | `task-games/melonjar` | 5.72 MB | 积分直接花（**不设币、不发券**，开局 8，每局都收） | `chill` |
+| `minergirl` | `task-games/minergirl` | 1.11 MB | 积分直接花（**不设币、不发券**，进场 15 + 10 分钟宽限） | `chill` |
+| `ropeland` | `task-games/ropeland` | 4.10 MB | 积分直接花（**不设币、不发券**，开局 20，每局都收）；羊毛只买升级/外观，**不换券** | `chill` |
+
+包大小是 `localGames.ts` 里 `bytes` 的口径（`make-local-catalog` 现算），
+改完包要重算，否则这张表会和清单说的不是一回事。
 
 `HOST_API = 4`（10-23 加 `mintVoucher`：抓到奖品**直接发券**，不经过币）。
 
@@ -405,13 +411,17 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 它的「进化经验」存在**游戏自己的存档**里，不进宿主账本 ——
 `manifest.coin` 只是闸门要求必填的占位。
 
-现在 `chill` 有三款（`sugar` / `anthill` / `moestrike`），差别只在**收费点**：
+现在 `chill` 有六款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland`），
+差别只在**收费点**：
 
 | 游戏 | 收费点 | 宽限 |
 | --- | --- | --- |
 | `sugar` | 「开局」 | 无 |
 | `anthill` | `mount()` 进场收一次 | 10 分钟（放置类没有「一局」） |
 | `moestrike` | 每次「出击」`enterBattle(n)` | 无（关卡制，每场都是新的一场） |
+| `melonjar` | 「开局」 | 无 |
+| `minergirl` | `mount()` 进场收一次 | 10 分钟（养成类没有「一局」） |
+| `ropeland` | 每次「开始跳绳」`startRun()` | 无（三只铃铛掉光就是一局） |
 
 判据一句话：**游戏里有没有「一局」这个动作** —— 有就按局收（关卡 / 回合制 / 抓娃娃），
 没有（放置 / 养成）就进场收一次 + 宽限期，且 `paidAt` **必须写存档**（写内存变量等于切走就失效）。
