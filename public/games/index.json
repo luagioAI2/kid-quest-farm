@@ -52,7 +52,7 @@
     {
       "id": "minergirl",
       "name": "挖矿少女",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "file": "minergirl/minergirl.plugin.mjs",
       "assetBase": "minergirl/"
     },

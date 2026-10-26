@@ -99,10 +99,10 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
   {
     "id": "minergirl",
     "name": "挖矿少女",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "url": "/games/minergirl/minergirl.plugin.mjs",
-    "sha256": "b4f0a6fb6ecd7d6252656881c3794ef67d9d5d842ac58ae6eb1465d9c7d2de49",
-    "bytes": 1168546,
+    "sha256": "2135931d9f1c2e60b05b7904da150559557991a6c0ee10ae30c6f26204ec1e13",
+    "bytes": 1170500,
     "assetBase": "/games/minergirl/"
   },
   {
