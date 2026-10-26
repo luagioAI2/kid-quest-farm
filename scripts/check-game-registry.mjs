@@ -23,6 +23,17 @@
  *
  * 这里把「四处 + 包本身」一次性对齐，并且用 `--self-test` 证明**每一类都能红**。
  *
+ * ## 第五类：PLAN 的**源图**在不在版本控制里（2026-10-27 加）
+ *
+ * 前四类只保证「产物存在」，而产物是从**游戏仓库里的源图**生成的。
+ * 实测漏网：`claw3d` 的 3 张源图放在 `claw-machine/shots/`，而那个仓库的
+ * `.gitignore` 明确 ignore 了 `shots`（走查临时目录）⇒ 详情页图的唯一来源
+ * 从来没进过 git，工作区一清就再也生成不出来，**而这里照样全绿**。
+ *
+ * 所以多查一条：PLAN 里列的每个源图，① 文件要在 `task-games/<项目>/` 下真实存在；
+ * ② 要被那个仓库的 git 跟踪（`git ls-files --error-unmatch`）。
+ * 游戏仓库不在（比如只 checkout 了宿主）时跳过，不误报。
+ *
  * ## 它不检查什么
  *
  * - 包能不能跑（那是 `e2e-plugin-local.mjs`）
@@ -32,6 +43,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
@@ -82,6 +94,34 @@ function parsePyPlan() {
   return plan
 }
 
+/**
+ * PLAN 里每个条目**用到哪几张源图**：`{ id: ['shots/01-title.png', …] }`。
+ *
+ * 为什么要单独解析：`parsePyPlan` 只取 `(id, 项目目录)` 这一对，
+ * 拿不到图片清单。而「源图在不在版本控制里」是**这个脚本的老盲区** ——
+ * 2026-10-27 实测：claw3d 的 3 张源图放在 `shots/`，而 `claw-machine/.gitignore`
+ * 明确 ignore 了 `shots`（那是走查临时目录）⇒ 详情页图的唯一来源从没入库，
+ * 清了就再也生成不出来，**而 `check:registry` 照样全绿**。
+ */
+function parsePlanFiles() {
+  const src = read('scripts/build-store-shots.py')
+  const out = {}
+  for (const m of src.matchAll(/^\s*\("([a-z0-9]+)",\s*"([^"]+)",\s*\[([\s\S]*?)\]\s*\),/gm)) {
+    out[m[1]] = [...m[3].matchAll(/\("([^"]+)",\s*"\d+"\)/g)].map((x) => x[1])
+  }
+  return out
+}
+
+/** 这个路径在那个仓库里被 git 跟踪了吗（`git ls-files --error-unmatch`） */
+function isTracked(cwd, rel) {
+  try {
+    execFileSync('git', ['ls-files', '--error-unmatch', '--', rel], { cwd, stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
 // ---------- 检查 ----------
 
 async function loadData() {
@@ -91,6 +131,7 @@ async function loadData() {
     local: parseLocalGames(),
     store: parseStorefront(),
     plan: parsePyPlan(),
+    planFiles: parsePlanFiles(),
     // 包里的 manifest 版本要动态 import 才知道（唯一能抓「升了清单没升包」的办法）
     manifestVersion: {},
   }
@@ -157,6 +198,22 @@ function run(data) {
     if (!data.plan[g.id]) {
       bad.push(`[截图源] ${g.id} 不在 build-store-shots.py 的 PLAN 里 —— 详情页的图永远是旧的`)
     }
+
+    // ⑤ PLAN 的**源图**必须存在，且**在游戏仓库里被 git 跟踪**
+    //    只查「产物在不在」不够：产物是从源图生成的，源图丢了就再也生成不出来。
+    //    实测漏网：claw3d 的 3 张源图在 `shots/`，而那款仓库 gitignore 了 `shots`。
+    const proj = data.plan[g.id]
+    const files = data.planFiles[g.id]
+    const projDir = proj ? path.join(ROOT, '..', 'task-games', proj) : null
+    if (files && projDir && fs.existsSync(projDir)) {
+      for (const rel of files) {
+        if (!fs.existsSync(path.join(projDir, rel))) {
+          bad.push(`[截图源] ${g.id} 的源图 ${rel} 不存在（task-games/${proj}/）`)
+        } else if (!isTracked(projDir, rel)) {
+          bad.push(`[截图源] ${g.id} 的源图 ${rel} 没进 git（task-games/${proj}/）—— 工作区一清就再也生成不出来`)
+        }
+      }
+    }
   }
 
   // 反向：多余的东西（永远渲染不出来 / 永远转不到）
@@ -186,6 +243,7 @@ const MUTATIONS = [
   ['截图文件不在', (d) => { d.store.find((x) => x.id === d.index[0].id).shots.push('/store/nope/9.webp') }, '不存在'],
   ['PLAN 漏一行', (d) => { delete d.plan[d.index[0].id] }, '不在 build-store-shots.py 的 PLAN 里'],
   ['PLAN 多了个不存在的项目', (d) => { d.plan.fake = 'no-such-dir' }, 'task-games/no-such-dir 不存在'],
+  ['PLAN 源图不存在', (d) => { d.planFiles[d.index[0].id] = ['shots/nope-xyz.png'] }, '源图 shots/nope-xyz.png 不存在'],
 ]
 
 async function selfTest() {
