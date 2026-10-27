@@ -104,6 +104,13 @@
       "version": "1.0.0",
       "file": "renttower/renttower.plugin.mjs",
       "assetBase": "renttower/"
+    },
+    {
+      "id": "stackmeow",
+      "name": "堆呀堆",
+      "version": "1.0.0",
+      "file": "stackmeow/stackmeow.plugin.mjs",
+      "assetBase": "stackmeow/"
     }
   ]
 }

@@ -167,6 +167,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "3cebf49680965d6a0310821f4b062ab361a95877626041c5e20a4439d7c88974",
     "bytes": 4593256,
     "assetBase": "/games/renttower/"
+  },
+  {
+    "id": "stackmeow",
+    "name": "堆呀堆",
+    "version": "1.0.0",
+    "url": "/games/stackmeow/stackmeow.plugin.mjs",
+    "sha256": "6749bb8c90d156e5ac3c5a41fbc494cb50f5220b93c0872bce62f66dddccd270",
+    "bytes": 4247977,
+    "assetBase": "/games/stackmeow/"
   }
 ]
 

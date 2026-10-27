@@ -1,0 +1,85 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 15,
+  "bytes": 2575282
+ },
+ "assets": [
+  {
+   "file": "audio/bgm_main.m4a",
+   "bytes": 979606,
+   "sha256": "d97b05d9e7573e8035c7c6b0280a75e9cd34d6040649b5e21d1e5733bd8dd1da"
+  },
+  {
+   "file": "bg/bg-dusk-pink.webp",
+   "bytes": 72060,
+   "sha256": "56140dcfa226c8d5c6adfff24c490683baa174f33cffcffb7be2be002347bbff"
+  },
+  {
+   "file": "bg/bg-night-purple.webp",
+   "bytes": 99936,
+   "sha256": "5800a5dfe0fbd23801a6ec76f5eb51a8df3e80c6c6b6aab63fe87cc512f02b25"
+  },
+  {
+   "file": "bg/bg-teal-city.webp",
+   "bytes": 108034,
+   "sha256": "b4be8902f0eba6c88cdb5acc33386844abe81d9da67094fdbe3d1ad203168c2d"
+  },
+  {
+   "file": "blocks/block-pink.webp",
+   "bytes": 50772,
+   "sha256": "ed2212bc307f28beb3cc3e345fc76f601829b12074cbb2ba0812a7c0768380f0"
+  },
+  {
+   "file": "blocks/block-purple.webp",
+   "bytes": 37460,
+   "sha256": "a0dec40bc8eda9ba8a73ad799078ed10f76f18ee5948fffbeb499cb9d46d3b52"
+  },
+  {
+   "file": "blocks/block-teal.webp",
+   "bytes": 31712,
+   "sha256": "b024a2848a89f91fad1087598faf76e240becff463292a4c7ab07a3cc54c7b78"
+  },
+  {
+   "file": "blocks/block-yellow.webp",
+   "bytes": 42842,
+   "sha256": "60bb2901b1acc07ef36dce191844f6bdaaa2c3553c1ab81001080c2d062c8d2f"
+  },
+  {
+   "file": "blocks/index.json",
+   "bytes": 206,
+   "sha256": "77c901e9e1613a73b48e8d56c03c723694c2fb6908b7481cc660467c63660f3a"
+  },
+  {
+   "file": "fonts/smiley-sans/SmileySans-Oblique.woff2",
+   "bytes": 1150924,
+   "sha256": "731f22973349404b15a88a99ef3b5dd4104c0965c23b7e485c1f11e84fea99e2"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/audioOff.webp",
+   "bytes": 242,
+   "sha256": "7fccdd72f4e2e9f2b6fd359dfec34cd8564e4f978c0d14ff489a1d43fb1ec814"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/audioOn.webp",
+   "bytes": 388,
+   "sha256": "c90305795f59c713a7e780862f9c220d6393531c77ba50cca27eaaffb8d6b3af"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/buttonX.webp",
+   "bytes": 572,
+   "sha256": "261235fbd4637efba57d11fc5c23c872bc071f454074d7fb297a44d56d1ace58"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/leaderboardsComplex.webp",
+   "bytes": 330,
+   "sha256": "3332d65bdd8e17295fc1bfb86ef06bc986cf42d12558d93350d9374022061f94"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/pause.webp",
+   "bytes": 198,
+   "sha256": "befc7e2a99f81129282f7929033d48d4cf8e32576800d2660a1fe7fa6c18e55b"
+  }
+ ]
+}

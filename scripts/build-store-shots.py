@@ -188,6 +188,15 @@ PLAN = [
         ("shots/03-tall.png", "3"),
         ("shots/04-shift.png", "4"),
     ]),
+    # ⚠️ 第一张必须是「这是什么游戏」：对局里的彩色塔，不是标题字。
+    # 这 4 张由 `task-games/stackmeow/scripts/capture.mjs` 对**当前构建**拍，
+    # 顺序就是详情页的顺序（对局 → 标题 → 结算 → 暂停）。
+    ("stackmeow", "stackmeow", [
+        ("screenshots/store-1.png", "1"),
+        ("screenshots/store-2.png", "2"),
+        ("screenshots/store-3.png", "3"),
+        ("screenshots/store-4.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

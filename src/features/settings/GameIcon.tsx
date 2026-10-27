@@ -115,6 +115,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   screamchick: Screamchick,
   sweetspin: Sweetspin,
   renttower: Renttower,
+  stackmeow: Stackmeow,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -870,6 +871,65 @@ function Renttower({ deep }: { deep: string }) {
         strokeWidth="1.9"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </g>
+  )
+}
+
+/**
+ * 堆呀堆：一座窄上去的彩色积木塔 + 顶上那块还在滑。
+ *
+ * 四块从下往上紫 / 青 / 粉 / 黄，是游戏里那套配色（`BLOCK_ASSETS` 的四张图）；
+ * 每块比下面窄一点、x 稍微偏一点 —— 这就是「压歪了会被削掉」的样子。
+ * 顶上那块单独一块、偏左、离得开一点，读出来是「还在左右滑、还没落」。
+ */
+function Stackmeow({ deep }: { deep: string }) {
+  /** 积木：墨色描边 + 亮色面 + 一条浅高光，和游戏里的涂鸦风一致 */
+  const Block = ({
+    x,
+    y,
+    w,
+    fill,
+  }: {
+    x: number
+    y: number
+    w: number
+    fill: string
+  }) => (
+    <g>
+      <rect x={x} y={y} width={w} height="7.4" rx="1.2" fill={fill} stroke="#14110F" strokeWidth="1.3" />
+      <rect x={x + 2} y={y + 1.4} width={w - 4} height="1.7" rx=".8" fill="#FFFFFF" opacity=".34" />
+    </g>
+  )
+
+  return (
+    <g>
+      {/* 投影：塔是立在地上的 */}
+      <ellipse cx="32" cy="56.6" rx="16" ry="2.8" fill={deep} opacity=".3" />
+
+      <Block x={15} y={47.2} w={34} fill="#7B4BD6" />
+      <Block x={16.4} y={40.2} w={30.6} fill="#2EC4B6" />
+      <Block x={18} y={33.2} w={27.4} fill="#FF3B8D" />
+      <Block x={19.4} y={26.2} w={25} fill="#FFD23F" />
+
+      {/* 顶上那块：偏左、离开一截 —— 「还在滑」 */}
+      <Block x={11.4} y={13.4} w={21} fill="#FF3B8D" />
+      {/* 下落轨迹（虚一点，别抢主体） */}
+      <path
+        d="M22 21.4v2.4"
+        stroke="#14110F"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeDasharray="1.6 1.8"
+        opacity=".55"
+      />
+
+      {/* PERFECT 的小星：这一款的正反馈就长这样 */}
+      <path
+        d="M45.6 12.2l1.1 2.5 2.5 1.1-2.5 1.1-1.1 2.5-1.1-2.5-2.5-1.1 2.5-1.1Z"
+        fill="#FFF3B0"
+        stroke="#14110F"
+        strokeWidth=".7"
       />
     </g>
   )
