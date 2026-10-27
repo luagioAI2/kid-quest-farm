@@ -152,6 +152,19 @@ PLAN = [
         ("shots/03-closet.png", "3"),
         ("shots/04-collection.png", "4"),
     ]),
+    # 2026-10-27 新增。源图是 `node scripts/capture.mjs` 拍的（DPR 2，585×1055）。
+    # 顺序：先看它是什么（标题 + 那只方块鸡）→ 有多少关（关卡网格）
+    # → 玩起来是什么（脖子伸出去铺地）→ 玩完得到什么（三颗星）。
+    # ⚠️ 第 2 张的存档是**页面里先塞进去的**（unlocked 13 / 27 颗星）：全新档打开是
+    #    24 把灰锁，拍出来像「关卡还没做」。
+    # ⚠️ 第 4 张要等三颗星一颗颗弹完（补间延迟 0.25/0.47/0.69 **游戏秒**，
+    #    headless 下约 7 倍 ⇒ 实测要 14 秒）。等 7 秒只亮一颗星。
+    ("screamchick", "screamchick", [
+        ("shots/01-title.png", "1"),
+        ("shots/02-levels.png", "2"),
+        ("shots/03-play.png", "3"),
+        ("shots/04-win.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

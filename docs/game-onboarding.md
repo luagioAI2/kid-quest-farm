@@ -398,7 +398,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 
 ---
 
-## 附录：现有十二款（2026-10-27 快照）
+## 附录：现有十三款（2026-10-27 快照）
 
 | id | 目录 | 包 | 经济 | 商城分类 |
 | --- | --- | --- | --- | --- |
@@ -414,6 +414,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `blockfit` | `task-games/blockfit` | 4.17 MB | 积分直接花（**不设币、不发券**，点开一道题 10，每局都收）；印章只是 45 枚收集进度，**不换券** | `chill` |
 | `deckrush` | `task-games/deckrush` | 4.13 MB | 积分直接花（**不设币、不发券**，点「开始」10，**点「继续」不重复收**）；60 秒构筑 + 6 关战斗 | `chill` |
 | `corgi` | `task-games/corgi` | 1.85 MB | 积分直接花（**不设币、不发券**，`mount()` 进场 10 + 10 分钟宽限）；爱心只在游戏存档里，不换券 | `chill` |
+| `screamchick` | `task-games/screamchick` | 0.95 MB | 积分直接花（**不设币、不发券**，进一关 10，**下一关/重玩不另收**）；星星只是 150 枚收集进度，不换券 | `chill` |
 
 包大小是 `localGames.ts` 里 `bytes` 的口径（`make-local-catalog` 现算），
 改完包要重算，否则这张表会和清单说的不是一回事。
@@ -425,7 +426,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 它的「进化经验」存在**游戏自己的存档**里，不进宿主账本 ——
 `manifest.coin` 只是闸门要求必填的占位。
 
-现在 `chill` 有九款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit` / `deckrush` / `corgi`），
+现在 `chill` 有十款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit` / `deckrush` / `corgi` / `screamchick`），
 差别只在**收费点**：
 
 | 游戏 | 收费点 | 宽限 |
@@ -439,6 +440,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `blockfit` | 每次「点开一道题」`startMain()` / `startTa()` | 无（点开就是一局，**翻目录/看标题屏免费**） |
 | `deckrush` | 标题屏点「开始」`onStart(fresh)` | 无（**点「继续」是接着上一局，不再收一次**） |
 | `corgi` | `mount()` 进场收一次 | 10 分钟（养成类没有「一局」） |
+| `screamchick` | 每次「进一关」`startLevel(i)` | 无（**挂载不收费**；「下一关」「重玩」都不另收） |
 
 判据一句话：**游戏里有没有「一局」这个动作** —— 有就按局收（关卡 / 回合制 / 抓娃娃），
 没有（放置 / 养成）就进场收一次 + 宽限期，且 `paidAt` **必须写存档**（写内存变量等于切走就失效）。

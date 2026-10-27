@@ -140,6 +140,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "7bf98367145834a0a0fafe1444852571cf28ab0bfbd3fc228805581526d1f19e",
     "bytes": 1939221,
     "assetBase": "/games/corgi/"
+  },
+  {
+    "id": "screamchick",
+    "name": "尖叫鸡",
+    "version": "1.0.0",
+    "url": "/games/screamchick/screamchick.plugin.mjs",
+    "sha256": "7918af7274bd19897c9329df3717c229b6ce3acced6a2e8ab6f8851e8537d09b",
+    "bytes": 991750,
+    "assetBase": "/games/screamchick/"
   }
 ]
 

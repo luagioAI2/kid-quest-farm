@@ -1,0 +1,130 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 24,
+  "bytes": 4119198
+ },
+ "assets": [
+  {
+   "file": "audio/bgm.m4a",
+   "bytes": 952770,
+   "sha256": "da9e1ec22ecca2b271dbccb4b3374743956b6d7590f8a4f30e1897feccb4f4ba"
+  },
+  {
+   "file": "fonts/OpenHuninn.woff2",
+   "bytes": 2180736,
+   "sha256": "22ff654dc1678b4b14949e55466b76048e68f9bdb52b8f9f1b076d478cc4715e"
+  },
+  {
+   "file": "sheets/joy-a.webp",
+   "bytes": 160896,
+   "sha256": "956ed7ccdc0236f47682062b3bbda546ef9588fa88bc563c86920eca553984d0"
+  },
+  {
+   "file": "sheets/joy-b.webp",
+   "bytes": 164896,
+   "sha256": "1161c40db3f65aa821e762b8d00c71be2d35e85a860c19a6d666c6bf40def222"
+  },
+  {
+   "file": "sheets/pain-a.webp",
+   "bytes": 144244,
+   "sha256": "a7967f336af8b629e096be8ea377c35c043f879ee4aa966e6a07b15bb32c202a"
+  },
+  {
+   "file": "sheets/pain-b.webp",
+   "bytes": 160926,
+   "sha256": "3cdf76c98b8693f9db92f57b844198c17fe8496cb02a586f71fe1c7b89934c3e"
+  },
+  {
+   "file": "sheets/pain-c.webp",
+   "bytes": 150654,
+   "sha256": "5c72cae06543382359477ddaa3b072a930eb093b95248a3bdeb288c44ae8d789"
+  },
+  {
+   "file": "sprites/bush.webp",
+   "bytes": 16970,
+   "sha256": "7049f17c5c64d7359bbe3e4f7d00734322dc39a1e40fc501e7dde04904584f52"
+  },
+  {
+   "file": "sprites/donut.webp",
+   "bytes": 10480,
+   "sha256": "751ac0a212b5eb3e2ce2022698f8170adcb98a32c52d2e572ed7572b2207e4e6"
+  },
+  {
+   "file": "sprites/flag-blue.webp",
+   "bytes": 4800,
+   "sha256": "ac9cf47b768ed03d612e65b706fba14682c383354d3c89a31097956f2aa21ab6"
+  },
+  {
+   "file": "sprites/flag-red.webp",
+   "bytes": 4046,
+   "sha256": "b4e196f7aea19dd5571e33772dade7bf86fc396e604ab2e697bc31cf64b3962f"
+  },
+  {
+   "file": "sprites/flower.webp",
+   "bytes": 7364,
+   "sha256": "74683fdb2794879d0d2b3eac440f088209014429ab659a08c455207454c2cc62"
+  },
+  {
+   "file": "sprites/grass.webp",
+   "bytes": 7782,
+   "sha256": "542c934c5c525ce1f99befbaed6ff5cd8e3f881bd7ff58dfd3edc075dda87fe1"
+  },
+  {
+   "file": "sprites/head-happy.webp",
+   "bytes": 20348,
+   "sha256": "c69511b7311a879b361a498299342f8dc8a093ec4765fe2987978190a9314f70"
+  },
+  {
+   "file": "sprites/head.webp",
+   "bytes": 16066,
+   "sha256": "202204257271bbd1881bc898a9d03e9eaedc3e2747714875491e50afda245d5f"
+  },
+  {
+   "file": "sprites/pain-dizzy.webp",
+   "bytes": 18712,
+   "sha256": "e8c0af6d15c925f312c3c618b53220a236e8fc6da8ae1dfbb4a1a5177b99ef2c"
+  },
+  {
+   "file": "sprites/pain-flat.webp",
+   "bytes": 19104,
+   "sha256": "cd87c71b34dd4ac7bdc2579d09b8affc155deca0209f5594ef94d75540f20d7d"
+  },
+  {
+   "file": "sprites/pain-shock.webp",
+   "bytes": 18474,
+   "sha256": "4bf1afdd2afcfa53857563442f337ac637a95b894fa33458cd0ee82aab015a08"
+  },
+  {
+   "file": "sprites/pain-squish.webp",
+   "bytes": 21928,
+   "sha256": "4cf3c15aea11c1dabdccd48886fe3c0e2119d281af8f77215202a48ce0d436b2"
+  },
+  {
+   "file": "sprites/popcorn.webp",
+   "bytes": 7948,
+   "sha256": "8608dac748355c6df0308ed5ffe52c41e773e38f6a9c6bb9a9e3622e9c8cf1ee"
+  },
+  {
+   "file": "sprites/pretzel.webp",
+   "bytes": 10236,
+   "sha256": "cea77875daab66c0a96c668b3357c3a10a59a8f134a75e989692f8c2a3970264"
+  },
+  {
+   "file": "sprites/star.webp",
+   "bytes": 5856,
+   "sha256": "1913193a0cc11ec84157b499d380df6fd0fb7ce71f40e6da7e593b643b28e96f"
+  },
+  {
+   "file": "tiles/ground.webp",
+   "bytes": 3842,
+   "sha256": "1aafe499c7d7973077ab24d95ec3dbf262968bd7a4e0a64ee16f6d06006f7570"
+  },
+  {
+   "file": "tiles/pit.webp",
+   "bytes": 10120,
+   "sha256": "a84f32a47b8e92da1ce8aeabaec0b4feb2c82b9d9a25c637619ec72942376960"
+  }
+ ]
+}
