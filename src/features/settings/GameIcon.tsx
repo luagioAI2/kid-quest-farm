@@ -109,6 +109,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   melonjar: Melonjar,
   minergirl: Minergirl,
   ropeland: Ropeland,
+  blockfit: Blockfit,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -538,6 +539,47 @@ function Ropeland({ deep }: { deep: string }) {
       <path d="M33.6 26.2v6.4M39 26.6v6.8M47 26.4v6.6M52.4 26v6.4" stroke="#F7F4EC" strokeWidth="2.2" strokeLinecap="round" />
       {/* 跳起的两道浪：有了它才读成「在跳」而不是「贴着绳子站着」 */}
       <path d="M23 35.4h5M67.6 36.4h5" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" opacity=".75" />
+    </g>
+  )
+}
+
+/**
+ * 方块填空：一块 4×4 的米白棋盘，被四片彩纸拼片填掉 15 格，右下角留一个空格。
+ *
+ * 画的**就是它的玩法**：不是「一块拼图」（那会读成七巧板 / 拼图游戏），
+ * 而是「几块形状不规则的纸片正好塞满一个方框，只剩一格」。留那一格是关键 ——
+ * 填满的棋盘看起来像一张色块图案，留一格才看得出「还差一块」。
+ */
+function Blockfit({ deep }: { deep: string }) {
+  /** 4×4，格 12，原点 (8,10)。用格子坐标写，改布局只改这一组常量 */
+  const X = (c: number) => 8 + c * 12
+  const Y = (r: number) => 10 + r * 12
+  /** 一片拼片 = 一组格子；相邻格子共享边，同色填充所以内部缝隙看不见 */
+  const piece = (cells: Array<[number, number]>) =>
+    cells.map(([c, r]) => `M${X(c)} ${Y(r)}h12v12h-12z`).join('')
+
+  return (
+    <g>
+      {/* 投影：只有它，棋盘才是「一张纸」而不是一块贴纸 */}
+      <rect x="8" y="12" width="48" height="48" rx="6" fill={deep} opacity=".28" />
+      {/* 棋盘：米白纸面 */}
+      <rect x="8" y="10" width="48" height="48" rx="6" fill="#FDFBF2" />
+      {/* 格线：画在拼片**下面**，空格里才看得见 */}
+      <g stroke="#B8C8D8" strokeWidth=".9" opacity=".7">
+        <path d="M20 10v48M32 10v48M44 10v48M8 22h48M8 34h48M8 46h48" />
+      </g>
+
+      {/* 四片彩纸：颜色取自游戏本体（青 / 蓝 / 紫 / 黄），和棋盘上看到的一致 */}
+      <path d={piece([[0, 0], [1, 0], [0, 1]])} fill="#45B7A5" />
+      <path d={piece([[2, 0], [3, 0], [3, 1], [3, 2]])} fill="#559CCF" />
+      <path d={piece([[0, 2], [0, 3], [1, 3], [2, 3]])} fill="#9274C7" />
+      <path d={piece([[1, 1], [2, 1], [1, 2], [2, 2]])} fill="#E7B84B" />
+
+      {/* 纸的受光：只压在棋盘上沿，压多了会把四片颜色洗白 */}
+      <rect x="8" y="10" width="48" height="14" rx="6" fill="#FFFFFF" opacity=".16" />
+
+      {/* 空格：右下角留一格，中间一个小圆点表示「这里还要塞一块」 */}
+      <circle cx={X(3) + 6} cy={Y(3) + 6} r="1.6" fill={deep} opacity=".38" />
     </g>
   )
 }

@@ -1,0 +1,40 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 6,
+  "bytes": 1445609
+ },
+ "assets": [
+  {
+   "file": "bg-paper.webp",
+   "bytes": 57084,
+   "sha256": "1a3d38e911942d0ce460ca85966ba995e19468897be3479b362bf525ac26dd00"
+  },
+  {
+   "file": "bgm-think.m4a",
+   "bytes": 1140553,
+   "sha256": "ade8b8170d8cf7f3df532619a687bd83abf3cd55589ce18d4f9ae61d7bf24822"
+  },
+  {
+   "file": "paper-fiber.webp",
+   "bytes": 105076,
+   "sha256": "0579ac915feeaa12d051897e0851fbf8694b424e557c7c5ae60cf90950c4d57c"
+  },
+  {
+   "file": "prop-eraser.webp",
+   "bytes": 26132,
+   "sha256": "ceb480401fc3303d889a7ecb321a8931f6300c55a34c445007a444fd6d957dad"
+  },
+  {
+   "file": "prop-pencil.webp",
+   "bytes": 21694,
+   "sha256": "8071ddf87df95078455bf3e080363bf96a9cf38352f2857db0a623cfd6c9d19f"
+  },
+  {
+   "file": "stamp.webp",
+   "bytes": 95070,
+   "sha256": "a53ad5477016331faa97f7a9a12ecfa81a8a8ea15f9c658a4881998e9611e4ec"
+  }
+ ]
+}

@@ -113,6 +113,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "e0930995ace757888a98bc20229ce757e0b02702670acdf70aade85660c950d1",
     "bytes": 4298589,
     "assetBase": "/games/ropeland/"
+  },
+  {
+    "id": "blockfit",
+    "name": "方块填空",
+    "version": "1.0.0",
+    "url": "/games/blockfit/blockfit.plugin.mjs",
+    "sha256": "734c3de97de53eff76377fe0f6300476f9d1bd3807009b9cdf8b8dde41cb9be2",
+    "bytes": 4371633,
+    "assetBase": "/games/blockfit/"
   }
 ]
 

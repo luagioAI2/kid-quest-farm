@@ -62,6 +62,13 @@
       "version": "1.0.0",
       "file": "ropeland/ropeland.plugin.mjs",
       "assetBase": "ropeland/"
+    },
+    {
+      "id": "blockfit",
+      "name": "方块填空",
+      "version": "1.0.0",
+      "file": "blockfit/blockfit.plugin.mjs",
+      "assetBase": "blockfit/"
     }
   ]
 }
