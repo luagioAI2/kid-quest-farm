@@ -393,24 +393,54 @@ console.log('\n【⑥ 点「开始玩」→ 戳屁屁进连击（canvas 上的�
   check('默认在第一个页签（零食）', s1?.tab === 0, String(s1?.tab))
   check('每秒产出算出来了', typeof s1?.hps === 'number' && s1.hps > 0, String(s1?.hps))
 
-  await wait(1200)
-  const c2 = await gameColors('2-play.png')
-  check(`★ 主界面不是空白（颜色 ${c2.n} 种）`, c2.n >= 20, c2.file)
-
   /*
-   * ★ 判据为什么是 `frenzy` 而不是「爱心变多了」：
-   *   这一款**自动产出**（`hps` 有值），爱心每帧都在涨 —— 点不点都会多。
-   *   `frenzy` 只有一种来源：连击条打满（每一下 +4.5，满 100 进 10 秒 frenzy），
-   *   而连击条只在**真的点中柯基**时才涨。所以它同时证明了
-   *   「点击到了 canvas 上」+「命中的是柯基」。
+   * ★★ 判据为什么是「爱心涨了」而不是「连击条满了（frenzy）」：
+   *
+   *   爱心：`tapMain()` 只在 `hitMain(x,y)` 命中柯基时才会被调（`onDown` 里先判命中），
+   *   每命中一下 `gain(tapVal)` ≥ 1，而**自动产出只有 ~0.2/秒** ⇒ 几秒里多出 5 个以上
+   *   只可能是「点中了」。它同时证明「点击到了 canvas 上」+「命中的是柯基」。
+   *
+   *   frenzy：要连击条打满 100（每下 +4.5 ⇒ 23 下）。但 headless 只有 4~6 fps，
+   *   `page.mouse.click` 连发时同一帧里的多次按下会被**合并/丢掉**，实际命中数不稳定
+   *   ⇒ 同一条脚本两次跑出 `9.98` 和 `0`。**别拿它当判据**，只当日志。
+   *
+   * ★★ 为什么要**分轮重试**而不是「进 play 就戳」：
+   *   `startPlay()` 用 380ms 的 tween 把标题层淡出，而 headless 把 delta 钳在 33ms/帧、
+   *   实际 4~6 fps ⇒ 墙钟要 ~2.7s 才跑完。**淡出期间戳屁屁是无效的**（实测
+   *   「进 play 立刻戳 45 下」爱心 0→0，「等 1.2s 再戳」爱心 0→55）。
+   *   所以判据写成「戳一轮不够就再等一轮」，而不是一个固定的 sleep ——
+   *   固定值要么太短（拍到过渡态 / 点不动），要么白白拖慢每一轮。
    */
-  const f0 = (await snapGame())?.frenzy ?? 0
-  // 三个纵向位置各戳 15 下：屁屁在主视觉那一块，取 0.35 / 0.42 / 0.50 三处足够覆盖
-  for (const fy of [0.35, 0.42, 0.5]) {
-    for (let i = 0; i < 15; i++) await tapDesign(size.W / 2, size.H * fy)
+  const h0 = (await snapGame())?.hearts ?? 0
+  let round = 0
+  let dh = 0
+  for (; round < 4; round++) {
+    // 三个纵向位置各戳 15 下：屁屁在主视觉那一块，取 0.35 / 0.42 / 0.50 三处足够覆盖
+    for (const fy of [0.35, 0.42, 0.5]) {
+      for (let i = 0; i < 15; i++) await tapDesign(size.W / 2, size.H * fy)
+    }
+    dh = ((await snapGame())?.hearts ?? 0) - h0
+    if (dh >= 5) break
+    await wait(900) // 大概率还在标题淡出，再等一轮
   }
   const s2 = await snapGame()
-  check('★ 戳屁屁进了连击（frenzy > 0）', (s2?.frenzy ?? 0) > 0, `frenzy ${f0} → ${s2?.frenzy}`)
+  check(`★ 戳屁屁真的加爱心（${h0} → ${s2?.hearts}，+${dh}）`, dh >= 5,
+    `第 ${round + 1} 轮点中；自动产出只有 ~0.2/秒，几秒涨 5 个只能是点中了`)
+  console.log(`  · 连击（frenzy）：${s2?.frenzy ?? 0}（headless 下点击会被合并，只当日志不看）`)
+
+  /*
+   * ★★ 截图必须放在**戳完之后**，而且还要再等一段。
+   *
+   * `startPlay()` 用 380ms 的 tween 把标题层淡出，而 headless 的 Phaser
+   * 把 delta 钳在 33ms/帧、实际只有 4~6 fps ⇒ **墙钟要 ~2.7s 才跑完**。
+   * 原来「进 play 就 wait 1200ms 再截」拍到的是**交叉淡入帧**
+   * （标题 ~50% + 主界面 ~40%，两层叠着）—— 颜色种类照样 ≥20，
+   * 断言全绿，只有人看截图才发现那张图不能用。
+   * 这和 blockfit「印章还是 alpha 0」是同一个坑：**颜色数判据抓不到过渡态**。
+   */
+  await wait(1800)
+  const c2 = await gameColors('2-play.png')
+  check(`★ 主界面不是空白（颜色 ${c2.n} 种）`, c2.n >= 20, c2.file)
 }
 
 let heartsBefore = 0
