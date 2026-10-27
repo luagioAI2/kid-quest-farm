@@ -197,6 +197,16 @@ PLAN = [
         ("screenshots/store-3.png", "3"),
         ("screenshots/store-4.png", "4"),
     ]),
+    # 2026-10-28 新增。源图是 `node scripts/capture.mjs` 拍的（DPR 2，390×844 容器）。
+    # 顺序：首页（一眼看出是打病毒的关卡制）→ 对局 → 英雄加点 → 结算。
+    # ⚠️ 对局那张拍在 **10%** 左右：25% 时通道口会堆成一面「病毒墙」，
+    #    三十来个四位数血量叠在一起，看着像 bug。
+    ("cellguard", "cellguard", [
+        ("screenshots/store-1.png", "1"),
+        ("screenshots/store-2.png", "2"),
+        ("screenshots/store-3.png", "3"),
+        ("screenshots/store-4.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

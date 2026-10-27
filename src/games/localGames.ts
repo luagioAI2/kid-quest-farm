@@ -176,6 +176,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "6749bb8c90d156e5ac3c5a41fbc494cb50f5220b93c0872bce62f66dddccd270",
     "bytes": 4247977,
     "assetBase": "/games/stackmeow/"
+  },
+  {
+    "id": "cellguard",
+    "name": "细胞守卫",
+    "version": "1.0.0",
+    "url": "/games/cellguard/cellguard.plugin.mjs",
+    "sha256": "758f56b723d3f683f3c631a35da94eb0db7109bad5a1719089611831ee6982be",
+    "bytes": 307406,
+    "assetBase": "/games/cellguard/"
   }
 ]
 

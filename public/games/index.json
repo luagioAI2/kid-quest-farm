@@ -111,6 +111,13 @@
       "version": "1.0.0",
       "file": "stackmeow/stackmeow.plugin.mjs",
       "assetBase": "stackmeow/"
+    },
+    {
+      "id": "cellguard",
+      "name": "细胞守卫",
+      "version": "1.0.0",
+      "file": "cellguard/cellguard.plugin.mjs",
+      "assetBase": "cellguard/"
     }
   ]
 }

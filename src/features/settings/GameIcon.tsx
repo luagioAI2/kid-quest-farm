@@ -116,6 +116,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   sweetspin: Sweetspin,
   renttower: Renttower,
   stackmeow: Stackmeow,
+  cellguard: Cellguard,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -930,6 +931,59 @@ function Stackmeow({ deep }: { deep: string }) {
         fill="#FFF3B0"
         stroke="#14110F"
         strokeWidth=".7"
+      />
+    </g>
+  )
+}
+
+/**
+ * 细胞守卫：一颗大病毒压过来，一颗小细胞举着星在底下顶着。
+ *
+ * 大的是紫色带刺的病毒（游戏里的怪就长这样），小的是青绿色细胞（玩家的英雄「阿兔」），
+ * 中间一道抗体弹 —— 「通道上拦病毒」这一件事三样就都说完了。
+ * 病毒比细胞大一圈是故意的：这一款的压力来自「怪比你能打」，靠的是摆武器不是硬拼。
+ */
+function Cellguard({ deep }: { deep: string }) {
+  /** 病毒的一根刺：短柄 + 圆头，八根围着球 */
+  const Spike = ({ deg }: { deg: number }) => (
+    <g transform={`rotate(${deg} 27 25)`}>
+      <path d="M27 15.4v-4.6" stroke="#2A1A3E" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="27" cy="10.2" r="2.1" fill="#9B6BF0" stroke="#2A1A3E" strokeWidth="1.1" />
+    </g>
+  )
+
+  return (
+    <g>
+      {/* 投影 */}
+      <ellipse cx="32" cy="57" rx="17" ry="2.8" fill={deep} opacity=".3" />
+
+      {/* 大病毒 */}
+      {[0, 45, 90, 135, 180, 225, 270, 315].map((d) => (
+        <Spike key={d} deg={d} />
+      ))}
+      <circle cx="27" cy="25" r="10.6" fill="#8B5CF6" stroke="#2A1A3E" strokeWidth="1.6" />
+      <circle cx="23.4" cy="21.6" r="3.4" fill="#B18BFA" opacity=".55" />
+      {/* 眼睛：一高一低，坏笑 */}
+      <ellipse cx="23.6" cy="24" rx="1.5" ry="1.9" fill="#2A1A3E" />
+      <ellipse cx="30.4" cy="24" rx="1.5" ry="1.9" fill="#2A1A3E" />
+      <path d="M24 29.4q3 2.2 6 0" stroke="#2A1A3E" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+
+      {/* 抗体弹：从细胞往病毒飞 */}
+      <g transform="rotate(-38 40 40)">
+        <rect x="36.4" y="38.2" width="8" height="3.4" rx="1.7" fill="#FFF3B0" stroke="#2A1A3E" strokeWidth="1" />
+      </g>
+
+      {/* 小细胞（英雄）：青绿球 + 顶上一颗星 */}
+      <circle cx="41" cy="48.4" r="7.6" fill="#7FE3B0" stroke="#2A1A3E" strokeWidth="1.6" />
+      <circle cx="38.6" cy="46.2" r="2.4" fill="#C6F7DD" opacity=".7" />
+      <ellipse cx="38.8" cy="48.2" rx="1.2" ry="1.5" fill="#2A1A3E" />
+      <ellipse cx="43.6" cy="48.2" rx="1.2" ry="1.5" fill="#2A1A3E" />
+      <path d="M39.4 52q1.8 1.5 3.6 0" stroke="#2A1A3E" strokeWidth="1.1" fill="none" strokeLinecap="round" />
+      <path
+        d="M41 36.6l1 2.3 2.3 1-2.3 1-1 2.3-1-2.3-2.3-1 2.3-1Z"
+        fill="#FFD23F"
+        stroke="#2A1A3E"
+        strokeWidth=".8"
       />
     </g>
   )
