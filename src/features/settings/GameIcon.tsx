@@ -114,6 +114,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   corgi: Corgi,
   screamchick: Screamchick,
   sweetspin: Sweetspin,
+  renttower: Renttower,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -803,6 +804,73 @@ function Sweetspin({ deep }: { deep: string }) {
       {/* 灯头：两道金属螺纹 */}
       <rect x="31.6" y="35" width="6.8" height="4.6" rx="1.6" fill="#9AA5AE" />
       <path d="M31.8 37.2h6.4" stroke="#7C868E" strokeWidth="1.1" strokeLinecap="round" />
+    </g>
+  )
+}
+
+/**
+ * 收租公寓：一栋亮着灯的公寓 + 右上角「加盖」的橙色上升箭头。
+ *
+ * 三件东西缺一不可（58px 下靠它们认出是这款）：
+ *   ① **竖向的楼**（不是方块）—— 楼顶压一道女儿墙，才不像一块饼干；
+ *   ② **暖黄的窗**（三亮三暗）—— 全亮会变成「写字楼」，全暗又变成「空楼」，
+ *      一亮一暗才读得出「有人住、还有空房」；
+ *   ③ 右上角的**橙色上升箭头** —— 那是游戏底栏那个「加盖」按钮的动作，
+ *      也是这一款唯一的核心动词（盖高 → 收更多租）。
+ *
+ * ⚠️ 三处踩过的坑（都是截图才看出来的，结构测试一律全绿）：
+ *   · 雨棚和门**贴在一起**时，58px 下红 + 深灰糊成一块「红黑坨子」⇒ 中间留一道缝；
+ *   · 雨棚 y 算高了会**压到最下一排窗**上，128px 下看着像窗上横了一道红杠；
+ *   · 光晕如果**画在窗上面**，暗窗也被蒙一层黄 ⇒ 窗就不「暗」了，光晕要垫在窗下面。
+ *
+ * 纵向排布（楼体 20.6~56）是算出来的，不是摆的：三排窗 3×5.8 + 两道 2.4 的间隔
+ * + 雨棚 1.6 + 门 6.8，上下各留一点余量 —— 改窗高记得连雨棚和门一起挪。
+ */
+function Renttower({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 投影：楼是立在地面上的 */}
+      <ellipse cx="32" cy="57.4" rx="15" ry="2.8" fill={deep} opacity=".3" />
+
+      {/* 楼体：正面米白，右立面压深一号，才有厚度 */}
+      <rect x="18.6" y="20.6" width="27.4" height="35.4" rx="1.6" fill="#F7E8CB" />
+      <path d="M39.4 20.6h6.6v35.4h-6.6Z" fill="#E3CBA4" />
+      {/* 女儿墙：压出楼顶的厚度，否则就是一块饼干 */}
+      <rect x="16.4" y="16.2" width="31.8" height="5.2" rx="1.6" fill="#CBB08A" />
+      <rect x="16.4" y="16.2" width="31.8" height="2.2" rx="1.1" fill="#DCC29C" />
+
+      {/* 光晕垫在窗下面：亮窗才「亮」，暗窗仍然是暗的 */}
+      <g fill="#FFD264" opacity=".3">
+        <rect x="20.2" y="22.6" width="8.4" height="7.4" rx="1.8" />
+        <rect x="29.4" y="30.8" width="8.4" height="7.4" rx="1.8" />
+        <rect x="20.2" y="39" width="8.4" height="7.4" rx="1.8" />
+      </g>
+
+      {/* 窗：三层，一亮一暗（暗的是空房） */}
+      <g>
+        <rect x="21" y="23.4" width="6.8" height="5.8" rx="1" fill="#FFD264" />
+        <rect x="30.2" y="23.4" width="6.8" height="5.8" rx="1" fill="#8FA3B4" />
+        <rect x="21" y="31.6" width="6.8" height="5.8" rx="1" fill="#8FA3B4" />
+        <rect x="30.2" y="31.6" width="6.8" height="5.8" rx="1" fill="#FFD264" />
+        <rect x="21" y="39.8" width="6.8" height="5.8" rx="1" fill="#FFD264" />
+        <rect x="30.2" y="39.8" width="6.8" height="5.8" rx="1" fill="#8FA3B4" />
+      </g>
+
+      {/* 门厅：雨棚和门之间留一道缝，58px 下才不糊成一团红黑 */}
+      <rect x="24.3" y="49.2" width="9.4" height="6.8" rx="1" fill="#8FA0AE" />
+      <rect x="28.6" y="49.2" width=".9" height="6.8" fill="#7C8B99" />
+      <rect x="23.3" y="47" width="11.4" height="1.6" rx=".8" fill="#E8604C" />
+
+      {/* 加盖：橙底白箭头（游戏底栏那个动作），白环把角标和楼体分开 */}
+      <circle cx="49.2" cy="16.6" r="7.6" fill="#E8604C" stroke="#FFFFFF" strokeWidth="1.4" />
+      <path
+        d="M49.2 20.2v-7.2M46.3 15.9l2.9-2.9 2.9 2.9"
+        fill="none"
+        stroke="#FFFFFF"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </g>
   )
 }

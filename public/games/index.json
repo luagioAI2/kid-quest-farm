@@ -97,6 +97,13 @@
       "version": "1.0.0",
       "file": "sweetspin/sweetspin.plugin.mjs",
       "assetBase": "sweetspin/"
+    },
+    {
+      "id": "renttower",
+      "name": "收租公寓",
+      "version": "1.0.0",
+      "file": "renttower/renttower.plugin.mjs",
+      "assetBase": "renttower/"
     }
   ]
 }

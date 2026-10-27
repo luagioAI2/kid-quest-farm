@@ -158,6 +158,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "0b58db812e6d6f94da1024168000546ba63a5627656bbe89cdef186e9748980d",
     "bytes": 108344,
     "assetBase": "/games/sweetspin/"
+  },
+  {
+    "id": "renttower",
+    "name": "收租公寓",
+    "version": "1.0.0",
+    "url": "/games/renttower/renttower.plugin.mjs",
+    "sha256": "3cebf49680965d6a0310821f4b062ab361a95877626041c5e20a4439d7c88974",
+    "bytes": 4593256,
+    "assetBase": "/games/renttower/"
   }
 ]
 
