@@ -968,11 +968,6 @@ function Cellguard({ deep }: { deep: string }) {
       <ellipse cx="30.4" cy="24" rx="1.5" ry="1.9" fill="#2A1A3E" />
       <path d="M24 29.4q3 2.2 6 0" stroke="#2A1A3E" strokeWidth="1.3" fill="none" strokeLinecap="round" />
 
-      {/* 抗体弹：从细胞往病毒飞 */}
-      <g transform="rotate(-38 40 40)">
-        <rect x="36.4" y="38.2" width="8" height="3.4" rx="1.7" fill="#FFF3B0" stroke="#2A1A3E" strokeWidth="1" />
-      </g>
-
       {/* 小细胞（英雄）：青绿球 + 顶上一颗星 */}
       <circle cx="41" cy="48.4" r="7.6" fill="#7FE3B0" stroke="#2A1A3E" strokeWidth="1.6" />
       <circle cx="38.6" cy="46.2" r="2.4" fill="#C6F7DD" opacity=".7" />
@@ -985,6 +980,16 @@ function Cellguard({ deep }: { deep: string }) {
         stroke="#2A1A3E"
         strokeWidth=".8"
       />
+
+      {/*
+       * 抗体弹：从细胞往病毒飞。
+       * ★ 必须画在细胞**之后**（之前被那颗星和青绿球盖掉，58px 下只剩一条白边），
+       *   位置卡在病毒右下缘和星星之间那道缝里（星星从 x≈39.7 开始）。
+       */}
+      <g transform="rotate(-36 33.5 34.6)">
+        <rect x="28.4" y="32.8" width="10.2" height="3.6" rx="1.8" fill="#FFF3B0" stroke="#2A1A3E" strokeWidth="1" />
+        <path d="M28.4 32.8l-2.6 1.8 2.6 1.8Z" fill="#FFD23F" stroke="#2A1A3E" strokeWidth=".8" strokeLinejoin="round" />
+      </g>
     </g>
   )
 }
