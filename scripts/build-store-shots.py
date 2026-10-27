@@ -130,6 +130,16 @@ PLAN = [
         ("shots/03-select.png", "3"),
         ("shots/04-clear.png", "4"),
     ]),
+    # 一分钟卡组：60 秒抽卡构筑 → 6 关牌战。
+    # ⚠️ 第 2 张必须等**三张备选真的摊开**再拍：刚进构筑时 `offer` 是 null，
+    #    拍出来只有一张倒计时，看不出这是「三选一抽卡」。
+    # ⚠️ 第 3 张必须等**手牌发完**：发牌是补间，headless 慢约 7×，固定 sleep 会拍成空手牌。
+    ("deckrush", "deckrush", [
+        ("shots/01-title.png", "1"),
+        ("shots/02-build.png", "2"),
+        ("shots/03-battle.png", "3"),
+        ("shots/04-cards.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

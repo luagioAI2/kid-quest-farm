@@ -69,6 +69,13 @@
       "version": "1.0.0",
       "file": "blockfit/blockfit.plugin.mjs",
       "assetBase": "blockfit/"
+    },
+    {
+      "id": "deckrush",
+      "name": "一分钟卡组",
+      "version": "1.0.0",
+      "file": "deckrush/deckrush.plugin.mjs",
+      "assetBase": "deckrush/"
     }
   ]
 }

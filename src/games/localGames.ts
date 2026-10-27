@@ -122,6 +122,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "734c3de97de53eff76377fe0f6300476f9d1bd3807009b9cdf8b8dde41cb9be2",
     "bytes": 4371633,
     "assetBase": "/games/blockfit/"
+  },
+  {
+    "id": "deckrush",
+    "name": "一分钟卡组",
+    "version": "1.0.0",
+    "url": "/games/deckrush/deckrush.plugin.mjs",
+    "sha256": "50f4b49e5c9ee36eb0934d998522678a0f65ecfe9df3fad0774905028b79c592",
+    "bytes": 4331925,
+    "assetBase": "/games/deckrush/"
   }
 ]
 

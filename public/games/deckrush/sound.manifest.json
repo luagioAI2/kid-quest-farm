@@ -1,0 +1,828 @@
+{
+  "assets": {
+    "music.battle": {
+      "kind": "music",
+      "loop": true,
+      "resolvedLoadPolicy": {
+        "mode": "stream",
+        "preload": "metadata"
+      },
+      "variants": {
+        "mp3": {
+          "bytes": 1584901,
+          "codec": "mp3",
+          "id": "mp3",
+          "mimeType": "audio/mpeg",
+          "priority": 0,
+          "sha256": "8476ce29692d8d317a7d79628af967448ec09d9f66efe692a597336c5cea2629",
+          "url": "assets/lib/oga-music/audio/battle/battle-theme-b-rpg.mp3"
+        }
+      }
+    },
+    "music.boss": {
+      "kind": "music",
+      "loop": true,
+      "resolvedLoadPolicy": {
+        "mode": "stream",
+        "preload": "metadata"
+      },
+      "variants": {
+        "mp3": {
+          "bytes": 2488168,
+          "codec": "mp3",
+          "id": "mp3",
+          "mimeType": "audio/mpeg",
+          "priority": 0,
+          "sha256": "1a8af0f083cf543d7f00fd903498102ca34349165d79f1e9ee9a733f4d2932f3",
+          "url": "assets/lib/oga-music/audio/boss/epic-boss-battle-orchestral.mp3"
+        }
+      }
+    },
+    "music.build": {
+      "kind": "music",
+      "loop": true,
+      "resolvedLoadPolicy": {
+        "mode": "stream",
+        "preload": "metadata"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 965672,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "priority": 0,
+          "sha256": "46dad7f657cac9dc7618961fc4eefcf1862ddf452b609c6baedf7cc496dcf0fd",
+          "url": "assets/audio/music-build.m4a"
+        }
+      }
+    },
+    "sfx.block": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 4836,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 4836,
+            "offset": 0
+          },
+          "priority": 0,
+          "sha256": "eef6b48a13233b616a41e56c97a16d0346784fae069868020cf60dfcadc1a6a8"
+        }
+      }
+    },
+    "sfx.burn": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 5548,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 5548,
+            "offset": 4836
+          },
+          "priority": 0,
+          "sha256": "fc34d955c417e4cf50b36891fedc9e7730779de3f93f648038c96dbb5b562bff"
+        }
+      }
+    },
+    "sfx.cardplay": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 3064,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 3064,
+            "offset": 10384
+          },
+          "priority": 0,
+          "sha256": "4f408bde216939e6b2e00fbf0d4bd932fbdc1ffe7ba02a5569afe16582df79b0"
+        }
+      }
+    },
+    "sfx.click": {
+      "kind": "ui",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 1741,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 1741,
+            "offset": 13448
+          },
+          "priority": 0,
+          "sha256": "d63aa53c2be786a75bb23320c024fb325908b4ebfb4b41fd4e69c551e5969713"
+        }
+      }
+    },
+    "sfx.defeat": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 20941,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 20941,
+            "offset": 15189
+          },
+          "priority": 0,
+          "sha256": "68a35cb177e81be132eb21563efb3746ed427de6daa8fcb8564e1541996bb706"
+        }
+      }
+    },
+    "sfx.delete": {
+      "kind": "ui",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 2889,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 2889,
+            "offset": 36130
+          },
+          "priority": 0,
+          "sha256": "335729d3e25900f009074960460d83fc5680f09f65c9ecaa66e1cb3b9ec96810"
+        }
+      }
+    },
+    "sfx.enemy_attack": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 5521,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 5521,
+            "offset": 39019
+          },
+          "priority": 0,
+          "sha256": "077aa1330b0d0d83ceadab731d00bf998da86b20e683d4dbae2d1484a38ddfca"
+        }
+      }
+    },
+    "sfx.heal": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 6598,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 6598,
+            "offset": 44540
+          },
+          "priority": 0,
+          "sha256": "5ed6e509870ac12ab6b6141cb9b0a1d5c9d173ddacc426368a20043cd2c3bb3e"
+        }
+      }
+    },
+    "sfx.hit_magic": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 4782,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 4782,
+            "offset": 51138
+          },
+          "priority": 0,
+          "sha256": "1a097d9a78d2a55087855cf994b4053cdc5530e19628f8cdb54d3ba49887c158"
+        }
+      }
+    },
+    "sfx.hit_slash": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 3829,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 3829,
+            "offset": 55920
+          },
+          "priority": 0,
+          "sha256": "2de29a746f081bcd759797eef5c80869c49863e930cee1bf51024ec3b549eb87"
+        }
+      }
+    },
+    "sfx.pick": {
+      "kind": "ui",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 2342,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 2342,
+            "offset": 59749
+          },
+          "priority": 0,
+          "sha256": "0434dcab120fa77f090861d8afb3716a9e9b5014e4fb06751080f990808d7d42"
+        }
+      }
+    },
+    "sfx.reveal_r": {
+      "kind": "ui",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 7375,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 7375,
+            "offset": 62091
+          },
+          "priority": 0,
+          "sha256": "d038735140e3e1d811fcdc8c5182c39dcd0f64289d0da06105df9d2bfe9bf09b"
+        }
+      }
+    },
+    "sfx.reveal_sr": {
+      "kind": "ui",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 10242,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 10242,
+            "offset": 69466
+          },
+          "priority": 0,
+          "sha256": "731040ad9b293db0d8d990d514ee8a7035b0876910782ebac35f31225ca162f1"
+        }
+      }
+    },
+    "sfx.reveal_ur": {
+      "kind": "ui",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 17140,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 17140,
+            "offset": 79708
+          },
+          "priority": 0,
+          "sha256": "61d8f3821a5412e9496655181b3d00247b44ebfcbe2688c38ffef32e3ad6992c"
+        }
+      }
+    },
+    "sfx.roar": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 13177,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 13177,
+            "offset": 96848
+          },
+          "priority": 0,
+          "sha256": "ae3d83990eedee681ff0a3d85863af5819cc5fc840b1c88f198c27a6ab44ed8c"
+        }
+      }
+    },
+    "sfx.summon": {
+      "kind": "ui",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 4995,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 4995,
+            "offset": 110025
+          },
+          "priority": 0,
+          "sha256": "7321a3a005ed110a40bbf502049f60915f8a6ee19b6c550046329e03a12aeb4c"
+        }
+      }
+    },
+    "sfx.tick": {
+      "kind": "ui",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 1687,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 1687,
+            "offset": 115020
+          },
+          "priority": 0,
+          "sha256": "280a172e3e03b43b539d1734973568b1c2021a5bcc4c27affbb4a15b44d64fe8"
+        }
+      }
+    },
+    "sfx.victory": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 21212,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 21212,
+            "offset": 116707
+          },
+          "priority": 0,
+          "sha256": "19efd0b30c4ad19baa4246057bc1d532710d294b1d177ee2adb1f301fdbd5da0"
+        }
+      }
+    }
+  },
+  "buses": {
+    "ambience": {
+      "gainDb": -3,
+      "parent": "sfx",
+      "userCategory": "sfx"
+    },
+    "impact": {
+      "gainDb": -1,
+      "parent": "sfx",
+      "userCategory": "sfx"
+    },
+    "master": {
+      "gainDb": -3,
+      "parent": null,
+      "userCategory": "master"
+    },
+    "music": {
+      "gainDb": 0,
+      "parent": "master",
+      "userCategory": "music"
+    },
+    "sfx": {
+      "gainDb": 0,
+      "parent": "master",
+      "userCategory": "sfx"
+    },
+    "ui": {
+      "gainDb": -2,
+      "parent": "sfx",
+      "userCategory": "sfx"
+    },
+    "voice": {
+      "gainDb": -2,
+      "parent": "master",
+      "userCategory": "voice"
+    }
+  },
+  "contentHash": "b43ab002a6ea69734782a01648b56ac2424b56e335d6919b26984f0a60d7c6c2",
+  "cues": {
+    "card.play": {
+      "assetIds": [
+        "sfx.cardplay"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 30,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "enemy.attack": {
+      "assetIds": [
+        "sfx.enemy_attack"
+      ],
+      "bus": "impact",
+      "cooldownMs": 50,
+      "duckRule": "impact",
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "enemy.roar": {
+      "assetIds": [
+        "sfx.roar"
+      ],
+      "bus": "impact",
+      "cooldownMs": 0,
+      "duckRule": "fanfare",
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "hit.block": {
+      "assetIds": [
+        "sfx.block"
+      ],
+      "bus": "impact",
+      "cooldownMs": 40,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "hit.burn": {
+      "assetIds": [
+        "sfx.burn"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 60,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "hit.heal": {
+      "assetIds": [
+        "sfx.heal"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 60,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "hit.magic": {
+      "assetIds": [
+        "sfx.hit_magic"
+      ],
+      "bus": "impact",
+      "cooldownMs": 40,
+      "duckRule": "impact",
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "hit.slash": {
+      "assetIds": [
+        "sfx.hit_slash"
+      ],
+      "bus": "impact",
+      "cooldownMs": 40,
+      "duckRule": "impact",
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "jingle.defeat": {
+      "assetIds": [
+        "sfx.defeat"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 0,
+      "duckRule": "fanfare",
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "jingle.victory": {
+      "assetIds": [
+        "sfx.victory"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 0,
+      "duckRule": "fanfare",
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "music.battle": {
+      "assetIds": [
+        "music.battle"
+      ],
+      "bus": "music",
+      "cooldownMs": 0,
+      "gainDb": -8,
+      "loop": true,
+      "polyphony": 1,
+      "priority": 20
+    },
+    "music.boss": {
+      "assetIds": [
+        "music.boss"
+      ],
+      "bus": "music",
+      "cooldownMs": 0,
+      "gainDb": -8,
+      "loop": true,
+      "polyphony": 1,
+      "priority": 20
+    },
+    "music.build": {
+      "assetIds": [
+        "music.build"
+      ],
+      "bus": "music",
+      "cooldownMs": 0,
+      "gainDb": -6,
+      "loop": true,
+      "polyphony": 1,
+      "priority": 20
+    },
+    "ui.click": {
+      "assetIds": [
+        "sfx.click"
+      ],
+      "bus": "ui",
+      "cooldownMs": 30,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "ui.delete": {
+      "assetIds": [
+        "sfx.delete"
+      ],
+      "bus": "ui",
+      "cooldownMs": 30,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "ui.pick": {
+      "assetIds": [
+        "sfx.pick"
+      ],
+      "bus": "ui",
+      "cooldownMs": 30,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "ui.reveal_r": {
+      "assetIds": [
+        "sfx.reveal_r"
+      ],
+      "bus": "ui",
+      "cooldownMs": 60,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "ui.reveal_sr": {
+      "assetIds": [
+        "sfx.reveal_sr"
+      ],
+      "bus": "ui",
+      "cooldownMs": 60,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "ui.reveal_ur": {
+      "assetIds": [
+        "sfx.reveal_ur"
+      ],
+      "bus": "ui",
+      "cooldownMs": 0,
+      "duckRule": "fanfare",
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "ui.summon": {
+      "assetIds": [
+        "sfx.summon"
+      ],
+      "bus": "ui",
+      "cooldownMs": 40,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "ui.tick": {
+      "assetIds": [
+        "sfx.tick"
+      ],
+      "bus": "ui",
+      "cooldownMs": 200,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    }
+  },
+  "duckRules": {
+    "fanfare": {
+      "attackMs": 30,
+      "holdMs": 1500,
+      "reductionDb": 9,
+      "releaseMs": 800,
+      "targetBus": "music"
+    },
+    "impact": {
+      "attackMs": 5,
+      "holdMs": 60,
+      "reductionDb": 3,
+      "releaseMs": 400,
+      "targetBus": "music"
+    }
+  },
+  "masterSafety": {
+    "attackSeconds": 0.003,
+    "kneeDb": 0,
+    "ratio": 20,
+    "releaseSeconds": 0.25,
+    "thresholdDb": -3
+  },
+  "mixStates": {},
+  "musicStates": {
+    "battle": {
+      "crossfadeMs": 1200,
+      "cueId": "music.battle"
+    },
+    "boss": {
+      "crossfadeMs": 1200,
+      "cueId": "music.boss"
+    },
+    "build": {
+      "crossfadeMs": 800,
+      "cueId": "music.build"
+    }
+  },
+  "packs": {
+    "main": {
+      "payloadBytes": 137919,
+      "payloadSha256": "aaa40e0b9522c4c85fad3b065b8b51780b5246da8c26d1364e33833f8cd0f6a7",
+      "url": "sound.pack"
+    }
+  },
+  "projectHash": "e2becd220e9f66dd3c4cc9c20ff62484fa1629b33b208da8ebf3c39692077e46",
+  "projectId": "deck-in-a-minute",
+  "runtimePolicy": {
+    "lockedPlayback": "reject",
+    "maxConcurrentDecodes": 3
+  },
+  "schemaVersion": "1.0.0",
+  "voicePolicy": {
+    "busMax": {
+      "ambience": 4,
+      "impact": 8,
+      "music": 2,
+      "sfx": 16,
+      "ui": 8,
+      "voice": 4
+    },
+    "defaultCueMax": 6,
+    "globalMax": 24,
+    "stealPolicy": "lowest-priority-oldest"
+  }
+}

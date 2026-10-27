@@ -110,6 +110,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   minergirl: Minergirl,
   ropeland: Ropeland,
   blockfit: Blockfit,
+  deckrush: Deckrush,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -580,6 +581,46 @@ function Blockfit({ deep }: { deep: string }) {
 
       {/* 空格：右下角留一格，中间一个小圆点表示「这里还要塞一块」 */}
       <circle cx={X(3) + 6} cy={Y(3) + 6} r="1.6" fill={deep} opacity=".38" />
+    </g>
+  )
+}
+
+/**
+ * 一分钟卡组：三张扇形摊开的牌，正面那张印着火焰（打的是巨龙）。
+ *
+ * 为什么不是「一张牌」：单张竖着的牌在 58px 下和一张空白便利贴没区别；
+ * 三张错开才有「一叠牌 / 构筑」的意思。正面那张的火焰是游戏里的攻击图标，
+ * 也是整组里唯一的高饱和暖色 —— 一眼能从一排图标里挑出来。
+ */
+function Deckrush({ deep }: { deep: string }) {
+  /** 一张牌：中心 (32,34)，22×30。`rot` 绕牌堆底部转，扇形才是从一点散开的 */
+  const card = (rot: number, fill: string, key: string) => (
+    <g key={key} transform={`rotate(${rot} 32 46)`}>
+      <rect x="21" y="19" width="22" height="30" rx="3" fill={fill} stroke={deep} strokeOpacity=".18" strokeWidth=".8" />
+    </g>
+  )
+
+  return (
+    <g>
+      {/* 投影：三张一起落在桌面上的那一片 */}
+      <ellipse cx="32" cy="53" rx="19" ry="3.6" fill={deep} opacity=".26" />
+
+      {/* 左右两张压在下面，只露出一半 —— 露太多会变成三张一样重的牌 */}
+      {card(-24, '#E8D9A8', 'l')}
+      {card(24, '#E8D9A8', 'r')}
+      {/* 左牌的花色点（天蓝）、右牌的花色点（金）：和游戏里两种稀有度的配色一致 */}
+      <circle cx="21.5" cy="26" r="2.2" fill="#357CA5" transform="rotate(-24 32 46)" />
+      <circle cx="42.5" cy="26" r="2.2" fill="#E8B839" transform="rotate(24 32 46)" />
+
+      {/* 正面那张：米白牌面 + 火焰 */}
+      <rect x="21" y="19" width="22" height="30" rx="3" fill="#FBF3DC" />
+      {/* 牌面受光：压在牌面上、**压在图徽下面** —— 压在火焰上面会把焰尖洗白 */}
+      <rect x="21" y="19" width="22" height="8" rx="3" fill="#FFFFFF" opacity=".45" />
+      {/* 牌面内框：一条细线就够，描粗会像贴纸 */}
+      <rect x="23.2" y="21.2" width="17.6" height="25.6" rx="2" fill="none" stroke="#E0CFA4" strokeWidth=".8" />
+      {/* 火焰：外焰珊瑚、内焰金 */}
+      <path d="M32 25.5c3.4 4.6 5.2 7 5.2 10.1a5.2 5.2 0 0 1-10.4 0c0-3.1 1.8-5.5 5.2-10.1z" fill="#EF8354" />
+      <path d="M32 30.5c1.6 2.2 2.5 3.4 2.5 4.9a2.5 2.5 0 0 1-5 0c0-1.5.9-2.7 2.5-4.9z" fill="#E8B839" />
     </g>
   )
 }

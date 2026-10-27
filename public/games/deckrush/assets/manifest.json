@@ -1,0 +1,305 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 59,
+  "bytes": 7379743
+ },
+ "assets": [
+  {
+   "file": "achievements/all_flawless.webp",
+   "bytes": 17362,
+   "sha256": "f200d85f267b04ddc1288b683ccb2c7f960ccbed6bc3e9b7e34bf61bea03fab1"
+  },
+  {
+   "file": "achievements/big_deck.webp",
+   "bytes": 20896,
+   "sha256": "9edb7c69c39373da031c817669920015c961ff66578f6692dd2a767a52339aca"
+  },
+  {
+   "file": "achievements/boss_flawless.webp",
+   "bytes": 14028,
+   "sha256": "414dc4dd85011da768497427f002e7f53f0bc44dbd5bd946b77f15284fd480fa"
+  },
+  {
+   "file": "achievements/clear_extreme.webp",
+   "bytes": 21392,
+   "sha256": "8acaf50d7f877cc2f57ba916923e35034e1c46acc395f5985dc27ef1a3d296ab"
+  },
+  {
+   "file": "achievements/clear_hard.webp",
+   "bytes": 16414,
+   "sha256": "7e7aef2dd0a428f9051661086de4f893db9120be5277f5b946a15248aa1b8a53"
+  },
+  {
+   "file": "achievements/clear_normal.webp",
+   "bytes": 13000,
+   "sha256": "bb9d72aaf44b1869c6b26cd2c66d5d1e3e01e6616667b6e2863edd5a3a0038bc"
+  },
+  {
+   "file": "achievements/mono_tag.webp",
+   "bytes": 18988,
+   "sha256": "22af9ecfb59ad88c6d3109fd9f55ec01f19ec722d89b8e21fdd0e2a233e10755"
+  },
+  {
+   "file": "achievements/speed_clear.webp",
+   "bytes": 19150,
+   "sha256": "ae2939ca5a392adce9169da2e2f4e3d7694228f0c24410f561748fb5a7c3ad88"
+  },
+  {
+   "file": "audio/music-build.m4a",
+   "bytes": 965672,
+   "sha256": "46dad7f657cac9dc7618961fc4eefcf1862ddf452b609c6baedf7cc496dcf0fd"
+  },
+  {
+   "file": "bg/courtyard.webp",
+   "bytes": 168454,
+   "sha256": "5c79e097603a5da83e0f3482d2098e132eab6418db6eebbb4ec9c0237ae10789"
+  },
+  {
+   "file": "bg/forest.webp",
+   "bytes": 255756,
+   "sha256": "fa36addd144d6c057a9c67b8060097ebd83c198ef95f4a264cc245ad7f108944"
+  },
+  {
+   "file": "bg/gacha.webp",
+   "bytes": 193556,
+   "sha256": "e6186c8e50385034c105a3df6ecb19179da8a3d4a469ae73c201820c9ff1b609"
+  },
+  {
+   "file": "bg/volcano.webp",
+   "bytes": 166706,
+   "sha256": "aeefae26a8436dad96f36ad71aaa274806736e51c73571fba16f0cd2a4f7d9f6"
+  },
+  {
+   "file": "cards/bash.webp",
+   "bytes": 23972,
+   "sha256": "21a97dc33062b07c46892d0b81d922ddc47ec802c18a19b3baa100bc60e5ee99"
+  },
+  {
+   "file": "cards/berserk.webp",
+   "bytes": 24782,
+   "sha256": "6ca96f6d50d4ecdd65b4afb921f8b5ab4330ad2b708bc89a1f7c1c32e4003c8e"
+  },
+  {
+   "file": "cards/bigswing.webp",
+   "bytes": 21822,
+   "sha256": "206e00c224ec932a60ea21890c884c332cdebf2da2745320f862a8d9b05016c2"
+  },
+  {
+   "file": "cards/chain.webp",
+   "bytes": 18122,
+   "sha256": "854776cfff6fa44b046636feff21fa420a5168525da91e977a8cec47399ac322"
+  },
+  {
+   "file": "cards/cheer.webp",
+   "bytes": 17910,
+   "sha256": "d91bce0077a78d57e9d02c3ce3c27359f1a1a743fd81b3177e0be4b8d73a5d83"
+  },
+  {
+   "file": "cards/double.webp",
+   "bytes": 18418,
+   "sha256": "da4681fb789c44f026f3d6b4215279eb18d6e18c31ccec576fe34ec293ca7783"
+  },
+  {
+   "file": "cards/dragonslayer.webp",
+   "bytes": 20954,
+   "sha256": "82c678d773c7d73212a839b334adb56b58fad9317acfb104f770fc5e395b28a5"
+  },
+  {
+   "file": "cards/ember.webp",
+   "bytes": 8810,
+   "sha256": "8cb8e33c97bd042219204e5d3cce9ed0c8b3aa29d0747acc7d484129b9975d3f"
+  },
+  {
+   "file": "cards/fireball.webp",
+   "bytes": 13894,
+   "sha256": "139c8e2357ae3f7da66e7df1a1bd9002474bfc86dfbcd4f1480183fd10edfb03"
+  },
+  {
+   "file": "cards/fireworks.webp",
+   "bytes": 29866,
+   "sha256": "407f566dce31c11d90a97f66f1da8d197a883370b87cc85dcb9fb96bb31d832b"
+  },
+  {
+   "file": "cards/flurry.webp",
+   "bytes": 13748,
+   "sha256": "bb1b10012d4434e91fe222a1a88608b6ce296aa3ab3604a4ea5991e42bac3458"
+  },
+  {
+   "file": "cards/frost.webp",
+   "bytes": 23800,
+   "sha256": "db71b00d592c4ae8f4a0d147a7ce8343f5109029476e4e34c467cf7d0286625d"
+  },
+  {
+   "file": "cards/goddess.webp",
+   "bytes": 24446,
+   "sha256": "504218427371e6ca79edd6870608cfeacc7a5fc32f77048cfd137ae0e37bbe7d"
+  },
+  {
+   "file": "cards/grimoire.webp",
+   "bytes": 27048,
+   "sha256": "d2504c4ab83b46a8f8b1e49c9f14992901be2068dc03392269dbccaf8a322ceb"
+  },
+  {
+   "file": "cards/guard.webp",
+   "bytes": 15978,
+   "sha256": "591c8a2928fcae116ea075c1cae5a04618b94ab5a7f9848e9712f7fa7a4ca04b"
+  },
+  {
+   "file": "cards/herb.webp",
+   "bytes": 20304,
+   "sha256": "e5ff83991e7be3b924a25b1dad83c1bfdb48dd6e62481ecb2991193361fbaf33"
+  },
+  {
+   "file": "cards/holylight.webp",
+   "bytes": 13252,
+   "sha256": "845ab064cd88177f4aad77bd501f4873aba1de21ec98b36cfcb864561d819850"
+  },
+  {
+   "file": "cards/hourglass.webp",
+   "bytes": 20850,
+   "sha256": "1a6a06b4b12e35f5d801e4c398cd8d9ca9d844cd824e62680367966cdb748c13"
+  },
+  {
+   "file": "cards/icearmor.webp",
+   "bytes": 18732,
+   "sha256": "04823987010532d3c696522cb7059e0c40b152c6581ee54492967bdbb1218f50"
+  },
+  {
+   "file": "cards/inferno.webp",
+   "bytes": 26972,
+   "sha256": "fc536157bc882637e93ed2945842aae2dcb527da6661bb9ad9d2c5a12bce9214"
+  },
+  {
+   "file": "cards/ironwall.webp",
+   "bytes": 15484,
+   "sha256": "4bb1cb980105ef80e03117c765bc2344addf4bb73cfcf04032311524c334a336"
+  },
+  {
+   "file": "cards/matsuri.webp",
+   "bytes": 24504,
+   "sha256": "cd465aee404c8d40d0ce9859c17c9c1fb2e9cd718ef2255434b7732b2cad42ad"
+  },
+  {
+   "file": "cards/meteor.webp",
+   "bytes": 21576,
+   "sha256": "765a073bb176415f1065c69804e8610d28c08464e9cd9ffdf79bc1c7b4d84163"
+  },
+  {
+   "file": "cards/mirror.webp",
+   "bytes": 15326,
+   "sha256": "debe97337b93fa07d515062e864c96873d0aacf517ea6db035390960aef2804d"
+  },
+  {
+   "file": "cards/phoenix.webp",
+   "bytes": 16686,
+   "sha256": "2180f335d732799f0257cafa0ce961d0a051d672cf96178933ee7d2bfd2b932d"
+  },
+  {
+   "file": "cards/rampart.webp",
+   "bytes": 19938,
+   "sha256": "d5b70f05deb3bf8936eced58e53a01e8cee15df03c462a7a676bfc7e7e923dd7"
+  },
+  {
+   "file": "cards/slash.webp",
+   "bytes": 20390,
+   "sha256": "c8fe4eaffa15e0449da8fc18342e21dd5573e18490c2280d834a225bd2c07d59"
+  },
+  {
+   "file": "cards/sworddance.webp",
+   "bytes": 16370,
+   "sha256": "ecd71a82f02bc67ea8bac5f269c7a2191171ef339d27bb235f8139073926b23d"
+  },
+  {
+   "file": "cards/thundergod.webp",
+   "bytes": 24638,
+   "sha256": "750b9811d5d0baa0b6338760feda5218aaf9b48f9567250e832bdfb55e040b8a"
+  },
+  {
+   "file": "cards/vamp.webp",
+   "bytes": 11708,
+   "sha256": "7b85f2d3a0ab537eb62bdce978d927ff070b759a86b145ba213d7273d6a722e4"
+  },
+  {
+   "file": "cards/warcry.webp",
+   "bytes": 22440,
+   "sha256": "7f8303fb3ce1fb9722bbfc79ab4c9a9adf3a3823c3857cab8678f5a7fca7bb72"
+  },
+  {
+   "file": "cards/zap.webp",
+   "bytes": 14492,
+   "sha256": "83c37629ec572c230a42cd8ccc0c8aaab1f05132ccc41d2506f62a48e3adc8fa"
+  },
+  {
+   "file": "enemies/bandit.webp",
+   "bytes": 74466,
+   "sha256": "7a39ca14afa1b759b46b52f44461a856ab82fa02ef9f4534719307016ce18b13"
+  },
+  {
+   "file": "enemies/dragon.webp",
+   "bytes": 115202,
+   "sha256": "424313de98b93d8700aea3fb40592ac554678d7f519f4837e620444a9c1b8576"
+  },
+  {
+   "file": "enemies/dragon_silhouette.webp",
+   "bytes": 42398,
+   "sha256": "28f2ffc5b175358452090c211429f4c4ed9c3bf5ec9efda7ebfb2ce1678e28ce"
+  },
+  {
+   "file": "enemies/general.webp",
+   "bytes": 83026,
+   "sha256": "8f68e15015ce36ae0eca0319b8edc8b7091d437cec7d908d9388f04de54b5e85"
+  },
+  {
+   "file": "enemies/golem.webp",
+   "bytes": 117376,
+   "sha256": "034a35666708317047c5d46f1d56c4c655c8eb20a1ebee6abfb01b8e942178ab"
+  },
+  {
+   "file": "enemies/mage.webp",
+   "bytes": 70234,
+   "sha256": "9f85724ad92816c3f579cb61eb04527e8348caf468e83c5329edcba76a00a1c4"
+  },
+  {
+   "file": "enemies/slime.webp",
+   "bytes": 61138,
+   "sha256": "f19435c7793954e22e826550a541749adcf8b207f7fba76045b544270b62c3b1"
+  },
+  {
+   "file": "fonts/LuckiestGuy-Regular.ttf",
+   "bytes": 73320,
+   "sha256": "cfbdd68a039f92df51cf3721506af6242e64594c6325fe0bedbeff3fe385d980"
+  },
+  {
+   "file": "hero.webp",
+   "bytes": 13114,
+   "sha256": "37828d93064e1f6a0d64331d439c669f0dcf676db7d294e04fb8d3d83b7f9262"
+  },
+  {
+   "file": "icons.webp",
+   "bytes": 47248,
+   "sha256": "3e7f1a5725b4706237ce7e150225b55fa6a2081740958f0ce2938417dd652dc2"
+  },
+  {
+   "file": "lib/oga-music/audio/battle/battle-theme-b-rpg.mp3",
+   "bytes": 1584901,
+   "sha256": "8476ce29692d8d317a7d79628af967448ec09d9f66efe692a597336c5cea2629"
+  },
+  {
+   "file": "lib/oga-music/audio/boss/epic-boss-battle-orchestral.mp3",
+   "bytes": 2488168,
+   "sha256": "1a8af0f083cf543d7f00fd903498102ca34349165d79f1e9ee9a733f4d2932f3"
+  },
+  {
+   "file": "tutorial/gacha_pick.webp",
+   "bytes": 50650,
+   "sha256": "02a498500cf84de6822eeed7740bb2f4311e2d45d7744f2a7f7e7a3f46c9c6e6"
+  },
+  {
+   "file": "tutorial/slime_intent.webp",
+   "bytes": 39896,
+   "sha256": "63cb102d70661c3f7d28b7f806d62475bc4dd156a5f536f02c731e7ac5d9e516"
+  }
+ ]
+}
