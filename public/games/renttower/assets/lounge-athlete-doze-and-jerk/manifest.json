@@ -1,0 +1,86 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-athlete-doze-and-jerk",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "922157c0726086fba8add45c756754e14afa7c796ea8e795b890c2eb443c3c23",
+   "size": 108015
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "96eae90f6e8c1da8eb7259d18738440ffb3fbf43d2d44146ca854c16f846ed9e",
+   "size": 222044
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "21eed7f3953692b0731d68ec8b22da34d4176387175ab3bc8fd68d2519158bea",
+   "size": 352530
+  }
+ ],
+ "action_id": "doze_and_jerk_awake",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 115,
+  "h": 150,
+  "count": 12,
+  "cols": 3,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9676
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 131.38,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9891,
+  "alpha_semi_share": 0.0589,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 12,
+  "event_source": "none",
+  "warnings": [
+   "the pose does not fully return to the start (seam 131.4)"
+  ]
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 689699250,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 24,
+  "x1": 84,
+  "y0": 64,
+  "y1": 140,
+  "h": 77,
+  "cx": 0.47391304347826085,
+  "bottom": 0.94
+ },
+ "nativeK": 2.88
+}

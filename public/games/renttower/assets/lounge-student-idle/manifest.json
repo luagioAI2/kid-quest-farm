@@ -1,0 +1,77 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-student-idle",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "d47be8f9d27383c449029b1a92c9e023bd9060a209d244e9b08e80b4604e16b6",
+   "size": 66017
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "23d9c8aaad30267e8eafa8beea0c5c4b4f9613d4664634ed1d863f803dbf6b5f",
+   "size": 182536
+  }
+ ],
+ "action_id": "idle",
+ "kind": "loop",
+ "frame": {
+  "w": 131,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 21,
+ "frame_ms": 48,
+ "duration_ms": 571,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9438
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 0.58,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9951,
+  "alpha_semi_share": 0.0447,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 1,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "flf2v",
+  "action_confidence": "template",
+  "seed": 52507017,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 7,
+  "x1": 121,
+  "y0": 9,
+  "y1": 140,
+  "h": 132,
+  "cx": 0.49236641221374045,
+  "bottom": 0.94
+ },
+ "nativeK": 1.66
+}

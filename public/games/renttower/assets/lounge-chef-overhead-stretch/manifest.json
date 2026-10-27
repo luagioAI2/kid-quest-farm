@@ -1,0 +1,78 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-chef-overhead-stretch",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "15b0284b3f3610f0c27abd26af855318941a65f8fb6f15b57da4d20d67a26d43",
+   "size": 109281
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "76a9d39c8d5ae803f16884ac2977e788fe13d433f62612245ccb4c06079b6941",
+   "size": 264876
+  }
+ ],
+ "action_id": "overhead_stretch",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 152,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9444
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 6
+ },
+ "qa": {
+  "seam_union_mae": 33.83,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9603,
+  "alpha_semi_share": 0.0839,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 329,
+  "event_source": "timing",
+  "event_amplitude": 0.014
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 642835900,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 45,
+  "x1": 100,
+  "y0": 10,
+  "y1": 141,
+  "h": 132,
+  "cx": 0.48026315789473684,
+  "bottom": 0.9466666666666667
+ },
+ "nativeK": 1.68
+}

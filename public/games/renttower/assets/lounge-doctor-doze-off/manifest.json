@@ -1,0 +1,77 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-doctor-doze-off",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "27338e800cb294989c0a925066060860397be39a305d92adeece01c44b8a6d2e",
+   "size": 133531
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "6e09bd2c5633419d667e73c2c8f6ed2cd0d384ef78e738355e7c95a5bf4f6e4d",
+   "size": 296954
+  }
+ ],
+ "action_id": "doze_off",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 114,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9453
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 23.97,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9936,
+  "alpha_semi_share": 0.0387,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 1,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 668762007,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 8,
+  "x1": 102,
+  "y0": 9,
+  "y1": 138,
+  "h": 130,
+  "cx": 0.4868421052631579,
+  "bottom": 0.9266666666666666
+ },
+ "nativeK": 1.7066666666666668
+}

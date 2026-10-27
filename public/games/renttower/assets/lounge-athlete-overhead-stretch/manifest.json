@@ -1,0 +1,87 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-athlete-overhead-stretch",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "2894f7166a7b36bf8deef86b01862e54f97fc117e0ee8da8fb1f36c1576a23fc",
+   "size": 110251
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "43c23ba3fd6407f9f12179c2a1ecd1a430acf83fea9708c76272079d2b67ab21",
+   "size": 327000
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "3141bea44fdfad155b10d95e66c44d26231c42973ac3ce1efaca00e3b4feae0e",
+   "size": 157022
+  }
+ ],
+ "action_id": "overhead_stretch",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 96,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9637
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 4
+ },
+ "qa": {
+  "seam_union_mae": 82.55,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9886,
+  "alpha_semi_share": 0.0695,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 10,
+  "event_source": "geometric",
+  "event_amplitude": 0.493,
+  "warnings": [
+   "the pose does not fully return to the start (seam 82.5)"
+  ]
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 1815441381,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 13,
+  "x1": 81,
+  "y0": 48,
+  "y1": 133,
+  "h": 86,
+  "cx": 0.4947916666666667,
+  "bottom": 0.8933333333333333
+ },
+ "nativeK": 2.5733333333333333
+}

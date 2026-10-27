@@ -1,0 +1,77 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-gamer-doze-nod",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "4227ad2bfcedabd080ebadd287d5ff887e97acf9b05b2c5395c97f5234d2281e",
+   "size": 121317
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "696d774c2e0202446c82d4dcf1c99e2a8acc884fbec4f69f19a0a50ac5873182",
+   "size": 272098
+  }
+ ],
+ "action_id": "gamer_doze_nod",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 100,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9438
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 20.13,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9691,
+  "alpha_semi_share": 0.0405,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 118,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 582916305,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 8,
+  "x1": 90,
+  "y0": 9,
+  "y1": 141,
+  "h": 133,
+  "cx": 0.495,
+  "bottom": 0.9466666666666667
+ },
+ "nativeK": 1.66
+}

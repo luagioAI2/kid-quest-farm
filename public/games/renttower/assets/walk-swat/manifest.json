@@ -1,0 +1,57 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "walk-swat",
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 132,
+  "h": 211,
+  "count": 16,
+  "cols": 3,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp",
+  "sheet-02.webp"
+ ],
+ "fps": 17.5,
+ "frame_ms": 57,
+ "duration_ms": 914,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9669
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 6.09,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9924,
+  "alpha_semi_share": 0.0406,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 53,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 693284864,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ }
+}

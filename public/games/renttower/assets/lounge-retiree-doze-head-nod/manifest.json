@@ -1,0 +1,77 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-retiree-doze-head-nod",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "1b8cc42a575bca307f980a42cd4991c395fece75c3f5a09f76642aa6e4cd542a",
+   "size": 129022
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "e9e37927e68971e2069f853018398e01f7e06d8bf7d7bf903437f97e196e15f7",
+   "size": 307846
+  }
+ ],
+ "action_id": "doze_head_nod",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 89,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9447
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 30.07,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9556,
+  "alpha_semi_share": 0.0589,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 403,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 2019053469,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 7,
+  "x1": 79,
+  "y0": 10,
+  "y1": 141,
+  "h": 132,
+  "cx": 0.4887640449438202,
+  "bottom": 0.9466666666666667
+ },
+ "nativeK": 1.6866666666666668
+}

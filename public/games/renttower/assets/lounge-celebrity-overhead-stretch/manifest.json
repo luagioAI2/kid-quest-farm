@@ -1,0 +1,84 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-celebrity-overhead-stretch",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "1bb0628fd166670410ef4bb577a40299311a9748ec25c19d0e23a07d66085d46",
+   "size": 119693
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "ade2a98fbbe7d787b19c1b01b3ed28ed1a88dbad0ef312ded8f90d7dee348d82",
+   "size": 248022
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "a9fbe5c22348801ae337e528c3130d01222312733974e87fda3a7135556d4607",
+   "size": 76610
+  }
+ ],
+ "action_id": "overhead_stretch",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 129,
+  "h": 150,
+  "count": 12,
+  "cols": 3,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9542
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 7
+ },
+ "qa": {
+  "seam_union_mae": 9.73,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9934,
+  "alpha_semi_share": 0.0483,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 162,
+  "event_source": "geometric",
+  "event_amplitude": 0.259
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 1915695028,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 32,
+  "x1": 104,
+  "y0": 35,
+  "y1": 142,
+  "h": 108,
+  "cx": 0.5310077519379846,
+  "bottom": 0.9533333333333334
+ },
+ "nativeK": 2.04
+}

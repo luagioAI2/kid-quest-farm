@@ -1,0 +1,78 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-gamer-overhead-stretch",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "b534b79da91d186bf2e2642e1f9672e00a67f5ad63a8c8289e75139de0cd23ab",
+   "size": 104430
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "a06c240cce793edb4fe06e7a84a11542f6e3320dac8c61cbc53afdf2d3ce264e",
+   "size": 308446
+  }
+ ],
+ "action_id": "overhead_stretch",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 79,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9557
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 5
+ },
+ "qa": {
+  "seam_union_mae": 12.72,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9689,
+  "alpha_semi_share": 0.043,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 154,
+  "event_source": "geometric",
+  "event_amplitude": 0.301
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 1186355392,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 6,
+  "x1": 71,
+  "y0": 38,
+  "y1": 142,
+  "h": 105,
+  "cx": 0.4936708860759494,
+  "bottom": 0.9533333333333334
+ },
+ "nativeK": 2.1066666666666665
+}

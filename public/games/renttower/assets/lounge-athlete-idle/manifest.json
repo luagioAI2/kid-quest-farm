@@ -1,0 +1,77 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-athlete-idle",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "ca51437a7e0c87ce4be0dd66c6de5a32036bee4258a35147cecf050af6b6e0af",
+   "size": 105874
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "52520afa4fb3e60fa2ee4492054ac573d33a9fd6f19b41dd19680ca6803eb72a",
+   "size": 229562
+  }
+ ],
+ "action_id": "idle",
+ "kind": "loop",
+ "frame": {
+  "w": 123,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 21,
+ "frame_ms": 48,
+ "duration_ms": 571,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9438
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 2.35,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9888,
+  "alpha_semi_share": 0.0661,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 1,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "flf2v",
+  "action_confidence": "template",
+  "seed": 817340944,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 8,
+  "x1": 113,
+  "y0": 8,
+  "y1": 141,
+  "h": 134,
+  "cx": 0.4959349593495935,
+  "bottom": 0.9466666666666667
+ },
+ "nativeK": 1.66
+}

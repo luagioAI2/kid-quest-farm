@@ -1,0 +1,84 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-student-overhead-stretch",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "82d338fb5cbf78fc68bbcf1b837a2e24d53cfb8f41268be80cdc7eacd2118a62",
+   "size": 95557
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "ca1313da110ed884e5ce3d656a9ed4e14137b3e071e91137bd3e6bacc7d81412",
+   "size": 290252
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "6e5bd803a6cfff1f8d3b82c30b07b3e5e8aee23a3ea390d0ab03142f64337512",
+   "size": 134238
+  }
+ ],
+ "action_id": "overhead_stretch",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 93,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9637
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 5
+ },
+ "qa": {
+  "seam_union_mae": 53.89,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9943,
+  "alpha_semi_share": 0.0461,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 43,
+  "event_source": "geometric",
+  "event_amplitude": 0.532
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 358432222,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 9,
+  "x1": 82,
+  "y0": 52,
+  "y1": 137,
+  "h": 86,
+  "cx": 0.4946236559139785,
+  "bottom": 0.92
+ },
+ "nativeK": 2.5733333333333333
+}

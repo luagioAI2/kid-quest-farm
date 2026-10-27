@@ -1,0 +1,56 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "walk-dancer",
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 222,
+  "h": 418,
+  "count": 16,
+  "cols": 4,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 19.69,
+ "frame_ms": 51,
+ "duration_ms": 813,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9665
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 15.83,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9832,
+  "alpha_semi_share": 0.0716,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 112,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 445102203,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ }
+}

@@ -1,0 +1,84 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-retiree-stretch-overhead",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "2cd68514a261e42037080e06eced28e3409ffecf28fc335af9d07d462f020891",
+   "size": 142294
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "eff1ec1593a03599943fe2937a20b0a711152387ea0f35f8f0b30aa5b75df3bb",
+   "size": 304296
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "de23152148dc120335ac0601019feaf57e486f9b5090dfaa5cdf02a22dfc8c4e",
+   "size": 89546
+  }
+ ],
+ "action_id": "stretch_overhead",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 145,
+  "h": 150,
+  "count": 12,
+  "cols": 3,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.951
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 4
+ },
+ "qa": {
+  "seam_union_mae": 18.07,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9384,
+  "alpha_semi_share": 0.0829,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 919,
+  "event_source": "geometric",
+  "event_amplitude": 0.164
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 1072322017,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 39,
+  "x1": 103,
+  "y0": 27,
+  "y1": 142,
+  "h": 116,
+  "cx": 0.49310344827586206,
+  "bottom": 0.9533333333333334
+ },
+ "nativeK": 1.9066666666666667
+}

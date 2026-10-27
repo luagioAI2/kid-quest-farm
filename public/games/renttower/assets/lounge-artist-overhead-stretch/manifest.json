@@ -1,0 +1,78 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-artist-overhead-stretch",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "207383f568d4effdbb8bf1a8abde9ee22e73d86b31eae82fd7c49c932764e98e",
+   "size": 90385
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "fb93abce5421f21265077d22f0dbce64c86f716ff9e5443ff7df2cb864782c7e",
+   "size": 244820
+  }
+ ],
+ "action_id": "overhead_stretch",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 82,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.953
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 6
+ },
+ "qa": {
+  "seam_union_mae": 16.16,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9584,
+  "alpha_semi_share": 0.0859,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 547,
+  "event_source": "geometric",
+  "event_amplitude": 0.223
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 636629457,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 24,
+  "x1": 61,
+  "y0": 32,
+  "y1": 142,
+  "h": 111,
+  "cx": 0.524390243902439,
+  "bottom": 0.9533333333333334
+ },
+ "nativeK": 1.9866666666666666
+}

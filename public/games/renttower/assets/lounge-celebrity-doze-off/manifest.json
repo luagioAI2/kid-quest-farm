@@ -1,0 +1,78 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-celebrity-doze-off",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "77743214a6fb78ce9bd6ac1ef9912ee1cdc9e6940fb0d9786320f011e2badf4c",
+   "size": 145720
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "a2f5ad92668ae7452e8a9d5ae07a45ab02544d525330209fb248cd41fc58d4c2",
+   "size": 283324
+  }
+ ],
+ "action_id": "doze_off",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 126,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9438
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 8
+ },
+ "qa": {
+  "seam_union_mae": 15.55,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9925,
+  "alpha_semi_share": 0.0356,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 70,
+  "event_source": "timing",
+  "event_amplitude": -0.005
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 1138777442,
+  "attempt": 2,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 8,
+  "x1": 96,
+  "y0": 8,
+  "y1": 141,
+  "h": 134,
+  "cx": 0.4166666666666667,
+  "bottom": 0.9466666666666667
+ },
+ "nativeK": 1.66
+}

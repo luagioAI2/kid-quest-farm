@@ -1,0 +1,77 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-retiree-idle",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "4a625f9c037810d401985ac01769590b73135efbc2e6f7dc1e04582e9c4108e4",
+   "size": 91217
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "1474e95e4d2c1ccf80eb50c9f0d2f093c7e8c158647d239b64fae48e7a7ce376",
+   "size": 237700
+  }
+ ],
+ "action_id": "idle",
+ "kind": "loop",
+ "frame": {
+  "w": 90,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 21,
+ "frame_ms": 48,
+ "duration_ms": 571,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9438
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 1.96,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9414,
+  "alpha_semi_share": 0.0775,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 859,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "flf2v",
+  "action_confidence": "template",
+  "seed": 206587330,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 7,
+  "x1": 80,
+  "y0": 8,
+  "y1": 140,
+  "h": 133,
+  "cx": 0.4888888888888889,
+  "bottom": 0.94
+ },
+ "nativeK": 1.66
+}

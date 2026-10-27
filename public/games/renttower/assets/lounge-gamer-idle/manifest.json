@@ -1,0 +1,77 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-gamer-idle",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "c933812bc936ded63190986dbbd39c1dbb4149bdc9719f3208ca8269d0250210",
+   "size": 69553
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "a225ea0d30084301fb95e1a86a39545898c3f963b0b1068d4ec7c1a0efcdb568",
+   "size": 149936
+  }
+ ],
+ "action_id": "idle",
+ "kind": "loop",
+ "frame": {
+  "w": 101,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 21,
+ "frame_ms": 48,
+ "duration_ms": 571,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9435
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 0.47,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9688,
+  "alpha_semi_share": 0.0383,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 0,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "flf2v",
+  "action_confidence": "template",
+  "seed": 393756556,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 8,
+  "x1": 92,
+  "y0": 9,
+  "y1": 141,
+  "h": 133,
+  "cx": 0.5,
+  "bottom": 0.9466666666666667
+ },
+ "nativeK": 1.6533333333333333
+}

@@ -1,0 +1,56 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "walk-architect",
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 219,
+  "h": 419,
+  "count": 16,
+  "cols": 4,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 17.5,
+ "frame_ms": 57,
+ "duration_ms": 914,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9666
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 32.78,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9886,
+  "alpha_semi_share": 0.0602,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 25,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 1075455755,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ }
+}

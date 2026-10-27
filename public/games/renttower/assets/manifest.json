@@ -1,0 +1,1235 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 245,
+  "bytes": 12343074
+ },
+ "assets": [
+  {
+   "file": "audio/amb_street.m4a",
+   "bytes": 28946,
+   "sha256": "4195d0eeb9191272b747b1db1086c777730e8657c9cb6f7963789f471afcf212"
+  },
+  {
+   "file": "audio/kb_bgm.m4a",
+   "bytes": 977748,
+   "sha256": "7eece0f157cb6a6beef0820cf38fb68d5a8819e2a0444d49b90a1eef97346c7f"
+  },
+  {
+   "file": "audio/police_siren_loop.m4a",
+   "bytes": 25840,
+   "sha256": "9319fafab354770df4dab7cc934ef7c6b46b3fdc5bf0f8773b5f8bd75b54614a"
+  },
+  {
+   "file": "audio/storm_loop.m4a",
+   "bytes": 30283,
+   "sha256": "a99dc398dda2c27641cd06471e5de244fba0c71aa13cd56631a7a20a6ae8a6ca"
+  },
+  {
+   "file": "basement_gym.webp",
+   "bytes": 22168,
+   "sha256": "56f8c9a927468ab6b02ec719a371d954f664c80daaf98af03a2c556e348932d1"
+  },
+  {
+   "file": "basement_parking.webp",
+   "bytes": 18766,
+   "sha256": "e9bb6a47d71e6c705640cd3b2b079e2c30cf33da1ca31bda219e3259e82dd67c"
+  },
+  {
+   "file": "basement_sento.webp",
+   "bytes": 29624,
+   "sha256": "fffb91742c4c9d6fb2b842543b83ede32d419383a2ffa94ec07d96ce4423400c"
+  },
+  {
+   "file": "basement_shopping.webp",
+   "bytes": 33310,
+   "sha256": "9eb6d023dd414f342af2a5649ea502bf44bdd42a41fde92d3167284bd0b994ec"
+  },
+  {
+   "file": "basement_storage.webp",
+   "bytes": 13918,
+   "sha256": "cb98ad5e4727735cb1a9e52143f2ee959d971bc8cac0c9ae68f7310c016f09b7"
+  },
+  {
+   "file": "bg_city.webp",
+   "bytes": 25184,
+   "sha256": "c426b636ce6015874fc4628f135a027b96c736a59ce6dfd90f6a00717f66cbb3"
+  },
+  {
+   "file": "coin.webp",
+   "bytes": 6126,
+   "sha256": "4caa78f251da39811b6bc8ce50bfd5232d5b893554b6b9574b4c217ba35546a6"
+  },
+  {
+   "file": "debris_leaf.webp",
+   "bytes": 3100,
+   "sha256": "37d08d58f357144b6959d4ceb69c3aba82c069c153e0e2b11630e365ec486473"
+  },
+  {
+   "file": "debris_plank.webp",
+   "bytes": 2784,
+   "sha256": "e538747e515d38c7227d858e5a38a10a6d021b292a1d08c833b00438dc168be3"
+  },
+  {
+   "file": "debris_tile.webp",
+   "bytes": 3100,
+   "sha256": "c754ed5a07b691ed7b2ce627a2d5a21248e8b2df93f21c43802a22c120f2ae91"
+  },
+  {
+   "file": "fx_aircon.webp",
+   "bytes": 3970,
+   "sha256": "2739c6d0a052463a8392d3918fa422ee6c6ce298839e81c436dee86e80473fee"
+  },
+  {
+   "file": "fx_bath.webp",
+   "bytes": 9342,
+   "sha256": "94eeb6d145c70b61b62fe412259022bd1ad57b040d2954095eebdf8d6dcda924"
+  },
+  {
+   "file": "fx_board.webp",
+   "bytes": 17918,
+   "sha256": "8a44de41a1dafec69f35edc78e7b272e191d137d53195ff1215de8ff1fecd0b8"
+  },
+  {
+   "file": "fx_breach.webp",
+   "bytes": 22992,
+   "sha256": "f0badbb70bf8b90ee1db77266ae1a2ba11484d160797dc9a110e49f7fccdcabf"
+  },
+  {
+   "file": "fx_chandelier.webp",
+   "bytes": 19350,
+   "sha256": "7698a47269945ae6bd05af0193b4b67739f803e19546e2cd90e5493cd20445ce"
+  },
+  {
+   "file": "fx_dryer.webp",
+   "bytes": 10240,
+   "sha256": "e1c6b709d4e262fc18d00f7482ea86aa79d9ed30d28003ba296b60dbedf9c687"
+  },
+  {
+   "file": "fx_kitchen.webp",
+   "bytes": 18016,
+   "sha256": "559238ee87b34d7562898db453b642180311363146c7d4535ba6bbc8e28e2ac1"
+  },
+  {
+   "file": "fx_rug.webp",
+   "bytes": 8710,
+   "sha256": "e7e9007b0db4491428f65c4c08c720007db28c7422a9260961fee8ae7a12c9eb"
+  },
+  {
+   "file": "fx_scorch.webp",
+   "bytes": 20700,
+   "sha256": "0b0cec10c808e77f6c320f11e259130a44e56620d18a3cc9c587eb0cb185dd25"
+  },
+  {
+   "file": "fx_shelf.webp",
+   "bytes": 17490,
+   "sha256": "6c3c04d9873d7a682e317a92ef5f1b85fd2a2815505a0a6f0b61b477d514c1a6"
+  },
+  {
+   "file": "fx_stain.webp",
+   "bytes": 16118,
+   "sha256": "aa4a77dbf5be78872bb762fe19a9c3a36839bd1ff3c7c53cbe3a2e2c9bcb5a6b"
+  },
+  {
+   "file": "fx_tv.webp",
+   "bytes": 4992,
+   "sha256": "0ea44b2005687b93e9b0d4405ddcf61feec51cc3315c5054d2df9c513b8ddfe6"
+  },
+  {
+   "file": "kb_counter.webp",
+   "bytes": 32094,
+   "sha256": "958b19d01612d8023d8b10b598bb91e104c2b94aa76586b88896484f6deab31e"
+  },
+  {
+   "file": "kb_item_0.webp",
+   "bytes": 7800,
+   "sha256": "3253a031d5d9405fb3de6c1afa95fa95b8d29fc277f60f49068120fbe2844b65"
+  },
+  {
+   "file": "kb_item_1.webp",
+   "bytes": 10258,
+   "sha256": "a46a005196b0baa72bfe93401a4b1bc29ae3c981d9167dee68580e342ee0229e"
+  },
+  {
+   "file": "kb_item_2.webp",
+   "bytes": 6460,
+   "sha256": "f603a4fb58098a3f59d2bc68159cb8d37a65e44303d6d4385d2ba2028dbc8c8a"
+  },
+  {
+   "file": "kb_item_3.webp",
+   "bytes": 11540,
+   "sha256": "d640457219ba5e94b8a465822ed09929e36e4dac05e70969642e6cf758f9325b"
+  },
+  {
+   "file": "kb_item_4.webp",
+   "bytes": 6808,
+   "sha256": "ee19509d11465f9d0acdfe73ae87470a9bda3779ac17bc35b4e99cfdb27f3ef4"
+  },
+  {
+   "file": "kb_item_5.webp",
+   "bytes": 10406,
+   "sha256": "428ec7df84a953dfe3330dded74866dd94c9adf5c4e79fd570d6172832836efd"
+  },
+  {
+   "file": "kb_item_6.webp",
+   "bytes": 6996,
+   "sha256": "67df9def4539f84aba40ed2298102d0a8666963ec170ca9d9ce53db19ce02035"
+  },
+  {
+   "file": "kb_item_7.webp",
+   "bytes": 9690,
+   "sha256": "39a05ee9e24b3c2776c0f1b7eb83eebbb1726ea14f0c140e10a4278705ce5766"
+  },
+  {
+   "file": "kb_shop_bg.webp",
+   "bytes": 81792,
+   "sha256": "b9dcc367179e3eafd9ee522bfc4c6e4af75fd2d6a815f3394f6c84a078b67d7b"
+  },
+  {
+   "file": "konbini.webp",
+   "bytes": 47784,
+   "sha256": "3ff25c4f443fe89af2284f446811f32af8438f5e8f5b78c3daecc1db971c8947"
+  },
+  {
+   "file": "lib/oga-music/audio/town/apple-cider-acoustic-cozy.mp3",
+   "bytes": 4062560,
+   "sha256": "0dc97fa1b78d7ebd5e2e86a2ff38537afb182ec727d0bb782cb8b9c6450b35a2"
+  },
+  {
+   "file": "lobby.webp",
+   "bytes": 33254,
+   "sha256": "f35c042f4ba353fbda2ff3ac18f1ff180b3253fff503e2e2d24427ff89b3d644"
+  },
+  {
+   "file": "lounge-artist-doze-nod/sheet-00.webp",
+   "bytes": 40948,
+   "sha256": "6ecc2cadf4c7579658fdc59a4bbbe6b103a0d65fe56e26d31137bb9c20148622"
+  },
+  {
+   "file": "lounge-artist-idle/sheet-00.webp",
+   "bytes": 41146,
+   "sha256": "d15fd09ec30f450362ddcfe12b86496bb4b1978a742fa1dd21ca33003cb96395"
+  },
+  {
+   "file": "lounge-artist-overhead-stretch/sheet-00.webp",
+   "bytes": 37258,
+   "sha256": "f7c2e3fad86508f71f89c3d82c50898e68aff849e369d8a5ab1b565d406fa014"
+  },
+  {
+   "file": "lounge-athlete-doze-and-jerk/sheet-00.webp",
+   "bytes": 17084,
+   "sha256": "15f8ae50c6192fd6675180dba7aa7bb5d434d254c8a932bc9c6c431f582a34bb"
+  },
+  {
+   "file": "lounge-athlete-doze-and-jerk/sheet-01.webp",
+   "bytes": 25016,
+   "sha256": "fb704f8e6f5eb778e02c9dbb757197e0c3c4549b722839116f336fe4428e35ac"
+  },
+  {
+   "file": "lounge-athlete-idle/sheet-00.webp",
+   "bytes": 58916,
+   "sha256": "c9cc7200642be41e52aacd10a6f05a93ea773e1849e4007c376d0fbc55cd1e2f"
+  },
+  {
+   "file": "lounge-athlete-overhead-stretch/sheet-00.webp",
+   "bytes": 31880,
+   "sha256": "79df9d26071911156d68929323a7d5e92de57b8e04145ededc5c53e4cad3eb86"
+  },
+  {
+   "file": "lounge-athlete-overhead-stretch/sheet-01.webp",
+   "bytes": 14582,
+   "sha256": "dd5960635899ee508e1a18e0961f85ebb1b828e6cf44dc2bb80c3a744348e675"
+  },
+  {
+   "file": "lounge-celebrity-doze-off/sheet-00.webp",
+   "bytes": 50188,
+   "sha256": "27a6d41e04e91b6c89b9c491ed118bd40d5fe497fba8c4e21bd6f2efb8de1bb9"
+  },
+  {
+   "file": "lounge-celebrity-idle/sheet-00.webp",
+   "bytes": 49300,
+   "sha256": "8b9fb5d053c755fe64e59b0fa18d5875fe25ce9854684d57da6376943c0e9795"
+  },
+  {
+   "file": "lounge-celebrity-overhead-stretch/sheet-00.webp",
+   "bytes": 33334,
+   "sha256": "cbdaaad1908ff5d258a97c084ac7c66f6b9014e13c21bb3226900f432d88932c"
+  },
+  {
+   "file": "lounge-celebrity-overhead-stretch/sheet-01.webp",
+   "bytes": 10334,
+   "sha256": "39d7916ecd689ec2dd2bcafec2e84267a0b5f492accbbe8747521e6bc5df5a1f"
+  },
+  {
+   "file": "lounge-ceo-doze-off/sheet-00.webp",
+   "bytes": 41140,
+   "sha256": "4a6fe2259afd8b1aea049f98db65fdcd1244f07271f1899084d039731d084122"
+  },
+  {
+   "file": "lounge-ceo-idle/sheet-00.webp",
+   "bytes": 39788,
+   "sha256": "3b7ce1b1c8f66e737d1acf24457cc4b41090b7956ac3f025eaa7d462aa56ee18"
+  },
+  {
+   "file": "lounge-ceo-overhead-stretch/sheet-00.webp",
+   "bytes": 25826,
+   "sha256": "fe92d9dce50934176bb8386e307cec39d6a216cdb585a04efa492a16034ba787"
+  },
+  {
+   "file": "lounge-ceo-overhead-stretch/sheet-01.webp",
+   "bytes": 7986,
+   "sha256": "2426a3cd1053ed45dc76a4ec33bd6d0902a468c47b71ebc3faef9d6db5e5710e"
+  },
+  {
+   "file": "lounge-chef-idle/sheet-00.webp",
+   "bytes": 45736,
+   "sha256": "617c6b7fb3768d45f6e3a4c2a7be2dcf65c7430feb96d292671efba65e3a771c"
+  },
+  {
+   "file": "lounge-chef-nod-off/sheet-00.webp",
+   "bytes": 47642,
+   "sha256": "e9eafcb6ca817e70c95be575abb938b992bdcd357c0dc0273e3097797442b679"
+  },
+  {
+   "file": "lounge-chef-overhead-stretch/sheet-00.webp",
+   "bytes": 56258,
+   "sha256": "ffa69075fa856099ea1b4e027f5d5c78ae57cbbeb67c37e3fad7782106d4a3e8"
+  },
+  {
+   "file": "lounge-doctor-doze-off/sheet-00.webp",
+   "bytes": 50746,
+   "sha256": "3a03494d882f80487c4419960ac4e5fccad723921c1f09a9b3460aed080714ba"
+  },
+  {
+   "file": "lounge-doctor-idle/sheet-00.webp",
+   "bytes": 50168,
+   "sha256": "7bb050da07a2bb9810a3601ffd74dcb28b8050e0e609a63d3300d824f8239ed6"
+  },
+  {
+   "file": "lounge-doctor-stretch-overhead/sheet-00.webp",
+   "bytes": 22196,
+   "sha256": "0180e696e3d99ba6dd876733b2735d88cc8dc46624879aa40fb8e733ac970a8e"
+  },
+  {
+   "file": "lounge-doctor-stretch-overhead/sheet-01.webp",
+   "bytes": 25062,
+   "sha256": "8e0b532a89bf11b6744a61852b6a1842eccf3cbc1c69f410675ed93fdb845b9c"
+  },
+  {
+   "file": "lounge-family-idle/sheet-00.webp",
+   "bytes": 61812,
+   "sha256": "7a336bcf78e91fcbace72d57d1a5394944c472970dc4a11099edd4fe7b1c581c"
+  },
+  {
+   "file": "lounge-gamer-doze-nod/sheet-00.webp",
+   "bytes": 48030,
+   "sha256": "37756aed3ecb7b01bb13b684012b8c2bbed0bef3a839f64f83fae4a2e38f26c8"
+  },
+  {
+   "file": "lounge-gamer-idle/sheet-00.webp",
+   "bytes": 42616,
+   "sha256": "8a1dc0d77d2d691db0f0658861ff29e059d4d3b16240b7fdb5684ab72c1192e4"
+  },
+  {
+   "file": "lounge-gamer-overhead-stretch/sheet-00.webp",
+   "bytes": 38974,
+   "sha256": "5ae30a189675471753411a5402ad56c85fefdcf78596b208838199505ba1c73e"
+  },
+  {
+   "file": "lounge-office-idle/sheet-00.webp",
+   "bytes": 41186,
+   "sha256": "5349be8b90fb09ae2bace3a3c66f66035cfedbcb2842690ac9d5d9801277efd2"
+  },
+  {
+   "file": "lounge-retiree-doze-head-nod/sheet-00.webp",
+   "bytes": 48400,
+   "sha256": "4f6dadbc770beac3a9579e6b2eef862aab4476e4d7e0bdc576d22dfa690e5062"
+  },
+  {
+   "file": "lounge-retiree-idle/sheet-00.webp",
+   "bytes": 49872,
+   "sha256": "72a17924d66487428525dcda869b1648fb937d3e5f133cd7963064323402188a"
+  },
+  {
+   "file": "lounge-retiree-stretch-overhead/sheet-00.webp",
+   "bytes": 42416,
+   "sha256": "9049e94f3f290775a06ebad887d2592e3ca28552c1bbc987eae67f342e4ff8e1"
+  },
+  {
+   "file": "lounge-retiree-stretch-overhead/sheet-01.webp",
+   "bytes": 12324,
+   "sha256": "e7347aef41371a1fd98de8fa14a38f750f7e65de128ba33ec472f9ec27161d5f"
+  },
+  {
+   "file": "lounge-student-doze-off/sheet-00.webp",
+   "bytes": 48392,
+   "sha256": "aa66abc69fee8dcd5c34a741ea2c28f25bd969fef7ca1a9a15ee92d0106eb837"
+  },
+  {
+   "file": "lounge-student-idle/sheet-00.webp",
+   "bytes": 51132,
+   "sha256": "5d4215b7cb8f4dfdbe11ee5510cfda1faaa5aa6b7354e4da2f3a694473ceb82d"
+  },
+  {
+   "file": "lounge-student-overhead-stretch/sheet-00.webp",
+   "bytes": 24712,
+   "sha256": "85e41b41048df52e0261e32cebb5c9b12e05539950ec9e256f9ce38ede3748e8"
+  },
+  {
+   "file": "lounge-student-overhead-stretch/sheet-01.webp",
+   "bytes": 11364,
+   "sha256": "0a4b68e703a9f7770b1e3d0f30b990ee48d62906f5dc3d444ccf8619bf3ec4a5"
+  },
+  {
+   "file": "missile.webp",
+   "bytes": 4914,
+   "sha256": "f6923ac62dee0f2aef33a71c56369d1aedbf16ba198fa2288cbb87024a093eab"
+  },
+  {
+   "file": "police_van.webp",
+   "bytes": 16174,
+   "sha256": "7c5068481445511c1441894367579f930ebe396e5d54633b5901ec7f3d19bc23"
+  },
+  {
+   "file": "roof.webp",
+   "bytes": 30908,
+   "sha256": "079a32a1fb755bc2146d448fd6c0319dab0d2a41c66875b0373c3ad6be6ed239"
+  },
+  {
+   "file": "room_base.webp",
+   "bytes": 14108,
+   "sha256": "578bd5cdc9d52d9b10c1078c00db947643633af53e2a529f9edf751d84e6805c"
+  },
+  {
+   "file": "room_base_dim.webp",
+   "bytes": 9622,
+   "sha256": "78aefc49af57ef30c93dedae4fa30c43a5e20b6018ebbe4698f3ba265357cc8b"
+  },
+  {
+   "file": "room_lux.webp",
+   "bytes": 25806,
+   "sha256": "26ccbfec238329f93846bd16d1d302d1a165c668d6007a1bfcf48cb7093430ac"
+  },
+  {
+   "file": "room_lux_dim.webp",
+   "bytes": 19540,
+   "sha256": "7f10a66993f2770777e6b35323b72e274e7e5d362849073194000202870af080"
+  },
+  {
+   "file": "sky_lounge.webp",
+   "bytes": 60196,
+   "sha256": "b5ee902c960f93890f3cec477964a4607a07a11394cfb172c0f5c82387965b04"
+  },
+  {
+   "file": "stair_core.webp",
+   "bytes": 16062,
+   "sha256": "2c592e1b6c04849c9b87734ded54bb6c65fe949fb383bf5d3f6bc8b757901b4e"
+  },
+  {
+   "file": "tenant_architect.webp",
+   "bytes": 13464,
+   "sha256": "bf292a3bb13d31c2ff4ae9159a5d53d3866133e34b48618a9b5ad88f007e16d6"
+  },
+  {
+   "file": "tenant_artist.webp",
+   "bytes": 16196,
+   "sha256": "eb889f45635297b01783c693cc10603130cb9c68b210de028806d7c9a63c7d99"
+  },
+  {
+   "file": "tenant_astronaut.webp",
+   "bytes": 20484,
+   "sha256": "a52534daa9556f8a19855ac9c9ac0bfb5c736c65c496c34cfb9bf09a6b478d4e"
+  },
+  {
+   "file": "tenant_athlete.webp",
+   "bytes": 19406,
+   "sha256": "7ec895d1adc4f80c8f01ebc53dab1aa67b2a51a1c7d75da2a7a14ce9d3569a6e"
+  },
+  {
+   "file": "tenant_baker.webp",
+   "bytes": 18092,
+   "sha256": "6d227b8230999b676744cbbb4303db8bb83e9493dc1a77347bdcd3b7aec6fa59"
+  },
+  {
+   "file": "tenant_baseballer.webp",
+   "bytes": 20944,
+   "sha256": "5ece92fb3e9fd370df262b02ae3d3a2c1cffab388bbe21b56b7cf75ef06646d1"
+  },
+  {
+   "file": "tenant_captain.webp",
+   "bytes": 16890,
+   "sha256": "720677756f0657ff36d4b52e51489a94a79f7497ceec3e398b78f1744b7e10de"
+  },
+  {
+   "file": "tenant_carpenter.webp",
+   "bytes": 19592,
+   "sha256": "125dd62583e2a2258b687a3c79cc1014ea5e0d22f0ef84ebdd4d4b34cac76f39"
+  },
+  {
+   "file": "tenant_celebrity.webp",
+   "bytes": 19000,
+   "sha256": "ea6b0917a5d2f1c7d64f541cbce3e0351166f075e9e462e637d0921059b12ed7"
+  },
+  {
+   "file": "tenant_ceo.webp",
+   "bytes": 16494,
+   "sha256": "fe0aa91965e73081b654a7d0fe4ba0c379b042f4318cfa30d886d24deb8b6485"
+  },
+  {
+   "file": "tenant_chef.webp",
+   "bytes": 16614,
+   "sha256": "c624f7b239d80c1b8f29e8a22cd61996a8d62c32a55301511cfe08a4ce61c39c"
+  },
+  {
+   "file": "tenant_comedian.webp",
+   "bytes": 17050,
+   "sha256": "790be41f7f62185d37690fcac05201283b265a11e0e917d7d2833579ccba9f22"
+  },
+  {
+   "file": "tenant_constable.webp",
+   "bytes": 14664,
+   "sha256": "98c1bbe9e1c448b008713f616b491db461fb2ba423ac726ef70b86e8238da074"
+  },
+  {
+   "file": "tenant_cosplayer.webp",
+   "bytes": 22100,
+   "sha256": "6b132394c3ef63cf8c0d1574294a9d49a80b1a5123d1aaef799ef0744ee6161e"
+  },
+  {
+   "file": "tenant_couple.webp",
+   "bytes": 27796,
+   "sha256": "d93081007758441712542adfaed6508c5dec986bc3f89811d39b427cd93de79e"
+  },
+  {
+   "file": "tenant_dancer.webp",
+   "bytes": 13950,
+   "sha256": "750b6b1bb0ab1e3e15a451986a2473fd88cab04cc04b37f8f3fac91e5dff5a89"
+  },
+  {
+   "file": "tenant_delivery.webp",
+   "bytes": 17084,
+   "sha256": "a3a8ffdabd86615b51c1a054c43ff4e136529002b48b6a55247edf43d0f9b27a"
+  },
+  {
+   "file": "tenant_dev.webp",
+   "bytes": 19066,
+   "sha256": "bf5be1b90ef04d1a43cf96bb5486fd696927dcdb35f5a5f6ff168a2f522f0de3"
+  },
+  {
+   "file": "tenant_director.webp",
+   "bytes": 15710,
+   "sha256": "0065e323d5e9896ff675cc3ff3c3df24f6fe422558cedf70079db0bbe1a17e78"
+  },
+  {
+   "file": "tenant_doctor.webp",
+   "bytes": 20310,
+   "sha256": "194d0e034bfe4f37b24bc1d289187d36c9f94675e5456c88a3c3066198162bcf"
+  },
+  {
+   "file": "tenant_driver.webp",
+   "bytes": 14096,
+   "sha256": "c3f2ebcd58930ece0a3c6a59c96731704b3a548b9397bee9fcddbe819a9677c4"
+  },
+  {
+   "file": "tenant_family.webp",
+   "bytes": 21402,
+   "sha256": "905a1e4a02f411d848d4ba627541b8fef2162526088aee60a624fdea98884960"
+  },
+  {
+   "file": "tenant_freeter.webp",
+   "bytes": 14794,
+   "sha256": "01a18887868a05e5e3311e035e44fa71375e56e2f846797c9dc151f820e7f69d"
+  },
+  {
+   "file": "tenant_gamer.webp",
+   "bytes": 17912,
+   "sha256": "2369924019c3814f7eb4bd9ec31b27d1268b0b204ec40080b61064efc5da1840"
+  },
+  {
+   "file": "tenant_hairdresser.webp",
+   "bytes": 15020,
+   "sha256": "3a3d2b090e313c79e404b72e0717a8d6c332c1e9b3820558eb01180a7ec955f9"
+  },
+  {
+   "file": "tenant_hotelier.webp",
+   "bytes": 15616,
+   "sha256": "7a64a409935ffcc1a62864df642e3fa303dec315f1c90c598a963fdc37498804"
+  },
+  {
+   "file": "tenant_jeweler.webp",
+   "bytes": 16988,
+   "sha256": "dd8144610ad26eb43f58e6ae7a491691157a93aa0bca5e4b49638a2c47797290"
+  },
+  {
+   "file": "tenant_judge.webp",
+   "bytes": 14916,
+   "sha256": "1de8a87854e170c1dd66eb1f70cdebbfbc5695654bada0cce2fa1e0083afc21b"
+  },
+  {
+   "file": "tenant_lawyer.webp",
+   "bytes": 17606,
+   "sha256": "ccee4751c193edc5c655124e78e167a127b6caa7efed9394aa1b5afb78755411"
+  },
+  {
+   "file": "tenant_manga.webp",
+   "bytes": 17664,
+   "sha256": "6e8cc8634d5232306148b6cad639ab081ba426d0ba98e2fa0b53bdb82d70f064"
+  },
+  {
+   "file": "tenant_miko.webp",
+   "bytes": 15596,
+   "sha256": "071c8872302632add8d881d0d9a5f10f092b0da6f1989f91a2ecc2bf8142717b"
+  },
+  {
+   "file": "tenant_model.webp",
+   "bytes": 15482,
+   "sha256": "3123a4d4663392c584d382cbe659a2458772fc9e530df063150101fde0c6e8df"
+  },
+  {
+   "file": "tenant_monk.webp",
+   "bytes": 19336,
+   "sha256": "bca07d3903c7fd81458d0db285ee3e60ae1cae68ac91e11ffb730d7dbb323f22"
+  },
+  {
+   "file": "tenant_novelist.webp",
+   "bytes": 15214,
+   "sha256": "fbe67a9f1737678ba9a636b4f5d1ba55048d09254cfd45bd05ef3578c5faec03"
+  },
+  {
+   "file": "tenant_nurse.webp",
+   "bytes": 14020,
+   "sha256": "75850966e79f413addf755cb4fe68e28b32f5931d1f1de8cf805da1e006dd3bb"
+  },
+  {
+   "file": "tenant_office.webp",
+   "bytes": 14878,
+   "sha256": "b1fb7d1dc0c21d6a78598629511d2c6f6e938e699b5efcfcac063fc4bc3f03db"
+  },
+  {
+   "file": "tenant_photographer.webp",
+   "bytes": 14058,
+   "sha256": "7c84dba5d692bcd1cd51b651face9c0f281e16601d471010fafcfb86bb1590e9"
+  },
+  {
+   "file": "tenant_pilot.webp",
+   "bytes": 14520,
+   "sha256": "76c89422822316917f9c390aea0ff38bf288c45bc0e2305d1623a03e041f511d"
+  },
+  {
+   "file": "tenant_poet.webp",
+   "bytes": 16858,
+   "sha256": "fe24a7f1836d6031dd18f8c54165ae95a182dce9ce8858c6153809699bb8c818"
+  },
+  {
+   "file": "tenant_racer.webp",
+   "bytes": 18394,
+   "sha256": "60129b61802b741fcc0a4cdd1e7f0f801fac6f09524e50200d85b4c153ded0be"
+  },
+  {
+   "file": "tenant_reporter.webp",
+   "bytes": 13528,
+   "sha256": "cec03479428c1adf002feb0382e7b1e3d6fa334e5dea0b6d5e9ea4db6b925381"
+  },
+  {
+   "file": "tenant_retiree.webp",
+   "bytes": 19608,
+   "sha256": "82749b4bfdfb37e20c607b8f2a43c3cc802ffa7e99eb3fce6a4a8e7ebcab07ba"
+  },
+  {
+   "file": "tenant_seiyuu.webp",
+   "bytes": 17356,
+   "sha256": "a585554b312f901480db775cd6effb214ee4b519d6ea5cb97f2000ed3dbfb0c2"
+  },
+  {
+   "file": "tenant_singer.webp",
+   "bytes": 17342,
+   "sha256": "20083249eedde394635997c3d69e5def4d213f20a4a3374084e69ade535ac8a0"
+  },
+  {
+   "file": "tenant_sommelier.webp",
+   "bytes": 14384,
+   "sha256": "770d18c33e0e45095d51ef1090fb2cc4970e97ba9855176bf501aaee3ec67c43"
+  },
+  {
+   "file": "tenant_student.webp",
+   "bytes": 19256,
+   "sha256": "50e54ae1cd92f4496727365f251a28dc05899dd15132f8d007944b06390d173a"
+  },
+  {
+   "file": "tenant_teacher.webp",
+   "bytes": 17238,
+   "sha256": "c7b3da0f42089f476a1a99b166e2647e877e16fcb414d14edbfa43b4b7a5677d"
+  },
+  {
+   "file": "tenant_tycoon.webp",
+   "bytes": 17768,
+   "sha256": "1d359ca51847e5dd56bf57c1849ba756a58aa8dbbb4c11c9a917e7213a6b1481"
+  },
+  {
+   "file": "tenant_vet.webp",
+   "bytes": 17152,
+   "sha256": "bac68947d3bbd70e5053fba886f4b016f965deddc4855091d18f3f73dd6b8286"
+  },
+  {
+   "file": "tenant_violinist.webp",
+   "bytes": 13884,
+   "sha256": "898571eae1e9d12cef6777b9bce421718739c0d4e00989900cc96692fdc5e8f3"
+  },
+  {
+   "file": "typhoon_cloud.webp",
+   "bytes": 95718,
+   "sha256": "f1829cbfb0e1ebaf9e2df4301ef96218881935244bb778ba80dc8d1d94e53ed9"
+  },
+  {
+   "file": "ui/icon_coin_selected.svg",
+   "bytes": 2403,
+   "sha256": "0361d00ce4b1cb591c555e97414089c98018e803ca2d15ef41eadacbb049e828"
+  },
+  {
+   "file": "walk-architect/sheet-00.webp",
+   "bytes": 37746,
+   "sha256": "0fef31187e515609dc35689cf400fe6297ca6c86d3cf8842faa661093fa59ee5"
+  },
+  {
+   "file": "walk-architect/sheet-01.webp",
+   "bytes": 39904,
+   "sha256": "cb7932c998a0afa243f25cb758b33ca4ec4f7cd83ffe7b8eddbfd93199a69fd9"
+  },
+  {
+   "file": "walk-artist/sheet-00.webp",
+   "bytes": 41680,
+   "sha256": "2a24a7ddc3deebc318c47d78e4250004c30557936d02146020ef121f5294dd86"
+  },
+  {
+   "file": "walk-artist/sheet-01.webp",
+   "bytes": 42734,
+   "sha256": "f4cdd5e3144e87d0012bf925c0595a4e98f9b4a05666f13fd6cc3cb45d5e5041"
+  },
+  {
+   "file": "walk-astronaut/sheet-00.webp",
+   "bytes": 48914,
+   "sha256": "bde14ba1501397f8b7ec0333d58734909ff5eb6a38d6c3e2f6844184578f5eda"
+  },
+  {
+   "file": "walk-astronaut/sheet-01.webp",
+   "bytes": 49274,
+   "sha256": "5b87f5def5d1548b56a8430aac5ccf47057c0259d3b9ff296ec9e2362a84fcff"
+  },
+  {
+   "file": "walk-athlete/sheet-00.webp",
+   "bytes": 39806,
+   "sha256": "5acb57e9cccf5311098ad0f5fec2973318e6c8eb0fd3cf39622291c670ac6feb"
+  },
+  {
+   "file": "walk-athlete/sheet-01.webp",
+   "bytes": 39480,
+   "sha256": "ecd4bd5dfe86c54ddda8a107d4dae032fea5949731bea70900df47dd936f5ae1"
+  },
+  {
+   "file": "walk-baker/sheet-00.webp",
+   "bytes": 51782,
+   "sha256": "3f1fb6bc353c7826cb0ff8fd0761f003ebd22ed361855ffa061015acc5682bff"
+  },
+  {
+   "file": "walk-baker/sheet-01.webp",
+   "bytes": 51116,
+   "sha256": "dbad17a78da60da5c7473c7709d3e164474c574bcb2329b1b41abcafd333ba0a"
+  },
+  {
+   "file": "walk-baseballer/sheet-00.webp",
+   "bytes": 35896,
+   "sha256": "c271257d0d0a952326f50b9224e0ef6012b0a91ecf94455ea52ce70140565761"
+  },
+  {
+   "file": "walk-baseballer/sheet-01.webp",
+   "bytes": 36756,
+   "sha256": "eb0ee55dc0ce0ba6a5a7b2c5449ad87b28c7024019437c36ba6d71e7d878923e"
+  },
+  {
+   "file": "walk-baseballer/sheet-02.webp",
+   "bytes": 26438,
+   "sha256": "0309d381861fbe80b5348e73ad58bf0ee744e426eeaa7c4b1be3530a3f31eed8"
+  },
+  {
+   "file": "walk-captain/sheet-00.webp",
+   "bytes": 38924,
+   "sha256": "a9459b16d700da814633d28f44c3918a9d7d67acef660e08e8bac1c8ed33832a"
+  },
+  {
+   "file": "walk-captain/sheet-01.webp",
+   "bytes": 40268,
+   "sha256": "e29315ee02c85ed6a8312ac84af79d8cce6ea109eaeb3c868bcf99b178ee2596"
+  },
+  {
+   "file": "walk-carpenter/sheet-00.webp",
+   "bytes": 42176,
+   "sha256": "b2e92cfe1b72fdc138c45d229e53679a594c26aba16c5928ed6f3d4e575a7a2c"
+  },
+  {
+   "file": "walk-carpenter/sheet-01.webp",
+   "bytes": 48744,
+   "sha256": "2d388405fb69d7f387b17c9b38defd87167d4dba310f5b1678246c871d61a3ed"
+  },
+  {
+   "file": "walk-celebrity/sheet-00.webp",
+   "bytes": 36248,
+   "sha256": "da0efc6fbf8a735c2004267ffcd5accffd7726dd202818de60fdf973fb413f7c"
+  },
+  {
+   "file": "walk-celebrity/sheet-01.webp",
+   "bytes": 36658,
+   "sha256": "ca66e1dad89ea3d06d7457fe86a054293feb35a901bc8baa8fb22f41cf61acfb"
+  },
+  {
+   "file": "walk-ceo/sheet-00.webp",
+   "bytes": 31092,
+   "sha256": "735416917acb53a08a1787fe8274117d1881b1370d308780e029b87bffdbe3f6"
+  },
+  {
+   "file": "walk-ceo/sheet-01.webp",
+   "bytes": 31818,
+   "sha256": "1b481700097f3079e5e74b0a755a49b9aa2179ba69d893bcc2f6c6a0d073ea8a"
+  },
+  {
+   "file": "walk-chef/sheet-00.webp",
+   "bytes": 43230,
+   "sha256": "432f132159ba41848304fa281b21042f1e0ee4795fdc781311061fae53b03016"
+  },
+  {
+   "file": "walk-chef/sheet-01.webp",
+   "bytes": 43926,
+   "sha256": "8e2dbf0b91cd0c1c140a4e4e4ab8757fbc377c601477c55f065cc595e9c16ccd"
+  },
+  {
+   "file": "walk-comedian/sheet-00.webp",
+   "bytes": 35868,
+   "sha256": "96ab4fca8a9828b79ddb1e5fd7b66aede0dbb778d5230f7ef60c3288a34e42f1"
+  },
+  {
+   "file": "walk-comedian/sheet-01.webp",
+   "bytes": 36642,
+   "sha256": "debc9191a5792ef263f5158efbbe8a539209099d1677d4daf21dd1b4ccb4b754"
+  },
+  {
+   "file": "walk-constable/sheet-00.webp",
+   "bytes": 33778,
+   "sha256": "b7ae335a35110d652960925cfa9875b8b9f55c82152c8d0010b3d39dc09ce5a0"
+  },
+  {
+   "file": "walk-constable/sheet-01.webp",
+   "bytes": 34840,
+   "sha256": "8e181cf3857061df1fd351bdcd51ff8df982131ae0fa3dee9d2f39a342b48896"
+  },
+  {
+   "file": "walk-cosplayer/sheet-00.webp",
+   "bytes": 47682,
+   "sha256": "7b9c2ac28ff6506775d47c29cef53a33037af6b004dfe9b05da84959cf7eff0c"
+  },
+  {
+   "file": "walk-cosplayer/sheet-01.webp",
+   "bytes": 48108,
+   "sha256": "b21a458f35f3696710f2eba3fe39d642f806969858c379c45ea76d25eca52dc0"
+  },
+  {
+   "file": "walk-couple-a/sheet-00.webp",
+   "bytes": 42876,
+   "sha256": "c7ce0e8195f83f7de0b84321d2bf8bccc6cf064701c9eec8afad6e735e0a513d"
+  },
+  {
+   "file": "walk-couple-a/sheet-01.webp",
+   "bytes": 42884,
+   "sha256": "c39e249f0b8bbff60d4a561e96a1a4d670eebb392dd27fe31a569c9ccf1437b8"
+  },
+  {
+   "file": "walk-couple-b/sheet-00.webp",
+   "bytes": 47202,
+   "sha256": "dcb9b8a37b04760dd0a857721240096e7a84bbc03a591a9177768f53d254d3aa"
+  },
+  {
+   "file": "walk-couple-b/sheet-01.webp",
+   "bytes": 46580,
+   "sha256": "397fcca1c89e3640f3f1fa3781be0815bb7accefcf81153ad368ca0ece158926"
+  },
+  {
+   "file": "walk-dancer/sheet-00.webp",
+   "bytes": 38824,
+   "sha256": "e670748247276d4dbe70f374977347f4ece0457cfbd9fac3f9ee0562406399c7"
+  },
+  {
+   "file": "walk-dancer/sheet-01.webp",
+   "bytes": 39410,
+   "sha256": "a038522b87b5886347b254c8d0010748dacf2f82064718b4c860bf8c6e12f281"
+  },
+  {
+   "file": "walk-delivery/sheet-00.webp",
+   "bytes": 37504,
+   "sha256": "8162adb045769526a398ffd5e28ce23593c509f5ded42626d1ff23178ce92dcd"
+  },
+  {
+   "file": "walk-delivery/sheet-01.webp",
+   "bytes": 37144,
+   "sha256": "eb4daf93e2106772eab2b1de08440aaf01b6d263a5e625a92e6129f06fc497f8"
+  },
+  {
+   "file": "walk-dev/sheet-00.webp",
+   "bytes": 34462,
+   "sha256": "2ff1a6a6b03a02fb55231b3e127c15fb5184c8b9483eca1fb7f186d43fe17726"
+  },
+  {
+   "file": "walk-dev/sheet-01.webp",
+   "bytes": 33820,
+   "sha256": "42868b548da285d559ab680266b4c21985d0092a52e5e0a4bd51895ee18f7333"
+  },
+  {
+   "file": "walk-director/sheet-00.webp",
+   "bytes": 36826,
+   "sha256": "08b7bab8fcc4d169253a1aed97d0a3b13e0b53fc458b9eafc7c0bf3e4f396d94"
+  },
+  {
+   "file": "walk-director/sheet-01.webp",
+   "bytes": 32908,
+   "sha256": "784a1a762547b418a32f4846b5b9a68f31c53c70c3b617150f065d915102cf27"
+  },
+  {
+   "file": "walk-doctor/sheet-00.webp",
+   "bytes": 38236,
+   "sha256": "7dc78fe0ebc6c181924d1891a36fb7304131ba6ca7f01f6af25f2301750627e3"
+  },
+  {
+   "file": "walk-doctor/sheet-01.webp",
+   "bytes": 38246,
+   "sha256": "5ea224ef8a77a66689d8e9e5117229f4706a77d1e61930bb63562704cd4eddf4"
+  },
+  {
+   "file": "walk-driver/sheet-00.webp",
+   "bytes": 33470,
+   "sha256": "9687e251c4a52c486e12b6f83ce32887e73389e1177a12f7e3735bc81e91f0ee"
+  },
+  {
+   "file": "walk-driver/sheet-01.webp",
+   "bytes": 33804,
+   "sha256": "24212c15aceeec6687d986323f011c745902fe406a46ed6b473243eb0c0f3e2f"
+  },
+  {
+   "file": "walk-family-a/sheet-00.webp",
+   "bytes": 33110,
+   "sha256": "5f285c2805ada1452180c2794848f3e54d6c41995f7ed8a2729bcff60c190520"
+  },
+  {
+   "file": "walk-family-a/sheet-01.webp",
+   "bytes": 33180,
+   "sha256": "8f3ba14c386f863b793734227d13be09186bd404cea89a3835ddaa5a5b8781c0"
+  },
+  {
+   "file": "walk-family-b/sheet-00.webp",
+   "bytes": 44184,
+   "sha256": "ff95a430986c844a37d68f3c5dd869f33c0269625ef7bfac7a2349b390e02a1d"
+  },
+  {
+   "file": "walk-family-b/sheet-01.webp",
+   "bytes": 45064,
+   "sha256": "78493b3bfc8f953650e9bc3da164d1e948bd4d0d24ac4b90c42c3cbe3156ebac"
+  },
+  {
+   "file": "walk-freeter/sheet-00.webp",
+   "bytes": 35992,
+   "sha256": "286f8407a398e80c47ce8af28e46e8c509e4b1e1b3ce27b77f213d7f279bb6b9"
+  },
+  {
+   "file": "walk-freeter/sheet-01.webp",
+   "bytes": 36538,
+   "sha256": "e7aacb03ebdc9640f097d9e20c5884b3febd5a674f3153a04e18695320e0b9a1"
+  },
+  {
+   "file": "walk-gamer/sheet-00.webp",
+   "bytes": 36284,
+   "sha256": "c29f18daa2c327d1c0ee19d223e9e0dc9ae88b0539f754ff150d0caa531809c1"
+  },
+  {
+   "file": "walk-gamer/sheet-01.webp",
+   "bytes": 43288,
+   "sha256": "ba4aeb7d612a3e29cc0410285135a9de2824d5902bc3beca10160ad23608b5f5"
+  },
+  {
+   "file": "walk-hairdresser/sheet-00.webp",
+   "bytes": 37844,
+   "sha256": "aa6ab1c4539c4dd2b8a1c48b956e23b1a203296dbb8654a40cbd9602d70059dd"
+  },
+  {
+   "file": "walk-hairdresser/sheet-01.webp",
+   "bytes": 37688,
+   "sha256": "c983dba439e1af6fb49514df83ab3fc01573ba2d3bef411bfe572285f5bc97e5"
+  },
+  {
+   "file": "walk-hotelier/sheet-00.webp",
+   "bytes": 31218,
+   "sha256": "d45a36229a4ced0315760287a7977345d6b1279ed957b8bf2dcc36fbd5b4a716"
+  },
+  {
+   "file": "walk-hotelier/sheet-01.webp",
+   "bytes": 32650,
+   "sha256": "acbc278f79c62686320ab129449bd63bd0dfd4fb13e4dc4d2b493a2e5833848a"
+  },
+  {
+   "file": "walk-jeweler/sheet-00.webp",
+   "bytes": 39186,
+   "sha256": "a9647944405ab1a4919e444c21e54d5d09781eeb9f1de0866caf8fa8326f2fd9"
+  },
+  {
+   "file": "walk-jeweler/sheet-01.webp",
+   "bytes": 39490,
+   "sha256": "c8a09f1d05c70725c4bed1d76d7e0a72f1cb0684009998c51e1a935a92d0d713"
+  },
+  {
+   "file": "walk-judge/sheet-00.webp",
+   "bytes": 32004,
+   "sha256": "e183a2d7db6f8c3a4d69b2689316316ae9c6c3f12ef17ca49be033fb266a4cc4"
+  },
+  {
+   "file": "walk-judge/sheet-01.webp",
+   "bytes": 31634,
+   "sha256": "306f7049035beb4ca3f24c024d85530e1d89f901e79da3edd5ff9f35441188f6"
+  },
+  {
+   "file": "walk-lawyer/sheet-00.webp",
+   "bytes": 36884,
+   "sha256": "16e79ebb9ce6a425c7bd70650d8003e4f09667958dc976d74cbefc000fcb6735"
+  },
+  {
+   "file": "walk-lawyer/sheet-01.webp",
+   "bytes": 35836,
+   "sha256": "9a920148d9a409c0cd96a4da1a26d5e7b3b9ca24fef367b5235156ef5c2e5adb"
+  },
+  {
+   "file": "walk-manga/sheet-00.webp",
+   "bytes": 42090,
+   "sha256": "f04ed7e58682e16419ec953f9df83f50cb277e816e8eefa94a779048734bab11"
+  },
+  {
+   "file": "walk-manga/sheet-01.webp",
+   "bytes": 40554,
+   "sha256": "6508f328917d9ed1e0061523c5da2b47e13bbc3ae64745e170df0e2eb2d26e27"
+  },
+  {
+   "file": "walk-miko/sheet-00.webp",
+   "bytes": 42076,
+   "sha256": "2397ab176977b6daf632fee1ef3d16557617e26f22c0d453d32198e464e1c3f2"
+  },
+  {
+   "file": "walk-miko/sheet-01.webp",
+   "bytes": 38342,
+   "sha256": "7bdbbaaeaa08767d6b4db286f7f98dff20c91e5ab0a309fab14df2c98a07de2e"
+  },
+  {
+   "file": "walk-model/sheet-00.webp",
+   "bytes": 34306,
+   "sha256": "2bd3f4a04f3897286d3fef44d6fef85533b94c02d9ed607c59135df33494bd82"
+  },
+  {
+   "file": "walk-model/sheet-01.webp",
+   "bytes": 32502,
+   "sha256": "71404284d3a817f17e72f4ce0b4688d068bcf51affe1699cedff4cdefc4b160e"
+  },
+  {
+   "file": "walk-monk/sheet-00.webp",
+   "bytes": 39604,
+   "sha256": "914de6c2d639124c19520d019d1c9de6b92ab1933df619b7b090113f8a4a5a80"
+  },
+  {
+   "file": "walk-monk/sheet-01.webp",
+   "bytes": 39160,
+   "sha256": "54cbeb84cd2331a26e570702180e44d76417d9ebd6057bdc6d5e94e10ce31f38"
+  },
+  {
+   "file": "walk-novelist/sheet-00.webp",
+   "bytes": 36844,
+   "sha256": "b43333bd3961accbe52337421fee6ac5afe56a1eee81ddfa8dcdc01c8a2ea484"
+  },
+  {
+   "file": "walk-novelist/sheet-01.webp",
+   "bytes": 36744,
+   "sha256": "9f38ee696d2115452473af908a9cc17e2879fbc8d735aa3f1c5d90e123d8f1c8"
+  },
+  {
+   "file": "walk-nurse/sheet-00.webp",
+   "bytes": 38100,
+   "sha256": "67cc34fdd1ad7adcf068727500772a30f73fbdd5870ce5354d086312994dd4b1"
+  },
+  {
+   "file": "walk-nurse/sheet-01.webp",
+   "bytes": 39592,
+   "sha256": "85b22cda32aa714181a9783b5f45ae6e5aae20a40fa5172f2ed9e0ed126e4c5b"
+  },
+  {
+   "file": "walk-office/sheet-00.webp",
+   "bytes": 33724,
+   "sha256": "0be2cda4d5013578fc1d343d79dcbc2b7d49d3f25a454b39e151989a87719772"
+  },
+  {
+   "file": "walk-office/sheet-01.webp",
+   "bytes": 39372,
+   "sha256": "666d66dd6ad0c4cc1d5859b519a1f426e5bd0873e3fb1f99b37c4e4a58b0b02e"
+  },
+  {
+   "file": "walk-photographer/sheet-00.webp",
+   "bytes": 33826,
+   "sha256": "83ea3c3a2175eb80df8f9dbc7d51e479c163444d566c0abd229415b3b188a786"
+  },
+  {
+   "file": "walk-photographer/sheet-01.webp",
+   "bytes": 37326,
+   "sha256": "5af740a6749db960d2bade4daf638508c0be738b30b0c1381b151a903f5eb84c"
+  },
+  {
+   "file": "walk-pilot/sheet-00.webp",
+   "bytes": 28340,
+   "sha256": "4cc239f7c618bd60a7c5d10d5a231f05b95901bfb893676aa310c5ff0e2f7fed"
+  },
+  {
+   "file": "walk-pilot/sheet-01.webp",
+   "bytes": 30006,
+   "sha256": "7fef52f69aecd14e889d8dc1998fa5f91383764fbaedc2ed1b0152ea7ebd5257"
+  },
+  {
+   "file": "walk-pilot/sheet-02.webp",
+   "bytes": 20170,
+   "sha256": "0bc36c4cc5708ab061eaccb16bcbb797ca30793c3564c8d9d390dd245fac7ba3"
+  },
+  {
+   "file": "walk-poet/sheet-00.webp",
+   "bytes": 33052,
+   "sha256": "4853f2193c3e5ea340e668448388539e85cfee6bd98e12154d2b03046b6f44ba"
+  },
+  {
+   "file": "walk-poet/sheet-01.webp",
+   "bytes": 33958,
+   "sha256": "80b1af4952935f1d8ed00a09dde20dcc32e129a95f09bc213de252aa5394d304"
+  },
+  {
+   "file": "walk-racer/sheet-00.webp",
+   "bytes": 46998,
+   "sha256": "c865743f6912d2c5627fe161cc0db6bdbd959bb328c27286c305dde2e888c839"
+  },
+  {
+   "file": "walk-racer/sheet-01.webp",
+   "bytes": 47984,
+   "sha256": "ee976b3e293814ac02dcf3549c7cbbaf4f50be8173efd9e98ee573a97ce7e0cc"
+  },
+  {
+   "file": "walk-reporter/sheet-00.webp",
+   "bytes": 40608,
+   "sha256": "5d78806606ba11a6adfc1c61118b69056237e71c0c32edb5240e06aaf9c23f61"
+  },
+  {
+   "file": "walk-reporter/sheet-01.webp",
+   "bytes": 41718,
+   "sha256": "4f2cb69b81027b233c3af35c12371bc46f429d6c6d9b8822ef1abc1caaa42219"
+  },
+  {
+   "file": "walk-retiree/sheet-00.webp",
+   "bytes": 42278,
+   "sha256": "fb6200907913f0b52401b4ca403a2a3d0d47fe8c9ca14ef4ebd5bfbaee669337"
+  },
+  {
+   "file": "walk-retiree/sheet-01.webp",
+   "bytes": 43084,
+   "sha256": "2ccaf7bf06230b68d7d00940c83b32a319f4f61913a03ed81cd57032a5746661"
+  },
+  {
+   "file": "walk-seiyuu/sheet-00.webp",
+   "bytes": 38952,
+   "sha256": "53fb8e645ebd39145b9e314b169f1414b5c8f008a7e6ffa266e18b0573f5c74f"
+  },
+  {
+   "file": "walk-seiyuu/sheet-01.webp",
+   "bytes": 40680,
+   "sha256": "d2ff23e1a2393d8f86f5984c0ae1995b4a2946bbd39bc464b0fab2a0bea523bc"
+  },
+  {
+   "file": "walk-singer/sheet-00.webp",
+   "bytes": 37014,
+   "sha256": "0c4c5bebbf47a08c72cefadb65aa05e8b712141731520d82d9624b2def91f83e"
+  },
+  {
+   "file": "walk-singer/sheet-01.webp",
+   "bytes": 38722,
+   "sha256": "1517570b41a768395db0388cb1407e507c1b4ec6706fe0a8745e471cec91ca69"
+  },
+  {
+   "file": "walk-sommelier/sheet-00.webp",
+   "bytes": 29140,
+   "sha256": "a17da1904a0d1e5e933fe5abed472ee521d6b1105b7dae38ea0cc67b0f221a88"
+  },
+  {
+   "file": "walk-sommelier/sheet-01.webp",
+   "bytes": 31466,
+   "sha256": "4866e7866aba00892dc3f6edf6ce745095fc150b0e67741e8f23972d61fda8c9"
+  },
+  {
+   "file": "walk-student/sheet-00.webp",
+   "bytes": 41204,
+   "sha256": "9f4f1ac00fb504f022865cf4fdec605aaeda31b514912d664e454c68603c5b7f"
+  },
+  {
+   "file": "walk-student/sheet-01.webp",
+   "bytes": 41832,
+   "sha256": "c5639c2589b2133419a97c2bc007775e25ed35cc9d10c071fc1e587079ca31ae"
+  },
+  {
+   "file": "walk-swat/sheet-00.webp",
+   "bytes": 29150,
+   "sha256": "4e9c7a4e5f03a97478816b7272293da2034e60eb1c0bad20151638e06004aaa1"
+  },
+  {
+   "file": "walk-swat/sheet-01.webp",
+   "bytes": 28148,
+   "sha256": "7dc15073aa886327732189c5941a9e946f15b0fc46ee9697724e5a51e97586b0"
+  },
+  {
+   "file": "walk-swat/sheet-02.webp",
+   "bytes": 21694,
+   "sha256": "ff9db74f6123718fe390d81ce23c09a48b0e32493e837e99e68a277ddb9225ad"
+  },
+  {
+   "file": "walk-teacher/sheet-00.webp",
+   "bytes": 35574,
+   "sha256": "b0aae9e9dacab4e9c43f776063e5adcd6dd5542600d925a9363e71d0ee8faed1"
+  },
+  {
+   "file": "walk-teacher/sheet-01.webp",
+   "bytes": 36636,
+   "sha256": "457d3f48f1906f10d7bb2b6a37f95326f4370756ff96097cf3cc75b748b9b647"
+  },
+  {
+   "file": "walk-tycoon/sheet-00.webp",
+   "bytes": 38050,
+   "sha256": "97157715fad61408b40c1669894a514bf10019b77313451e65a1c828304af7be"
+  },
+  {
+   "file": "walk-tycoon/sheet-01.webp",
+   "bytes": 37906,
+   "sha256": "dc181abe3ab52453eb5a10b804c1ed47a2ad9a142d9abe58f1e985d1605ec326"
+  },
+  {
+   "file": "walk-vet/sheet-00.webp",
+   "bytes": 37128,
+   "sha256": "b156b4ed15fa7c3e414d5869249334bb097645b118ad48b5e1552f63b5cdf41a"
+  },
+  {
+   "file": "walk-vet/sheet-01.webp",
+   "bytes": 38032,
+   "sha256": "c595dc3c75de728bd232283e62ace8204bcef8b2faf669bc6660702da6094499"
+  },
+  {
+   "file": "walk-violinist/sheet-00.webp",
+   "bytes": 33728,
+   "sha256": "c0ef57809b76026fd09dcf98930933e38135f238414b59a52dc3cb7c89139e16"
+  },
+  {
+   "file": "walk-violinist/sheet-01.webp",
+   "bytes": 33678,
+   "sha256": "5ef45fbd5f6e79354808985971136a970ae0695eef0301522509ce96696ea5a3"
+  }
+ ]
+}

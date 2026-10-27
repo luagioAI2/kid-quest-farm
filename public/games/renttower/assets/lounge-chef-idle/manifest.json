@@ -1,0 +1,77 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "lounge-chef-idle",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "d066fd0086142f50ee138375aba8d2824ed898ef7e0d16c53f80543a7d7c6323",
+   "size": 65188
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "fa1dad123cd396916162028476094d9ac52d1335636d3786e5d24fb0eabd990b",
+   "size": 168108
+  }
+ ],
+ "action_id": "idle",
+ "kind": "loop",
+ "frame": {
+  "w": 73,
+  "h": 150,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 21,
+ "frame_ms": 48,
+ "duration_ms": 571,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9438
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 3.65,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9603,
+  "alpha_semi_share": 0.0526,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 22,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "flf2v",
+  "action_confidence": "template",
+  "seed": 847742783,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ },
+ "figure": {
+  "x0": 7,
+  "x1": 63,
+  "y0": 8,
+  "y1": 140,
+  "h": 133,
+  "cx": 0.4863013698630137,
+  "bottom": 0.94
+ },
+ "nativeK": 1.66
+}
