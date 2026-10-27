@@ -165,6 +165,16 @@ PLAN = [
         ("shots/03-play.png", "3"),
         ("shots/04-win.png", "4"),
     ]),
+    # 旋转灯泡（Sweet Spin）：同样没有标题页，第 1 张是关卡盘。
+    # 种子存档给了「前 12 关已通」，否则拍出来是 19 个锁。
+    # ⚠️ 第 3 张不是「转一半」而是「差最后 3 下」：管道没接通时一盏灯都不亮，
+    #    「一半」那张和开局几乎一样（实测两张看不出区别）。
+    ("sweetspin", "sweetspin", [
+        ("shots/01-levels.png", "1"),
+        ("shots/02-play.png", "2"),
+        ("shots/03-half.png", "3"),
+        ("shots/04-win.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

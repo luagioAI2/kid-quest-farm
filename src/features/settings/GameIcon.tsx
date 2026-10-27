@@ -113,6 +113,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   deckrush: Deckrush,
   corgi: Corgi,
   screamchick: Screamchick,
+  sweetspin: Sweetspin,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -744,6 +745,64 @@ function Screamchick({ deep }: { deep: string }) {
       />
       <path d="M27.8 45h8.4v1.8a2.2 2.2 0 0 1-2.2 2.2h-4a2.2 2.2 0 0 1-2.2-2.2Z" fill="#F2728C" />
       <path d="M27.4 49.8h9.2" stroke="#E8632E" strokeWidth="2" strokeLinecap="round" />
+    </g>
+  )
+}
+
+/**
+ * 旋转灯泡：一块黏土六边形砖 + 一盏点亮的灯泡 + 一截接进来的管道。
+ *
+ * ⚠️ 三样东西缺一不可，少一样就「读成别的东西」：
+ *   · 少了**六边形**，只剩一个灯泡 ⇒ 看起来像「手电筒 / 台灯」类应用；
+ *   · 少了**管道**，六边形 + 灯泡 ⇒ 像一块太阳能板；
+ *   · 灯泡**必须点亮**（暖黄 + 光晕 + 射线），熄的那个是米白，58px 下等于没有主体。
+ *
+ * 底色用 `grass`（游戏里那块浅绿背景），砖是米白 —— 和尖叫鸡的「黄压蓝」不撞。
+ */
+function Sweetspin({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 投影：砖是「立」在草地上的 */}
+      <ellipse cx="32" cy="55" rx="16" ry="3" fill={deep} opacity=".3" />
+
+      {/* 黏土六边形砖：深一号的侧边 + 米白顶面，才有厚度 */}
+      <path d="M32 8 51.6 19.4v22.8L32 53.6 12.4 42.2V19.4Z" fill="#E8D2AE" />
+      <path d="M32 8 51.6 19.4v22.8L32 53.6Z" fill="#F6E4C4" />
+      <path d="M32 8 12.4 19.4v22.8L32 53.6Z" fill="#FFF7E6" />
+
+      {/* 接进来的管道（游戏里的淡蓝管），从左侧砖边拐进来 */}
+      <path
+        d="M13.6 34.6h9.2a3.6 3.6 0 0 0 3.6-3.6v-1.4"
+        fill="none"
+        stroke="#86B6E0"
+        strokeWidth="5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M13.6 34.6h9.2a3.6 3.6 0 0 0 3.6-3.6v-1.4"
+        fill="none"
+        stroke="#D6EBFA"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+
+      {/* 光晕：不加的话「亮着」只能靠颜色说，58px 下分不出亮没亮 */}
+      <circle cx="35" cy="27.4" r="12.4" fill="#FFD45C" opacity=".28" />
+      {/* 射线 */}
+      <g stroke="#F5A623" strokeWidth="1.9" strokeLinecap="round" opacity=".95">
+        <path d="M35 12.6v2.6" />
+        <path d="M24.4 16.6l1.9 1.9" />
+        <path d="M45.6 16.6l-1.9 1.9" />
+        <path d="M20.6 27.4h2.6" />
+        <path d="M46.8 27.4h2.6" />
+      </g>
+      {/* 灯泡玻璃：暖黄 + 左上高光 */}
+      <circle cx="35" cy="27.4" r="8.4" fill="#FFC155" />
+      <circle cx="35" cy="27.4" r="8.4" fill="none" stroke="#E5952E" strokeWidth="1" opacity=".55" />
+      <path d="M31.4 22.6a4.6 4.6 0 0 1 4.4-1.8" stroke="#FFF1C4" strokeWidth="2.2" strokeLinecap="round" fill="none" />
+      {/* 灯头：两道金属螺纹 */}
+      <rect x="31.6" y="35" width="6.8" height="4.6" rx="1.6" fill="#9AA5AE" />
+      <path d="M31.8 37.2h6.4" stroke="#7C868E" strokeWidth="1.1" strokeLinecap="round" />
     </g>
   )
 }

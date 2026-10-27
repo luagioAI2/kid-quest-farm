@@ -1,0 +1,45 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 7,
+  "bytes": 1205747
+ },
+ "assets": [
+  {
+   "file": "battery_clay.webp",
+   "bytes": 41942,
+   "sha256": "b40ae781ec9de242a5eb7a414a9563576bc7b6ed52af4c44be96059d88fc6af8"
+  },
+  {
+   "file": "bg_clay.webp",
+   "bytes": 49156,
+   "sha256": "dc6296570ac574a081e9842a3167d98b568258e36e74caae69bd7a2d3346304a"
+  },
+  {
+   "file": "bgm.m4a",
+   "bytes": 961757,
+   "sha256": "f5c629b998f25c9453dbb7e7dedba38fcce6c912bea1f7f74e04ff25474a034d"
+  },
+  {
+   "file": "bulb_clay_off.webp",
+   "bytes": 32562,
+   "sha256": "f07912d357a64172946f699fb3c2d68465b54c1f3f1e125e03909a151cfb7c32"
+  },
+  {
+   "file": "bulb_clay_on.webp",
+   "bytes": 36706,
+   "sha256": "2609dc6864e0a05f969405aa5796fc79dd9ceae6d4f854d0a011bb31aa43a9cc"
+  },
+  {
+   "file": "hex_clay.webp",
+   "bytes": 42302,
+   "sha256": "229cec73b037e749b37bc02add58b0f7c5ce575e2c172a94b789b24ffa109f43"
+  },
+  {
+   "file": "lock_clay.webp",
+   "bytes": 41322,
+   "sha256": "3d1bcc2c768bbf5ca780fc830e301742c694f6846a008b4b866ab9d6d24fd5bf"
+  }
+ ]
+}

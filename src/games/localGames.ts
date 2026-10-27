@@ -149,6 +149,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "7918af7274bd19897c9329df3717c229b6ce3acced6a2e8ab6f8851e8537d09b",
     "bytes": 991750,
     "assetBase": "/games/screamchick/"
+  },
+  {
+    "id": "sweetspin",
+    "name": "旋转灯泡",
+    "version": "1.0.0",
+    "url": "/games/sweetspin/sweetspin.plugin.mjs",
+    "sha256": "0b58db812e6d6f94da1024168000546ba63a5627656bbe89cdef186e9748980d",
+    "bytes": 108344,
+    "assetBase": "/games/sweetspin/"
   }
 ]
 

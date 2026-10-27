@@ -90,6 +90,13 @@
       "version": "1.0.0",
       "file": "screamchick/screamchick.plugin.mjs",
       "assetBase": "screamchick/"
+    },
+    {
+      "id": "sweetspin",
+      "name": "旋转灯泡",
+      "version": "1.0.0",
+      "file": "sweetspin/sweetspin.plugin.mjs",
+      "assetBase": "sweetspin/"
     }
   ]
 }
