@@ -95,6 +95,13 @@ node ~/.workbuddy-ai/skills/scrape-game-into-farm/scripts/scrape.mjs \
 import 图和运行时拼出来的路径里。静态扫只能拿到「代码里写死的」，帧序列 / 按等级
 解锁的贴图要靠运行时补（`--browse` 用真 Chrome 收全部请求）。
 
+**第三类漏抓：流式音频。** `sound.manifest.json` 的 `packs.main.url` 指向一个容器包
+（`sound.pack`），而音乐常常再被列成 `assets[*].variants[*].url` 的**独立文件** ——
+它们在游戏里是「进了某个场景才加载」，**静态扫和 `--browse` 都收不到**。
+症状是**整局没有音乐，而且 0 个 404**（没人请求，当然不 404）。
+抓法：按清单里每条声明的 `bytes` 逐条补抓并比对字节数（见 `fetch-missing.mjs` 的 `manifestAudio()`）。
+另外容器包总比声明的负载大一点（头部 + 对齐），判「已经抓好」要用**容差**而不是相等。
+
 **判据**：整轮加载 **0 个 404**（`e2e-*.mjs` 里已断言，排除 favicon）。
 ⚠️ 只数「抓了多少个文件」不算判据 —— 抓漏了不会报错，只会在某个二级页面变成一片空白。
 
@@ -384,10 +391,14 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | 改完数值，卡面文案还是旧的 | 文案和数值是两处，四层验收全盖不到 | 凡是「无限/永久」措辞都要跟着上限改 |
 | 走查截图拍出来是引导页 | 三层遮罩没关（onboarding → 插件欢迎层 → 教练卡） | 判据：截图里文案在 = 探针坏了 |
 | 构建报错栈里全是 rolldown | safe-delete 闸门（`SAFE_DELETE_BULK_CONFIRM_REQUIRED`） | 加 `CODEBUDDY_SAFE_DELETE_ENABLED=0` |
+| 一按「回标题 / 暂停 / 结算」就抛 `Cannot read properties of undefined (reading 'then')` | 存档适配层的 `putLatest` 返回了 `undefined`，而调用处是 `putLatest(...).then(...)`；**可选链只挡 nullish，方法存在就会调** | 适配层里凡是被 `.then()` 的方法**必须返回 Promise**（`Promise.resolve(true)`） |
+| 独立网页全白、canvas 0、**一个错都不报** | 把模块顶层 `await` 改成 `export async function start()` 后模块体不再自执行，而 `index.html` 还挂着 `<script src="./game.js">` ⇒ 什么都没跑 | 入口改成 `import { start }` + `start({container})`；判据是 canvas ≥ 1 **且** 截图颜色 ≥ 20 |
+| 整局没有音乐，且 **0 个 404** | 音乐是**流式变体**（`sound.manifest.json` 的 `variants[*].url`），静态扫和 `--browse` 都抓不到；清单路径还漏了 `A()` | 按清单里的 `bytes` 补抓并逐条比对字节数 |
+| 按钮看得见、点不到，控制台干净 | `mountDisplay({...})` 没给 `host` ⇒ 它量的是 `#app`/`document.body`（整个视口），canvas 比容器大，超出的部分在容器外 | 传 `host: container`；判据 `elementFromPoint(中心)` 仍在容器内 |
 
 ---
 
-## 附录：现有十款（2026-10-27 快照）
+## 附录：现有十一款（2026-10-27 快照）
 
 | id | 目录 | 包 | 经济 | 商城分类 |
 | --- | --- | --- | --- | --- |
@@ -401,6 +412,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `minergirl` | `task-games/minergirl` | 1.11 MB | 积分直接花（**不设币、不发券**，进场 15 + 10 分钟宽限） | `chill` |
 | `ropeland` | `task-games/ropeland` | 4.10 MB | 积分直接花（**不设币、不发券**，开局 20，每局都收）；羊毛只买升级/外观，**不换券** | `chill` |
 | `blockfit` | `task-games/blockfit` | 4.17 MB | 积分直接花（**不设币、不发券**，点开一道题 10，每局都收）；印章只是 45 枚收集进度，**不换券** | `chill` |
+| `deckrush` | `task-games/deckrush` | 4.13 MB | 积分直接花（**不设币、不发券**，点「开始」10，**点「继续」不重复收**）；60 秒构筑 + 6 关战斗 | `chill` |
 
 包大小是 `localGames.ts` 里 `bytes` 的口径（`make-local-catalog` 现算），
 改完包要重算，否则这张表会和清单说的不是一回事。
@@ -412,7 +424,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 它的「进化经验」存在**游戏自己的存档**里，不进宿主账本 ——
 `manifest.coin` 只是闸门要求必填的占位。
 
-现在 `chill` 有七款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit`），
+现在 `chill` 有八款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit` / `deckrush`），
 差别只在**收费点**：
 
 | 游戏 | 收费点 | 宽限 |
@@ -424,6 +436,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `minergirl` | `mount()` 进场收一次 | 10 分钟（养成类没有「一局」） |
 | `ropeland` | 每次「开始跳绳」`startRun()` | 无（三只铃铛掉光就是一局） |
 | `blockfit` | 每次「点开一道题」`startMain()` / `startTa()` | 无（点开就是一局，**翻目录/看标题屏免费**） |
+| `deckrush` | 标题屏点「开始」`onStart(fresh)` | 无（**点「继续」是接着上一局，不再收一次**） |
 
 判据一句话：**游戏里有没有「一局」这个动作** —— 有就按局收（关卡 / 回合制 / 抓娃娃），
 没有（放置 / 养成）就进场收一次 + 宽限期，且 `paidAt` **必须写存档**（写内存变量等于切走就失效）。
