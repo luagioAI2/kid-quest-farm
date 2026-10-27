@@ -131,6 +131,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "50f4b49e5c9ee36eb0934d998522678a0f65ecfe9df3fad0774905028b79c592",
     "bytes": 4331925,
     "assetBase": "/games/deckrush/"
+  },
+  {
+    "id": "corgi",
+    "name": "柯基屁屁",
+    "version": "1.0.0",
+    "url": "/games/corgi/corgi.plugin.mjs",
+    "sha256": "7bf98367145834a0a0fafe1444852571cf28ab0bfbd3fc228805581526d1f19e",
+    "bytes": 1939221,
+    "assetBase": "/games/corgi/"
   }
 ]
 

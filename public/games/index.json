@@ -76,6 +76,13 @@
       "version": "1.0.0",
       "file": "deckrush/deckrush.plugin.mjs",
       "assetBase": "deckrush/"
+    },
+    {
+      "id": "corgi",
+      "name": "柯基屁屁",
+      "version": "1.0.0",
+      "file": "corgi/corgi.plugin.mjs",
+      "assetBase": "corgi/"
     }
   ]
 }
