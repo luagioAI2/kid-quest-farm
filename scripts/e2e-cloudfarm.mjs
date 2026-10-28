@@ -323,10 +323,12 @@ console.log('\n【① 安装：设置 → 游戏 → 游戏市场 → 安装】'
   // 装完把市场关掉：后面几步（设为当前 / 返回 / 进游戏）都是家长在设置页上的动作，
   // 隔着一层遮罩点也能中（`el.click()` 不走命中测试），但截图会全被盖住。
   await closeGameStore()
-  const stillOpen = await page.evaluate(
-    () => !!document.querySelector('[role="dialog"][aria-label="游戏市场"]'),
-  )
-  check('装完市场能关掉', !stillOpen)
+  /*
+    ⚠️ 2026-10-28 删掉了一条**假绿**的断言：原来是
+      `check('装完市场能关掉', !document.querySelector('[role=dialog][aria-label=游戏市场]'))`
+    2026-10-25 市场改成「列表直接摊在设置页上」之后那个弹层就不存在了 ⇒
+    查询恒为 null ⇒ 断言恒真。留着比没有更糟：日志里一条绿，什么也没证明。
+    （`closeGameStore()` 现在是空函数，调用点保留只是为了 diff 可读。） */
 }
 
 /* ============================================================

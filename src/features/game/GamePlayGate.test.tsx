@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
 import { useApp } from '@/store/useApp'
 import { DEFAULT_SETTINGS } from '@/db/db'
 import { appDayKey, addDays } from '@/domain/time'
@@ -90,5 +90,69 @@ describe('GamePlayGate：跨天自动归零', () => {
     )
     expect(screen.getByTestId('game')).toBeTruthy()
     expect(screen.queryByText('今天的游戏时间用完了')).toBeNull()
+  })
+})
+
+describe('GamePlayGate：剩 5 分钟提醒一次', () => {
+  /* 到点直接收走太硬 —— 孩子会以为游戏卡了。所以剩 5 分钟时弹一条 toast。
+
+     ⚠️ 这条判据要的是「**只提醒一次**」：每 15 秒弹一个比不提醒更烦。
+     写成 `toHaveBeenCalled()` 的话，重复提醒也会绿。 */
+  it('★ 进入 5 分钟以内提醒一次，再玩两分钟也不重复', () => {
+    vi.useFakeTimers()
+    const orig = useApp.getState().pushToast
+    const spy = vi.fn()
+    useApp.setState({ pushToast: spy as never })
+    // 上限 30 分钟、已玩 26 分钟 ⇒ 还剩 4 分钟
+    setSettings({ gameDailyMinutes: 30, gameClock: { day: todayKey(), sec: 26 * 60 } })
+
+    const { unmount } = render(
+      <GamePlayGate>
+        <Game />
+      </GamePlayGate>,
+    )
+    act(() => {
+      vi.advanceTimersByTime(15_000)
+    })
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(String(spy.mock.calls[0][0].title)).toMatch(/还能玩 \d+ 分钟/)
+
+    act(() => {
+      vi.advanceTimersByTime(120_000)
+    })
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    // ⚠️ 卸载要包在 act 里：cleanup 会 `flush()` → `setTicks(0)`，
+    //    在外面卸会刷一串 act 警告（不影响判据，但会让整轮日志变脏）
+    act(() => {
+      unmount()
+    })
+    useApp.setState({ pushToast: orig })
+    vi.useRealTimers()
+  })
+
+  it('还剩很多的时候不打扰', () => {
+    vi.useFakeTimers()
+    const orig = useApp.getState().pushToast
+    const spy = vi.fn()
+    useApp.setState({ pushToast: spy as never })
+    // 还剩 20 分钟
+    setSettings({ gameDailyMinutes: 30, gameClock: { day: todayKey(), sec: 10 * 60 } })
+
+    const { unmount } = render(
+      <GamePlayGate>
+        <Game />
+      </GamePlayGate>,
+    )
+    act(() => {
+      vi.advanceTimersByTime(30_000)
+    })
+    expect(spy).not.toHaveBeenCalled()
+
+    act(() => {
+      unmount()
+    })
+    useApp.setState({ pushToast: orig })
+    vi.useRealTimers()
   })
 })

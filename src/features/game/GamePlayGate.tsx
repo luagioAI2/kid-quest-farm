@@ -49,16 +49,21 @@ import {
 const TICK_SEC = 15
 /** 每 4 个 tick 落一次库（60 秒）—— 进程被杀最多丢 1 分钟 */
 const FLUSH_EVERY = 4
+/** 剩这么多秒时提醒一次（2026-10-28：到点直接收走太硬，孩子会以为卡了） */
+const WARN_SEC = 300
 
 export function GamePlayGate({ children }: { children: ReactNode }) {
   const limitMin = clampGameDailyMinutes(useApp((s) => s.settings.gameDailyMinutes))
   const clock = useApp((s) => s.settings.gameClock)
   const dayStartHour = useApp((s) => s.settings.dayStartHour)
   const updateSettings = useApp((s) => s.updateSettings)
+  const pushToast = useApp((s) => s.pushToast)
 
   /** 这次挂载之后走过多少 tick（还没落库的那部分）。ref 给 interval 读，state 给渲染读 */
   const ticksRef = useRef(0)
   const [ticks, setTicks] = useState(0)
+  /** 「还剩 5 分钟」只提醒一次，别每 15 秒弹一个 */
+  const warned = useRef(false)
 
   const dayKey = appDayKey(Date.now(), dayStartHour)
   const baseSec = rollGameClock(clock, dayKey).sec
@@ -80,10 +85,41 @@ export function GamePlayGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     // 不限时 / 已经玩完：一个定时器都不开
     if (limitMin === 0 || locked) return
+    // 改上限 / 跨天之后重新计：新额度下该提醒还得提醒
+    warned.current = false
     const id = window.setInterval(() => {
       if (document.visibilityState === 'hidden') return
       ticksRef.current += 1
       setTicks(ticksRef.current)
+
+      /*
+        剩 5 分钟提醒一次。
+
+        ⚠️ 已玩秒数必须**从 store 现读**，不能闭包里的 `baseSec`：
+           落库之后 store 里的数变了，闭包那份还是挂载时的旧值 ⇒ 少算 ⇒
+           提醒迟到，或者干脆永远不来（额度全落库过的人）。
+
+        ⚠️ 走 toast，不在游戏画面上叠一条横幅：农场是整屏 canvas，
+           按容器高度铺满，插一条横幅会让画面矮一截（见文件头第 2 条）。
+           toast 是 `fixed` 的，零布局成本。
+      */
+      if (!warned.current) {
+        const s = useApp.getState().settings
+        const played =
+          rollGameClock(s.gameClock, appDayKey(Date.now(), s.dayStartHour)).sec +
+          ticksRef.current * TICK_SEC
+        const left = remainingSec(limitMin, played)
+        if (left > 0 && left <= WARN_SEC) {
+          warned.current = true
+          pushToast({
+            kind: 'info',
+            title: `还能玩 ${Math.max(1, Math.ceil(left / 60))} 分钟`,
+            detail: '到点会自动收起来，先把这一局玩完吧',
+            emoji: '⏳',
+          })
+        }
+      }
+
       if (ticksRef.current % FLUSH_EVERY === 0) flush()
     }, TICK_SEC * 1000)
     return () => {
@@ -91,7 +127,7 @@ export function GamePlayGate({ children }: { children: ReactNode }) {
       // 离开这一格 / 玩到上限 / 改上限：把没落库的那几 tick 结掉
       flush()
     }
-  }, [limitMin, locked, flush, dayKey])
+  }, [limitMin, locked, flush, dayKey, pushToast])
 
   if (!locked) return <>{children}</>
 
