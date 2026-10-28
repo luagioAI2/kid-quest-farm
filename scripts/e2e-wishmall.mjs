@@ -786,6 +786,47 @@ await page.evaluate(() => {
 await wait(500)
 void gameName
 
+/* ---------- ⑬ 兑换记录：结束的单子不能「消失」 ----------
+ *
+ * `done` / `cancelled` 的单子在别处看不见：卡片只显示还没走完的，
+ * 待办入口只算 committed / confirmed。没有这一屏，孩子换到手的东西
+ * 过一天就查不到了 —— 而这正是「我到底换过没有」的唯一答案。
+ *
+ * 走到这里手上应该有 3 单：泡泡玛特（取消）、泡泡玛特（完成）、盲盒（完成）。
+ */
+console.log('\n── 兑换记录 ──')
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find(
+    (x) => (x.textContent ?? '').trim() === '兑换记录',
+  )
+  b?.click()
+})
+await wait(700)
+await page.screenshot({ path: `${OUT}/09-orders.png` })
+
+const ordersView = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('[data-wish-order]')]
+  const text = document.body.innerText
+  return {
+    count: rows.length,
+    hasCancelled: text.includes('已取消'),
+    doneCount: rows.filter((r) => r.innerText.includes('已经拿到')).length,
+    // 记录里也要标出「已放进游戏柜」，不然「已拿到」和「游戏在哪」是两回事
+    delivered: text.includes('已放进游戏柜'),
+    empty: text.includes('还没有换过东西'),
+  }
+})
+check('兑换记录列出全部 3 单', ordersView.count === 3, `${ordersView.count} 单`)
+check('取消过的单子还在（不是消失了）', ordersView.hasCancelled)
+check('两单完成的是「已经拿到」', ordersView.doneCount === 2, `${ordersView.doneCount} 单`)
+check('已交付的数字商品有标记', ordersView.delivered)
+check('有单子时不显示空态', !ordersView.empty)
+
+await page.evaluate(() => {
+  document.querySelector('button[aria-label="返回"]')?.click()
+})
+await wait(500)
+
 /* ---------- ⑩ 底栏 5 格在 390px 下不挤、不换行 ---------- */
 const navFit = await page.evaluate(() => {
   const tabs = [...document.querySelectorAll('[data-tour^="tab-"]')]

@@ -3,6 +3,7 @@ import { useApp } from '@/store/useApp'
 import type { WishItem, WishTint } from '@/domain/types'
 import {
   WISH_KIND_META,
+  WISH_STATUS_TEXT,
   blindBoxRemaining,
   compareWishItem,
   daysToSave,
@@ -10,6 +11,7 @@ import {
   redeemedGameIdsFrom,
   type WishFilter,
 } from '@/domain/wish'
+import { humanizeAgo } from '@/domain/time'
 import { formatPriceCents } from '@/domain/cash'
 import { WISH_BLINDBOX_ID, WISH_ITEMS, wishItemById } from '@/games/wishCatalog'
 import { STOREFRONT, type StorefrontEntry } from '@/games/storefront'
@@ -113,6 +115,7 @@ type WishView =
   | { kind: 'offer'; itemId: string }
   | { kind: 'confirm'; orderId: string }
   | { kind: 'box'; gameId: string }
+  | { kind: 'orders' }
 
 export default function WishPage() {
   const wishOffers = useApp((s) => s.wishOffers)
@@ -191,6 +194,14 @@ export default function WishPage() {
     )
   } else if (view.kind === 'confirm') {
     content = <ConfirmView orderId={view.orderId} onBack={goList} onDone={goList} />
+  } else if (view.kind === 'orders') {
+    content = (
+      <OrdersView
+        orders={wishOrders}
+        onBack={goList}
+        onOpen={(itemId) => setView({ kind: 'detail', itemId })}
+      />
+    )
   } else if (view.kind === 'box') {
     content = <BoxView gameId={view.gameId} onDone={goList} />
   } else if (view.kind === 'detail') {
@@ -221,6 +232,7 @@ export default function WishPage() {
         balance={harvestBalance}
         owned={owned}
         onOpen={(itemId) => setView({ kind: 'detail', itemId })}
+        onOrders={() => setView({ kind: 'orders' })}
       />
     )
   }
@@ -269,6 +281,7 @@ function ListView({
   balance,
   owned,
   onOpen,
+  onOrders,
 }: {
   filter: WishFilter
   setFilter: (f: WishFilter) => void
@@ -278,6 +291,7 @@ function ListView({
   balance: number
   owned: Set<string>
   onOpen: (id: string) => void
+  onOrders: () => void
 }) {
   const items = useMemo(() => {
     const all = WISH_ITEMS.filter((i) => !i.archived).sort(compareWishItem)
@@ -311,6 +325,14 @@ function ListView({
             </p>
             <p className="text-xs font-bold text-ink-500">看看有什么想要的，告诉爸爸妈妈</p>
           </div>
+          {/* 兑换记录：换过什么、到哪一步了。没有这一屏，`done` / `cancelled`
+              的单子在界面上**彻底消失**（卡片只看得到「还没走完」的那些）。 */}
+          <button
+            onClick={onOrders}
+            className="flex-none rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-ink-600 shadow-flat active:btn-press"
+          >
+            兑换记录
+          </button>
         </div>
       </header>
 
@@ -1289,6 +1311,122 @@ function BoxView({ gameId, onDone }: { gameId: string; onDone: () => void }) {
       >
         收下
       </button>
+    </div>
+  )
+}
+
+/* ============================================================
+   ⑥ 兑换记录
+   ------------------------------------------------------------
+   为什么必须有这一屏：`done` 和 `cancelled` 的单子在别处**看不见** ——
+   卡片只显示「还没走完」的那几个（`activeOrderOf`），待办入口也只算
+   `committed` / `confirmed`。于是孩子换到手的东西、家长取消掉的单子，
+   过一天就彻底消失，连「我到底换过没有」都查不到。
+
+   数据就是 `wishOrders`（不新开表、不加 Dexie 版本号）：快照字段
+   （`itemName` / `itemEmoji` / `voucherPrice`）本来就是为历史准备的 ——
+   商品改名或下架之后，这一屏还能正确解释当时发生了什么。
+   ============================================================ */
+
+const STATUS_TONE: Record<string, 'green' | 'gray' | 'amber' | 'blue'> = {
+  wished: 'blue',
+  committed: 'amber',
+  confirmed: 'blue',
+  done: 'green',
+  cancelled: 'gray',
+}
+
+/**
+ * 记录里那一行的状态说法。
+ *
+ * ⚠️ 数字商品交付完还在 `committed`（等家长收尾），但界面上**不能**说
+ * 「等爸妈确认」—— 孩子已经拿到游戏了。这条规则在详情页 / 卡片上已经写过，
+ * 记录页也要一致，否则同一单在两屏里说两种话。
+ */
+function orderStatusLabel(o: { status: string; openedGameId?: string }): string {
+  if (o.openedGameId && (o.status === 'committed' || o.status === 'confirmed')) {
+    return '已放进游戏柜'
+  }
+  return WISH_STATUS_TEXT[o.status] ?? o.status
+}
+
+function orderStatusTone(o: { status: string; openedGameId?: string }): 'green' | 'gray' | 'amber' | 'blue' {
+  if (o.openedGameId && (o.status === 'committed' || o.status === 'confirmed')) return 'green'
+  return STATUS_TONE[o.status] ?? 'gray'
+}
+
+function OrdersView({
+  orders,
+  onBack,
+  onOpen,
+}: {
+  orders: ReturnType<typeof useApp.getState>['wishOrders']
+  onBack: () => void
+  onOpen: (itemId: string) => void
+}) {
+  const sorted = useMemo(
+    () => [...orders].sort((a, b) => b.createdAt - a.createdAt).slice(0, 50),
+    [orders],
+  )
+
+  return (
+    <div className="pb-4">
+      <div className="flex items-center gap-2 pt-safe pt-3">
+        <button
+          onClick={onBack}
+          aria-label="返回"
+          className="btn flex h-10 w-10 items-center justify-center rounded-xl bg-white text-lg text-ink-700 shadow-flat"
+        >
+          ←
+        </button>
+        <span className="font-display text-base font-extrabold">兑换记录</span>
+        <span className="flex-1" />
+        <span className="text-[11px] font-bold text-ink-500">最近 {sorted.length} 条</span>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="flex min-h-[45vh] flex-col items-center justify-center gap-2">
+          <span className="text-4xl">🧾</span>
+          <p className="text-sm font-extrabold text-ink-600">还没有换过东西</p>
+          <p className="text-xs font-bold text-ink-500">看到喜欢的，先告诉爸爸妈妈</p>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {sorted.map((o) => {
+            const item = wishItemById(o.itemId)
+            return (
+              <button
+                key={o.id}
+                data-wish-order={o.id}
+                onClick={() => onOpen(o.itemId)}
+                className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-flat active:btn-press"
+              >
+                <span
+                  className={
+                    'flex h-11 w-11 flex-none items-center justify-center rounded-2xl text-xl ' +
+                    TINT_BG[item?.tint ?? 'sun']
+                  }
+                >
+                  {o.itemEmoji}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-extrabold text-ink-900">
+                    {o.itemName}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] font-bold text-ink-500">
+                    {humanizeAgo(o.createdAt)}
+                    {o.vouchersHeld > 0 ? ` · 🎫 ${o.vouchersHeld} 张` : ' · 只是想要'}
+                    {/* 未结束的数字单子，状态标签已经写了「已放进游戏柜」，
+                        这里只在**结束之后**补一句（那时标签写的是「已经拿到」） */}
+                    {o.openedGameId && o.status === 'done' ? ' · 已放进游戏柜' : ''}
+                  </span>
+                </span>
+                <Tag tone={orderStatusTone(o)}>{orderStatusLabel(o)}</Tag>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

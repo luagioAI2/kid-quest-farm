@@ -148,6 +148,95 @@ describe('心愿商城：单个游戏就是那个游戏', () => {
   })
 })
 
+describe('心愿商城：兑换记录', () => {
+  /* `done` / `cancelled` 的单子在别处**看不见** —— 卡片只显示还没走完的，
+     待办入口只算 committed/confirmed。没有这一屏，孩子换到手的东西过一天
+     就彻底消失，连「我到底换过没有」都查不到。 */
+  it('没有单子时是空态，不摆一堆空白', async () => {
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: '兑换记录' }))
+    expect(await screen.findByText('还没有换过东西')).toBeTruthy()
+  })
+
+  it('换到手的、被取消的都能查到，状态写中文', async () => {
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_done',
+        itemName: '收租公寓',
+        itemEmoji: '🏢',
+        kind: 'gamebox',
+        status: 'done',
+        doneAt: Date.now(),
+        openedGameId: 'renttower',
+        createdAt: Date.now() - 60_000,
+      }) as never,
+    )
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_cancel',
+        itemId: 'wish-popmart',
+        itemName: '泡泡玛特盲盒',
+        itemEmoji: '🧸',
+        kind: 'collectible',
+        status: 'cancelled',
+        cancelledAt: Date.now(),
+        createdAt: Date.now() - 120_000,
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: '兑换记录' }))
+
+    expect(await screen.findByText('收租公寓')).toBeTruthy()
+    expect(screen.getByText('泡泡玛特盲盒')).toBeTruthy()
+    // 状态文案来自 `WISH_STATUS_TEXT`（这个常量之前一直是死代码）
+    expect(screen.getByText('已经拿到')).toBeTruthy()
+    expect(screen.getByText('已取消')).toBeTruthy()
+    // 已交付的数字商品要标出来，不然「已拿到」和「游戏在哪」是两回事
+    expect(screen.getByText(/已放进游戏柜/)).toBeTruthy()
+  })
+
+  it('未收尾的数字单子写「已放进游戏柜」，不写「等爸妈确认」', async () => {
+    // 同一单在两屏里说两种话是最容易犯的错：详情页/卡片已经改成
+    // 「已放进游戏柜」，记录页照抄状态字典就会又冒出「等爸妈确认」。
+    await db.wishOrders.put(committedOrder({ openedGameId: 'renttower' }) as never)
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: '兑换记录' }))
+
+    expect(await screen.findByText('已放进游戏柜')).toBeTruthy()
+    expect(screen.queryByText('等爸妈确认')).toBeNull()
+  })
+
+  it('点一条记录能回到那件商品', async () => {
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_done',
+        itemId: 'wish-game-renttower',
+        itemName: '收租公寓',
+        itemEmoji: '🏢',
+        kind: 'gamebox',
+        status: 'done',
+        doneAt: Date.now(),
+        openedGameId: 'renttower',
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: '兑换记录' }))
+    await user.click(await screen.findByText('收租公寓'))
+    // 详情页：这个游戏已经有了
+    expect(await screen.findByText('这个游戏你已经有了')).toBeTruthy()
+  })
+})
+
 describe('心愿商城：待家长处理的入口', () => {
   /* 孩子换了东西之后，家长那边**没有任何提示** —— 只能逐个商品点开、
      看卡片上的标记。列表顶部这一条是整条链路里「现在该谁动手」的唯一答案。 */

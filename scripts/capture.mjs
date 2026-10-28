@@ -576,6 +576,24 @@ try {
     console.log('  ⚠️ 10f 跳过：列表里没找到带手绘图标的游戏卡片')
   }
 
+  /* 10g. 兑换记录（2026-10-28 补）
+     ------------------------------------------------------------
+     `done` / `cancelled` 的单子**只在这一屏**看得到：卡片只显示还没走完的，
+     待办入口只算 committed / confirmed。走查时最该看的是「已取消」那行
+     会不会写得像「出事了」—— 它只是家长点错了价。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(
+      (x) => (x.textContent ?? '').trim() === '兑换记录',
+    )
+    b?.click()
+  })
+  await wait(700)
+  await shot('10g-wish-orders')
+  await page.evaluate(() => {
+    document.querySelector('button[aria-label="返回"]')?.click()
+  })
+  await wait(400)
+
   /* 11. 设置页（孩子 tab） */
   await page.evaluate(async () => {
     // 清掉家长锁，免得点齿轮时被 PIN 拦住（PIN 归 e2e 测，截图脚本不管）
