@@ -1561,7 +1561,12 @@ mod.default.mount(container, hostApi)                     // 见 12.5
 
 ⚠️ 还有一个 `installGameFromUrl`（**无任何校验**：`fetch` → 直接 `importBundle`）——
 它只给本地走查用，**不是给用户的**，也**不许**接进设置页。
-设置页接的是 `installFromCatalog`（判据在 `PluginStoreCard` 的文件头）。
+设置页接的是 `installFromCatalog`。
+
+> ⚠️ **2026-10-28：设置页那条入口没了。** 家长要求「在线商店页去掉」，
+> `PluginStoreCard` 连同它的两个测试文件一起删了。`installFromCatalog` 本身
+> 仍在 store 里、仍被 `install.test.ts` 覆盖（验签 / 哈希 / 失败零落盘），
+> 只是**界面上不再有任何入口**。要接回来的时候，按本节判据重新做一个入口。
 
 **现状（2026-10-18 核过）**：界面上**没有任何入口**。唯一入口是调试句柄
 `__kqf__.plugin.installFromUrl`，而 `__kqf__` **故意没有 `import.meta.env.DEV` 守卫**
@@ -1694,7 +1699,7 @@ interface HostApi {
 | 运行时加载器 + 三道门 + `validateBundle` | `src/games/loader.ts` |
 | 下载来的游戏在 App 里的挂载点 | `src/games/PluginGameHost.tsx` |
 | 样板游戏「许愿池」（零依赖）+ 独立构建 | `games-src/demo/index.ts`、`games-src/vite.config.ts` |
-| 家长栏「游戏市场」列表（内置 + 本地包同一张表，状态在行上） | `src/features/settings/GameStore.tsx`（`GamesSection.tsx` 只留三张卡：钻石 / 市场 / 在线商店） |
+| 家长栏「我的游戏」列表（内置 + 本地包同一张表，状态在行上） | `src/features/settings/GameStore.tsx`（`GamesSection.tsx` 只留两张卡：每天玩多久 / 我的游戏。2026-10-28 删掉了钻石卡和在线商店卡） |
 | 走查脚本（47 条断言，含遮挡探针自检） | `scripts/capture-game-bundle.mjs` |
 
 两条**P1 期间新加的守卫**（都是「静默失效」型的，值得单独记）：

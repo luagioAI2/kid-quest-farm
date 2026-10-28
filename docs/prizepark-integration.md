@@ -60,7 +60,14 @@ PluginGameHost.tsx  容器 + 卸载兜底（disposed 标记 + replaceChildren）
 catalogUrl.ts  CATALOG_URL —— **现在是空字符串，商店未配置**
 ```
 
-**这条链已经能跑通**：`scripts/demo-catalog.mjs` 会起一个本地目录服务，`catalog:verify` 是走查脚本。
+**这条链已经能跑通**：`scripts/demo-catalog.mjs` 会起一个本地目录服务。
+
+> ⚠️ **2026-10-28：`catalog:verify` 走查脚本已删除。** 家长要求「在线商店页去掉」，
+> 那张卡从设置页删掉了 —— 而那个脚本有一半是**点界面**的（点「检查」→ 列表 →
+> 点安装），没有入口之后它必然跑不通。
+> 链子本身没动，`src/games/install.test.ts` / `verify.test.ts` 仍然钉着验签、
+> 哈希、失败零落盘；缺的是「真浏览器里 Ed25519 + blob import 可用」这一条。
+> **P3 真要接的时候，把界面入口和这个脚本一起补回来。**
 
 ### 1.2 已有一台娃娃机（v1 内置）
 
@@ -433,7 +440,8 @@ return () => {
 2. npm run build:games → games-dist/prizepark.js
 3. scripts/sign-catalog.mjs sign → catalog.json + catalog.json.sig
 4. 填 CATALOG_URL（现在还是空字符串）
-5. npm run catalog:verify 走查
+5. **先补回设置页的入口**（2026-10-28 随「在线商店页去掉」一起删了），
+   再按 `install.test.ts` / `verify.test.ts` 的判据补一个走查脚本
 ```
 
 ### P4 · 本地内置模式（0.5 天）

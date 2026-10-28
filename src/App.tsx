@@ -12,8 +12,10 @@ import { ChildTour } from './features/onboarding/ChildTour'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { isNative, playTone } from './platform/files'
 import { gameById } from './games/registry'
+import { CURRENCY } from './domain/currency'
 import { pageFor } from './games/pages'
 import { PluginGameHost } from './games/PluginGameHost'
+import { GamePlayGate } from './features/game/GamePlayGate'
 import './features/farm/farm.css'
 
 type TabKey = 'tasks' | 'game' | 'redeem' | 'wish' | 'points'
@@ -52,6 +54,15 @@ export default function App() {
   const balance = useApp((s) => s.balance)
   /** 兑换券：农场产出的结算币。和积分是两套账，见 store 里 postHarvest 的注释。 */
   const harvestBalance = useApp((s) => s.harvestBalance)
+  /**
+   * 钻石（`mall`）。2026-10-28 家长要求：**顶栏在积分前面显示钻石**。
+   *
+   * ⚠️ 它现在**没有任何产出入口**了 —— 设置页那张「钻石」卡（含手动发放）
+   * 同一轮被删掉，而内置游戏一款标价的都没有（`registry.ts` 的 `priceMall` 全 0）。
+   * 唯一来源是全新档案赠送的 500（`doSeedIfEmpty`）。
+   * 家长知道并接受：「照常显示，0 也显示」。
+   */
+  const mallBalance = useApp((s) => s.mallBalance)
   const toasts = useApp((s) => s.toasts)
   const dismissToast = useApp((s) => s.dismissToast)
   const boot = useApp((s) => s.boot)
@@ -267,7 +278,7 @@ export default function App() {
             {/* `pl-safe pr-safe` 是 calc(env(...) + 1rem)，正好等于原来的 px-4，
                 但横屏刘海屏上会多让出安全区。横屏时刘海就在顶栏左右两端，
                 所以这两个必须加在**顶栏**上（底栏在底部中间，够不到刘海）。 */}
-            <div className="page-col flex items-center gap-1.5 py-2.5 pl-safe pr-safe pt-safe">
+            <div className="page-col flex items-center gap-1 py-2.5 pl-safe pr-safe pt-safe">
               <span className="text-2xl">{settings.avatar}</span>
               {/* `data-child-name` 是给 e2e-check 定位用的。
                   原来是 `header.children[1]` —— 平板适配给顶栏加了一层
@@ -280,18 +291,38 @@ export default function App() {
                 {settings.childName}
               </span>
               {/*
-                两个币种并排。**图标和底色必须能区分开**：
-                  🪙 积分 = 奖励色（sun），能买种子/幼崽/地块，也能进兑换商城
+                三个币种并排。**图标和底色必须能区分开**：
+                  💎 钻石   = 天空色（sky），只用来买游戏（现在没有标价的游戏，余额是历史/赠送）
+                  🪙 积分   = 奖励色（sun），能买种子/幼崽/地块，也能进兑换商城
                   🎫 兑换券 = 草色（grass），只能进兑换商城的丰收档，买不了农场投入
                 用农场页同一个色（bg-grass-100 / text-grass-700），
                 孩子从农场切到任务页时不会觉得是两个东西。
+
+                ⚠️ 2026-10-28 加 💎 之后这一行是**全局最挤的一行**：
+                  头像 + 名字 + 三颗币 + 两个按钮。名字那个 span 靠
+                  `min-w-0 truncate` 收缩（少一个都不行），三颗币一律
+                  `shrink-0` —— 让币去挤名字，不要反过来把币挤成半颗。
+
+                  加完实测 390px 下名字被压成「宝…」（只剩 40px），所以三颗币
+                  统一收成 `px-1.5` + `text-sm`、外层 gap 收到 1：省出约 35px
+                  给名字。**再往里加第四颗币之前先量一遍** ——
+                  这一行的余量已经用完了。
               */}
               <div
-                className="flex shrink-0 items-center gap-1 rounded-full bg-sun-200 px-2.5 py-1.5 shadow-flat"
+                className="flex shrink-0 items-center gap-1 rounded-full bg-sky-200 px-1.5 py-1.5 shadow-flat"
+                aria-label={`钻石 ${mallBalance}`}
+              >
+                <span className="text-sm leading-none">{CURRENCY.mall.emoji}</span>
+                <span className="tnum font-display text-sm font-extrabold leading-none text-ink-900">
+                  {mallBalance}
+                </span>
+              </div>
+              <div
+                className="flex shrink-0 items-center gap-1 rounded-full bg-sun-200 px-1.5 py-1.5 shadow-flat"
                 aria-label={`积分 ${balance}`}
               >
-                <span className="text-base leading-none">🪙</span>
-                <span className="tnum font-display text-base font-extrabold leading-none text-ink-900">
+                <span className="text-sm leading-none">🪙</span>
+                <span className="tnum font-display text-sm font-extrabold leading-none text-ink-900">
                   {balance}
                 </span>
               </div>
@@ -309,11 +340,11 @@ export default function App() {
                 （云边小农场 2026-10-24 已经把它从自己的顶栏删掉了）。
               */}
               <div
-                className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-2.5 py-1.5 shadow-flat"
+                className="flex shrink-0 items-center gap-1 rounded-full bg-grass-100 px-1.5 py-1.5 shadow-flat"
                 aria-label={`兑换券 ${harvestBalance}`}
               >
-                <span className="text-base leading-none">🎫</span>
-                <span className="tnum font-display text-base font-extrabold leading-none text-grass-700">
+                <span className="text-sm leading-none">🎫</span>
+                <span className="tnum font-display text-sm font-extrabold leading-none text-grass-700">
                   {harvestBalance}
                 </span>
               </div>
@@ -368,12 +399,20 @@ export default function App() {
                   </div>
                 }
               >
-                {tab === 'game' &&
-                  (GamePage ? (
-                    <GamePage />
-                  ) : activePlugin ? (
-                    <PluginGameHost gameId={activeGameId} />
-                  ) : null)}
+                {/*
+                  游戏那一格包一层 `GamePlayGate` —— 家长设了「每天玩多久」时，
+                  玩满就把游戏换成一句「今天玩完了」。**没设时它原样放行**
+                  （渲染 `children` 本身，不多一层 div，游戏页量容器高度不受影响）。
+                */}
+                {tab === 'game' && (
+                  <GamePlayGate>
+                    {GamePage ? (
+                      <GamePage />
+                    ) : activePlugin ? (
+                      <PluginGameHost gameId={activeGameId} />
+                    ) : null}
+                  </GamePlayGate>
+                )}
               </Suspense>
               {tab === 'redeem' && <RedeemPage />}
               {tab === 'wish' && <WishPage />}

@@ -396,7 +396,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | 症状 | 真因 | 判据 / 修法 |
 | --- | --- | --- |
 | 装不上，报「包内容校验不过」 | 拷了包没重跑 `make-local-catalog`，或 `.gitattributes` 缺 `-text` | 比 `public/games/*/*.mjs` 的 sha256 与 `localGames.ts` |
-| 界面显示「已是最新」但没更新 | 改了包没升 `version` | `PluginStoreCard` 只比 `installed.version === g.version` |
+| 界面显示「已是最新」但没更新 | 改了包没升 `version` | `InstallAction`（`GameStore.tsx`）只比 `installed.version === local.version` |
 | 挂上了、`ready` 也是 true，但 DOM 不在容器里 | **StrictMode 双挂载**（dev 里 effect 跑两遍，两次 mount 并发共用一个容器，先回来的 unmount 把后来的根节点清了） | 宿主已修（每次挂载给自己的 slot div）。**别用「关掉 StrictMode」收工** |
 | 整屏空白但断言全绿 | 容器高度塌成 0 | 断言「根节点高度 == 容器高度」 |
 | 资源全 404，报错是 `Unexpected non-whitespace character after JSON at position 4` | `assetUrl(rel)` 的 `rel` 相对 `assets/`，漏了这层；`res.json()` 吃进 404 正文 | 断言整轮 0 个 404 |

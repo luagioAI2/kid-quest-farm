@@ -1002,6 +1002,18 @@ export interface PendingCheckIn {
 
 /* ---------------- 设置 ---------------- */
 
+/**
+ * 「今天已经玩了多少秒」+ 这笔秒数属于哪一天（`YYYY-MM-DD`）。
+ *
+ * 定义放在这里（而不是 `gameTime.ts`）是因为 `types.ts` 是零依赖的底座 ——
+ * 反过来让它 import 领域文件会形成 `types → gameTime → time → types` 的环。
+ * 口径与归零逻辑仍在 `domain/gameTime.ts` 的 `rollGameClock`。
+ */
+export interface GameClock {
+  day: string
+  sec: number
+}
+
 export interface AppSettings {
   /** 孩子昵称 */
   childName: string
@@ -1149,6 +1161,25 @@ export interface AppSettings {
 
   /** 农场时间流速设置 */
   farmClock: FarmClockSettings
+
+  /**
+   * 每天最多玩多少分钟游戏。`0` = 不限。家长 2026-10-28 的「沉迷设定」。
+   *
+   * 只管游戏那一格（`features/game/GamePlayGate.tsx`），不影响任务、兑换、心愿。
+   * 可选：老库里没有这个字段时 `loadSettings` 会合并成 `DEFAULT_SETTINGS` 的 0，
+   * 也就是**老用户默认不限时**，不会被这次改动突然锁住。
+   *
+   * 口径与夹取见 `domain/gameTime.ts`。
+   */
+  gameDailyMinutes?: number
+
+  /**
+   * 今天已经玩了多少秒 + 这笔秒数属于哪一天。
+   *
+   * ⚠️ **必须连日期一起存**：只存秒数的话，昨天玩满 30 分钟，今天一开就锁死，
+   * 而且零报错。跨天归零由 `domain/gameTime.ts` 的 `rollGameClock` 负责。
+   */
+  gameClock?: GameClock
 
   /** 家长锁 PIN（明文仅本地，4 位） */
   parentPin?: string

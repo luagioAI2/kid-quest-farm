@@ -17,7 +17,6 @@ import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { MALL } from './lib/currency.mjs'
 
 /* ⚠️ 变量名**别叫 `URL`** —— 那会遮住全局的 `URL` 构造器（本项目踩过）。 */
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4396/'
@@ -159,7 +158,6 @@ for (const vp of VIEWPORTS) {
       txt,
       rows,
       buttons,
-      hasMallCard: txt.includes('钻石'),
       /*
         2026-10-25 起**没有**「已购买 / 已下载 / 敬请期待」三张卡了 ——
         所有游戏（内置 + 插件）排在同一张表里，状态写在每一行上。
@@ -173,21 +171,26 @@ for (const vp of VIEWPORTS) {
       ),
       activeGameId: window.__kqf__?.getState?.().activeGameId ?? '',
       games: window.__kqf__?.games?.() ?? [],
-      owned: window.__kqf__?.getState?.().ownedGameIds ?? [],
+      /*
+        2026-10-28 改版后的三个事实：
+          · 不再叫「游戏市场」，叫「我的游戏」（家长：这些都是已经购买的游戏）
+          · 钻石卡（含手动发放）和在线商店卡都删了
+          · 新增「每天玩多久」，档位按钮带 `data-game-limit`
+      */
+      limitButtons: [...document.querySelectorAll('[data-game-limit]')].map((b) =>
+        (b.textContent ?? '').trim(),
+      ),
+      playedLine: document.querySelector('[data-game-played]')?.textContent?.trim() ?? '',
       hasMint: document.querySelector('[data-mall-mint]') !== null,
-      mallBalanceText: document.querySelector('[data-mall-balance]')?.innerText ?? '',
-      // 账本派生出来的真实余额 —— 用来验「卡片上显示的数 = 派生值」，不写死 0
-      mallBalance: window.__kqf__?.getState?.().mallBalance ?? -1,
+      buyButtons: document.querySelectorAll('[data-buy-game]').length,
     }
   })
 
-  const soonGames = info.games.filter((g) => g.status === 'comingSoon')
-  // 可买 = 做好的 × 有价的 × 还没买的（免费的首款不在「敬请期待」里）
-  const buyable = info.games.filter(
-    (g) => g.status === 'available' && g.priceMall > 0 && !info.owned.includes(g.id),
+  check(
+    '★ 这张表叫「我的游戏」，不再叫「游戏市场」',
+    info.txt.includes('我的游戏') && !info.txt.includes('游戏市场'),
+    info.txt.includes('游戏市场') ? '页面上还有「游戏市场」' : '',
   )
-
-  check('有「钻石」一块', info.hasMallCard)
 
   /* ★ 这一条钉的就是家长的第二次要求：「感觉没必要 单独 已购买，已下载，
      敬请期待，直接 在 游戏市场。每个游戏 不同状态呗。」
@@ -216,61 +219,29 @@ for (const vp of VIEWPORTS) {
       (info.activeGameId === 'farm' ? farmRow.includes('当前') : farmRow.includes('设为当前')),
     `activeGameId=${info.activeGameId || '(空)'} 行=${farmRow.replace(/\n/g, ' / ') || '（没有农场的行）'}`,
   )
-  check(
-    `占位游戏在列表里，且都标「敬请期待」（注册表现状 ${soonGames.length} 条）`,
-    info.rows.filter((r) => r.includes('敬请期待')).length === soonGames.length,
-    `占位行数 = ${info.rows.filter((r) => r.includes('敬请期待')).length}`,
-  )
-  // ★ 这一条才是重点：**没有任何东西可买**的时候，界面不许出现购买按钮。
-  //   出现了就是「界面承诺了它做不到的事」。
-  /*
-    ⚠️ 图标**从 `domain/currency.ts` 派生**（走 `scripts/lib/currency.mjs`），
-      不在脚本里再抄一份。这里原来写死的是 `/^🎫\s*\d+$/` ——
-      2026-10-16 钻石的图标从 `🎫` 换成 `🛍️`，那种写法会**静默地一个都匹配不到**，
-      于是下面「个数 = N」这条会红在一个跟功能完全无关的地方（例子过期，不是坏了）。
 
-    ⚠️ 也别用 emoji 拼正则：只判「以这个图标开头」+「后面全是数字」。
-      取数字同理，用 `slice` 不用正则（`e2e-check.mjs` 那边也是这么改的）。
-  */
-  const isBuyLabel = (t) => {
-    const s = (t ?? '').trim()
-    if (!s.startsWith(MALL.emoji)) return false
-    return /^\d+$/.test(s.slice(MALL.emoji.length).trim())
-  }
-  const buyButtons = info.buttons.filter(isBuyLabel)
-  /*
-    ★ 这一条的原意是「**没做好的游戏**不许出现购买按钮」（界面不能承诺
-    它做不到的事）。原实现是「一个购买按钮都不许有」—— 那在「一款能买的
-    都没有」的年代恰好等价，但娃娃机上线之后就变成了一条**错误的**断言。
+  /* ---------- 2026-10-28：这一页从「商店」变成「清单」 ----------
+     家长：「游戏市场换个名字，这些都是已经购买的游戏。在这里只是控制，
+            下载，安装，卸载，选择当前。」
+     ⇒ 价格、购买按钮、「敬请期待」全都不该出现。
+     判据落在**属性**上（`[data-buy-game]`），不靠 emoji 拼正则 ——
+     钻石图标改过一次，那种写法会静默地一个都匹配不到（见旧注释）。 */
+  check('★ 没有任何购买按钮', info.buyButtons === 0, `实际 ${info.buyButtons} 个`)
+  check('★ 没有「敬请期待」', !info.txt.includes('敬请期待'))
+  check(
+    '★ 钻石卡（含手动发放）没了',
+    !info.txt.includes('钻石') && !info.hasMint,
+    info.hasMint ? '还找得到 [data-mall-mint]' : '',
+  )
+  check('★ 在线商店卡没了', !info.txt.includes('在线商店'))
 
-    ➜ 改成直接表达原意：购买按钮的**个数**必须等于「做好的 × 有价的 × 没买的」，
-      而且**每一款 comingSoon 的行里都不许有**。这样以后钓鱼池上线也不用改。
-  */
+  /* 沉迷设定：每天玩多久 */
   check(
-    `★ 购买按钮的个数 = 做好的有价游戏里还没买的那些（应为 ${buyable.length}）`,
-    buyButtons.length === buyable.length,
-    `实际 ${buyButtons.length} 个：${JSON.stringify(buyButtons)}`,
+    '★ 有「每天玩多久」六个档位',
+    info.limitButtons.length === 6,
+    info.limitButtons.join(' / ') || '一个 [data-game-limit] 都没找到',
   )
-  const soonRows = info.rows.filter((r) => r.includes('敬请期待'))
-  check(
-    '★ 每一款「敬请期待」的游戏行里都没有购买按钮',
-    soonRows.every((r) => !r.includes(MALL.emoji)),
-    soonRows.filter((r) => r.includes(MALL.emoji)).join(' / ') || '（都没有）',
-  )
-
-  /*
-    钻石卡片：2026-10-16 起**有**发币入口（手动发放），
-    因为娃娃机用钻石买 —— 没有入口的话那个购买按钮按下去必然失败。
-    2026-10-17 起**新档会送 500 钻石**（`doSeedIfEmpty` 的欢迎种子），
-    所以「新档余额必须是 0」已经不成立了。
-    现在钉的是：入口在、**卡片上显示的数 = 账本派生出来的数**（不写死 0 / 500）。
-  */
-  check('★ 钻石卡片上有手动发放入口', info.hasMint, info.hasMint ? '' : '没找到 [data-mall-mint]')
-  check(
-    '★ 钻石卡片显示的数 = 账本派生出来的余额',
-    info.mallBalance >= 0 && info.mallBalanceText.replace(/\D/g, '') === String(info.mallBalance),
-    `显示「${info.mallBalanceText.trim()}」/ 派生 ${info.mallBalance}`,
-  )
+  check('★ 有今日用量那一行', /今天/.test(info.playedLine), info.playedLine)
 
   await page.screenshot({ path: `${OUT}/${vp.name}-2-家长栏游戏.png`, fullPage: true })
   console.log(`  · 已存图 ${OUT}/${vp.name}-2-家长栏游戏.png`)

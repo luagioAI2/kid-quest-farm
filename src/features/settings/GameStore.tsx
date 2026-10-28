@@ -13,20 +13,29 @@ import {
   type StoreTint,
 } from '../../games/storefront'
 import { GAMES, gameById, type GameDef } from '../../games/registry'
-import { CURRENCY } from '../../domain/currency'
 import { formatSize } from '../../games/size'
 import { checkPluginEconomy } from '../../domain/pluginEconomy'
 import { GameIconArt } from './GameIcon'
 
 /**
- * 游戏市场 —— 手机应用市场那种形态（2026-10-24 用户要求）。
+ * 我的游戏 —— 手机应用市场那种形态（2026-10-24 用户要求）。
  *
  * ```
- *   设置页 → 游戏   「游戏市场」卡片：所有游戏一张表，状态写在行上
- *     └─ 详情       大图 + 练什么 + 截图（可点开放大）+ 关于 + 安装
+ *   设置页 → 游戏   「我的游戏」卡片：所有游戏一张表，状态写在行上
+ *     └─ 详情       大图 + 练什么 + 截图（可点开放大）+ 关于 + 安装 / 卸载
  * ```
  *
- * ⚠️ 这张卡 2026-10-25 被家长改了三次，三次都是「少一层、少一处」：
+ * ## ⚠️ 2026-10-28：从「游戏市场」改成「我的游戏」
+ *
+ * 家长：「游戏市场换个名字，这些都是已经购买的游戏。在这里只是控制，
+ * 下载，安装，卸载，选择当前。」
+ *
+ * ⇒ 这张表**不是商店**了：没有价格、没有「敬请期待」、没有购买按钮。
+ *   它是一份「我有哪些游戏、现在装没装、当前是哪一款」的清单。
+ *   （这也顺带解决了一件旧事：内置游戏早就一款标价的都没有了，
+ *     那个购买分支一直是死代码 —— 死代码比错误的代码更难发现。）
+ *
+ * ## ⚠️ 这张卡 2026-10-25 被家长改了三次，三次都是「少一层、少一处」：
  *   ① 去掉「进入游戏市场」按钮 + 全屏列表（列表本来就是这张卡的内容）
  *   ② 「已购买 / 已下载 / 敬请期待」三张卡并进来（一款游戏一行，状态在行上）
  *   ③ 「练什么」从每一行挪进详情（一行四条子弹会把列表撑过一整屏）
@@ -176,7 +185,7 @@ function InstallAction({
  *
  * | 来源 | 从哪来 | 谁决定它的状态 |
  * | --- | --- | --- |
- * | 内置 | `registry.ts`，编译进 App | `ownedGameIds`（买没买）+ `activeGameId` |
+ * | 内置 | `registry.ts`，编译进 App | `activeGameId`（是不是当前那款） |
  * | 插件 | `public/games/`，随包发 | `installedGames`（装没装）+ `activeGameId` |
  *
  * ⚠️ 锚点：`data-local-row` / `data-local-install` / `data-local-installed` /
@@ -187,14 +196,16 @@ function InstallAction({
 /*
  * 行尾那颗药丸。iOS 应用市场的一行**只有一个动作**（获取 / 打开），就这一颗。
  *
- * 三种配色对应三种语义，别再临时拼颜色：
- *   · MAIN  —— 这一步该做的事（安装 / 更新 / 花钻石买）
+ * 两种配色对应两种语义，别再临时拼颜色：
  *   · SOFT  —— 可做但不算主动作（设为当前）
- *   · MUTE  —— 状态，不可点（当前 / 敬请期待）
+ *   · MUTE  —— 状态，不可点（当前）
+ *
+ * ⚠️ 2026-10-28 删掉了 `MAIN`（亮黄那颗）。它只服务「💎 价格」购买按钮，
+ *   购买分支删掉之后一个读者都没有了。**别把它加回来** ——
+ *   这页现在没有「主动作」这一档：安装/更新走 `InstallAction` 自己的按钮。
  */
 const PILL_BASE =
   'btn h-8 shrink-0 rounded-full px-3.5 text-[12.5px] font-extrabold active:btn-press disabled:opacity-50'
-const PILL_MAIN = PILL_BASE + ' bg-sun-300 text-ink-900'
 const PILL_SOFT = PILL_BASE + ' border border-ink-200 bg-white text-ink-700'
 const PILL_MUTE =
   'grid h-8 shrink-0 place-items-center rounded-full bg-ink-100 px-3.5 text-[12.5px] font-extrabold text-ink-500'
@@ -315,10 +326,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
 
   const installedGames = useApp((s) => s.installedGames)
   const activeGameId = useApp((s) => s.activeGameId)
-  const ownedGameIds = useApp((s) => s.ownedGameIds)
   const setActiveGame = useApp((s) => s.setActiveGame)
-  const buyGame = useApp((s) => s.buyGame)
-  const pushToast = useApp((s) => s.pushToast)
 
   // 内置在前（农场是首款），插件按 `storefront.ts` 的书写顺序跟在后面。
   // 分组顺序由 `GAME_KIND_ORDER` 定，空分类不渲染。
@@ -330,20 +338,31 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
     }).filter((r): r is PluginRow => r !== null),
   ]
 
-  const buy = async (id: string) => {
-    const res = await buyGame(id)
-    pushToast({
-      kind: res.ok ? 'success' : 'warn',
-      title: res.ok ? '买好了' : '没买成',
-      detail: res.message,
-      emoji: res.ok ? '✅' : '⚠️',
-    })
-  }
+  /*
+    ⚠️ 这里原来有一个 `buy()` —— 点「💎 价格」调 `buyGame`。
+    2026-10-28 购买分支整段删掉之后它没有读者了，一起删。
+    （`buyGame` 本身还在 store 里：心愿商城的数字商品走的是另一条链，别顺手删。）
+  */
 
   return (
     <>
-      <Card title="游戏市场" emoji="🏬">
-        <p className="text-sm leading-relaxed text-ink-500">
+      <Card title="我的游戏" emoji="🎮">
+        {/*
+          2026-10-28 家长：「换成『游戏不是为了沉迷，而是为了激励孩子完成任务』，
+          优化下话语，让家长能认同」。
+
+          ⚠️ 那句话本身是「不只是 X 而是 Y」句式，**不能照抄上去** ——
+          本项目的文案口径见 `GamesSection.tsx` 头注释。这里把它拆成三句
+          陈述句：先做事、才换得到时间；时长有上限；游戏自己动不了账。
+          家长要的「认同」来自**这三条事实**，不是来自一句口号。
+        */}
+        <p className="text-sm leading-relaxed text-ink-600">
+          这些游戏是任务之后的奖励，不是随时能打开的消遣。
+          孩子做完任务、拿到积分，才换得到游戏时间；玩多久由上面的「每天玩多久」管着。
+          游戏自己发不了积分，也延长不了时长。
+        </p>
+
+        <p className="mt-2 text-sm leading-relaxed text-ink-500">
           点「详情」看每一款是让孩子练什么的。装好之后在这一行点「设为当前」，底部那个游戏按钮就是它。
         </p>
 
@@ -367,7 +386,6 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                   /* ---------- 内置：状态只有 当前 / 设为当前 / 要买 / 敬请期待 ---------- */
                   if (row.src === 'builtin') {
                     const { game } = row
-                    const owned = ownedGameIds.includes(game.id)
                     const isCurrent = activeGameId === game.id
                     return (
                       <RowShell
@@ -378,26 +396,24 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                         note="自带"
                         subtitle={game.tagline}
                         /*
-                          `comingSoon` **只显示状态**：不写价格、不给购买按钮 ——
-                          买了也没得玩，那就是「界面承诺了它做不到的事」。
+                          ⚠️ 2026-10-28 这里只剩「当前 / 设为当前」两个状态。
+                          原来还有「要买（💎 价格）」和「敬请期待」两条，家长：
+                            「这些都是已经购买的游戏。在这里只是控制，下载，
+                              安装，卸载，选择当前。」
+                          ⇒ 购买与占位两条分支整段删掉（`buyGame` / `priceMall` /
+                            `GameStatus` 在这张表里一个读者都没有了）。
+
+                          这是**删规则不是藏规则**：留下「没买就显示价格」的分支，
+                          将来某款游戏 `priceMall` 被填上，界面会突然冒出一个
+                          没有发币入口、按下去必然失败的购买按钮。
                         */
                         pill={
-                          game.status === 'comingSoon' ? (
-                            <span className={PILL_MUTE}>敬请期待</span>
-                          ) : !owned ? (
-                            <button
-                              disabled={!gateOpen}
-                              data-buy-game={game.id}
-                              onClick={() => void buy(game.id)}
-                              className={PILL_MAIN}
-                            >
-                              {CURRENCY.mall.emoji} {game.priceMall}
-                            </button>
-                          ) : isCurrent ? (
+                          isCurrent ? (
                             <span className={PILL_MUTE}>当前</span>
                           ) : (
                             <button
                               disabled={!gateOpen}
+                              data-builtin-set-current={game.id}
                               onClick={() => void setActiveGame(game.id)}
                               className={PILL_SOFT}
                             >

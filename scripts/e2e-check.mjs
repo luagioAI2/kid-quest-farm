@@ -17,7 +17,7 @@ import { makeProfileDir } from './lib/profile.mjs'
 import { qualityLabelRegex, readQualityLabels } from './lib/quality.mjs'
 // 币种显示名 / 图标从源码读，不在本脚本里再抄一份 —— 见 currency.mjs 文件头
 // （2026-10-16「丰收币 🌾」→「商城币 🎟️」就是抄了第二份的那次事故）
-import { COUPON, POINTS } from './lib/currency.mjs'
+import { COUPON, MALL, POINTS } from './lib/currency.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME_CANDIDATES = [
@@ -415,11 +415,24 @@ try {
     headerProbe.long.h === headerProbe.short.h && headerProbe.short.h > 0,
     `短名字 ${headerProbe.short.h}px → 长名字 ${headerProbe.long.h}px`,
   )
+  /*
+    2026-10-28：家长要求「顶部栏 积分前面显示钻石」⇒ 顶栏现在三颗币。
+    顺序也一起判：钻石必须**在积分前面**，不然「前面」这条要求没落地，
+    而三颗都在的判据照样绿。
+  */
+  const mallIdx = headerProbe.labels.findIndex((c) => c?.startsWith(MALL.name))
+  const pointsIdx = headerProbe.labels.findIndex((c) => c?.startsWith(POINTS.name))
   check(
-    `顶栏同时显示${POINTS.name}和${COUPON.name}`,
-    headerProbe.labels.some((c) => c?.startsWith(POINTS.name)) &&
+    `顶栏同时显示${MALL.name}、${POINTS.name}和${COUPON.name}`,
+    mallIdx >= 0 &&
+      pointsIdx >= 0 &&
       headerProbe.labels.some((c) => c?.startsWith(COUPON.name)),
     headerProbe.labels.join(' / ') || '一个都没找到',
+  )
+  check(
+    `★ ${MALL.name}排在${POINTS.name}前面`,
+    mallIdx >= 0 && pointsIdx >= 0 && mallIdx < pointsIdx,
+    `钻石在第 ${mallIdx + 1} 个、积分在第 ${pointsIdx + 1} 个（按 aria-label 顺序）`,
   )
   // 还原名字：后面几项会打印顶栏文字，改着名字会把输出搞乱
   await page.evaluate(async (prev) => {
@@ -1783,8 +1796,9 @@ try {
   // 否则"页面正文里没有余额牌"就成了"整屏都没有"，那是把功能删了而不是去重。
   const headerChip = await probeBalanceChips('任务')
   check(
-    `全局顶栏仍然显示${POINTS.name}和${COUPON.name}`,
+    `全局顶栏仍然显示${MALL.name}、${POINTS.name}和${COUPON.name}`,
     headerChip.headerChips >= 1 &&
+      headerChip.headerText.includes(MALL.emoji) &&
       headerChip.headerText.includes(POINTS.emoji) &&
       headerChip.headerText.includes(COUPON.emoji),
     headerChip.headerText,

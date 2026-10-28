@@ -666,13 +666,14 @@ try {
   await wait(800)
   await shot('12c-cash-ratio')
 
-  /* 11b / 11c. 设置 · 游戏 tab：游戏市场（2026-10-24 改成应用商店形态）
+  /* 11b / 11c. 设置 · 游戏 tab：我的游戏（2026-10-28 从「游戏市场」改名）
      ------------------------------------------------------------
-     这一屏是**家长真的会点**的地方，四块内容全是新的：
-       · ① 设置页上的「游戏市场」入口卡（三款游戏的图标）
-       · ② 市场列表 —— 每款一行：图标 / 名字 / 一句话 / 适龄 / 安装
-       · ③ 详情页 —— 帮助孩子 / 截图（可点开放大）/ 关于这款游戏
-       · ④ 装完之后市场那一行变「当前」+「经济参数」
+     这一屏是**家长真的会点**的地方：
+       · ⓪ 「每天玩多久」—— 到点锁游戏那一格（新；锁住那一屏在图 15）
+       · ① 列表 —— 每款一行：图标 / 名字 / 一句话 / 适龄 / 安装
+       · ② 详情页 —— 帮助孩子 / 截图（可点开放大）/ 关于这款游戏
+       · ③ 装完之后那一行变「当前」+「经济参数」
+       （钻石卡和在线商店卡 2026-10-28 删了，这一屏不再有那两块）
      不把它们放进图集，第 4 层走查对这一屏就等于没验（§12b / §13 同一个坑）。
 
      ★ 两张图不够了：**装之前**和**装之后**是两种界面。
@@ -1042,6 +1043,45 @@ try {
   })
   await wait(800)
   await shot('14-period-streak')
+
+  /* 15. 游戏时长锁（2026-10-28 新增的界面）
+     ------------------------------------------------------------
+     家长设了「每天玩多久」之后，玩满就把游戏换成一句「今天的游戏时间用完了」。
+     这一屏**只有设了上限才出现** —— 走查用的是全新档案（默认不限），
+     不主动设一次就永远拍不到，等于这块新界面没进图集。
+
+     ⚠️ 日期键必须在页面里按 `appDayKey` 的口径算（本地时区 + dayStartHour 偏移）。
+       写死一个日期串的话，跨天那几小时会算成「昨天」⇒ 归零 ⇒ 不锁 ⇒
+       拍出来是一张**正常的游戏画面**，而脚本一声不吭。 */
+  await page.evaluate(() => {
+    const pad = (n) => String(n).padStart(2, '0')
+    const s = window.__kqf__.getState().settings
+    const d = new Date(Date.now() - s.dayStartHour * 3600_000)
+    const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    return window.__kqf__.getState().updateSettings({
+      gameDailyMinutes: 30,
+      gameClock: { day, sec: 30 * 60 },
+    })
+  })
+  await wait(500)
+  // 底栏「游戏」那一格是当前游戏（锚点 tab-<id>），按排除法找，别写死 tab-farm
+  await page.evaluate(() => {
+    const staticTours = ['tab-tasks', 'tab-redeem', 'tab-wish', 'tab-points']
+    const b = [...document.querySelectorAll('[data-tour^="tab-"]')].find(
+      (x) => !staticTours.includes(x.getAttribute('data-tour')),
+    )
+    b?.click()
+  })
+  await wait(1000)
+  await shot('15-game-limit-locked')
+
+  // 收工：把上限关掉、回任务页 —— 后面的图不该带着一个锁住的游戏
+  await page.evaluate(() =>
+    window.__kqf__.getState().updateSettings({ gameDailyMinutes: 0, gameClock: undefined }),
+  )
+  await wait(300)
+  await page.evaluate(() => document.querySelector('[data-tour="tab-tasks"]')?.click())
+  await wait(600)
 
   /* 记下这批图是从**哪一版 bundle** 截的。
      `make-site-assets.py` 会把它复制成 `site/img/shots-source.txt`，

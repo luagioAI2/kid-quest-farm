@@ -1072,6 +1072,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
     timeScale: 1,
     showClock: true,
   },
+  /**
+   * 每天游戏时长上限。**默认 0 = 不限**。
+   *
+   * 家长 2026-10-28 才要的「沉迷设定」，老用户升级上来不该被突然锁住 ——
+   * 所以默认必须是「不限」，由家长自己去设。
+   */
+  gameDailyMinutes: 0,
   /** 默认家长密码：0000。首次打开即有密码保护，家长可在设置里改。 */
   parentPin: '0000',
 }
