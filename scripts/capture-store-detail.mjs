@@ -145,7 +145,38 @@ for (const vp of VIEWPORTS) {
       .then(() => true, () => false)
     check(`[${id}] 能打开详情`, sheetReady)
     if (!sheetReady) continue
-    await wait(600) // 等截图解码（webp 是懒加载的）
+    /*
+     * ★★ 别用固定 `wait(600)` 等 webp 解码：截图是 `loading="lazy"`，解码也是异步的。
+     *    固定值在整轮里会**随机**红两三款（实测 anthill / moestrike / melonjar /
+     *    redbutton 轮流红，每次都不一样），看着像「那几款的图坏了」。
+     *    ⇒ 判据是「所有 img 的 `naturalWidth > 0`」，轮询到为止。
+     *    ⚠️ 不 `scrollIntoView`：那会改变弹层的滚动位置，后面 `el.screenshot()`
+     *       截到的就不是家长看到的那一屏了。改成 `loading='eager'` + `decode()`。
+     */
+    await page.evaluate(async () => {
+      const sheet = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
+      if (!sheet) return
+      await Promise.all(
+        [...sheet.querySelectorAll('img')].map(async (im) => {
+          im.loading = 'eager'
+          try {
+            await im.decode()
+          } catch {
+            /* 解码失败交给下面的断言去报 */
+          }
+        }),
+      )
+    })
+    await page
+      .waitForFunction(
+        () => {
+          const sheet = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
+          const imgs = sheet ? [...sheet.querySelectorAll('img')] : []
+          return imgs.length > 0 && imgs.every((im) => im.naturalWidth > 0)
+        },
+        { timeout: 8000 },
+      )
+      .catch(() => {})
 
     const info = await page.evaluate(() => {
       const sheet = document.querySelector('[role="dialog"][aria-label="游戏详情"]')

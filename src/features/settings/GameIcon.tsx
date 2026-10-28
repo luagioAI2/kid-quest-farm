@@ -117,6 +117,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   renttower: Renttower,
   stackmeow: Stackmeow,
   cellguard: Cellguard,
+  redbutton: Redbutton,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -990,6 +991,39 @@ function Cellguard({ deep }: { deep: string }) {
         <rect x="28.4" y="32.8" width="10.2" height="3.6" rx="1.8" fill="#FFF3B0" stroke="#2A1A3E" strokeWidth="1" />
         <path d="M28.4 32.8l-2.6 1.8 2.6 1.8Z" fill="#FFD23F" stroke="#2A1A3E" strokeWidth=".8" strokeLinejoin="round" />
       </g>
+    </g>
+  )
+}
+
+/**
+ * 别按红按钮：一颗圆顶红按钮 + 三道光 + 一枚金币。
+ *
+ * ★ 不画手指：58px 下那五根指头会糊成一团白，反而看不出是按钮。
+ *   用「光 + 金币」表达「按下去会掉钱」，剪影靠那颗半球撑起来。
+ * ★ 半球要有**底座**（下面那道更暗的椭圆）：只画一个红圆是贴纸，
+ *   加一圈侧壁才有「按得下去」的厚度。
+ */
+function Redbutton({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 落地阴影 */}
+      <ellipse cx="32" cy="55.5" rx="20" ry="4.2" fill={deep} opacity=".32" />
+      {/* 侧壁（底座）：比顶面暗一档，制造厚度 */}
+      <ellipse cx="32" cy="46.5" rx="19.5" ry="8" fill="#A81526" />
+      {/* 顶面：上沿亮一档 */}
+      <ellipse cx="32" cy="42" rx="19.5" ry="12.6" fill="#E52D38" />
+      <ellipse cx="32" cy="39.6" rx="17.6" ry="10.4" fill="#F24A4A" />
+      {/* 高光：偏左上，和顶光方向一致 */}
+      <ellipse cx="25.4" cy="35.4" rx="6.4" ry="3.1" fill="#FFFFFF" opacity=".34" transform="rotate(-16 25.4 35.4)" />
+      {/* 按下时的三道光 */}
+      <g stroke="#FFFFFF" strokeWidth="1.9" strokeLinecap="round" opacity=".9">
+        <path d="M32 15.5v4.4" />
+        <path d="M24.2 18.6l1.9 3.4" />
+        <path d="M39.8 18.6l-1.9 3.4" />
+      </g>
+      {/* 金币：压在右上角，和按钮错开 */}
+      <circle cx="49.4" cy="21.6" r="6.6" fill="#FFD23F" stroke="#C98A12" strokeWidth="1" />
+      <circle cx="49.4" cy="21.6" r="4" fill="none" stroke="#E8A81C" strokeWidth="1.1" opacity=".85" />
     </g>
   )
 }

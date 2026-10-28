@@ -185,6 +185,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "758f56b723d3f683f3c631a35da94eb0db7109bad5a1719089611831ee6982be",
     "bytes": 307406,
     "assetBase": "/games/cellguard/"
+  },
+  {
+    "id": "redbutton",
+    "name": "别按红按钮",
+    "version": "1.0.0",
+    "url": "/games/redbutton/redbutton.plugin.mjs",
+    "sha256": "2a1cbab20d281e2af7d49a5d49dea4a213a55d3395834067b542347d67f31369",
+    "bytes": 1117038,
+    "assetBase": "/games/redbutton/"
   }
 ]
 

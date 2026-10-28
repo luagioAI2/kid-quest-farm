@@ -207,6 +207,15 @@ PLAN = [
         ("screenshots/store-3.png", "3"),
         ("screenshots/store-4.png", "4"),
     ]),
+    # 顺序：首页（标题 + 那颗大红按钮）→ 连击 12（宝箱 + 金币）→ 升级面板 → 扭蛋机。
+    # ⚠️ 第 2 张必须在**最后一按下之后立刻截**：连击文字只活 1.2 秒；
+    #    但又要先等 2.6 秒让「升级！技能点 +1」的 toast 淡出（它会压住成就那一行）。
+    ("redbutton", "redbutton", [
+        ("screenshots/store-1.png", "1"),
+        ("screenshots/store-2.png", "2"),
+        ("screenshots/store-3.png", "3"),
+        ("screenshots/store-4.png", "4"),
+    ]),
 ]
 
 WIDTH = 360
