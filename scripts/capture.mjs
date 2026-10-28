@@ -506,6 +506,45 @@ try {
     console.log('  ⚠️ 10c/10d 跳过：心愿商城列表里没找到「泡泡玛特」')
   }
 
+  /* 10e. 开箱页（数字商品兑换之后）——2026-10-28 补
+     ------------------------------------------------------------
+     为什么要有这一屏：数字商品（盲盒）**兑换那一刻就交付**，实物才要等
+     爸妈去淘宝买。两套文案共用 `committed` 状态，走查时最该看的就是
+     「孩子已经拿到游戏之后，界面还在不在说等爸妈确认 / 去购买」。
+
+     两条注意：
+     1. 必须**先回到列表**再点盲盒 —— 定价页的返回只回到详情，
+        少按一次就会在详情页里找 `.grid > button`（那里没有网格）。
+     2. 装包是真的（读 `public/games/` 的本地包），要轮询等开箱页出现，
+        不能 `wait(600)` 赌一把。 */
+  for (let i = 0; i < 2; i++) {
+    await page.evaluate(() => {
+      const b = document.querySelector('button[aria-label="返回"]')
+      b?.click()
+    })
+    await wait(450)
+  }
+  const priced = await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    await st().wishSetOffer('wish-blindbox', 20)
+    await window.__kqf__.addVouchers(100)
+    return true
+  })
+  if (priced && (await clickByText('游戏盲盒'))) {
+    await wait(700)
+    await clickByText('张兑换')
+    await page
+      .waitForFunction(() => document.body.innerText.includes('抽到了新游戏'), { timeout: 30000 })
+      .catch(() => console.log('  ⚠️ 10e 开箱页没出现：盲盒没换成功（先看 10b 有没有定价）'))
+    await wait(600)
+    await shot('10e-wish-box')
+    // 回到列表，别把「收下」留给下一步的设置页
+    await clickByText('收下')
+    await wait(600)
+  } else {
+    console.log('  ⚠️ 10e 跳过：列表里没找到「游戏盲盒」')
+  }
+
   /* 11. 设置页（孩子 tab） */
   await page.evaluate(async () => {
     // 清掉家长锁，免得点齿轮时被 PIN 拦住（PIN 归 e2e 测，截图脚本不管）

@@ -45,6 +45,18 @@ const TINT_BG: Record<WishTint, string> = {
   berry: 'bg-berry-100',
 }
 
+/**
+ * 这一单**东西已经给了**没有。
+ *
+ * 数字商品（盲盒 / 盒子）在兑换那一刻就交付，凭证是 `openedGameId`
+ * （装包成功才写）。实物要等爸妈去淘宝买，所以永远是 false。
+ *
+ * ⚠️ 判据用 `openedGameId` 而不是 `kind`：盒子装包失败会走 `wishCancel`
+ * 退券，那种单子不该被当成「已交付」。判据和 `wishRedeem` / `wishCancel`
+ * 里认的是同一个字段，三处口径一致。
+ */
+const isDelivered = (order?: { openedGameId?: string }) => !!order?.openedGameId
+
 type WishView =
   | { kind: 'list' }
   | { kind: 'detail'; itemId: string }
@@ -298,7 +310,7 @@ function BlindBoxHero({
             <Tag tone="gray">等爸妈开放</Tag>
           )}
           <Tag tone="plain">还能开出 {remaining.length} 款</Tag>
-          {order?.status === 'committed' && <Tag tone="amber">等爸妈确认</Tag>}
+          {order?.status === 'committed' && <Tag tone="green">已放进游戏柜</Tag>}
         </span>
       </span>
     </button>
@@ -344,6 +356,9 @@ function ItemCard({
         {alreadyOwned ? (
           <Tag tone="gray">已经有了</Tag>
         ) : order?.status === 'committed' ? (
+          /* ⚠️ 数字商品走不到这一支：`owned` 里已经包含
+             `redeemedGameIdsFrom(wishOrders)`，所以「兑换到手过」的盒子
+             永远先命中上面的 `alreadyOwned`。这里留着的只有实物。 */
           <Tag tone="amber">等爸妈确认</Tag>
         ) : offer ? (
           // 定价优先于「已告诉爸妈」：家长开放之后，卡片上该显示价格，
@@ -376,7 +391,7 @@ function DetailView({
 }: {
   item: WishItem
   offer: { voucherPrice: number } | undefined
-  order: { id: string; status: string } | undefined
+  order: { id: string; status: string; openedGameId?: string } | undefined
   balance: number
   owned: Set<string>
   onBack: () => void
@@ -390,6 +405,8 @@ function DetailView({
 
   const [busy, setBusy] = useState(false)
   const [pinOk, setPinOk] = useState(false)
+  /** 数字商品：家长要主动点一下「完成这一单」，闸门才展开（见下面的注释） */
+  const [pinOpen, setPinOpen] = useState(false)
   const settings = useApp((s) => s.settings)
   const needsPin = !!settings.parentPin && settings.protectParentActions !== false
 
@@ -513,8 +530,45 @@ function DetailView({
       )}
 
       <div className="mt-4">
-        {order?.status === 'committed' ? (
-          // 已兑换 = 订单在等家长。**密码闸门直接顶替按钮** ——
+        {order?.status === 'committed' && isDelivered(order) ? (
+          /*
+           * 数字商品：孩子**已经拿到了**（兑换那一刻就开箱/装包）。
+           *
+           * 所以这里不能把密码闸门摆成主内容 —— 他刚开完箱、游戏已经能玩，
+           * 点进来却看到「请爸爸妈妈来一下」，看着像这一单还没成交。
+           * 主内容写「已经放进游戏柜了」；家长那一侧只留一个小入口，
+           * 过了密码才展开「完成这一单」（里面还能取消、退回券）。
+           */
+          <div className="space-y-2">
+            <div className="rounded-2xl bg-grass-100 px-4 py-3 text-center text-sm font-extrabold text-grass-700">
+              ✅ 已经放进你的游戏柜了
+            </div>
+            {needsPin && !pinOk ? (
+              pinOpen ? (
+                <ParentPinPanel
+                  title="请爸爸妈妈来一下"
+                  hint="处理这一单需要密码"
+                  onPass={() => setPinOk(true)}
+                />
+              ) : (
+                <button
+                  onClick={() => setPinOpen(true)}
+                  className="btn h-11 w-full rounded-2xl bg-white text-sm font-extrabold text-ink-600 shadow-flat active:btn-press"
+                >
+                  👤 爸妈：完成这一单
+                </button>
+              )
+            ) : (
+              <button
+                onClick={() => onConfirm(order.id)}
+                className="btn h-11 w-full rounded-2xl bg-white text-sm font-extrabold text-ink-600 shadow-flat active:btn-press"
+              >
+                完成这一单
+              </button>
+            )}
+          </div>
+        ) : order?.status === 'committed' ? (
+          // 实物：已兑换 = 订单在等家长去外链买。**密码闸门直接顶替按钮** ——
           // 让面板和按钮同时出现，按钮就成了一个假闸门。
           needsPin && !pinOk ? (
             <ParentPinPanel
@@ -610,12 +664,13 @@ function OfferView({
    * 那时孩子根本没点过「想要这个」—— 页面却在替孩子撒谎。
    * 2026-10-28 截图走查发现（capture 的流程从没点过「想要这个」，
    * 定价页却写着这句），**结构断言完全看不出来**。
+   *
+   * ⚠️ **有单子就算**，不按状态筛。一开始只认 `wished/committed/confirmed`，
+   * 结果孩子**已经换过**（`done`）的商品，定价页说「孩子还没提过」——
+   * 又是一种撒谎，而且更离谱。`cancelled` 同理：他当时确实想要过。
+   * 这里只回答「他有没有表过态」，不回答「现在还想不想要」。
    */
-  const childAsked = wishOrders.some(
-    (o) =>
-      o.itemId === itemId &&
-      (o.status === 'wished' || o.status === 'committed' || o.status === 'confirmed'),
-  )
+  const childAsked = wishOrders.some((o) => o.itemId === itemId)
 
   const cur = wishOffers.find((o) => o.itemId === itemId && !o.closedAt)
   const [price, setPrice] = useState(cur?.voucherPrice ?? 30)
@@ -791,6 +846,16 @@ function ConfirmView({
 
   if (!order) return <EmptyState onBack={onBack} />
 
+  /**
+   * 数字商品：`openedGameId` 就是「已经交付」的凭证（装包成功才会写）。
+   *
+   * 实物这一页是**家长去外链买**的收银台；数字商品没有这一步 ——
+   * 游戏已经在孩子柜子里了，家长在这里只是把这一单收尾。
+   * 文案必须跟着分叉，否则会出现「App 不代收货款，买好之后点已经买好了」
+   * 这种对着一个已经解锁的游戏说的话。
+   */
+  const digital = isDelivered(order)
+
   const buy = () => {
     // 只在家长确认页出现外链 —— 孩子端读不到 `buyUrl`
     if (item?.buyUrl) window.open(item.buyUrl, '_blank', 'noopener,noreferrer')
@@ -807,7 +872,10 @@ function ConfirmView({
         >
           ←
         </button>
-        <span className="font-display text-base font-extrabold">确认兑换</span>
+        <span className="font-display text-base font-extrabold">
+          {/* 数字商品已经交付完了，标题再写「确认兑换」像是在让家长再确认一次 */}
+          {digital ? '这一单' : '确认兑换'}
+        </span>
         <span className="flex-1" />
         <span className="rounded-full bg-grape-100 px-2.5 py-1 text-[11px] font-extrabold text-grape-500">
           👤 家长
@@ -832,7 +900,7 @@ function ConfirmView({
           </span>
         </span>
         <span className="rounded-full bg-grass-100 px-2 py-0.5 text-[10px] font-extrabold text-grass-700">
-          待确认
+          {digital ? '已放进游戏柜' : '待确认'}
         </span>
       </div>
 
@@ -861,7 +929,9 @@ function ConfirmView({
           </button>
         )}
         <p className="mt-2.5 rounded-xl bg-sun-100 px-2.5 py-2 text-[11px] font-bold leading-relaxed text-sun-700">
-          📦 App 不代收货款。买好之后回到这里点「已经买好了」。
+          {digital
+            ? '🎮 游戏已经在孩子的游戏柜里了，这里只是把这一单收尾。'
+            : '📦 App 不代收货款。买好之后回到这里点「已经买好了」。'}
         </p>
       </div>
 
@@ -912,7 +982,7 @@ function ConfirmView({
           }}
           className="btn h-12 flex-1 bg-grass-500 text-base font-extrabold text-white active:btn-press"
         >
-          已经买好了
+          {digital ? '完成这一单' : '已经买好了'}
         </button>
       </div>
     </div>

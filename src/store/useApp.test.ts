@@ -2540,6 +2540,67 @@ describe('兑换券：不可逆约束 + 每轮闸门', () => {
     ).toEqual({ level: 3 })
   })
 
+  it('⑧ 确认 → 完成：只推进状态，券一动都不动', async () => {
+    // 整条流程的终点。它断了的话订单永远停在 confirmed，
+    // 家长那边看起来像「买完了但 App 不知道」，而且**没有任何报错**。
+    //
+    // 判据分开看状态和账本：只钉状态的话，「状态对了但券被退回去」
+    // 这种错会漏掉（退券是另一个函数，很容易被顺手调用）。
+    await postHarvest({ delta: 200, source: 'farm_harvest', memo: '测试注入' })
+    await postHarvest({ delta: -50, source: 'wish_redeem', memo: '心愿商城：泡泡玛特盲盒' })
+    await db.wishOrders.put({
+      id: 'wo_flow',
+      itemId: 'wish-popmart',
+      itemName: '泡泡玛特盲盒',
+      itemEmoji: '🧸',
+      kind: 'collectible',
+      voucherPrice: 50,
+      status: 'committed',
+      vouchersHeld: 50,
+      createdAt: Date.now(),
+      committedAt: Date.now(),
+    })
+    await useApp.getState().refresh()
+    const ledgerRows = useApp.getState().harvestLedger.length
+
+    await useApp.getState().wishConfirm('wo_flow')
+    await useApp.getState().refresh()
+    let row = await db.wishOrders.get('wo_flow')
+    expect(row?.status, 'committed → confirmed').toBe('confirmed')
+    expect(row?.confirmedAt, '要记时间戳').toBeGreaterThan(0)
+    expect(useApp.getState().harvestBalance, '确认时券不动').toBe(150)
+
+    await useApp.getState().wishDone('wo_flow')
+    await useApp.getState().refresh()
+    row = await db.wishOrders.get('wo_flow')
+    expect(row?.status, 'confirmed → done').toBe('done')
+    expect(row?.doneAt, '要记时间戳').toBeGreaterThan(0)
+    expect(useApp.getState().harvestBalance, '完成时券也不动（成交在 App 外面）').toBe(150)
+    expect(useApp.getState().harvestLedger, '整条流程不该多出任何流水').toHaveLength(ledgerRows)
+
+    // 已取消的单子不能被一次误点复活（`wishConfirm` 里有这道闸）
+    await db.wishOrders.put({
+      id: 'wo_dead',
+      itemId: 'wish-popmart',
+      itemName: '泡泡玛特盲盒',
+      itemEmoji: '🧸',
+      kind: 'collectible',
+      voucherPrice: 50,
+      status: 'cancelled',
+      vouchersHeld: 0,
+      createdAt: Date.now(),
+      cancelledAt: Date.now(),
+    })
+    await useApp.getState().refresh()
+    await useApp.getState().wishConfirm('wo_dead')
+    await useApp.getState().wishDone('wo_dead')
+    await useApp.getState().refresh()
+    expect(
+      (await db.wishOrders.get('wo_dead'))?.status,
+      'cancelled 不许被 confirm / done 复活',
+    ).toBe('cancelled')
+  })
+
   it('④ 「收进背包」之后还能卖出去 —— 收完地空了也要认这笔账', async () => {
     // 2026-09-15 由**第 4 层界面走查**抓出来的真 bug。
     //
