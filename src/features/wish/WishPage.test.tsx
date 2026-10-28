@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { db } from '@/db/db'
 import { useApp } from '@/store/useApp'
+import { STOREFRONT } from '@/games/storefront'
 import WishPage from './WishPage'
 
 /* ============================================================
@@ -114,5 +115,101 @@ describe('心愿商城：数字商品兑换之后', () => {
 
     expect(await screen.findByText(/确认兑换 · 去购买/)).toBeTruthy()
     expect(screen.queryByText(/已经放进你的游戏柜了/)).toBeNull()
+  })
+})
+
+describe('心愿商城：单个游戏就是那个游戏', () => {
+  /* 「一个游戏」不该被当成「盒子里的一张卡」：家长要判断值不值得让孩子
+     攒券换，靠的是截图和玩法说明。2026-10-28 用户原话：
+     「单个游戏就是游戏 不是盲盒」「点游戏的时候，也要展示类似设置里
+     游戏/详情页的东西」。 */
+  const GAME = STOREFRONT.find((s) => s.shots.length > 0)!
+
+  it('分类叫「游戏」，不叫「盒子」', async () => {
+    render(<WishPage />)
+    expect(await screen.findByRole('button', { name: '游戏' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '盒子' })).toBeNull()
+  })
+
+  it('点进游戏能看到截图 / 练什么 / 关于，截图还能点开', async () => {
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: new RegExp(GAME.name) }))
+
+    expect(await screen.findByText('截图')).toBeTruthy()
+    expect(screen.getByText('练什么')).toBeTruthy()
+    expect(screen.getByText('关于这款游戏')).toBeTruthy()
+    expect(screen.getByText(GAME.shots[0].caption), '截图得真的有').toBeTruthy()
+    expect(screen.getByText(GAME.learn[0]), '练什么得是这款游戏自己的').toBeTruthy()
+
+    // 点截图 → 放大层（Portal 到 body，aria-label 是「关闭大图」）
+    await user.click(screen.getByText(GAME.shots[0].caption))
+    expect(await screen.findByLabelText('关闭大图')).toBeTruthy()
+  })
+})
+
+describe('心愿商城：待家长处理的入口', () => {
+  /* 孩子换了东西之后，家长那边**没有任何提示** —— 只能逐个商品点开、
+     看卡片上的标记。列表顶部这一条是整条链路里「现在该谁动手」的唯一答案。 */
+  it('有待处理单子时，列表顶部写出几单、是什么', async () => {
+    await db.wishOrders.put(committedOrder({ openedGameId: 'renttower' }) as never)
+    await useApp.getState().refresh()
+
+    render(<WishPage />)
+    expect(await screen.findByText(/有 1 单在等爸妈处理/)).toBeTruthy()
+    expect(screen.getByText(/已放进游戏柜，等爸妈收尾/)).toBeTruthy()
+  })
+
+  it('实物单子说的是「等爸妈去商店买」', async () => {
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_toy',
+        itemId: 'wish-popmart',
+        itemName: '泡泡玛特盲盒',
+        itemEmoji: '🧸',
+        kind: 'collectible',
+        status: 'committed',
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    render(<WishPage />)
+    expect(await screen.findByText(/等爸妈去商店买/)).toBeTruthy()
+  })
+
+  it('单子处理完，入口就消失', async () => {
+    await db.wishOrders.put(
+      committedOrder({ openedGameId: 'renttower', status: 'done', doneAt: Date.now() }) as never,
+    )
+    await useApp.getState().refresh()
+
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+    expect(screen.queryByText(/在等爸妈处理/), '没有待办就不该摆这一条').toBeNull()
+  })
+
+  it('★ 点它只进详情，**不能**直连确认页（否则绕开家长密码）', async () => {
+    // 确认页上有「取消兑换」和「去商店购买」，而密码闸门只渲染在详情页底部。
+    // 这条入口如果直接跳确认页，孩子就能绕过家长密码去取消/外链 ——
+    // 2026-10-28 已经在详情页右上角那个「确认兑换」入口上踩过一次。
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_toy',
+        itemId: 'wish-popmart',
+        itemName: '泡泡玛特盲盒',
+        itemEmoji: '🧸',
+        kind: 'collectible',
+        status: 'committed',
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByText(/有 1 单在等爸妈处理/))
+
+    // 详情页：先撞家长密码（默认 pin = 0000）
+    expect(await screen.findByText('请爸爸妈妈来一下')).toBeTruthy()
+    expect(screen.queryByText('取消兑换'), '确认页的按钮不许在这里出现').toBeNull()
   })
 })

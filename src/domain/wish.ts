@@ -20,7 +20,7 @@ export const WISH_KIND_META: Record<
   { label: string; emoji: string; digital: boolean }
 > = {
   blindbox: { label: '盲盒', emoji: '🎁', digital: true },
-  gamebox: { label: '盒子', emoji: '🎮', digital: true },
+  gamebox: { label: '游戏', emoji: '🎮', digital: true },
   toy: { label: '玩具', emoji: '🧸', digital: false },
   study: { label: '学习', emoji: '📚', digital: false },
   collectible: { label: '收藏', emoji: '✨', digital: false },

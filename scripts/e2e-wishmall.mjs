@@ -620,10 +620,14 @@ const listAfterBox = await page.evaluate(() => {
   return {
     waiting: body.includes('等爸妈确认'),
     delivered: body.includes('已放进游戏柜'),
+    banner: body.includes('在等爸妈处理'),
   }
 })
 check('列表不再说「等爸妈确认」', !listAfterBox.waiting)
 check('列表写「已放进游戏柜」', listAfterBox.delivered)
+/* 家长端唯一的提示：孩子换了东西，列表顶部要说清有几单、是什么。
+   没有它，家长只能逐个商品点开看标记。 */
+check('列表顶部有「等爸妈处理」入口', listAfterBox.banner)
 
 // 详情：主内容是「已经拿到」，不是密码闸门 + 去购买
 await page.evaluate(() => {
@@ -682,6 +686,7 @@ const digitalDone = await page.evaluate(() => {
     doneAt: !!o?.doneAt,
     balance: s.harvestBalance,
     refunds: s.harvestLedger.filter((e) => e.source === 'wish_refund').length,
+    banner: document.body.innerText.includes('在等爸妈处理'),
   }
 })
 check('订单收尾到 done', digitalDone.status === 'done', String(digitalDone.status))
@@ -692,6 +697,94 @@ check(
   `${opened.balance} → ${digitalDone.balance}`,
 )
 check('收尾没多写退款流水', digitalDone.refunds === 1, `${digitalDone.refunds} 笔（前面取消那 1 笔）`)
+check('单子收尾后「等爸妈处理」入口消失', !digitalDone.banner)
+
+/* ---------- ⑫ 单个游戏：就是那个游戏，不是「盒子里的一张卡」 ----------
+ *
+ * 用户口径（2026-10-28）：「单个游戏就是游戏 不是盲盒」「点游戏的时候，
+ * 也要展示类似设置里游戏/详情页的东西」。所以这里要验三件事：
+ *   ① 分类叫「游戏」，界面上不出现「盒子 / 指定款」；
+ *   ② 详情里有截图 / 练什么 / 关于（和「设置 → 游戏 → 详情」同一份内容）；
+ *   ③ **换视图要回到顶部** —— 游戏卡片在列表很下面，滚下去点开，
+ *      不重置滚动就停在详情中段（截图/练什么），名字和兑换按钮全在屏幕外，
+ *      看着像「点了没反应」。
+ */
+console.log('\n── 单个游戏详情 ──')
+const scrolledToGames = await page.evaluate(() => {
+  const card = [...document.querySelectorAll('.grid > button')].find((x) =>
+    x.querySelector('svg'),
+  )
+  if (!card) return false
+  card.scrollIntoView({ block: 'center' })
+  return true
+})
+await wait(500)
+check('列表里能找到游戏卡片（有手绘图标）', scrolledToGames)
+
+const gameName = await page.evaluate(() => {
+  const card = [...document.querySelectorAll('.grid > button')].find((x) =>
+    x.querySelector('svg'),
+  )
+  const name = card?.innerText?.split('\n')[0] ?? ''
+  card?.click()
+  return name
+})
+await wait(800)
+await page.screenshot({ path: `${OUT}/08-game-detail.png` })
+
+const gameDetail = await page.evaluate(() => {
+  const body = document.body.innerText
+  const main = document.querySelector('main')
+  const back = document.querySelector('button[aria-label="返回"]')
+  return {
+    hasShots: body.includes('截图'),
+    hasLearn: body.includes('练什么'),
+    hasAbout: body.includes('关于这款游戏'),
+    // 分类文案：不该再有「盒子」「指定款」
+    boxWord: body.includes('盒子'),
+    specWord: body.includes('指定款'),
+    scrollTop: Math.round(main?.scrollTop ?? -1),
+    // 顶栏 + 返回按钮必须在视口内 —— 换视图回到顶部的判据
+    backTop: back ? Math.round(back.getBoundingClientRect().top) : -1,
+    shots: document.querySelectorAll('img').length,
+  }
+})
+check('游戏详情有截图', gameDetail.hasShots, `${gameDetail.shots} 张图`)
+check('游戏详情有「练什么」', gameDetail.hasLearn)
+check('游戏详情有「关于这款游戏」', gameDetail.hasAbout)
+check('界面上没有「盒子」「指定款」字样', !gameDetail.boxWord && !gameDetail.specWord)
+check('换视图后回到顶部（不是停在详情中段）', gameDetail.scrollTop === 0, `scrollTop=${gameDetail.scrollTop}`)
+check('返回按钮在视口内', gameDetail.backTop >= 0 && gameDetail.backTop < 200, `top=${gameDetail.backTop}`)
+
+// 截图能点开（放大层挂在 body 上，不能被底部导航压住）
+await page.evaluate(() => {
+  const img = document.querySelector('img')
+  img?.closest('button')?.click()
+})
+await wait(500)
+const zoomed = await page.evaluate(() => {
+  const layer = document.querySelector('button[aria-label="关闭大图"]')
+  if (!layer) return { open: false }
+  /* 「盖住了没有」只能靠 `elementFromPoint` —— 底部导航那一点命中的是谁，
+     就是谁在最上面。`z-index` 抬到 9999 也可能被外壳的层叠上下文关住
+     （`anim-fade` 是隐式层叠上下文，见 `components/Portal.tsx`）。 */
+  const hit = document.elementFromPoint(195, window.innerHeight - 40)
+  return {
+    open: true,
+    coversNav: !!hit && (hit === layer || layer.contains(hit)),
+  }
+})
+check('点截图能放大', zoomed.open)
+check('放大层盖住底部导航（Portal 生效）', zoomed.coversNav)
+await page.evaluate(() => {
+  document.querySelector('button[aria-label="关闭大图"]')?.click()
+})
+await wait(300)
+await page.evaluate(() => {
+  document.querySelector('button[aria-label="返回"]')?.click()
+})
+await wait(500)
+void gameName
 
 /* ---------- ⑩ 底栏 5 格在 390px 下不挤、不换行 ---------- */
 const navFit = await page.evaluate(() => {

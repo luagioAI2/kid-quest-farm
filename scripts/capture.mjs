@@ -545,6 +545,37 @@ try {
     console.log('  ⚠️ 10e 跳过：列表里没找到「游戏盲盒」')
   }
 
+  /* 10f. 单个游戏详情（2026-10-28 用户口径：单个游戏就是游戏，不是盲盒）
+     ------------------------------------------------------------
+     游戏卡片在列表**很下面**（实物之后），所以要先滚过去再点。
+     这一屏要看的正是「和设置里游戏详情是不是同一份东西」：
+     图标 / 版本 / 适龄 / 时长 / 体积 / 截图 / 练什么 / 关于。
+     ⚠️ 滚下去点开之后必须确认**回到了顶部** —— 不重置滚动的话
+     拍出来是详情中段（截图区），名字和兑换按钮都不在画面里。
+     ⚠️ 开箱那条 toast 会压住这一屏的标题，先等它自己消失（约 3.4 秒）。 */
+  await page
+    .waitForFunction(() => window.__kqf__.getState().toasts.length === 0, { timeout: 6000 })
+    .catch(() => {})
+  const gameCard = await page.evaluate(() => {
+    const card = [...document.querySelectorAll('.grid > button')].find((x) =>
+      x.querySelector('svg'),
+    )
+    if (!card) return null
+    card.scrollIntoView({ block: 'center' })
+    card.click()
+    return card.innerText.split('\n')[0]
+  })
+  if (gameCard) {
+    await wait(800)
+    await shot('10f-wish-game')
+    await page.evaluate(() => {
+      document.querySelector('button[aria-label="返回"]')?.click()
+    })
+    await wait(500)
+  } else {
+    console.log('  ⚠️ 10f 跳过：列表里没找到带手绘图标的游戏卡片')
+  }
+
   /* 11. 设置页（孩子 tab） */
   await page.evaluate(async () => {
     // 清掉家长锁，免得点齿轮时被 PIN 拦住（PIN 归 e2e 测，截图脚本不管）

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/store/useApp'
 import type { WishItem, WishTint } from '@/domain/types'
 import {
@@ -12,7 +12,11 @@ import {
 } from '@/domain/wish'
 import { formatPriceCents } from '@/domain/cash'
 import { WISH_BLINDBOX_ID, WISH_ITEMS, wishItemById } from '@/games/wishCatalog'
-import { STOREFRONT } from '@/games/storefront'
+import { STOREFRONT, type StorefrontEntry } from '@/games/storefront'
+import { LOCAL_GAMES } from '@/games/localGames'
+import { formatSize } from '@/games/size'
+import { GameIconArt } from '../settings/GameIcon'
+import { Portal } from '@/components/Portal'
 import { ParentPinPanel } from '../parent/ParentGate'
 
 /* ============================================================
@@ -56,6 +60,52 @@ const TINT_BG: Record<WishTint, string> = {
  * 里认的是同一个字段，三处口径一致。
  */
 const isDelivered = (order?: { openedGameId?: string }) => !!order?.openedGameId
+
+/**
+ * 单个游戏（`kind === 'gamebox'`）在**商店目录**里的那一条。
+ *
+ * 心愿商城的游戏是从 `STOREFRONT` 推导出来的（见 `games/wishCatalog.ts`），
+ * 所以点进一款游戏时能拿到截图 / 练什么 / 关于 —— 和「设置 → 游戏 → 详情」
+ * 摆的是同一份内容。**「一个游戏就是那个游戏」**，不是「盒子里的一张卡」：
+ * 没有截图、没有玩法说明，家长根本判断不了该不该给孩子换。
+ */
+function gameEntryOf(item: WishItem): StorefrontEntry | undefined {
+  if (item.kind !== 'gamebox' || !item.gameId) return undefined
+  return STOREFRONT.find((s) => s.id === item.gameId)
+}
+
+/**
+ * 游戏图标：和商店列表用的是**同一支手绘插画**（`GameIconArt`），不是 emoji。
+ *
+ * emoji 是「平色块 + 系统字形」，放在 58px 的卡片里和旁边的手绘图标一比，
+ * 一眼就是占位图。商店那边 2026-10-25 已经换过一轮，这里跟着走。
+ */
+function WishGameIcon({
+  entry,
+  size = 'md',
+}: {
+  entry: StorefrontEntry
+  size?: 'md' | 'lg'
+}) {
+  const box = size === 'lg' ? 'h-20 w-20 rounded-[22px]' : 'h-14 w-14 rounded-2xl'
+  return (
+    <span
+      aria-hidden
+      className={'shrink-0 overflow-hidden border-3 border-ink-900/10 shadow-flat ' + box}
+    >
+      <GameIconArt id={entry.id} tint={entry.tint} className="h-full w-full" />
+    </span>
+  )
+}
+
+/** 游戏详情里的小标签（适龄 / 一局多久 / 包多大） */
+function Meta({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full bg-ink-900/5 px-2.5 py-1 text-[11px] font-extrabold text-ink-600">
+      {children}
+    </span>
+  )
+}
 
 type WishView =
   | { kind: 'list' }
@@ -103,6 +153,21 @@ export default function WishPage() {
         o.itemId === itemId &&
         (o.status === 'wished' || o.status === 'committed' || o.status === 'confirmed'),
     )
+
+  /**
+   * 还等着**家长**处理的单子（已兑换 / 已确认）。
+   *
+   * 没有这一条的话，家长只能逐个商品点开、看卡片上的标记，才知道有单子
+   * 要处理 —— 孩子换了东西，家长那边一点提示都没有。整条链路里
+   * 「现在该谁动手」只在这一处有答案，所以摆在列表最上面。
+   */
+  const pendingOrders = useMemo(
+    () =>
+      wishOrders
+        .filter((o) => o.status === 'committed' || o.status === 'confirmed')
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [wishOrders],
+  )
 
   const goList = () => setView({ kind: 'list' })
 
@@ -152,6 +217,7 @@ export default function WishPage() {
         setFilter={setFilter}
         offerOf={offerOf}
         activeOrderOf={activeOrderOf}
+        pending={pendingOrders}
         balance={harvestBalance}
         owned={owned}
         onOpen={(itemId) => setView({ kind: 'detail', itemId })}
@@ -159,7 +225,35 @@ export default function WishPage() {
     )
   }
 
-  return <div className="page-col px-4 pb-28">{content}</div>
+  /**
+   * 换视图时**回到顶部**。
+   *
+   * 不重置的话：列表往下滚到「游戏」那一区（实物后面，要滚两三屏），
+   * 点进去看到的是详情页的**中段**（截图 / 练什么），名字、券价和
+   * 「用 N 张兑换」全在屏幕外 —— 看着像「点了没反应」。
+   * 2026-10-28 用 `_wish-game-probe.mjs` 拍出来才发现的。
+   *
+   * 滚动容器是外壳的 `<main>`（页面自己不是滚动容器），所以要从根节点
+   * 往上找第一个真正能滚的祖先，而不是只 `window.scrollTo`。
+   */
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    window.scrollTo(0, 0)
+    let el: HTMLElement | null = rootRef.current?.parentElement ?? null
+    while (el) {
+      if (el.scrollHeight > el.clientHeight) {
+        el.scrollTop = 0
+        break
+      }
+      el = el.parentElement
+    }
+  }, [view])
+
+  return (
+    <div ref={rootRef} className="page-col px-4 pb-28">
+      {content}
+    </div>
+  )
 }
 
 /* ============================================================
@@ -171,6 +265,7 @@ function ListView({
   setFilter,
   offerOf,
   activeOrderOf,
+  pending,
   balance,
   owned,
   onOpen,
@@ -179,6 +274,7 @@ function ListView({
   setFilter: (f: WishFilter) => void
   offerOf: (id: string) => ReturnType<typeof useApp.getState>['wishOffers'][number] | undefined
   activeOrderOf: (id: string) => ReturnType<typeof useApp.getState>['wishOrders'][number] | undefined
+  pending: ReturnType<typeof useApp.getState>['wishOrders']
   balance: number
   owned: Set<string>
   onOpen: (id: string) => void
@@ -217,6 +313,45 @@ function ListView({
           </div>
         </div>
       </header>
+
+      {/* 待家长处理的单子 —— 整条链路里「现在该谁动手」只有这一处答案。
+          没有它，家长要逐个商品点开、看卡片标记才知道孩子换了东西。
+
+          ⚠️ 点它只回到**商品详情**，不能直接进确认页：确认页上有
+          「取消兑换」和「去商店购买」，而密码闸门只渲染在详情页底部。
+          直连确认页 = 孩子绕开家长密码 —— 这个坑 2026-10-28 已经踩过一次
+          （当时是详情页右上角那个「确认兑换」入口）。 */}
+      {pending.length > 0 && (
+        <button
+          onClick={() => onOpen(pending[0].itemId)}
+          /* `aria-label` 是必须的：不加的话这个按钮的**可访问名**会把商品名
+             也拼进去，走查/测试里按商品名找卡片会一次命中两个元素。 */
+          aria-label={`待处理订单：${pending.length} 单`}
+          className="mt-3 flex w-full items-center gap-3 rounded-3xl bg-white p-3 text-left shadow-flat active:btn-press"
+        >
+          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-sun-100 text-xl">
+            🔔
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-extrabold text-ink-900">
+              有 {pending.length} 单在等爸妈处理
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] font-bold text-ink-500">
+              {pending
+                .slice(0, 2)
+                .map((o) => o.itemName)
+                .join('、')}
+              {pending.length > 2 ? ` 等 ${pending.length} 件` : ''} ·{' '}
+              {pending.every((o) => o.openedGameId)
+                ? '已放进游戏柜，等爸妈收尾'
+                : pending.every((o) => !o.openedGameId)
+                  ? '等爸妈去商店买'
+                  : '点这里去看'}
+            </span>
+          </span>
+          <span className="text-lg text-ink-500">›</span>
+        </button>
+      )}
 
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
         {chips.map((c) => (
@@ -331,6 +466,7 @@ function ItemCard({
   onOpen: () => void
 }) {
   const alreadyOwned = item.kind === 'gamebox' && !!item.gameId && owned.has(item.gameId)
+  const entry = gameEntryOf(item)
 
   return (
     <button
@@ -339,18 +475,18 @@ function ItemCard({
     >
       <span
         className={
-          'mb-2 flex aspect-[4/3] items-center justify-center rounded-2xl text-3xl ' +
+          'mb-2 flex aspect-[4/3] items-center justify-center rounded-2xl ' +
           TINT_BG[item.tint]
         }
       >
-        {item.emoji}
+        {/* 游戏用和商店同一支手绘图标，不用 emoji —— 后者在 58px 下像占位图 */}
+        {entry ? <WishGameIcon entry={entry} /> : <span className="text-3xl">{item.emoji}</span>}
       </span>
       <span className="px-0.5 text-sm font-extrabold leading-snug text-ink-900">
         {item.name}
       </span>
       <span className="mt-0.5 px-0.5 text-[11px] font-bold text-ink-500">
         {item.partnerName ?? WISH_KIND_META[item.kind].label}
-        {item.kind === 'gamebox' ? ' · 指定款' : ''}
       </span>
       <span className="mt-1.5 flex flex-wrap items-center gap-1 px-0.5">
         {alreadyOwned ? (
@@ -415,6 +551,12 @@ function DetailView({
   const boxRemaining = item.kind === 'blindbox' ? blindBoxRemaining(item.pool ?? [], [...owned]) : []
   const soldOut = item.kind === 'blindbox' && boxRemaining.length === 0
 
+  /** 单个游戏的商店条目 + 本地包信息（版本 / 体积） */
+  const gameEntry = gameEntryOf(item)
+  const localGame = gameEntry ? LOCAL_GAMES.find((g) => g.id === gameEntry.id) : undefined
+  /** 截图放大：必须 Portal 到 body，否则被页面外壳的层叠上下文关在小盒子里 */
+  const [zoom, setZoom] = useState<{ src: string; caption: string } | null>(null)
+
   const meta = WISH_KIND_META[item.kind]
 
   const doRedeem = async () => {
@@ -461,35 +603,68 @@ function DetailView({
         )}
       </div>
 
-      <div
-        className={
-          'mt-3 flex aspect-[4/3] items-center justify-center rounded-3xl text-7xl shadow-flat ' +
-          TINT_BG[item.tint]
-        }
-      >
-        {item.emoji}
-      </div>
+      {gameEntry ? (
+        /*
+         * 单个游戏：头部照「设置 → 游戏 → 详情」那一屏 —— 图标 + 版本 +
+         * 一句话玩法 + 适龄 / 时长 / 包大小。截图和玩法说明在下面。
+         *
+         * 为什么不用 emoji 大图：这里卖的是**一个具体的游戏**，
+         * 家长要判断「值不值得让孩子攒券换」，靠的是截图和玩法，
+         * 不是一颗 🎮。
+         */
+        <div className="mt-3 flex gap-3 rounded-3xl bg-white p-3.5 shadow-flat">
+          <WishGameIcon entry={gameEntry} size="lg" />
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-lg font-extrabold leading-snug text-ink-900">
+              {item.name}
+            </h2>
+            <p className="mt-0.5 text-[11px] font-bold text-ink-500">
+              游戏{localGame ? ` · v${localGame.version}` : ''}
+            </p>
+            <p className="mt-1.5 text-sm leading-snug text-ink-700">{gameEntry.pitch}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <Meta>{gameEntry.age}</Meta>
+              <Meta>{gameEntry.session}</Meta>
+              {localGame && <Meta>{formatSize(localGame.bytes)}</Meta>}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div
+            className={
+              'mt-3 flex aspect-[4/3] items-center justify-center rounded-3xl text-7xl shadow-flat ' +
+              TINT_BG[item.tint]
+            }
+          >
+            {item.emoji}
+          </div>
 
-      <div className="mt-4">
-        <h2 className="font-display text-xl font-extrabold leading-snug text-ink-900">
-          {item.name}
-        </h2>
-        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-ink-500">
-          <span className="rounded-full bg-white px-2 py-0.5 shadow-flat">
-            {meta.emoji} {item.kind === 'gamebox' ? '游戏盒子' : meta.label}
-          </span>
-          {item.partnerName && <span>{item.partnerName}</span>}
-          {item.ageRange && (
-            <span>
-              {item.ageRange[1] >= 99
-                ? `${item.ageRange[0]} 岁以上`
-                : `${item.ageRange[0]}–${item.ageRange[1]} 岁`}
-            </span>
-          )}
-        </p>
-      </div>
+          <div className="mt-4">
+            <h2 className="font-display text-xl font-extrabold leading-snug text-ink-900">
+              {item.name}
+            </h2>
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold text-ink-500">
+              <span className="rounded-full bg-white px-2 py-0.5 shadow-flat">
+                {meta.emoji} {meta.label}
+              </span>
+              {item.partnerName && <span>{item.partnerName}</span>}
+              {item.ageRange && (
+                <span>
+                  {item.ageRange[1] >= 99
+                    ? `${item.ageRange[0]} 岁以上`
+                    : `${item.ageRange[0]}–${item.ageRange[1]} 岁`}
+                </span>
+              )}
+            </p>
+          </div>
+        </>
+      )}
 
-      {item.note && <p className="mt-3 text-sm leading-relaxed text-ink-600">{item.note}</p>}
+      {/* 游戏的 `note` 就是 `pitch`（目录是推导出来的），上面已经写过了 */}
+      {item.note && !gameEntry && (
+        <p className="mt-3 text-sm leading-relaxed text-ink-600">{item.note}</p>
+      )}
 
       {/* 价格与券价**必须分层** —— 见文件头第 3 条 */}
       {item.priceCents != null && (
@@ -630,6 +805,81 @@ function DetailView({
           </button>
         )}
       </div>
+
+      {/*
+       * 单个游戏：把「设置 → 游戏 → 详情」里的三块内容搬过来 ——
+       * 截图 / 练什么 / 关于。放在兑换按钮**下面**，是为了不让说明
+       * 把「现在能不能换」挤出第一屏。
+       */}
+      {gameEntry && (
+        <>
+          <section className="mt-5">
+            <p className="text-sm font-extrabold text-ink-900">截图</p>
+            <p className="mt-0.5 text-[11px] font-bold text-ink-500">点一下能放大</p>
+            <div className="-mx-4 mt-2 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-4 pb-1">
+              {gameEntry.shots.map((s) => (
+                <button
+                  key={s.src}
+                  onClick={() => setZoom(s)}
+                  className="w-[132px] shrink-0 snap-start text-left active:scale-[.98]"
+                >
+                  <img
+                    src={s.src}
+                    alt=""
+                    loading="lazy"
+                    className="w-full rounded-xl border-2 border-ink-900/10 object-cover object-top"
+                  />
+                  <span className="mt-1 block text-[11px] leading-snug text-ink-500">
+                    {s.caption}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-5">
+            <p className="text-sm font-extrabold text-ink-900">练什么</p>
+            <ul className="mt-2 space-y-2">
+              {gameEntry.learn.map((line) => (
+                <li key={line} className="flex gap-2 text-sm leading-snug text-ink-700">
+                  <span className="mt-[3px] shrink-0 text-grass-600">·</span>
+                  <span className="min-w-0">{line}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="mt-5">
+            <p className="text-sm font-extrabold text-ink-900">关于这款游戏</p>
+            <div className="mt-2 space-y-2">
+              {gameEntry.about.map((p) => (
+                <p key={p} className="text-sm leading-relaxed text-ink-700">
+                  {p}
+                </p>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+
+      {/* 截图放大：`fixed` 必须挂在 body 上，否则被页面外壳的层叠上下文
+          关进小盒子，底部导航会压在大图上面（见 `components/Portal.tsx`）。 */}
+      {zoom && (
+        <Portal>
+          <button
+            onClick={() => setZoom(null)}
+            aria-label="关闭大图"
+            className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-ink-900/80 p-5"
+          >
+            <img
+              src={zoom.src}
+              alt=""
+              className="max-h-[80vh] w-auto max-w-full rounded-2xl object-contain"
+            />
+            <span className="text-center text-sm font-bold text-white/90">{zoom.caption}</span>
+          </button>
+        </Portal>
+      )}
     </div>
   )
 }
