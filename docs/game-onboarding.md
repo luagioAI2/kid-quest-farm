@@ -409,10 +409,11 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | 独立网页全白、canvas 0、**一个错都不报** | 把模块顶层 `await` 改成 `export async function start()` 后模块体不再自执行，而 `index.html` 还挂着 `<script src="./game.js">` ⇒ 什么都没跑 | 入口改成 `import { start }` + `start({container})`；判据是 canvas ≥ 1 **且** 截图颜色 ≥ 20 |
 | 整局没有音乐，且 **0 个 404** | 音乐是**流式变体**（`sound.manifest.json` 的 `variants[*].url`），静态扫和 `--browse` 都抓不到；清单路径还漏了 `A()` | 按清单里的 `bytes` 补抓并逐条比对字节数 |
 | 按钮看得见、点不到，控制台干净 | `mountDisplay({...})` 没给 `host` ⇒ 它量的是 `#app`/`document.body`（整个视口），canvas 比容器大，超出的部分在容器外 | 传 `host: container`；判据 `elementFromPoint(中心)` 仍在容器内 |
+| ★ 底部按钮**被裁掉**，手指够不到，而 e2e 全绿 | 布局函数量的是**自己的挂载根**，而挂载根的高度正是它写进去的 `--window-h`（`height:var(--window-h,100dvh)`）⇒ **循环**，永远停在 `100dvh`，比容器高 146px（`doodlederby` 的「03 送它去比赛」就这么没了） | 量宿主给的 `container`，**不量 root**；判据两条：`#dd-app` 尺寸 == 容器尺寸，且 `elementFromPoint(按钮中心)` 命中按钮自己 —— `.click()` 不走命中测试，只测它必绿 |
 
 ---
 
-## 附录：现有二十款（2026-10-28 快照）
+## 附录：现有二十一款（2026-10-28 快照）
 
 | id | 目录 | 包 | 经济 | 商城分类 |
 | --- | --- | --- | --- | --- |
@@ -436,6 +437,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `redbutton` | `task-games/redbutton` | 1.09 MB | 积分直接花（**不设币、不发券**，这一档的**第一下按键** 10，10 分钟内切回来不再收）；金币/宝石只买升级与扭蛋，不换券 | `chill` |
 | `guardshift` | `task-games/guardshift` | 4.30 MB | 积分直接花（**不设币、不发券**，点「出阵」10，**每局都收**，「重试」接着打不另收）；钻石只花在「永久强化」，不换券 | `chill` |
 | `hoopsneak` | `task-games/hoopsneak` | 4.32 MB | 积分直接花（**不设币、不发券**，**进一关** 10，每关都收，「重新开始」不另收）；星星只是 600 枚收集进度（解锁笔记本），不换券 | `chill` |
+| `doodlederby` | `task-games/doodlederby` | 4.22 MB | 积分直接花（**不设币、不发券**，点「03 送它去比赛」10，**每场都收**；画马/预览/起名/换赛制都不收）；名次与用时只在游戏存档里，不换券 | `chill` |
 
 包大小是 `localGames.ts` 里 `bytes` 的口径（`make-local-catalog` 现算），
 改完包要重算，否则这张表会和清单说的不是一回事。
@@ -447,7 +449,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 它的「进化经验」存在**游戏自己的存档**里，不进宿主账本 ——
 `manifest.coin` 只是闸门要求必填的占位。
 
-现在 `chill` 有十七款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit` / `deckrush` / `corgi` / `screamchick` / `sweetspin` / `renttower` / `stackmeow` / `cellguard` / `redbutton` / `guardshift` / `hoopsneak`），
+现在 `chill` 有十八款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit` / `deckrush` / `corgi` / `screamchick` / `sweetspin` / `renttower` / `stackmeow` / `cellguard` / `redbutton` / `guardshift` / `hoopsneak` / `doodlederby`），
 差别只在**收费点**：
 
 | 游戏 | 收费点 | 宽限 |
@@ -469,6 +471,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `redbutton` | 这一档的**第一下按键**（`pressManual()`，点击与空格都走它） | 10 分钟（放置点击器没有「一局」；`paidAt` 写存档。**进 tab 不收费**） |
 | `guardshift` | 每次「出阵」 | 无（一局制；**「重试」是接着打，不再收**；进 tab / 关卡列表 / 卡组页 / 图鉴都不收） |
 | `hoopsneak` | 每次**进一关** `enterLevel(i)`（标题「开始」/ 选关圆钮 / 结算「下一关」都走它） | 无（一关制；**HUD「重新开始」直接调 `startLevel`，不经过收费**；进 tab / 选关页 / 笔记本翻页都不收） |
+| `doodlederby` | 每次**开跑一场** `launchRace()`（参赛页「03 送它去比赛」/ 成绩单「再跑一场」都走它） | 无（一场制；**画马 / 3D 预览 / 起名 / 换赛制 / 比赛里「回画室」都不收** —— 画马是这款游戏的核心乐趣，收在这里等于把好玩的锁在付费墙后） |
 
 判据一句话：**游戏里有没有「一局」这个动作** —— 有就按局收（关卡 / 回合制 / 抓娃娃），
 没有（放置 / 养成）就进场收一次 + 宽限期，且 `paidAt` **必须写存档**（写内存变量等于切走就失效）。

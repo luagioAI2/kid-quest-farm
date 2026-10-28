@@ -120,6 +120,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   redbutton: Redbutton,
   guardshift: Guardshift,
   hoopsneak: Hoopsneak,
+  doodlederby: Doodlederby,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -1149,6 +1150,54 @@ function Hoopsneak({ deep }: { deep: string }) {
       {/* 球 */}
       <circle cx="20" cy="39.4" r="4.6" fill="#4A7BC8" stroke="#2C3444" strokeWidth="1.3" />
       <path d="M15.9 37.6c2.6 1.4 5.6 1.4 8.2 0" fill="none" stroke="#2C3444" strokeWidth=".8" opacity=".55" />
+    </g>
+  )
+}
+
+/**
+ * 画马赛跑：点阵纸上一匹蜡笔画的马，旁边一支蜡笔。
+ *
+ * 三件东西缺一不可：
+ *   ① **纸**是这款游戏的全部舞台（画室、预览、赛道都从这张纸长出来）；
+ *   ② **马必须是一笔画出来的折线**，不能画成实心剪影 —— 这款游戏的核心是
+ *      「你画的线会变成 3D 的管子」，实心马就把这件事说反了；
+ *   ③ **蜡笔**说明是「你自己画」，不是选一匹马。
+ * 线条用游戏里的蜡笔橙 `#E65C35`（不是墨色），因为玩家画出来的第一匹马就是橙的。
+ */
+function Doodlederby({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 落地阴影（`deep` = 卡片底色的深色档，和背景同源才不会显脏） */}
+      <ellipse cx="32" cy="58" rx="17" ry="4.2" fill={deep} opacity=".24" />
+      {/* 纸 */}
+      <rect x="9" y="6.5" width="46" height="49.5" rx="2.4" fill="#FCF8EA" stroke="#3F3A33" strokeWidth="1.5" />
+      {/* 纸上的点阵（只点几颗，58px 下再多就是噪点） */}
+      <g fill="#D5CFBB">
+        <circle cx="14" cy="13" r=".75" />
+        <circle cx="24" cy="11.5" r=".75" />
+        <circle cx="34" cy="13.5" r=".75" />
+        <circle cx="14.5" cy="21" r=".75" />
+      </g>
+      {/* 马：一条折线走完身子 → 脖子 → 头，腿另起四笔（和游戏里画法一致） */}
+      <g fill="none" stroke="#E65C35" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        {/* 身子 + 脖子 + 头 */}
+        <path d="M17.4 32.2 18 38.8 40.8 37.8 41.6 30.4 38.4 30.8 41.4 25.6 47 24 50.4 26.6 48.2 29.2 42.6 28.6" />
+        {/* 耳朵 */}
+        <path d="M44.6 25.2 45.4 22.6 46.6 24.8" />
+        {/* 尾巴 */}
+        <path d="M17.4 32.2 13.4 29.4 14.8 35.6" />
+        {/* 四条腿（前两条、后两条），末端各一小横当蹄子 */}
+        <path d="M39.4 37.6 40.2 45.4M36.2 37.9 35.8 45.2M21.8 38.4 20.8 45.6M25 38.2 25.4 45.4" />
+        <path d="M40.2 45.4h2.2M35.8 45.2h2.1M20.8 45.6h2.1M25.4 45.4h2.1" />
+      </g>
+      {/* 眼睛 */}
+      <circle cx="46.6" cy="26.4" r=".8" fill="#3F3A33" />
+      {/* 蜡笔：压在纸的左下角，斜着放 */}
+      <g transform="rotate(-26 21 51)">
+        <rect x="13.6" y="48.8" width="12.6" height="4.8" rx="1" fill="#E65C35" stroke="#3F3A33" strokeWidth="1" />
+        <rect x="23.2" y="48.8" width="3" height="4.8" rx=".8" fill="#C24A2A" />
+        <path d="M13.6 48.8 9.4 51.2 13.6 53.6Z" fill="#F6D9B8" stroke="#3F3A33" strokeWidth="1" strokeLinejoin="round" />
+      </g>
     </g>
   )
 }

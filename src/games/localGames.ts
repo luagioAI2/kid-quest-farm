@@ -212,6 +212,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "80e377474e3eb79aa8b186e0a437597ed6e1ed79e08ce1ea9582ca6b8507ccd0",
     "bytes": 4425730,
     "assetBase": "/games/hoopsneak/"
+  },
+  {
+    "id": "doodlederby",
+    "name": "画马赛跑",
+    "version": "1.0.0",
+    "url": "/games/doodlederby/doodlederby.plugin.mjs",
+    "sha256": "2a93a0c34852d6401622278c5180920a057b121b1e4dd5ce72a7aeb0ead0c95b",
+    "bytes": 4421556,
+    "assetBase": "/games/doodlederby/"
   }
 ]
 

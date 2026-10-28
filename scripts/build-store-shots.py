@@ -232,6 +232,12 @@ PLAN = [
         ("screenshots/store-3.png", "3"),
         ("screenshots/store-4.png", "4"),
     ]),
+    ("doodlederby", "doodlederby", [
+        ("screenshots/store-1.png", "1"),
+        ("screenshots/store-2.png", "2"),
+        ("screenshots/store-3.png", "3"),
+        ("screenshots/store-4.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

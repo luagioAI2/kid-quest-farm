@@ -139,6 +139,13 @@
       "version": "1.0.0",
       "file": "hoopsneak/hoopsneak.plugin.mjs",
       "assetBase": "hoopsneak/"
+    },
+    {
+      "id": "doodlederby",
+      "name": "画马赛跑",
+      "version": "1.0.0",
+      "file": "doodlederby/doodlederby.plugin.mjs",
+      "assetBase": "doodlederby/"
     }
   ]
 }

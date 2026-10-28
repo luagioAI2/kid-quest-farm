@@ -1,0 +1,36 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 4,
+  "bytes": 1023216
+ },
+ "assets": [
+  {
+   "file": "audio/doodle-percussion.m4a",
+   "bytes": 976782,
+   "sha256": "dae1ffc5468e992bafae89bb79087b559a52a0a2e3cdad9e7959dc4de993d596"
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/audioOff.png",
+   "bytes": 15311,
+   "sha256": "c82e3784acee369264aa9e6cfc91973729982db5a2154d6ecddfd1927414d676",
+   "w": 100,
+   "h": 100
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/audioOn.png",
+   "bytes": 15628,
+   "sha256": "aee49ff7b9151214178079eb860a341958ba54627c93d0b2636b05670a37a585",
+   "w": 100,
+   "h": 100
+  },
+  {
+   "file": "lib/kenney-game-icons/icons/leaderboardsComplex.png",
+   "bytes": 15495,
+   "sha256": "42fb5ca04f212198616268c213aa94b3ae126b4422b948b2a6ea15f4ae6d2caf",
+   "w": 100,
+   "h": 100
+  }
+ ]
+}

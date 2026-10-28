@@ -1,0 +1,374 @@
+{
+  "assets": {
+    "music.doodle": {
+      "kind": "music",
+      "loop": true,
+      "resolvedLoadPolicy": {
+        "mode": "stream",
+        "preload": "metadata"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 976782,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "priority": 0,
+          "sha256": "dae1ffc5468e992bafae89bb79087b559a52a0a2e3cdad9e7959dc4de993d596",
+          "url": "assets/audio/doodle-percussion.m4a"
+        }
+      }
+    },
+    "sfx.count": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "wav": {
+          "bytes": 10628,
+          "codec": "wav",
+          "id": "wav",
+          "mimeType": "audio/wav",
+          "pack": {
+            "id": "main",
+            "length": 10628,
+            "offset": 0
+          },
+          "priority": 0,
+          "sha256": "01d25d367638a7ef99e728afec2f0022de00da5c6e929d8acaf8cc915eb18001"
+        }
+      }
+    },
+    "sfx.finish": {
+      "kind": "ui",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "wav": {
+          "bytes": 65312,
+          "codec": "wav",
+          "id": "wav",
+          "mimeType": "audio/wav",
+          "pack": {
+            "id": "main",
+            "length": 65312,
+            "offset": 10628
+          },
+          "priority": 0,
+          "sha256": "4211c71553af4d638c4f7f3dced9b9316441f9d8569c54c15c4a1aa0d37047d2"
+        }
+      }
+    },
+    "sfx.go": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "wav": {
+          "bytes": 26506,
+          "codec": "wav",
+          "id": "wav",
+          "mimeType": "audio/wav",
+          "pack": {
+            "id": "main",
+            "length": 26506,
+            "offset": 75940
+          },
+          "priority": 0,
+          "sha256": "eca397049396fd1514a571e228377f97c8e00471ecd2d65849312dc8926209b6"
+        }
+      }
+    },
+    "sfx.hit": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "wav": {
+          "bytes": 15480,
+          "codec": "wav",
+          "id": "wav",
+          "mimeType": "audio/wav",
+          "pack": {
+            "id": "main",
+            "length": 15480,
+            "offset": 102446
+          },
+          "priority": 0,
+          "sha256": "4616cdb6685c7165a16186ada73aa92243f09cda3b64f70e7e0c1de0f86953d4"
+        }
+      }
+    },
+    "sfx.jump": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "wav": {
+          "bytes": 17684,
+          "codec": "wav",
+          "id": "wav",
+          "mimeType": "audio/wav",
+          "pack": {
+            "id": "main",
+            "length": 17684,
+            "offset": 117926
+          },
+          "priority": 0,
+          "sha256": "3cdd3653f718e70768f12fd17de84160aa1798945857166e071ee4f3d2527334"
+        }
+      }
+    },
+    "sfx.miss": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "wav": {
+          "bytes": 12392,
+          "codec": "wav",
+          "id": "wav",
+          "mimeType": "audio/wav",
+          "pack": {
+            "id": "main",
+            "length": 12392,
+            "offset": 135610
+          },
+          "priority": 0,
+          "sha256": "e8bcebed6ebae593cb8d2fb0f737915abb01941e909a8c542d1c6b97fa8ff26e"
+        }
+      }
+    },
+    "sfx.tap": {
+      "kind": "impact",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "wav": {
+          "bytes": 4896,
+          "codec": "wav",
+          "id": "wav",
+          "mimeType": "audio/wav",
+          "pack": {
+            "id": "main",
+            "length": 4896,
+            "offset": 148002
+          },
+          "priority": 0,
+          "sha256": "31d5de913e2a02f1b2c1ed72526b6fcd947a39279939ca4f07414f6a242c86c6"
+        }
+      }
+    }
+  },
+  "buses": {
+    "ambience": {
+      "gainDb": -3,
+      "parent": "sfx",
+      "userCategory": "sfx"
+    },
+    "impact": {
+      "gainDb": -1,
+      "parent": "sfx",
+      "userCategory": "sfx"
+    },
+    "master": {
+      "gainDb": -3,
+      "parent": null,
+      "userCategory": "master"
+    },
+    "music": {
+      "gainDb": 0,
+      "parent": "master",
+      "userCategory": "music"
+    },
+    "sfx": {
+      "gainDb": 0,
+      "parent": "master",
+      "userCategory": "sfx"
+    },
+    "ui": {
+      "gainDb": -2,
+      "parent": "sfx",
+      "userCategory": "sfx"
+    },
+    "voice": {
+      "gainDb": -2,
+      "parent": "master",
+      "userCategory": "voice"
+    }
+  },
+  "contentHash": "2a796e53c7f1adf75ac9b42b897df81f6f45a0e96b74442db35d986ee90b67d9",
+  "cues": {
+    "music.doodle": {
+      "assetIds": [
+        "music.doodle"
+      ],
+      "bus": "music",
+      "cooldownMs": 0,
+      "gainDb": -12,
+      "loop": true,
+      "polyphony": 1,
+      "priority": 20
+    },
+    "sfx.count": {
+      "assetIds": [
+        "sfx.count"
+      ],
+      "bus": "impact",
+      "cooldownMs": 0,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "sfx.finish": {
+      "assetIds": [
+        "sfx.finish"
+      ],
+      "bus": "ui",
+      "cooldownMs": 0,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "sfx.go": {
+      "assetIds": [
+        "sfx.go"
+      ],
+      "bus": "impact",
+      "cooldownMs": 0,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "sfx.hit": {
+      "assetIds": [
+        "sfx.hit"
+      ],
+      "bus": "impact",
+      "cooldownMs": 0,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "sfx.jump": {
+      "assetIds": [
+        "sfx.jump"
+      ],
+      "bus": "impact",
+      "cooldownMs": 0,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "sfx.miss": {
+      "assetIds": [
+        "sfx.miss"
+      ],
+      "bus": "impact",
+      "cooldownMs": 0,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    },
+    "sfx.tap": {
+      "assetIds": [
+        "sfx.tap"
+      ],
+      "bus": "impact",
+      "cooldownMs": 0,
+      "gainDb": 0,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5,
+      "syncRole": "impact",
+      "transientAnchorMs": 0
+    }
+  },
+  "duckRules": {},
+  "masterSafety": {
+    "attackSeconds": 0.003,
+    "deHarsh": {
+      "attackSeconds": 0.003,
+      "crossoverHz": 6000,
+      "kneeDb": 6,
+      "ratio": 4,
+      "releaseSeconds": 0.15,
+      "thresholdDb": -28
+    },
+    "kneeDb": 0,
+    "ratio": 20,
+    "releaseSeconds": 0.25,
+    "thresholdDb": -3
+  },
+  "mixStates": {},
+  "musicStates": {
+    "doodle": {
+      "crossfadeMs": 600,
+      "cueId": "music.doodle"
+    }
+  },
+  "packs": {
+    "main": {
+      "payloadBytes": 152898,
+      "payloadSha256": "4ba6ddb90bbfc6b65701f3686488181461b91f9c480e7331ed5a73da008c0464",
+      "url": "sound.pack"
+    }
+  },
+  "projectHash": "df7fa7a28f04efde7de4315e83f760b68914091ee9f772df4391353815951c0c",
+  "projectId": "doodle-derby",
+  "runtimePolicy": {
+    "lockedPlayback": "reject",
+    "maxConcurrentDecodes": 3
+  },
+  "schemaVersion": "1.0.0",
+  "voicePolicy": {
+    "busMax": {
+      "ambience": 4,
+      "impact": 8,
+      "music": 2,
+      "sfx": 16,
+      "ui": 8,
+      "voice": 4
+    },
+    "defaultCueMax": 6,
+    "globalMax": 24,
+    "stealPolicy": "lowest-priority-oldest"
+  }
+}
