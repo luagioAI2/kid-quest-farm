@@ -21,6 +21,10 @@ import type {
   RedeemRecord,
   Task,
   TaskInstance,
+  WishOffer,
+  WishOrder,
+  WishShipInfo,
+  WishShipSnapshot,
 } from '../domain/types'
 import {
   addItem,
@@ -32,6 +36,7 @@ import {
   currentHarvestBalance,
   currentMallBalance,
   db,
+  detachGameKv,
   DEFAULT_SETTINGS,
   getGameKv,
   listGameKv,
@@ -44,6 +49,8 @@ import {
   loadQuotaCarry,
   loadRedeemItems,
   loadRedeemRecords,
+  loadWishOffers,
+  loadWishOrders,
   ledgerTip,
   loadSettings,
   logFarmEvents,
@@ -66,6 +73,8 @@ import {
 } from '../db/db'
 import { DEFAULT_GAME_ID } from '../games/ids'
 import { GAMES, gameById, ownedByDefault, purchasedIdsFrom } from '../games/registry'
+import { wishItemById } from '../games/wishCatalog'
+import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom } from '../domain/wish'
 import { makeHostApi } from '../games/hostApi'
 import { importBundle, mountBundle } from '../games/loader'
 import { catalogPublicKeyRaw } from '../games/catalogKey'
@@ -195,6 +204,15 @@ interface AppState {
   /** 兑换商城：含下架，家长管理用 */
   allRedeemItems: RedeemItem[]
   redeemRecords: RedeemRecord[]
+  /**
+   * 心愿商城：**家长已经定价开放**的商品。
+   *
+   * 商品目录本身是常量（`games/wishCatalog.ts`），这里只有「这一家开不开放、
+   * 卖多少券」。没有对应行的商品 = 未开放 = 孩子只能表明意向。
+   */
+  wishOffers: WishOffer[]
+  /** 心愿单 / 兑换单。一条记录从 `wished` 走到 `done` */
+  wishOrders: WishOrder[]
   /** 农场最近发生的事件（给孩子看的「农场日志」） */
   farmEvents: FarmEvent[]
   /** 市场行情 */
@@ -417,6 +435,47 @@ interface AppState {
   fulfillRedeem: (recordId: string) => Promise<void>
   /** 今日已兑换次数（用于 limitPerDay 校验） */
   redeemedToday: (itemId: string) => number
+
+  /* ---- 心愿商城（2026-10-28） ---- */
+  /**
+   * 孩子「想要这个」。
+   *
+   * **不扣任何东西**，只是让家长在那边看到一个待定价的心愿。
+   * 已经有同一件商品的活跃单子时**不重复建单** —— 孩子连点两下不该出现两行。
+   */
+  wishExpress: (itemId: string) => Promise<void>
+  /**
+   * 孩子「确定兑换」：**扣兑换券** + 建单（`committed`）。
+   *
+   * 盲盒在这一步开奖（`pickBlindBox`），游戏盒子在下一步装包。
+   * 返回 `gameId` 让界面能弹开箱结果。
+   *
+   * ⚠️ 扣券和建单必须在**同一个事务**里：只扣券不建单，孩子的东西就凭空没了。
+   */
+  wishRedeem: (itemId: string) => Promise<{ ok: boolean; message: string; gameId?: string }>
+  /**
+   * 家长给商品定价（`voucherPrice > 0`）或关闭（`<= 0`）。
+   *
+   * 关闭是写 `closedAt` 而不是删行 —— 孩子之前换过的历史还要能解释。
+   */
+  wishSetOffer: (itemId: string, voucherPrice: number) => Promise<void>
+  /** 家长确认：已经去外链买了（`committed` → `confirmed`） */
+  wishConfirm: (orderId: string) => Promise<void>
+  /** 家长标记完成，可顺手存收货信息和成交单号（`confirmed` → `done`） */
+  wishDone: (
+    orderId: string,
+    patch?: { ship?: WishShipInfo; buyOrderNo?: string },
+  ) => Promise<void>
+  /**
+   * 取消 / 撤回。
+   *
+   * * `wished` → 直接撤，**不碰账本**（还没扣过）
+   * * `committed` / `confirmed` → **退券**（写一笔 `wish_refund`）
+   *
+   * ⚠️ 退券前必须在**事务内**重读状态。靠按钮 disabled 挡不住两个标签页同时点，
+   * 那样会退两次 —— 而账本只看 delta 之和，多退一次不会报错。
+   */
+  wishCancel: (orderId: string, reason?: string) => Promise<void>
 
   /* ---- 游戏（插件骨架，2026-10-14 起） ---- */
   /**
@@ -723,6 +782,8 @@ const BACKUP_ARRAY_FIELDS = [
   'checkInProgress',
   'redeemItems',
   'redeemRecords',
+  'wishOffers',
+  'wishOrders',
   'events',
 ] as const
 
@@ -738,7 +799,51 @@ const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
   'checkInProgress',
   'redeemItems',
   'redeemRecords',
+  'wishOrders',
 ])
+
+/**
+ * 备份里的收货信息：**只留省市区 + 手机尾号**（`docs/wish-mall-spec.md` §9.1）。
+ *
+ * `wishOrders` 现在会进备份，而 `ship` 里是收货人姓名 + 手机号 + 家庭详细地址
+ * —— 绑在**儿童**账号上。整表原样导出等于「备份文件里躺着一份小孩住址」，
+ * 而这个文件通常被丢进微信 / 网盘里传来传去。所以导出前必须裁。
+ */
+function shipSnapshotOf(ship: WishShipInfo | undefined): WishShipSnapshot | undefined {
+  if (!ship) return undefined
+  const digits = typeof ship.phone === 'string' ? ship.phone.replace(/[^0-9]/g, '') : ''
+  return {
+    region: typeof ship.region === 'string' ? ship.region : '',
+    phoneTail: digits.slice(-4),
+  }
+}
+
+/**
+ * 导出用：把一条订单裁成「可以进备份」的样子。
+ *
+ * `ship` 整段丢掉，只换成 `shipSnapshot`。**不要图省事写 `{...o, ship: undefined}`**
+ * —— `JSON.stringify` 会连 `ship: undefined` 一起省掉，看着没事，但只要有人
+ * 把 `undefined` 改成 `{}` 或者忘了这段，住址就跟着出去了，而且没有任何报错。
+ */
+function orderToBackup(o: WishOrder): WishOrder {
+  const { ship, ...rest } = o
+  const snapshot = shipSnapshotOf(ship)
+  return snapshot ? { ...rest, shipSnapshot: snapshot } : rest
+}
+
+/**
+ * 导入用：**再裁一次**。
+ *
+ * 备份文件是用户手里可以随便改的，老版本 App 导出的文件里也可能真的带着
+ * `ship`（那时还没这条规矩）。把外部输入当可信 = 迟早有一份带地址的备份
+ * 被恢复进库里，然后跟着下一次导出再传播出去。
+ */
+function orderFromBackup(o: WishOrder): WishOrder {
+  const { ship, ...rest } = o
+  if (!ship) return rest
+  const snapshot = shipSnapshotOf(ship)
+  return snapshot ? { ...rest, shipSnapshot: snapshot } : rest
+}
 
 function validateBackup(d: Record<string, unknown>): string | null {
   for (const key of BACKUP_ARRAY_FIELDS) {
@@ -1086,6 +1191,8 @@ async function doRefresh(
     redeemItems,
     allRedeemItems,
     redeemRecords,
+    wishOffers,
+    wishOrders,
     farmEvents,
     quotaCarry,
   ] = await Promise.all([
@@ -1108,6 +1215,8 @@ async function doRefresh(
     loadRedeemItems(),
     loadAllRedeemItems(),
     loadRedeemRecords(),
+    loadWishOffers(),
+    loadWishOrders(),
     loadFarmEvents(40),
     loadQuotaCarry(),
   ])
@@ -1140,6 +1249,8 @@ async function doRefresh(
     redeemItems,
     allRedeemItems,
     redeemRecords,
+    wishOffers,
+    wishOrders,
     farmEvents,
     market,
     balance,
@@ -1547,6 +1658,8 @@ export const useApp = create<AppState>((set, get) => ({
   redeemItems: [],
   allRedeemItems: [],
   redeemRecords: [],
+  wishOffers: [],
+  wishOrders: [],
   farmEvents: [],
   market: createInitialMarket(PRODUCE_BASE_PRICE),
   balance: 0,
@@ -2931,6 +3044,280 @@ export const useApp = create<AppState>((set, get) => ({
     await get().refresh()
   },
 
+  /* ================= 心愿商城 ================= */
+
+  /**
+   * 孩子「想要这个」。
+   *
+   * 不扣任何东西。已经有活跃单子时**直接返回** —— 孩子连点两下不该出现两行，
+   * 而且「想要」这件事重复表达一次也没有意义。
+   */
+  wishExpress: async (itemId) => {
+    const item = wishItemById(itemId)
+    if (!item) return
+
+    const active = get().wishOrders.find(
+      (o) =>
+        o.itemId === itemId &&
+        (o.status === 'wished' || o.status === 'committed' || o.status === 'confirmed'),
+    )
+    if (active) return
+
+    const offer = get().wishOffers.find((o) => o.itemId === itemId && !o.closedAt)
+    await db.wishOrders.put({
+      id: uid('wo'),
+      itemId,
+      itemName: item.name,
+      itemEmoji: item.emoji,
+      kind: item.kind,
+      partnerName: item.partnerName,
+      voucherPrice: offer?.voucherPrice ?? 0,
+      status: 'wished',
+      vouchersHeld: 0,
+      createdAt: Date.now(),
+    })
+
+    get().pushToast({
+      kind: 'info',
+      title: `已经告诉爸妈：想要「${item.name}」`,
+      detail: '他们看到之后会给它定一个兑换券的价格',
+      emoji: '💌',
+    })
+    await get().refresh()
+  },
+
+  /**
+   * 孩子「确定兑换」。
+   *
+   * ## 顺序是有讲究的
+   *
+   * 1. **先算能不能开**（盲盒池子空了就到此为止，不能先扣券）
+   * 2. **再在一个事务里扣券 + 建单**（只扣券不建单 = 孩子的东西凭空没了）
+   * 3. **最后装包**（网络 IO 不能放进事务）。装失败就退券 —— 见下。
+   *
+   * ## 为什么装包失败要退券
+   *
+   * 游戏类商品的「交付」就是装包。装不上等于没给东西，券留着没有任何理由。
+   * 退券走 `wishCancel`，和「家长取消」是同一条路 —— 两处各写一遍退款逻辑，
+   * 迟早有一处漏了 `status` 判断，然后就会退两次。
+   */
+  wishRedeem: async (itemId) => {
+    const item = wishItemById(itemId)
+    if (!item) return { ok: false, message: '没有这件商品' }
+
+    const offer = get().wishOffers.find((o) => o.itemId === itemId && !o.closedAt)
+    if (!offer || offer.voucherPrice <= 0) {
+      return { ok: false, message: '爸妈还没给它定价' }
+    }
+
+    const preview = planWishRedeem(offer.voucherPrice, get().harvestBalance)
+    if (!preview.affordable) {
+      return { ok: false, message: `还差 ${preview.shortfall} 张兑换券` }
+    }
+
+    // 已拥有 = 账本买过的 + 装上的插件 + **心愿单里兑换到手过的**。
+    //
+    // 第三个来源不能省：`uninstallGame` 会把包和存档一起删掉，删完之后
+    // 前两个来源都认不出来 —— 盒子会变回可兑换、盲盒会把它放回池子，
+    // 孩子就被扣第二次券（详见 `redeemedGameIdsFrom` 的注释）。
+    const owned = new Set<string>([
+      ...get().ownedGameIds,
+      ...Object.keys(get().installedGames),
+      ...redeemedGameIdsFrom(get().wishOrders),
+    ])
+
+    let gameId: string | undefined
+    if (item.kind === 'blindbox') {
+      const picked = pickBlindBox(item.pool ?? [], [...owned])
+      // ⚠️ 池子空了必须**在这里**拦住。再往下就扣券了，扣完才发现没得开。
+      if (!picked) return { ok: false, message: '这些游戏你都有啦，等新的再来开' }
+      gameId = picked
+    } else if (item.kind === 'gamebox') {
+      if (!item.gameId) return { ok: false, message: '这款游戏没配好' }
+      if (owned.has(item.gameId)) return { ok: false, message: '这个游戏你已经有了' }
+      gameId = item.gameId
+    }
+
+    const now = Date.now()
+    const freshId = uid('wo')
+    const box: { ok: boolean; id: string } = { ok: true, id: freshId }
+
+    await db.transaction('rw', [db.harvestLedger, db.wishOrders], async () => {
+      const tip = await harvestTip()
+      // 事务内**重新算一次**：外面那份只是给 UI 看的预览。
+      // 两个标签页同时点「兑换」时，用旧余额算会把已经花掉的券再花一次。
+      const live = planWishRedeem(offer.voucherPrice, tip.balance)
+      if (!live.affordable) {
+        box.ok = false
+        return
+      }
+
+      await db.harvestLedger.put({
+        id: `hv_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+        delta: -live.price,
+        balanceAfter: tip.balance - live.price,
+        source: 'wish_redeem',
+        refId: item.id,
+        memo: `心愿商城：${item.name}`,
+        createdAt: tip.createdAt,
+      })
+
+      // 同一件商品如果之前只是「想要」，**复用那一行** ——
+      // 一条记录走完全程，历史里不会出现「想要一条、兑换一条」两行。
+      const existed = await db.wishOrders
+        .where('itemId')
+        .equals(itemId)
+        .filter((o) => o.status === 'wished')
+        .first()
+      if (existed) box.id = existed.id
+
+      await db.wishOrders.put({
+        id: box.id,
+        itemId,
+        itemName: item.name,
+        itemEmoji: item.emoji,
+        kind: item.kind,
+        partnerName: item.partnerName,
+        voucherPrice: live.price,
+        status: 'committed',
+        vouchersHeld: live.price,
+        openedGameId: gameId,
+        createdAt: existed?.createdAt ?? now,
+        committedAt: now,
+      })
+    })
+
+    if (!box.ok) return { ok: false, message: '兑换券不够啦' }
+
+    // 游戏类：真正交付 = 装包。失败就把券退回去。
+    if (gameId) {
+      const res = await get().installLocalGame(gameId)
+      if (!res.ok) {
+        await get().wishCancel(box.id, '游戏没装好')
+        return { ok: false, message: `游戏没装好，券已经退回来了：${res.message}` }
+      }
+    }
+
+    get().pushToast({
+      kind: 'reward',
+      title: `兑换成功：${item.name}`,
+      detail: gameId ? '已经放进你的游戏柜啦' : '等爸爸妈妈去买',
+      emoji: item.emoji,
+    })
+    await get().refresh()
+    return { ok: true, message: '兑换成功', gameId }
+  },
+
+  wishSetOffer: async (itemId, voucherPrice) => {
+    const price = Math.round(voucherPrice)
+    const now = Date.now()
+    if (price > 0) {
+      // `put` 整行覆盖 —— 重新开放会顺手清掉旧的 `closedAt`，这是想要的
+      await db.wishOffers.put({ itemId, voucherPrice: price, openedAt: now })
+    } else {
+      const cur = await db.wishOffers.get(itemId)
+      // 关闭写 `closedAt`，**不删行** —— 孩子之前换过的历史还要能解释
+      if (cur) await db.wishOffers.update(itemId, { closedAt: now })
+    }
+    await get().refresh()
+  },
+
+  wishConfirm: async (orderId) => {
+    const row = await db.wishOrders.get(orderId)
+    // 只有「已兑换」能往前走。已取消的单子不能被一次误点复活。
+    if (!row || row.status !== 'committed') return
+    await db.wishOrders.update(orderId, { status: 'confirmed', confirmedAt: Date.now() })
+    await get().refresh()
+  },
+
+  wishDone: async (orderId, patch) => {
+    const row = await db.wishOrders.get(orderId)
+    if (!row || (row.status !== 'committed' && row.status !== 'confirmed')) return
+
+    const now = Date.now()
+    const next: Partial<WishOrder> = { status: 'done', doneAt: now }
+    if (patch?.buyOrderNo) next.buyOrderNo = patch.buyOrderNo
+    if (patch?.ship) {
+      // 收货信息**自动过期**：30 天后由启动清理抹掉（见 `purgeOldWishShip`）。
+      // 不指望用户手动删 —— 没人会回来删自己的地址。
+      next.ship = { ...patch.ship, purgeAfter: now + 30 * 24 * 60 * 60 * 1000 }
+    }
+    await db.wishOrders.update(orderId, next)
+    await get().refresh()
+  },
+
+  wishCancel: async (orderId, reason) => {
+    const now = Date.now()
+    const box = { refunded: 0, deliveredGame: undefined as string | undefined }
+
+    await db.transaction('rw', [db.harvestLedger, db.wishOrders], async () => {
+      const row = await db.wishOrders.get(orderId)
+      if (!row) return
+
+      // 已经结束的单子直接返回。**这一步就是防重复退款的全部** ——
+      // 按钮 disabled 挡不住两个标签页同时点，而账本只看 delta 之和，
+      // 多退一次不会报错，只会让余额悄悄变多。
+      if (row.status !== 'wished' && row.status !== 'committed' && row.status !== 'confirmed') {
+        return
+      }
+
+      // 记下来：这个订单交付过哪款游戏。事务外要把安装摘掉 ——
+      // 删 `gameKv` 的行不属于这个事务（另一张表），而且它失败也不该回滚退款。
+      box.deliveredGame = row.openedGameId
+
+      if (row.status !== 'wished') {
+        const tip = await harvestTip()
+        await db.harvestLedger.put({
+          id: `hv_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+          delta: row.vouchersHeld,
+          balanceAfter: tip.balance + row.vouchersHeld,
+          source: 'wish_refund',
+          refId: row.itemId,
+          memo: `取消兑换退回：${row.itemName}`,
+          createdAt: tip.createdAt,
+        })
+        box.refunded = row.vouchersHeld
+      }
+
+      await db.wishOrders.update(orderId, {
+        status: 'cancelled',
+        cancelledAt: now,
+        cancelReason: reason,
+      })
+    })
+
+    /*
+     * 数字商品：券退回去了，**游戏必须一起收回**。
+     *
+     * 不收回就是「券退回来 + 游戏还装着」= 白拿一个游戏，而且
+     * `redeemedGameIdsFrom` 只认 committed/confirmed/done，取消之后
+     * 这个游戏又变回「没买过」，孩子可以**再兑换一次**。
+     *
+     * 用 `detachGameKv` 而不是 `clearGameKv`：只摘安装（包 + 资源根），
+     * **保留存档** —— 撤销的是这笔交易，不是孩子玩出来的进度。
+     *
+     * 装包失败那条路也会走到这里（`wishRedeem` 装不上就 `wishCancel`），
+     * 那时 `gameKv` 里本来就没有包，删 0 行，无副作用。
+     */
+    if (box.deliveredGame) {
+      await detachGameKv(box.deliveredGame)
+      if (get().activeGameId === box.deliveredGame) {
+        // 正在玩的就是它 → 回落，否则底部导航会指向一个已经不存在的游戏
+        await get().updateSettings({ activeGame: DEFAULT_GAME_ID })
+      }
+    }
+
+    if (box.refunded > 0) {
+      get().pushToast({
+        kind: 'info',
+        title: `已退回 ${box.refunded} 张兑换券`,
+        detail: box.deliveredGame ? '游戏已收回，进度还在' : undefined,
+        emoji: '🎫',
+      })
+    }
+    await get().refresh()
+  },
+
   /* ================= 游戏（插件骨架） ================= */
 
   setActiveGame: async (id) => {
@@ -3210,6 +3597,8 @@ export const useApp = create<AppState>((set, get) => ({
       checkInProgress,
       redeemItems,
       redeemRecords,
+      wishOffers,
+      wishOrders,
       farmEvents,
       settings,
       meta,
@@ -3229,6 +3618,8 @@ export const useApp = create<AppState>((set, get) => ({
       db.checkInProgress.toArray(),
       db.redeemItems.toArray(),
       db.redeemRecords.toArray(),
+      db.wishOffers.toArray(),
+      db.wishOrders.toArray(),
       db.farmEvents.toArray(),
       loadSettings(),
       db.meta.toArray(),
@@ -3238,7 +3629,14 @@ export const useApp = create<AppState>((set, get) => ({
     ])
     return {
       app: 'kid-quest-farm',
-      version: 2,
+      /**
+       * 备份格式版本。**导入端不看它**（只认 `app` 和 `data`），
+       * 所以老文件照样能读；它只是给「人」和排障用的标记。
+       *
+       * v3（2026-10-28）：`data` 里新增 `wishOrders`，且其中的收货信息
+       * 一律是脱敏快照（`shipSnapshot`），不会有 `ship`。见 spec §9.1。
+       */
+      version: 3,
       exportedAt: Date.now(),
       data: {
         tasks,
@@ -3264,6 +3662,27 @@ export const useApp = create<AppState>((set, get) => ({
         checkInProgress,
         redeemItems,
         redeemRecords,
+        /**
+         * **家长给商品定的券价**（哪件开放、卖多少张）。
+         *
+         * 这是用户自己录入的数据，不在商品目录常量里（目录只有「有什么」）。
+         * 不导出的话，换机之后**所有商品都变回「等爸妈开放」** —— 孩子点进去
+         * 什么也换不了，家长得把每一件重新定一次价，而且没有任何提示说
+         * 「你的定价没跟过来」。
+         */
+        wishOffers,
+        /**
+         * 愿望单订单。**必须导出** —— 里面有 `vouchersHeld`（这一单押着的券）。
+         *
+         * 漏掉的后果不是「历史没了」那么轻：券在 `committed` 时已经从余额里扣走，
+         * 扣券的凭据就是这个字段。导入后订单消失 ⇒ 券被扣了却**没有任何订单
+         * 可以退**（`cancelOrder` 找不到行），孩子的券凭空蒸发，且不报错。
+         * 2026-10-28 补导出时发现（当时只导了 `redeemRecords`）。
+         *
+         * ⚠️ 必须过 `orderToBackup` 裁掉 `ship`（收货人/手机/地址），
+         *    见那个函数的注释和 spec §9.1。
+         */
+        wishOrders: wishOrders.map(orderToBackup),
         events: farmEvents,
         market,
         settings,
@@ -3337,6 +3756,11 @@ export const useApp = create<AppState>((set, get) => ({
         checkInProgress: pickArray<CheckInProgress>(d.checkInProgress) ?? [],
         redeemItems: pickArray<RedeemItem>(d.redeemItems) ?? [],
         redeemRecords: pickArray<RedeemRecord>(d.redeemRecords) ?? [],
+        // 老备份里没有愿望单 → null → 空数组（不写任何行，等于没这功能）
+        // ⚠️ 主键是 `itemId`，**不是 `id`** —— 和背包同一个坑，见 `pickArray` 的注释
+        wishOffers: pickArray<WishOffer>(d.wishOffers, 'itemId') ?? [],
+        // ⚠️ 必须过 `orderFromBackup`：外部文件里可能带着 `ship`
+        wishOrders: (pickArray<WishOrder>(d.wishOrders) ?? []).map(orderFromBackup),
         events: pickArray<FarmEvent>(d.events) ?? [],
       }
 
@@ -3353,6 +3777,8 @@ export const useApp = create<AppState>((set, get) => ({
           db.checkInProgress,
           db.redeemItems,
           db.redeemRecords,
+          db.wishOffers,
+          db.wishOrders,
           db.farmEvents,
           db.harvestLedger,
           db.mallLedger,
@@ -3373,6 +3799,8 @@ export const useApp = create<AppState>((set, get) => ({
             db.checkInProgress.clear(),
             db.redeemItems.clear(),
             db.redeemRecords.clear(),
+            db.wishOffers.clear(),
+            db.wishOrders.clear(),
             db.farmEvents.clear(),
             db.meta.clear(),
           ])
@@ -3388,6 +3816,8 @@ export const useApp = create<AppState>((set, get) => ({
           await db.checkInProgress.bulkPut(rows.checkInProgress)
           if (rows.redeemItems.length > 0) await db.redeemItems.bulkPut(rows.redeemItems)
           if (rows.redeemRecords.length > 0) await db.redeemRecords.bulkPut(rows.redeemRecords)
+          if (rows.wishOffers.length > 0) await db.wishOffers.bulkPut(rows.wishOffers)
+          if (rows.wishOrders.length > 0) await db.wishOrders.bulkPut(rows.wishOrders)
           if (rows.events.length > 0) await db.farmEvents.bulkPut(rows.events)
           if (d.settings && typeof d.settings === 'object') {
             await db.meta.put({ key: 'settings', value: d.settings })
@@ -3741,6 +4171,17 @@ declare global {
        */
       addPoints: (delta: number) => Promise<void>
       /**
+       * 调试发兑换券。和 `addPoints` 并列，**只给 E2E 用**。
+       *
+       * 为什么必须有：心愿商城的核心断言是「兑换后余额真的少了」，
+       * 而兑换券只能靠农场收成或玩插件游戏赚 —— 走查脚本没有几分钟去种地。
+       * 没有这个入口，那条断言只能退化成「按钮点了没报错」，
+       * 而按钮点了没报错恰恰是最容易骗过测试的假绿。
+       *
+       * ⚠️ 走账本（`manual_adjust`），不是直接改余额。
+       */
+      addVouchers: (delta: number) => Promise<void>
+      /**
        * 测试专用：一键解锁全部内容。
        * - 开满 12 块地
        * - 背包里塞满所有种子
@@ -3853,6 +4294,14 @@ if (typeof window !== 'undefined') {
         delta,
         source: 'manual_adjust',
         memo: `调试加积分 +${delta}`,
+      })
+      await useApp.getState().refresh()
+    },
+    addVouchers: async (delta) => {
+      await postHarvest({
+        delta,
+        source: 'manual_adjust',
+        memo: `调试加兑换券 +${delta}`,
       })
       await useApp.getState().refresh()
     },

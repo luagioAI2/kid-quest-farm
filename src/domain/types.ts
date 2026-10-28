@@ -280,6 +280,21 @@ export type HarvestSource =
   | 'claw_prize' // 奖品 → 兑换券（含插件游戏 mintVoucher；名字是历史遗留）
   | 'game_redeem' // 插件游戏的币换成兑换券（2026-10-22）
   | 'harvest_redeem' // 用兑换券兑换（负数）
+  /**
+   * 心愿商城兑换（负数，2026-10-28）。
+   *
+   * 与 `harvest_redeem` 分开是有意的：兑换（家里的事）和心愿商城（外面的事）
+   * 在报表上是两件事，混成一个来源就没法回答「孩子这个月的券花在哪了」。
+   */
+  | 'wish_redeem'
+  /**
+   * 心愿商城取消/买不成退回（正数，2026-10-28）。
+   *
+   * ⚠️ 这是**唯一**一条会把券退回来的边。它成立的前提是「成交发生在 App 外面」：
+   * 孩子点了兑换就先扣券，家长去淘宝买，买不成必须能退。
+   * 别把它扩展成「后悔就能退」—— 那会让券变成可以无限试探的额度。
+   */
+  | 'wish_refund'
   | 'manual_adjust' // 家长手工调整
 
 /**
@@ -761,6 +776,165 @@ export interface RedeemRecord {
   fulfilled: boolean
   fulfilledAt?: number
   createdAt: number
+}
+
+/* ---------------- 心愿商城（2026-10-28） ---------------- */
+
+/**
+ * 心愿商城的商品类型。
+ *
+ * `blindbox` / `gamebox` 是**游戏**，兑换后在 App 内直接解锁；
+ * 其余三类是**实物**，兑换后家长去外链买。
+ *
+ * ⚠️ 这五类共用一个 `kind` 字段而不是拆成两张表，是因为它们在列表里
+ * 要**混排**（用户要求：游戏盲盒优先显示）。拆表会让列表排序变成归并逻辑。
+ */
+export type WishKind = 'blindbox' | 'gamebox' | 'toy' | 'study' | 'collectible'
+
+/** 图标底色档位（对应 `theme.css` 的色板） */
+export type WishTint = 'sun' | 'grass' | 'sky' | 'grape' | 'tan' | 'berry'
+
+/**
+ * 商品目录条目 —— **常量，不入库**（见 `games/wishCatalog.ts`）。
+ *
+ * 为什么不像 `RedeemItem` 那样入库：这些是**商家/运营提供的目录**，
+ * 跟着版本走；改一个商品文案不该触发 Dexie 迁移，也不该被「导入备份」覆盖。
+ *
+ * 可变的那部分（本家庭开不开放、卖多少券）在 `WishOffer` 里，**单独一张表**。
+ */
+export interface WishItem {
+  id: string
+  kind: WishKind
+  name: string
+  emoji: string
+  tint: WishTint
+  /** 商家名，如「泡泡玛特」。实物才有 */
+  partnerName?: string
+  /**
+   * 盲盒池：候选游戏 id。
+   *
+   * ⚠️ 真正开奖时还要**减去孩子已拥有的**（见 `domain/wish.ts` 的 `pickBlindBox`）。
+   * 池子里写死「全部游戏」是对的 —— 拥有关系是每个家庭不同的，不能写进常量。
+   */
+  pool?: string[]
+  /** 游戏盒子指定的那一款（`gamebox` 必填） */
+  gameId?: string
+  /** 参考零售价（**分**）。只做展示，**不参与任何计算** */
+  priceCents?: number
+  ageRange?: [number, number]
+  /** 一句话说明（列表和详情共用） */
+  note?: string
+  /** 兑换须知（「不指定款式」这类必须写清楚） */
+  notice?: string
+  /** 外链。**只在家长确认页出现**，孩子端读不到 */
+  buyUrl?: string
+  /** 外链按钮文字，如「去淘宝购买」 */
+  buyLabel?: string
+  archived?: boolean
+  sortOrder?: number
+}
+
+/**
+ * 家长对本商品的开放设置 —— **这是唯一可变的那一半**。
+ *
+ * 一件商品在没有 `WishOffer` 的时候就是「未开放」：孩子只能表明意向。
+ * 家长定了价、写了这一行，它才变成可兑换。
+ */
+export interface WishOffer {
+  itemId: string
+  /** 兑换券价格（🎫）。心愿商城**只收券**，不混付积分 */
+  voucherPrice: number
+  /** 钻石价（测试用）。0 / 不填 = 不卖 */
+  diamondPrice?: number
+  openedAt: number
+  /** 关闭时间。关掉不删行 —— 孩子之前换过的历史还要能解释 */
+  closedAt?: number
+}
+
+/**
+ * 心愿单 / 兑换单。**一条记录走完全程**，靠 `status` 推进。
+ *
+ * 为什么不拆成「意向表」+「订单表」：意向和订单是同一件东西的两个阶段，
+ * 拆开就要处理「意向转订单时哪几个字段搬过去」，而且历史会分成两段。
+ */
+export type WishStatus = 'wished' | 'committed' | 'confirmed' | 'done' | 'cancelled'
+
+export interface WishOrder {
+  id: string
+  itemId: string
+  /* ---- 快照：商品改名/下架后历史仍可读 ---- */
+  itemName: string
+  itemEmoji: string
+  kind: WishKind
+  partnerName?: string
+  /** 兑换时的券价（家长之后改价不影响这一单） */
+  voucherPrice: number
+
+  status: WishStatus
+  /**
+   * 这一单实际扣掉的券。
+   *
+   * `wished` 阶段是 0；`committed` 起等于 `voucherPrice`。
+   * **退款按这个数退，不重新读商品** —— 商品改价了也不能退错。
+   */
+  vouchersHeld: number
+
+  /** 盲盒开出的游戏 id（只有 `blindbox` 会有） */
+  openedGameId?: string
+
+  /* ---- 收货信息：敏感，见 `docs/wish-mall-spec.md` §9 ---- */
+  ship?: WishShipInfo
+  /**
+   * 从备份恢复出来的收货信息**快照**（只有省市区 + 手机尾号）。
+   *
+   * 完整地址**永远不进备份**（spec §9.1），所以恢复出来的订单不可能有 `ship`
+   * —— 要继续发货必须让家长重新填一次。这个字段留着只是为了客服对账时
+   * 能看出「这一单当时寄到哪个省市、尾号几」。
+   *
+   * 和 `ship` 分成两个字段而不是「半个 `ship`」，是因为 `WishShipInfo`
+   * 的 `receiver` / `phone` / `address` 都是必填 —— 塞一个缺字段的对象进去，
+   * 类型上过得去、运行时会读出一串 `undefined`，那是最难查的一种。
+   */
+  shipSnapshot?: WishShipSnapshot
+  /** 外链成交后家长填的订单号，便于对账 */
+  buyOrderNo?: string
+
+  createdAt: number
+  committedAt?: number
+  confirmedAt?: number
+  doneAt?: number
+  cancelledAt?: number
+  cancelReason?: string
+}
+
+/**
+ * 收货信息。
+ *
+ * ⚠️ 收货人 + 手机 + 家庭地址绑在**儿童**账号上 = 敏感个人信息。
+ * 三条硬约束（`docs/wish-mall-spec.md` §9）：不进备份、30 天后自动抹除、
+ * 不进任何日志/toast。
+ */
+export interface WishShipInfo {
+  receiver: string
+  phone: string
+  /** 省市区，抹除后保留这一段 */
+  region: string
+  address: string
+  /** 尺码 / 颜色 */
+  note?: string
+  /** 到这个时间点就把 `address` / `receiver` / `phone` 抹掉 */
+  purgeAfter: number
+}
+
+/**
+ * 收货信息的**脱敏快照** —— 备份里只允许出现这两段（spec §9.1）。
+ *
+ * 手机只留后 4 位，地址只留省市区。这个粒度对客服对账够用，
+ * 拿到手也定位不到一个具体的小孩。
+ */
+export interface WishShipSnapshot {
+  region: string
+  phoneTail: string
 }
 
 /* ---------------- 农场时间流速 ---------------- */

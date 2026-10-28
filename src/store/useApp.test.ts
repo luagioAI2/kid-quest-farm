@@ -1,14 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addItem,
+  ASSET_BASE_KEY,
+  BUNDLE_KEY,
   currentBalance,
   currentHarvestBalance,
   db,
   DEFAULT_SETTINGS,
+  getGameKv,
   loadSettings,
   postHarvest,
   postLedger,
+  postMall,
   savePlots,
+  setGameKv,
   setMeta,
 } from '../db/db'
 import {
@@ -24,6 +29,7 @@ import { MAX_TIER_RATIO, MIN_TIER_RATIO } from '../domain/tierRatio'
 import { periodKeyFor, runningMinutes } from '../domain/time'
 import { capFor, CROP_BY_ID, priceCeilingFor } from '../domain/catalog'
 import { REDEEM_PRICE_MIGRATIONS, SEED_REDEEM_ITEMS, SEED_TASKS } from '../domain/seedTasks'
+import { WISH_BLINDBOX_ID, WISH_BLINDBOX_POOL } from '../games/wishCatalog'
 
 /* ============================================================
    签到 / 长期任务的家长审核
@@ -2260,6 +2266,278 @@ describe('兑换券：不可逆约束 + 每轮闸门', () => {
       '导入备份不能把背包清空',
     ).toBe(7)
     expect(inv.find((s) => s.itemId === 'produce-carrot')?.count ?? 0).toBe(3)
+  })
+
+  it('④ 导出 → 导入 不能把「押着的券」弄丢（wishOrders 才是退款凭据）', async () => {
+    // 2026-10-28 补心愿商城时发现：`exportBackup` 导了 `redeemRecords`，
+    // 却**没有** `wishOrders`。而这两者完全不是一回事：
+    // `redeemRecords` 只是历史流水，`wishOrders` 里才有 `vouchersHeld`
+    // —— 也就是「这一单押了多少张券」。
+    //
+    // 兑换时券是从余额里**真扣掉**的（见 `wishRedeem` 的 harvestLedger 负数行），
+    // 扣券的凭据就是这行订单。导出再导入一次订单消失 ⇒ 券被扣了却没有订单
+    // 可以退（`wishCancel` 读不到行直接 return）⇒ **孩子的券凭空蒸发**，
+    // 全程不报错、界面上只是「心愿单空了」。
+    //
+    // 断言分三层：订单在 → 押券数对 → 真的退得回来。
+    // 只钉第一层会绿着而退款仍然坏掉。
+    await postHarvest({ delta: 200, source: 'farm_harvest', memo: '测试注入' })
+    await useApp.getState().refresh()
+    await useApp.getState().wishSetOffer('wish-popmart', 50)
+    await useApp.getState().wishExpress('wish-popmart')
+    const res0 = await useApp.getState().wishRedeem('wish-popmart')
+    expect(res0.ok, res0.message).toBe(true)
+    await useApp.getState().refresh()
+
+    expect(useApp.getState().harvestBalance, '前提：兑换要真扣券').toBe(150)
+    const before = useApp.getState().wishOrders.find((o) => o.itemId === 'wish-popmart')
+    expect(before?.status, '前提：券已扣，订单在 committed').toBe('committed')
+    expect(before?.vouchersHeld, '前提：押券数就是扣掉的数').toBe(50)
+
+    const backup = await useApp.getState().exportBackup()
+    // 导出这一步单独钉一次：漏了字段时 `importBackup` 只会安静地写 0 行，
+    // 光看导入结果分辨不出「没导出」还是「没导入」。
+    // （`exportBackup` 的返回类型是 `unknown` —— 它就是「随便序列化出去」的，
+    //   这里必须自己给出形状。）
+    const exported = backup as { data?: { wishOrders?: unknown[] } }
+    expect(exported.data?.wishOrders, '导出必须带上心愿单订单').toHaveLength(1)
+
+    const res = await useApp.getState().importBackup(backup)
+    expect(res.ok, res.message).toBe(true)
+    await useApp.getState().refresh()
+
+    const after = useApp.getState().wishOrders.find((o) => o.itemId === 'wish-popmart')
+    expect(after, '导入备份不能把心愿单订单清空').toBeTruthy()
+    expect(after?.vouchersHeld, '押券数必须原样回来').toBe(50)
+    expect(useApp.getState().harvestBalance, '导入不该改动券余额').toBe(150)
+    // 家长定的价也在同一批数据里：丢了就「所有商品变回等爸妈开放」，
+    // 孩子点进去什么也换不了（`wishOffers` 的主键是 `itemId`，另一个坑）。
+    expect(
+      useApp.getState().wishOffers.find((o) => o.itemId === 'wish-popmart')?.voucherPrice,
+      '导入备份不能丢掉家长定的价',
+    ).toBe(50)
+
+    // 最后一层：押着的券真的退得回来。
+    await useApp.getState().wishCancel(after!.id, '测试取消')
+    await useApp.getState().refresh()
+    expect(
+      useApp.getState().harvestBalance,
+      '取消兑换必须把押着的 50 张退回来（订单丢了就退不了）',
+    ).toBe(200)
+  })
+
+  it('④ 备份里不能出现收货人 / 手机 / 家庭地址（spec §9.1）', async () => {
+    // `wishOrders` 进备份之后，这张表里就多了一样东西：`ship`
+    // —— 收货人姓名 + 手机号 + 家庭详细地址，绑在**儿童**账号上。
+    // 备份文件的实际流向是「导出 → 微信/网盘传给另一台手机」，
+    // 所以整表原样导出 = 一份小孩住址在聊天记录里躺着。
+    //
+    // 这条用例是**字符串级**的：不看字段名、不看类型，直接在最外层
+    // `JSON.stringify` 里搜那三样东西。字段改名、嵌套一层、`undefined`
+    // 变成 `{}`，只要字面量还在就一定红 —— 这类漏法结构断言抓不住。
+    await postHarvest({ delta: 200, source: 'farm_harvest', memo: '测试注入' })
+    await useApp.getState().refresh()
+    await useApp.getState().wishSetOffer('wish-popmart', 50)
+    await useApp.getState().wishExpress('wish-popmart')
+    const res0 = await useApp.getState().wishRedeem('wish-popmart')
+    expect(res0.ok, res0.message).toBe(true)
+    await useApp.getState().refresh()
+
+    const order = useApp.getState().wishOrders.find((o) => o.itemId === 'wish-popmart')
+    expect(order, '前提：得先有一单').toBeTruthy()
+    const SECRETS = {
+      receiver: '王小豆',
+      phone: '13800001234',
+      address: '文三路 100 号 3 幢 501 室',
+    }
+    await useApp.getState().wishDone(order!.id, {
+      ship: {
+        receiver: SECRETS.receiver,
+        phone: SECRETS.phone,
+        region: '浙江省杭州市西湖区',
+        address: SECRETS.address,
+        note: 'S 码',
+        purgeAfter: 0,
+      },
+      buyOrderNo: 'TB20261028001',
+    })
+    await useApp.getState().refresh()
+
+    const backup = await useApp.getState().exportBackup()
+    const raw = JSON.stringify(backup)
+    for (const [field, value] of Object.entries(SECRETS)) {
+      expect(raw.includes(value), `备份里不能出现 ${field}：${value}`).toBe(false)
+    }
+
+    // 该留的还得留：省市区 + 尾号，客服对账要用
+    const exported = backup as {
+      data?: { wishOrders?: Array<{ shipSnapshot?: { region: string; phoneTail: string } }> }
+    }
+    expect(exported.data?.wishOrders?.[0]?.shipSnapshot).toEqual({
+      region: '浙江省杭州市西湖区',
+      phoneTail: '1234',
+    })
+
+    // 恢复回来也不能把 `ship` 带进库（备份文件是用户可以随便改的）
+    const res = await useApp.getState().importBackup(backup)
+    expect(res.ok, res.message).toBe(true)
+    await useApp.getState().refresh()
+    const row = await db.wishOrders.get(order!.id)
+    expect(row, '订单本身要回来').toBeTruthy()
+    expect(row?.ship, '恢复的订单不该有完整收货信息').toBeUndefined()
+    expect(row?.shipSnapshot).toEqual({ region: '浙江省杭州市西湖区', phoneTail: '1234' })
+  })
+
+  it('⑤ 盲盒池子被买空时不许扣券（先算池子，再动账本）', async () => {
+    // spec §11 的验收项：「盲盒『先算池子再扣券』：池子为空时不产生任何流水」。
+    //
+    // 顺序写反的后果不是「报个错」，而是**券扣了、东西没给**：
+    // `wishRedeem` 是先 `planWishRedeem` → 开事务写扣券流水 → 建单。
+    // 如果「池子空不空」放在事务里（或者扣完才判），孩子会看到
+    // 「这些游戏你都有啦」，但券已经没了，而且流水是合法的一笔支出 ——
+    // 事后连「该不该退」都要靠人工判断。
+    //
+    // 这条同时钉住「返回 ok:false」和「余额一分没动」两件事：
+    // 只钉前者的话，将来有人把「算池子」挪到扣券之后，测试还是绿的。
+    await postHarvest({ delta: 500, source: 'farm_harvest', memo: '测试注入' })
+    await postMall({ delta: 100, source: 'manual_adjust', memo: '测试注入' })
+    // 把池子里每一款都「买过」—— 拥有关系只看 mallLedger 的支出行
+    for (const gid of WISH_BLINDBOX_POOL) {
+      await postMall({ delta: -1, source: 'game_purchase', refId: gid, memo: `买 ${gid}` })
+    }
+    await useApp.getState().refresh()
+    await useApp.getState().wishSetOffer(WISH_BLINDBOX_ID, 50)
+
+    const before = useApp.getState().harvestBalance
+    const redeemRowsBefore = useApp.getState().harvestLedger.filter(
+      (e) => e.source === 'wish_redeem',
+    ).length
+    const res = await useApp.getState().wishRedeem(WISH_BLINDBOX_ID)
+    await useApp.getState().refresh()
+
+    expect(res.ok, '池子空了必须拒绝').toBe(false)
+    expect(res.message).toContain('都有啦')
+    expect(useApp.getState().harvestBalance, '拒绝时一分券都不许扣').toBe(before)
+    expect(
+      useApp.getState().harvestLedger.filter((e) => e.source === 'wish_redeem').length,
+      '拒绝时不许写扣券流水',
+    ).toBe(redeemRowsBefore)
+    expect(
+      useApp.getState().wishOrders.filter((o) => o.itemId === WISH_BLINDBOX_ID),
+      '拒绝时不许建单',
+    ).toHaveLength(0)
+  })
+
+  it('⑥ 兑换来的游戏**卸载之后**不许再兑换一次（否则白扣一次券）', async () => {
+    // 游戏类商品的交付 = 装包，「拥有」一直从 `installedGames` 派生。
+    // 而 `uninstallGame` 把包和存档一起删 —— 删完这个游戏就「没买过」了：
+    // 盒子卡片变回可兑换，点下去**再扣一次券**。
+    //
+    // 这条用例不真去装包（jsdom 里装不了插件），而是直接造出
+    // 「兑换过、但现在没装着」的状态 —— 这正是卸载之后的样子。
+    // 判据三条：拒绝、余额不动、不建新单。
+    await postHarvest({ delta: 200, source: 'farm_harvest', memo: '测试注入' })
+    await useApp.getState().refresh()
+
+    const GAME = 'cloudfarm'
+    const ITEM = `wish-game-${GAME}`
+    // 前提：这个游戏**现在没装着**，否则用例测的是「已安装」那条老路径
+    expect(Object.keys(useApp.getState().installedGames)).not.toContain(GAME)
+    expect(useApp.getState().ownedGameIds).not.toContain(GAME)
+
+    // 造一条「当年兑换过」的单子（`openedGameId` 就是交付凭证）
+    await db.wishOrders.put({
+      id: 'wo_old_redeem',
+      itemId: ITEM,
+      itemName: '云上农场',
+      itemEmoji: '🌾',
+      kind: 'gamebox',
+      voucherPrice: 50,
+      status: 'committed',
+      vouchersHeld: 50,
+      openedGameId: GAME,
+      createdAt: Date.now() - 60_000,
+      committedAt: Date.now() - 60_000,
+    })
+    await useApp.getState().refresh()
+    await useApp.getState().wishSetOffer(ITEM, 50)
+
+    const before = useApp.getState().harvestBalance
+    const redeemRowsBefore = useApp.getState().harvestLedger.filter(
+      (e) => e.source === 'wish_redeem',
+    ).length
+    const res = await useApp.getState().wishRedeem(ITEM)
+    await useApp.getState().refresh()
+
+    expect(res.ok, '卸载之后必须拦住，不能当没买过').toBe(false)
+    expect(res.message).toContain('已经有')
+    expect(useApp.getState().harvestBalance, '被拒绝时一分券都不许扣').toBe(before)
+    /* ★ 这条才是**钱级**判据。
+       闸门没拦住时，流程会走到装包：装成功 ⇒ 真扣一次券（孩子白花一次）；
+       装失败 ⇒ 虽然退回来了，但账本上已经多了一笔 `wish_redeem` + 一笔
+       `wish_refund`（流水里凭空多两条「兑换又退款」）。
+       所以「不许出现扣券流水」既能抓「白扣」，也能抓「闸门位置错了」。 */
+    expect(
+      useApp.getState().harvestLedger.filter((e) => e.source === 'wish_redeem').length,
+      '被拒绝时不许写扣券流水',
+    ).toBe(redeemRowsBefore)
+    expect(
+      useApp.getState().wishOrders.filter((o) => o.itemId === ITEM),
+      '不许再建一条新单',
+    ).toHaveLength(1)
+  })
+
+  it('⑦ 取消兑换要**收回**游戏，但保留存档', async () => {
+    // 「券退回来 + 游戏还装着」= 白拿一个游戏。而且取消之后
+    // `redeemedGameIdsFrom` 不再认它，孩子还能再兑换一次。
+    //
+    // 收回用 `detachGameKv`（只摘安装）而不是 `clearGameKv`（连存档）：
+    // 撤销的是**这笔交易**，不是孩子玩出来的进度。家长点这个按钮的动机
+    // 通常只是「价格定错了」，不该顺手抹掉存档。
+    await postHarvest({ delta: 200, source: 'farm_harvest', memo: '测试注入' })
+    // 造出「券已扣」的状态（真实兑换会走装包，jsdom 里装不了）
+    await postHarvest({ delta: -50, source: 'wish_redeem', memo: '心愿商城：云上农场' })
+    // 造出「已安装 + 有存档」
+    await setGameKv('cloudfarm', BUNDLE_KEY, 'export function start() {}')
+    await setGameKv('cloudfarm', ASSET_BASE_KEY, '/games/cloudfarm/')
+    await setGameKv('cloudfarm', 'save', { level: 3 })
+    await db.wishOrders.put({
+      id: 'wo_delivered',
+      itemId: 'wish-game-cloudfarm',
+      itemName: '云上农场',
+      itemEmoji: '🌾',
+      kind: 'gamebox',
+      voucherPrice: 50,
+      status: 'committed',
+      vouchersHeld: 50,
+      openedGameId: 'cloudfarm',
+      createdAt: Date.now(),
+      committedAt: Date.now(),
+    })
+    await useApp.getState().refresh()
+
+    expect(useApp.getState().harvestBalance, '前提：券已经扣过').toBe(150)
+    /* 判据直接看 `gameKv` 的行，不看 `installedGames` ——
+       jsdom 里 `import(blob:)` 起不来（`Cannot find package 'blob:nodedata:…'`），
+       `installedGames` 在单测里恒为空。而 `installedGames` 本来就是
+       从 `__bundle` 那一行派生的（`listInstalledBundles`），钉住行就是钉住它。 */
+    expect(
+      await getGameKv('cloudfarm', BUNDLE_KEY),
+      '前提：安装包在库里',
+    ).toBeTruthy()
+
+    await useApp.getState().wishCancel('wo_delivered', '测试取消')
+    await useApp.getState().refresh()
+
+    expect(useApp.getState().harvestBalance, '券要原样退回').toBe(200)
+    expect(
+      await getGameKv('cloudfarm', BUNDLE_KEY),
+      '取消之后安装包必须删掉（否则「券退了游戏还在」= 白拿）',
+    ).toBeUndefined()
+    expect(
+      await getGameKv('cloudfarm', 'save'),
+      '★ 存档必须保留 —— 撤销的是交易，不是孩子的进度',
+    ).toEqual({ level: 3 })
   })
 
   it('④ 「收进背包」之后还能卖出去 —— 收完地空了也要认这笔账', async () => {

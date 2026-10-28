@@ -3,6 +3,7 @@ import { selectPendingCheckIns, selectPendingReview, useApp } from './store/useA
 import TaskPage from './features/tasks/TaskPage'
 import PointsPage from './features/tasks/PointsPage'
 import RedeemPage from './features/redeem/RedeemPage'
+import WishPage from './features/wish/WishPage'
 import SettingsPage from './features/settings/SettingsPage'
 import { ReviewSheetModal } from './features/parent/ReviewSheet'
 import { SplashPage } from './features/splash/SplashPage'
@@ -15,7 +16,7 @@ import { pageFor } from './games/pages'
 import { PluginGameHost } from './games/PluginGameHost'
 import './features/farm/farm.css'
 
-type TabKey = 'tasks' | 'game' | 'redeem' | 'points'
+type TabKey = 'tasks' | 'game' | 'redeem' | 'wish' | 'points'
 
 /**
  * 底部导航里**固定**的那三格。
@@ -31,6 +32,9 @@ type TabKey = 'tasks' | 'game' | 'redeem' | 'points'
 const STATIC_TABS: { key: TabKey; label: string; emoji: string; tour: string }[] = [
   { key: 'tasks', label: '任务', emoji: '📋', tour: 'tab-tasks' },
   { key: 'redeem', label: '兑换', emoji: '🎁', tour: 'tab-redeem' },
+  // 心愿商城（2026-10-28）：和「兑换」并列，不是它的子页 ——
+  // 兑换是家里的事（家长自建、家长兑现），心愿是外面的事（合作商商品、淘宝成交）。
+  { key: 'wish', label: '心愿', emoji: '🛍️', tour: 'tab-wish' },
   { key: 'points', label: '积分', emoji: '🪙', tour: 'tab-points' },
 ]
 
@@ -159,7 +163,11 @@ export default function App() {
   )
 
   /**
-   * 底部导航的全部四格：把「游戏」那一格插在「任务」和「兑换」之间。
+   * 底部导航的全部五格：把「游戏」那一格插在「任务」和「兑换」之间。
+   *
+   * 2026-10-28 从四格变五格（加了「心愿」）。底栏是 `flex-1` + `justify-center`，
+   * 不是固定列宽，所以加一格只是每格变窄（390px 上 97 → 78px），
+   * **不需要改布局代码**。但所有「按第几个 tab」定位的测试都要复查。
    *
    * 游戏格是**运行时算**的 —— 图标、名字、`data-tour` 全都来自当前游戏。
    * 农场是首款且默认拥有，所以默认状态下这一格就是原来的「🌾 农场 / tab-farm」，
@@ -184,6 +192,7 @@ export default function App() {
       },
       STATIC_TABS[1],
       STATIC_TABS[2],
+      STATIC_TABS[3],
     ],
     [activeGame, activePlugin, activeGameId],
   )
@@ -367,6 +376,7 @@ export default function App() {
                   ) : null)}
               </Suspense>
               {tab === 'redeem' && <RedeemPage />}
+              {tab === 'wish' && <WishPage />}
               {tab === 'points' && <PointsPage />}
             </ErrorBoundary>
           </main>

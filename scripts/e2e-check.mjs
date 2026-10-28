@@ -1596,6 +1596,14 @@ try {
   if (exported) {
     check('导出数据结构正确', exported.app === 'kid-quest-farm' && !!exported.data, JSON.stringify(Object.keys(exported.data ?? {})).slice(0, 120))
     check('导出含任务定义', Array.isArray(exported.data.tasks) && exported.data.tasks.length > 0, `${exported.data.tasks?.length} 个任务`)
+    // 心愿商城的两张表：`wishOffers`（家长定价）、`wishOrders`（含押券数）。
+    // 这两张表是**后加的**，`exportBackup` 是逐表列举的 —— 新表不加就永远不导出，
+    // 而且不报错。单元测试已经钉了内容，这里钉的是「浏览器里跑出来的那一份」
+    // 真的带上了这两个 key（曾经出过「单测绿、产物里没有」的先例）。
+    const dataKeys = Object.keys(exported.data ?? {})
+    check('导出含心愿商城两张表', dataKeys.includes('wishOffers') && dataKeys.includes('wishOrders'), dataKeys.filter((k) => k.startsWith('wish')).join(',') || '(无 wish 字段)')
+    // 备份里不能有完整收货信息（spec §9.1）。这里只查 key 名 —— 真值断言在单测里。
+    check('导出不含 ship 原字段', !JSON.stringify(exported).includes('"ship"'))
   } else {
     check('导出数据', false, '未拿到导出结果')
   }

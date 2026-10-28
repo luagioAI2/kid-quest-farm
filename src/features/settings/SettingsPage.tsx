@@ -579,7 +579,7 @@ export default function SettingsPage({
               <>
                 <Card title="导出备份" emoji="💾">
                   <p className="mb-3 text-sm text-ink-500">
-                    把所有任务、积分、农场数据打包成一个 JSON 文件。建议每周导出一次。
+                    把所有任务、积分、兑换券、农场和心愿单打包成一个 JSON 文件。建议每周导出一次。
                   </p>
                   <button
                     onClick={() => void handleExport()}
@@ -591,7 +591,7 @@ export default function SettingsPage({
 
                 <Card title="从备份恢复" emoji="📥">
                   <p className="mb-3 text-sm text-ink-500">
-                    ⚠️ 恢复会**覆盖**当前全部数据，请先导出一次现有数据。
+                    ⚠️ 恢复会覆盖当前全部数据，请先导出一次现有数据。
                   </p>
                   <input
                     ref={fileRef}
@@ -614,8 +614,8 @@ export default function SettingsPage({
 
                 <Card title="备份格式说明" emoji="📄">
                   <p className="text-sm text-ink-500">
-                    导出的是纯文本 JSON，包含任务定义、每日实例、积分流水、背包、农场和设置。
-                    你可以自己保存到网盘，之后换手机或换浏览器都能导入回来。
+                    导出的是纯文本 JSON，包含任务定义、每日实例、积分流水、兑换券流水、背包、农场、设置、
+                    心愿单和兑换单。你可以自己保存到网盘，之后换手机或换浏览器都能导入回来。
                   </p>
                   <button
                     onClick={downloadSample}
@@ -629,7 +629,7 @@ export default function SettingsPage({
                   {!confirmReset ? (
                     <>
                       <p className="mb-3 text-sm text-ink-500">
-                        清空所有数据并重新开始。这个操作**无法撤销**。
+                        清空所有数据并重新开始。这个操作无法撤销。
                       </p>
                       <button
                         onClick={() => setConfirmReset(true)}

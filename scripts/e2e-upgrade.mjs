@@ -178,7 +178,10 @@ const seeded = await page.evaluate(
       r.onsuccess = () => res(r.result)
       r.onerror = () => rej(r.error)
     })
-    const tx = db.transaction(['ledger', 'tasks', 'meta', 'farmEvents'], 'readwrite')
+    const tx = db.transaction(
+      ['ledger', 'tasks', 'meta', 'farmEvents', 'redeemItems', 'redeemRecords'],
+      'readwrite',
+    )
     tx.objectStore('ledger').put({
       id: 'lg_seed_1', delta: 50, balanceAfter: 50, source: 'manual_adjust',
       memo: '欢迎来到小任务农场！', createdAt: 1000,
@@ -200,6 +203,17 @@ const seeded = await page.evaluate(
     tx.objectStore('meta').put({ key: 'seedIfEmpty', value: true })
     tx.objectStore('farmEvents').put({
       id: 'fe_seed', kind: 'disaster', createdAt: 2500, refId: 'plot:0',
+    })
+    /* 兑换商城的商品和兑换记录 —— spec §11 明确要求「老库升级到 v9 后一条不少」。
+       以前这里只种了流水和任务，那条判据其实是**空的**（表里本来就没东西，
+       「还在」恒真）。2026-10-28 加心愿商城（v9）时补上。 */
+    tx.objectStore('redeemItems').put({
+      id: 'rd_seed', name: '老数据的零食', emoji: '🍬', category: 'treat',
+      cost: 20, archived: false, createdAt: 1100,
+    })
+    tx.objectStore('redeemRecords').put({
+      id: 'rr_seed', itemId: 'rd_seed', name: '老数据的零食', emoji: '🍬',
+      cost: 20, fulfilled: false, createdAt: 1200,
     })
     await new Promise((res) => { tx.oncomplete = res })
     db.close()
@@ -250,6 +264,8 @@ const after = await page.evaluate(async () => {
     farmEvents: await readAll('farmEvents'),
     harvestLedger: await readAll('harvestLedger'),
     mallLedger: await readAll('mallLedger'),
+    redeemItems: await readAll('redeemItems'),
+    redeemRecords: await readAll('redeemRecords'),
   }
   db.close()
   return out
@@ -280,6 +296,21 @@ check(
   `实际 ${Array.isArray(after.ledger) ? after.ledger.length : after.ledger} 条`,
 )
 check('旧任务数据还在', Array.isArray(after.tasks) && after.tasks.some((t) => t.id === 'tk_seed'))
+/* 判据用 `some(id)` 而不是 `length === N`：升级后 App 自己可能往这两张表里
+   补默认商品（`SEED_REDEEM_ITEMS`），条数本来就会变。要守的是
+   「老用户自己的那条没被清掉」。 */
+check(
+  '★ 老库的兑换商品还在（spec §11：升级到 v9 一条不少）',
+  Array.isArray(after.redeemItems) && after.redeemItems.some((x) => x.id === 'rd_seed'),
+  Array.isArray(after.redeemItems) ? `共 ${after.redeemItems.length} 条` : String(after.redeemItems),
+)
+check(
+  '★ 老库的兑换记录还在',
+  Array.isArray(after.redeemRecords) && after.redeemRecords.some((x) => x.id === 'rr_seed'),
+  Array.isArray(after.redeemRecords)
+    ? `共 ${after.redeemRecords.length} 条`
+    : String(after.redeemRecords),
+)
 check('农场事件日志还在', Array.isArray(after.farmEvents) && after.farmEvents.length === 1)
 check(
   '★ 新增的账本表都是空的（没被旧数据污染）',

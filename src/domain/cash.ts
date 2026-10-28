@@ -70,3 +70,21 @@ export function formatYuan(points: number, pointsPerYuan?: number): string {
   const s = rounded.toFixed(2).replace(/\.?0+$/, '')
   return `¥${s === '' ? '0' : s}`
 }
+
+/**
+ * **分 → 「¥69」「¥4.5」**。给心愿商城的商品参考价用。
+ *
+ * ⚠️ 和 `formatYuan` 是两件事，别混用：
+ *   * `formatYuan(points, pointsPerYuan)` 走的是**汇率**（1 元 = N 积分），
+ *     输入是积分，输出是「这些积分大约值多少钱」；
+ *   * `formatPriceCents(cents)` **不涉及任何汇率**，输入本来就是钱（分）。
+ *
+ * 心愿商城的商品价必须走这一条 —— 用 `formatYuan` 会把「¥69」算成
+ * 「69 ÷ 10 = ¥6.9」，而那个数字看起来完全正常，不会报错。
+ */
+export function formatPriceCents(cents: number): string {
+  if (!Number.isFinite(cents)) return '¥—'
+  const yuan = Math.round(cents) / 100
+  const s = yuan.toFixed(2).replace(/\.?0+$/, '')
+  return `¥${s === '' ? '0' : s}`
+}

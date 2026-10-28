@@ -21,6 +21,8 @@ import type {
   RedeemRecord,
   Task,
   TaskInstance,
+  WishOffer,
+  WishOrder,
 } from '../domain/types'
 
 /* ============================================================
@@ -68,6 +70,10 @@ class KidQuestFarmDB extends Dexie {
   farmEvents!: Table<FarmEvent, string>
   /** 通用键值 —— **下载来的游戏**的状态都存这里，见 `GameKvRow`。 */
   gameKv!: Table<GameKvRow, string>
+  /** 心愿商城里**家长对商品的定价**。商品目录本身是常量，不在这里 */
+  wishOffers!: Table<WishOffer, string>
+  /** 心愿单 / 兑换单。`ship` 是敏感信息，见 `WishShipInfo` 的注释 */
+  wishOrders!: Table<WishOrder, string>
   meta!: Table<MetaRow, string>
 
   constructor() {
@@ -165,6 +171,24 @@ class KidQuestFarmDB extends Dexie {
     this.version(8).upgrade(async (tx) => {
       await purgeRemovedGameKv(tx.table('gameKv'))
     })
+
+    // v9：心愿商城（2026-10-28）。
+    //
+    // 两张表，分工是刻意的：
+    //   * `wishOffers` —— **家长对某件商品的定价**（可变状态）。
+    //     商品目录本身是常量（`games/wishCatalog.ts`），不入库。
+    //   * `wishOrders` —— 心愿单/兑换单，一条记录走完全程。
+    //
+    // ⚠️ 心愿商城**只收兑换券**，所以这里没有「积分余额」之类的字段。
+    //    扣券/退券都走 `harvestLedger`（`wish_redeem` / `wish_refund`），
+    //    余额永远是 delta 之和 —— 别在这两张表里再存一份余额。
+    //
+    // ⚠️ `wishOrders.ship` 是**儿童敏感个人信息**（收货人+手机+家庭地址）。
+    //    备份导出必须 strip 掉，见 `exportBackup` 里那段注释。
+    this.version(9).stores({
+      wishOffers: 'itemId',
+      wishOrders: 'id, itemId, status, createdAt',
+    })
   }
 }
 
@@ -232,6 +256,32 @@ export async function listGameKv(gameId: string): Promise<Record<string, unknown
 /** 卸载一款游戏：只删**它自己的**状态，返回删掉的行数。 */
 export async function clearGameKv(gameId: string): Promise<number> {
   return db.gameKv.where('gameId').equals(gameId).delete()
+}
+
+/**
+ * **摘掉安装、保留存档**：只删 `__bundle` / `__assets` 两行。
+ *
+ * 用在「取消兑换要收回游戏」这条路上（`wishCancel`）。和 `clearGameKv` 的区别：
+ *
+ * | | 包 | 存档（插件自己写的 key） |
+ * | --- | --- | --- |
+ * | `clearGameKv`（家长主动卸载） | 删 | 删 |
+ * | `detachGameKv`（撤销兑换） | 删 | **留** |
+ *
+ * 为什么留：撤销兑换是「这笔交易不算数」，不是「孩子不要这个游戏了」。
+ * 把孩子玩出来的进度一起抹掉，等于用一次退款惩罚他 —— 而且家长点这个按钮
+ * 的动机通常只是「价格定错了」，根本没想到会删存档。
+ *
+ * `installedGames` 是从 `__bundle` 那一行派生的（`listInstalledBundles`），
+ * 所以删掉它游戏就不算「装着」了；存档还在，将来重新兑换能接着玩。
+ */
+export async function detachGameKv(gameId: string): Promise<number> {
+  const keep = new Set([gameKvKey(gameId, BUNDLE_KEY), gameKvKey(gameId, ASSET_BASE_KEY)])
+  return db.gameKv
+    .where('gameId')
+    .equals(gameId)
+    .filter((r) => keep.has(r.key))
+    .delete()
 }
 
 /**
@@ -431,6 +481,28 @@ export async function loadAllRedeemItems(): Promise<RedeemItem[]> {
 
 export async function loadRedeemRecords(limit = 60): Promise<RedeemRecord[]> {
   return db.redeemRecords.orderBy('createdAt').reverse().limit(limit).toArray()
+}
+
+/* ---------------- 心愿商城 ---------------- */
+
+/**
+ * 家长对商品的定价。
+ *
+ * 全量读 —— 这张表只会随「家长开放了几件商品」增长，几十行顶天，
+ * 比按 `closedAt` 过滤再在内存里判更省心（而且过滤条件迟早会变）。
+ */
+export async function loadWishOffers(): Promise<WishOffer[]> {
+  return db.wishOffers.toArray()
+}
+
+/**
+ * 心愿单 / 兑换单。
+ *
+ * `limit` 默认 80：孩子同时挂着的单子通常个位数，80 足够覆盖历史列表。
+ * ⚠️ **不要把它当成「全部订单」**去算统计 —— 统计请走 `db.wishOrders.toArray()`。
+ */
+export async function loadWishOrders(limit = 80): Promise<WishOrder[]> {
+  return db.wishOrders.orderBy('createdAt').reverse().limit(limit).toArray()
 }
 
 /* ---------------- 背包 ---------------- */
@@ -1052,6 +1124,8 @@ export async function wipeAll(): Promise<void> {
         db.checkInProgress.clear(),
         db.redeemItems.clear(),
         db.redeemRecords.clear(),
+        db.wishOffers.clear(),
+        db.wishOrders.clear(),
         db.farmEvents.clear(),
         db.meta.clear(),
       ])

@@ -458,6 +458,9 @@ try {
   for (const [label, name] of [
     ['兑换', '09-redeem'],
     ['积分', '10-points'],
+    // 心愿商城（2026-10-28 新增，P1）。放最后是因为它自己还要往下走两屏
+    // （详情 / 家长定价），下一节直接接着拍，不用再切回来。
+    ['心愿', '10b-wish-list'],
   ]) {
     await clickByText(label, 'nav')
     await wait(700)
@@ -473,6 +476,34 @@ try {
     })
     await wait(300)
     await shot(name)
+  }
+
+  /* 10c~10d. 心愿商城：商品详情 + 家长定价（2026-10-28 新增，P1）
+     ------------------------------------------------------------
+     为什么必须进图集：这个页面的问题**结构断言全看不见** ——
+     「6–成人 岁」这种文案拼接、21 个游戏盒子把商家商品挤到屏幕外、
+     定价页的「每天赚 0 张」都是走查时才发现的，而当时截图里根本没有这一屏。
+
+     两条注意：
+     1. **先清家长锁**。`OfferView` 整页就是一道 PIN 闸门（`needsPin && !pinOk`
+        → 直接 return 锁屏），不清的话 `10d` 永远拍出同一张「请爸爸妈妈来一下」。
+     2. 点的是**商家商品**（泡泡玛特），不是游戏盒子 —— 盒子详情少一半内容
+        （没有参考价、没有外链按钮），拿它当样本等于漏掉最该看的那半页。 */
+  await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    await st().updateSettings({ protectParentActions: false, parentPin: undefined })
+  })
+  await wait(400)
+  if (await clickByText('泡泡玛特')) {
+    await wait(700)
+    await shot('10c-wish-detail')
+    if (await clickByText('定价')) {
+      await wait(700)
+      await shot('10d-wish-offer')
+    }
+  } else {
+    // 拍不到就明说。静默少一张图 = 走查时以为「这页没问题」
+    console.log('  ⚠️ 10c/10d 跳过：心愿商城列表里没找到「泡泡玛特」')
   }
 
   /* 11. 设置页（孩子 tab） */
