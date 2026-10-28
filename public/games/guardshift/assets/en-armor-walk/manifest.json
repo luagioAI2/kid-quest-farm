@@ -1,0 +1,73 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "en-armor-walk",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "4b828cfa914a1a36787ad971a813b8977449f12e18d438d04475de8a84e2e0e8",
+   "size": 147337
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "f1b70ccce6bd285c110da6cf9c1020e2b55f273712b2f8199c4d28a6c047f222",
+   "size": 184632
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "d901c9e41acb7d024d8bf5215036efc39ea7efff307b8183c359eb0ee50dc06d",
+   "size": 183986
+  }
+ ],
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 156,
+  "h": 214,
+  "count": 12,
+  "cols": 3,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 11.55,
+ "frame_ms": 87,
+ "duration_ms": 1039,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9673
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 8.32,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9949,
+  "alpha_semi_share": 0.0279,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 129,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 1279143215,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ }
+}

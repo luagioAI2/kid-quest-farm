@@ -1,0 +1,73 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "en-boar-walk",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "34023afda782c9f7454a8b694c6047caaeab703e0843664221395e7930705998",
+   "size": 101809
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "199cf7cd1e3ddb56c01cbb875bae94ae24d1693c0f2275c21658effa1e235ccd",
+   "size": 135984
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "33f008ab9a8465bb959c034e635a89b45cd18f8b5aaac966360ccfc7913512c7",
+   "size": 47150
+  }
+ ],
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 163,
+  "h": 130,
+  "count": 12,
+  "cols": 3,
+  "rows": 3
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp"
+ ],
+ "fps": 14.44,
+ "frame_ms": 69,
+ "duration_ms": 831,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9459
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 21.93,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9931,
+  "alpha_semi_share": 0.0427,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 62,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 1843785304,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "gray",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ }
+}

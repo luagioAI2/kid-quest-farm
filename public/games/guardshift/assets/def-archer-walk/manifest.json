@@ -1,0 +1,67 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "def-archer-walk",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "bd8f0271fc3da5a2a94062a4a34c028227297d4e1b254d4a432ba3accce62f98",
+   "size": 203454
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "5f8eac9491673b5cac55e3b0259f72bb9b5806f157ecc5dda8627b5026987dc6",
+   "size": 214352
+  }
+ ],
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 99,
+  "h": 128,
+  "count": 16,
+  "cols": 4,
+  "rows": 4
+ },
+ "pages": [
+  "sheet-00.webp"
+ ],
+ "fps": 21,
+ "frame_ms": 48,
+ "duration_ms": 762,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9453
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 43.01,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9846,
+  "alpha_semi_share": 0.0735,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 217,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 15081034,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ }
+}

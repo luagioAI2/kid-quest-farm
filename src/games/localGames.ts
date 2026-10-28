@@ -194,6 +194,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "2a1cbab20d281e2af7d49a5d49dea4a213a55d3395834067b542347d67f31369",
     "bytes": 1117038,
     "assetBase": "/games/redbutton/"
+  },
+  {
+    "id": "guardshift",
+    "name": "轮班守卫",
+    "version": "1.0.0",
+    "url": "/games/guardshift/guardshift.plugin.mjs",
+    "sha256": "3d7c82d0f40ad37706b5014827221a3f97f6780b3f0b0f51cc47906931536e76",
+    "bytes": 4399615,
+    "assetBase": "/games/guardshift/"
   }
 ]
 

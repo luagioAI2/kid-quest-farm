@@ -118,6 +118,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   stackmeow: Stackmeow,
   cellguard: Cellguard,
   redbutton: Redbutton,
+  guardshift: Guardshift,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -1024,6 +1025,64 @@ function Redbutton({ deep }: { deep: string }) {
       {/* 金币：压在右上角，和按钮错开 */}
       <circle cx="49.4" cy="21.6" r="6.6" fill="#FFD23F" stroke="#C98A12" strokeWidth="1" />
       <circle cx="49.4" cy="21.6" r="4" fill="none" stroke="#E8A81C" strokeWidth="1.1" opacity=".85" />
+    </g>
+  )
+}
+
+/**
+ * 轮班守卫：一座奶油色小城堡 + 一条砖路，路边站着一个红斗篷弓兵。
+ *
+ * 三件东西缺一不可，而且顺序有讲究：
+ *   ① 草地土丘（深色 `deep`）在最下面，负责「这是草地关卡」；
+ *   ② 砖路**必须画在城堡之前** —— 它要从城堡门口往下拐出去，画在后面会盖住门；
+ *   ③ 弓兵放最后，压在路边：58px 下它是唯一能读出「有人守着」的东西。
+ */
+function Guardshift({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 落地阴影（`deep` = 卡片底色的深色档，和背景同源才不会显脏） */}
+      <ellipse cx="32" cy="51" rx="19" ry="5" fill={deep} opacity=".26" />
+      {/* 草地土丘 */}
+      <ellipse cx="32" cy="45" rx="23" ry="12.5" fill="#8FD06A" />
+      <ellipse cx="32" cy="43" rx="23" ry="12.5" fill="#A8E07F" />
+      {/* 砖路：从门口往下拐到左下角 */}
+      <path
+        d="M32 40v9c0 4-3 6-7 7l-11 3"
+        fill="none"
+        stroke="#F0D9A8"
+        strokeWidth="7"
+        strokeLinecap="round"
+      />
+      <path
+        d="M32 40v9c0 4-3 6-7 7l-11 3"
+        fill="none"
+        stroke="#D8B87A"
+        strokeWidth="1"
+        strokeLinecap="round"
+        strokeDasharray="2 3"
+      />
+      {/* 城堡主体 */}
+      <rect x="21.5" y="28" width="21" height="14.5" rx="1.6" fill="#FFF4DE" stroke="#4A3326" strokeWidth="1.5" />
+      {/* 城垛：三小块 */}
+      <g fill="#FFF4DE" stroke="#4A3326" strokeWidth="1.2">
+        <rect x="21.5" y="25.6" width="4" height="3.4" />
+        <rect x="30" y="25.6" width="4" height="3.4" />
+        <rect x="38.5" y="25.6" width="4" height="3.4" />
+      </g>
+      {/* 两顶粉色尖顶塔 */}
+      <g stroke="#4A3326" strokeWidth="1.4" strokeLinejoin="round">
+        <path d="M19.4 25.8l3.6-7.4 3.6 7.4Z" fill="#F2798E" />
+        <path d="M37.4 25.8l3.6-7.4 3.6 7.4Z" fill="#F2798E" />
+      </g>
+      {/* 拱门 */}
+      <path d="M29.6 42.5v-5.2a2.4 2.4 0 0 1 4.8 0v5.2Z" fill="#8A5A3B" stroke="#4A3326" strokeWidth="1.1" />
+      {/* 弓兵：红斗篷 + 一张弓 */}
+      <g>
+        <circle cx="16.4" cy="41.6" r="4.1" fill="#C6394B" stroke="#4A3326" strokeWidth="1.2" />
+        <circle cx="16.4" cy="42.6" r="2.1" fill="#FFE3C2" />
+        <path d="M13.4 45.6c1.6-1.1 4.4-1.1 6 0l-.5 2.4h-5Z" fill="#C6394B" stroke="#4A3326" strokeWidth="1.1" />
+        <path d="M21.6 39.6a4.2 4.2 0 0 1 0 5.2" fill="none" stroke="#FFD23F" strokeWidth="1.4" strokeLinecap="round" />
+      </g>
     </g>
   )
 }

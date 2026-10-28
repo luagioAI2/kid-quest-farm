@@ -125,6 +125,13 @@
       "version": "1.0.0",
       "file": "redbutton/redbutton.plugin.mjs",
       "assetBase": "redbutton/"
+    },
+    {
+      "id": "guardshift",
+      "name": "轮班守卫",
+      "version": "1.0.0",
+      "file": "guardshift/guardshift.plugin.mjs",
+      "assetBase": "guardshift/"
     }
   ]
 }

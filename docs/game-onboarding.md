@@ -398,7 +398,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 
 ---
 
-## 附录：现有十八款（2026-10-28 快照）
+## 附录：现有十九款（2026-10-28 快照）
 
 | id | 目录 | 包 | 经济 | 商城分类 |
 | --- | --- | --- | --- | --- |
@@ -420,6 +420,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `stackmeow` | `task-games/stackmeow` | 4.05 MB | 积分直接花（**不设币、不发券**，开局 10，**每局都收**）；最高分只在游戏存档里，不换券 | `chill` |
 | `cellguard` | `task-games/cellguard` | 0.29 MB | 积分直接花（**不设币、不发券**，点「开始战斗」10，**每局都收**，「继续战斗」接着打不另收）；钻石只买游戏内的钥匙/武器，不换券 | `chill` |
 | `redbutton` | `task-games/redbutton` | 1.09 MB | 积分直接花（**不设币、不发券**，这一档的**第一下按键** 10，10 分钟内切回来不再收）；金币/宝石只买升级与扭蛋，不换券 | `chill` |
+| `guardshift` | `task-games/guardshift` | 4.30 MB | 积分直接花（**不设币、不发券**，点「出阵」10，**每局都收**，「重试」接着打不另收）；钻石只花在「永久强化」，不换券 | `chill` |
 
 包大小是 `localGames.ts` 里 `bytes` 的口径（`make-local-catalog` 现算），
 改完包要重算，否则这张表会和清单说的不是一回事。
@@ -431,7 +432,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 它的「进化经验」存在**游戏自己的存档**里，不进宿主账本 ——
 `manifest.coin` 只是闸门要求必填的占位。
 
-现在 `chill` 有十五款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit` / `deckrush` / `corgi` / `screamchick` / `sweetspin` / `renttower` / `stackmeow` / `cellguard` / `redbutton`），
+现在 `chill` 有十六款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit` / `deckrush` / `corgi` / `screamchick` / `sweetspin` / `renttower` / `stackmeow` / `cellguard` / `redbutton` / `guardshift`），
 差别只在**收费点**：
 
 | 游戏 | 收费点 | 宽限 |
@@ -451,6 +452,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `stackmeow` | 每次「开始」`beginRun()` | 无（一局就是一整座塔；**「继续」接着上一局不再收**） |
 | `cellguard` | 每次「开始战斗」 | 无（一局制；**「继续战斗」是接着打，不再收**，进 tab 也不收） |
 | `redbutton` | 这一档的**第一下按键**（`pressManual()`，点击与空格都走它） | 10 分钟（放置点击器没有「一局」；`paidAt` 写存档。**进 tab 不收费**） |
+| `guardshift` | 每次「出阵」 | 无（一局制；**「重试」是接着打，不再收**；进 tab / 关卡列表 / 卡组页 / 图鉴都不收） |
 
 判据一句话：**游戏里有没有「一局」这个动作** —— 有就按局收（关卡 / 回合制 / 抓娃娃），
 没有（放置 / 养成）就进场收一次 + 宽限期，且 `paidAt` **必须写存档**（写内存变量等于切走就失效）。

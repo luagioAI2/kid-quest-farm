@@ -1,0 +1,85 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "boss-golem-walk",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "c4a11f98d91b1d0cb47c8433e552b830175940aae25bc8a913e7f63472c8da18",
+   "size": 244828
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "ce74078b617941f6ec30f184a68fb9d1c5f5eb4144b414a55606bc148b9c71a5",
+   "size": 145260
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "3bfce079f23579ce7961818c154da33209bb965adac8872d18ba05cb135e38a1",
+   "size": 107992
+  },
+  {
+   "path": "sheet-02.webp",
+   "sha256": "92f5d82d653ea5370510592b12551e7fbf2eb76f88079686630eb72fe3d4410c",
+   "size": 114104
+  },
+  {
+   "path": "sheet-03.webp",
+   "sha256": "d45bc12df94af655380bbac1d915ac5216621ee89743a4f9620503f0dbf08f98",
+   "size": 141798
+  }
+ ],
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 203,
+  "h": 191,
+  "count": 16,
+  "cols": 2,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp",
+  "sheet-02.webp",
+  "sheet-03.webp"
+ ],
+ "fps": 19.69,
+ "frame_ms": 51,
+ "duration_ms": 813,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9634
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 16.58,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9786,
+  "alpha_semi_share": 0.0362,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 582,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 1384048452,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ }
+}

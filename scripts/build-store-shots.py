@@ -216,6 +216,14 @@ PLAN = [
         ("screenshots/store-3.png", "3"),
         ("screenshots/store-4.png", "4"),
     ]),
+    # 顺序：标题 → 战斗 → 伙伴图鉴 → 卡组。
+    # ⚠️ 关卡列表那张**故意没拍**：整屏都是「未解锁」，放进商店像在展示「你玩不到」。
+    ("guardshift", "guardshift", [
+        ("screenshots/store-1.png", "1"),
+        ("screenshots/store-2.png", "2"),
+        ("screenshots/store-3.png", "3"),
+        ("screenshots/store-4.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

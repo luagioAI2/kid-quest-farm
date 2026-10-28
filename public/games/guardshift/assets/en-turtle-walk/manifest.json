@@ -1,0 +1,85 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "en-turtle-walk",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "e7ae28af5b64ed04c0e62ebbc7629b7ce722c1de7b3b27ce19cc39634f23e0c1",
+   "size": 215754
+  },
+  {
+   "path": "sheet-00.webp",
+   "sha256": "0398000ed8db8a9b2b92ddf23ce1082871d94ce116cd6cbb21fc2a4744ef52ee",
+   "size": 180184
+  },
+  {
+   "path": "sheet-01.webp",
+   "sha256": "cc2bf107728cec5bbed87b1ff69df95ccfdc52f454ad0ffd7f44f8658aa49e13",
+   "size": 182298
+  },
+  {
+   "path": "sheet-02.webp",
+   "sha256": "0235fe743f5c7941f5bed70b8dca692cd1702ebf9c34280b4029c9fe64d9c1bd",
+   "size": 183238
+  },
+  {
+   "path": "sheet-03.webp",
+   "sha256": "b7f94c71cf0ef13b53d36144cbc97fd4e7de6b100e73f3dab9d48d4731b2b5a4",
+   "size": 181072
+  }
+ ],
+ "action_id": "walk",
+ "kind": "loop",
+ "frame": {
+  "w": 245,
+  "h": 217,
+  "count": 16,
+  "cols": 2,
+  "rows": 2
+ },
+ "pages": [
+  "sheet-00.webp",
+  "sheet-01.webp",
+  "sheet-02.webp",
+  "sheet-03.webp"
+ ],
+ "fps": 21,
+ "frame_ms": 48,
+ "duration_ms": 762,
+ "loop": true,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9677
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 15.57,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.997,
+  "alpha_semi_share": 0.0191,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 0,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "template",
+  "seed": 1422031253,
+  "attempt": 1,
+  "source_frames": 33,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ }
+}
