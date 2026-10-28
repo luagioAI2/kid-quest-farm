@@ -119,6 +119,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   cellguard: Cellguard,
   redbutton: Redbutton,
   guardshift: Guardshift,
+  hoopsneak: Hoopsneak,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -1083,6 +1084,71 @@ function Guardshift({ deep }: { deep: string }) {
         <path d="M13.4 45.6c1.6-1.1 4.4-1.1 6 0l-.5 2.4h-5Z" fill="#C6394B" stroke="#4A3326" strokeWidth="1.1" />
         <path d="M21.6 39.6a4.2 4.2 0 0 1 0 5.2" fill="none" stroke="#FFD23F" strokeWidth="1.4" strokeLinecap="round" />
       </g>
+    </g>
+  )
+}
+
+/**
+ * 偷偷投篮：一页横格纸 + 右边的手绘篮筐，球沿着虚线抛物线飞过去。
+ *
+ * 三件东西缺一不可：
+ *   ① **横格纸 + 左侧红边线**是这款游戏的全部视觉语言（整屏就是一张纸），
+ *      去掉它这块就退化成「一个篮球」；
+ *   ② 虚线抛物线负责「这是投球，不是投篮游戏机」；
+ *   ③ 球压在抛物线上、星压在球前面 —— 58px 下只能靠球和筐读出玩法。
+ * 墨色用蓝黑 `#2C3444`（游戏里是蓝墨水勾线），不用其它图标的棕色。
+ */
+function Hoopsneak({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 落地阴影（`deep` = 卡片底色的深色档，和背景同源才不会显脏） */}
+      <ellipse cx="32" cy="55.5" rx="18" ry="4.6" fill={deep} opacity=".24" />
+      {/* 横格纸 */}
+      <rect x="9.5" y="8.5" width="45" height="46" rx="2.6" fill="#FCF7E7" stroke="#2C3444" strokeWidth="1.5" />
+      {/* 横格线（画在纸上，别压到边框） */}
+      <g stroke="#C2CFE0" strokeWidth=".9" strokeLinecap="round">
+        <path d="M14 20h36" />
+        <path d="M14 28h36" />
+        <path d="M14 36h36" />
+        <path d="M14 44h36" />
+      </g>
+      {/* 左侧红边线 */}
+      <path d="M16.4 11.5v40" stroke="#E8827F" strokeWidth=".9" opacity=".85" />
+      {/* 抛物线（虚线）：从球当前位置继续往右上 */}
+      <path
+        d="M15.6 44.6c4.6-9.4 12.4-13.4 20.2-13.4"
+        fill="none"
+        stroke="#2C3444"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+        strokeDasharray="2.2 2.6"
+        opacity=".55"
+      />
+      {/* 篮筐：背板 + 红圈 + 网 */}
+      <path d="M46.2 15.6v9.2" stroke="#2C3444" strokeWidth="1.5" strokeLinecap="round" />
+      <ellipse cx="40.4" cy="26.4" rx="6.6" ry="2.3" fill="none" stroke="#D8494E" strokeWidth="2.1" />
+      <path
+        d="M34.6 28.2l1.9 5.6h7.8l1.9-5.6"
+        fill="none"
+        stroke="#9AA7BC"
+        strokeWidth="1"
+        strokeLinejoin="round"
+      />
+      <g stroke="#9AA7BC" strokeWidth=".8" opacity=".9">
+        <path d="M37.2 28.4l.7 5.2" />
+        <path d="M43.6 28.4l-.7 5.2" />
+      </g>
+      {/* 星：球刚吃到的那一颗（在球前面，压住纸面） */}
+      <path
+        d="M30.4 26.2l1.5 3 3.3.5-2.4 2.3.6 3.3-3-1.6-3 1.6.6-3.3-2.4-2.3 3.3-.5Z"
+        fill="#FFD23F"
+        stroke="#C98A12"
+        strokeWidth=".9"
+        strokeLinejoin="round"
+      />
+      {/* 球 */}
+      <circle cx="20" cy="39.4" r="4.6" fill="#4A7BC8" stroke="#2C3444" strokeWidth="1.3" />
+      <path d="M15.9 37.6c2.6 1.4 5.6 1.4 8.2 0" fill="none" stroke="#2C3444" strokeWidth=".8" opacity=".55" />
     </g>
   )
 }

@@ -224,6 +224,14 @@ PLAN = [
         ("screenshots/store-3.png", "3"),
         ("screenshots/store-4.png", "4"),
     ]),
+    # 顺序：标题 → 球在半空 → 新机关说明卡 → 后面的机关关。
+    # ⚠️ 选关页那张**故意没拍**：5 个圆钮里 4 个是「未解锁」，放进商店像在展示「你玩不到」。
+    ("hoopsneak", "hoopsneak", [
+        ("screenshots/store-1.png", "1"),
+        ("screenshots/store-2.png", "2"),
+        ("screenshots/store-3.png", "3"),
+        ("screenshots/store-4.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

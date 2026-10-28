@@ -132,6 +132,13 @@
       "version": "1.0.0",
       "file": "guardshift/guardshift.plugin.mjs",
       "assetBase": "guardshift/"
+    },
+    {
+      "id": "hoopsneak",
+      "name": "偷偷投篮",
+      "version": "1.0.0",
+      "file": "hoopsneak/hoopsneak.plugin.mjs",
+      "assetBase": "hoopsneak/"
     }
   ]
 }

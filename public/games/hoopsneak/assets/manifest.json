@@ -1,0 +1,20 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 2,
+  "bytes": 2117959
+ },
+ "assets": [
+  {
+   "file": "audio/bgm_doodle.m4a",
+   "bytes": 967035,
+   "sha256": "ee9f8e05b5e9a1a9ccb9d57837446d42719b3625d9ddc07a0e018f8284201a87"
+  },
+  {
+   "file": "fonts/SmileySans-Oblique.woff2",
+   "bytes": 1150924,
+   "sha256": "731f22973349404b15a88a99ef3b5dd4104c0965c23b7e485c1f11e84fea99e2"
+  }
+ ]
+}

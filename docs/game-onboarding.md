@@ -154,6 +154,20 @@ python scripts/convert-webp.py            # png/jpg → webp（脚本随项目�
 用 `container.style.position` 判断会读成空串 ⇒ 补一个 `relative` ⇒ inline 胜过类 ⇒
 盒子退回内容高度（平板 966 → 600）。判据用 `getComputedStyle(...).position === 'static'`。
 
+#### 4.1b 原版是横屏设计的游戏（`orientation`）
+
+宿主是竖屏。原版 `mountDisplay({ orientation: 'landscape' })` 会**往 `document.body` 里塞一个
+`position:fixed` 的「请旋转屏幕继续」遮罩** —— 竖屏下它永远不消失，而且盖住的是**整个 App**，
+不只是游戏区（实测同一帧颜色数 75 vs 改成 `both` 后 206）。
+
+⇒ 横屏设计的游戏一律写 `mountDisplay({ host: 挂载根节点, orientation: 'both', lang: 'zh' })`。
+
+改完之后画面是**竖屏里的一条横向带**（1280×720 按宽度缩放：390 宽的手机上就是 390×219，
+上下是同源背景）。这是**正确的取舍，不要试图裁掉两边**：这类游戏的投手贴在左边缘、篮筐贴在右边缘，
+裁哪边都是把玩法裁掉。代价是「游戏区偏小」，接这类游戏时要提前跟人讲清楚这一条。
+
+⚠️ `host` 一定要传**挂载根节点**，不传就量整个视口 ⇒ 按钮画在容器外面（看得见点不到）。
+
 ### 4.2 经济：先选一条路，别硬改
 
 **这是整件事里唯一需要「判断」的一步**，其余都是机械活。
@@ -398,7 +412,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 
 ---
 
-## 附录：现有十九款（2026-10-28 快照）
+## 附录：现有二十款（2026-10-28 快照）
 
 | id | 目录 | 包 | 经济 | 商城分类 |
 | --- | --- | --- | --- | --- |
@@ -421,6 +435,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `cellguard` | `task-games/cellguard` | 0.29 MB | 积分直接花（**不设币、不发券**，点「开始战斗」10，**每局都收**，「继续战斗」接着打不另收）；钻石只买游戏内的钥匙/武器，不换券 | `chill` |
 | `redbutton` | `task-games/redbutton` | 1.09 MB | 积分直接花（**不设币、不发券**，这一档的**第一下按键** 10，10 分钟内切回来不再收）；金币/宝石只买升级与扭蛋，不换券 | `chill` |
 | `guardshift` | `task-games/guardshift` | 4.30 MB | 积分直接花（**不设币、不发券**，点「出阵」10，**每局都收**，「重试」接着打不另收）；钻石只花在「永久强化」，不换券 | `chill` |
+| `hoopsneak` | `task-games/hoopsneak` | 4.32 MB | 积分直接花（**不设币、不发券**，**进一关** 10，每关都收，「重新开始」不另收）；星星只是 600 枚收集进度（解锁笔记本），不换券 | `chill` |
 
 包大小是 `localGames.ts` 里 `bytes` 的口径（`make-local-catalog` 现算），
 改完包要重算，否则这张表会和清单说的不是一回事。
@@ -432,7 +447,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 它的「进化经验」存在**游戏自己的存档**里，不进宿主账本 ——
 `manifest.coin` 只是闸门要求必填的占位。
 
-现在 `chill` 有十六款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit` / `deckrush` / `corgi` / `screamchick` / `sweetspin` / `renttower` / `stackmeow` / `cellguard` / `redbutton` / `guardshift`），
+现在 `chill` 有十七款（`sugar` / `anthill` / `moestrike` / `melonjar` / `minergirl` / `ropeland` / `blockfit` / `deckrush` / `corgi` / `screamchick` / `sweetspin` / `renttower` / `stackmeow` / `cellguard` / `redbutton` / `guardshift` / `hoopsneak`），
 差别只在**收费点**：
 
 | 游戏 | 收费点 | 宽限 |
@@ -453,6 +468,7 @@ URL」列为违规示例，这是过审论据的一部分。空着的时候设�
 | `cellguard` | 每次「开始战斗」 | 无（一局制；**「继续战斗」是接着打，不再收**，进 tab 也不收） |
 | `redbutton` | 这一档的**第一下按键**（`pressManual()`，点击与空格都走它） | 10 分钟（放置点击器没有「一局」；`paidAt` 写存档。**进 tab 不收费**） |
 | `guardshift` | 每次「出阵」 | 无（一局制；**「重试」是接着打，不再收**；进 tab / 关卡列表 / 卡组页 / 图鉴都不收） |
+| `hoopsneak` | 每次**进一关** `enterLevel(i)`（标题「开始」/ 选关圆钮 / 结算「下一关」都走它） | 无（一关制；**HUD「重新开始」直接调 `startLevel`，不经过收费**；进 tab / 选关页 / 笔记本翻页都不收） |
 
 判据一句话：**游戏里有没有「一局」这个动作** —— 有就按局收（关卡 / 回合制 / 抓娃娃），
 没有（放置 / 养成）就进场收一次 + 宽限期，且 `paidAt` **必须写存档**（写内存变量等于切走就失效）。

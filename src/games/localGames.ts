@@ -203,6 +203,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "3d7c82d0f40ad37706b5014827221a3f97f6780b3f0b0f51cc47906931536e76",
     "bytes": 4399615,
     "assetBase": "/games/guardshift/"
+  },
+  {
+    "id": "hoopsneak",
+    "name": "偷偷投篮",
+    "version": "1.0.0",
+    "url": "/games/hoopsneak/hoopsneak.plugin.mjs",
+    "sha256": "80e377474e3eb79aa8b186e0a437597ed6e1ed79e08ce1ea9582ca6b8507ccd0",
+    "bytes": 4425730,
+    "assetBase": "/games/hoopsneak/"
   }
 ]
 
