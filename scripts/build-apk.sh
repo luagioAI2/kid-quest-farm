@@ -5,10 +5,25 @@
 # 用法：
 #   bash scripts/build-apk.sh            # debug 包（可直接安装）
 #   bash scripts/build-apk.sh release    # release 包（需签名配置）
+#   bash scripts/build-apk.sh --offline  # 明知没有后端也照打（纯离线包）
+#   bash scripts/build-apk.sh --web-only # 只构建 Web 产物，不碰 gradle
 # ============================================================
 set -euo pipefail
 
-MODE="${1:-debug}"
+MODE="debug"
+OFFLINE=0
+WEB_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    debug|release) MODE="$arg" ;;
+    --offline) OFFLINE=1 ;;
+    --web-only) WEB_ONLY=1 ;;
+    *)
+      echo "✗ 不认识的参数：$arg"
+      exit 2
+      ;;
+  esac
+done
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
@@ -48,6 +63,49 @@ fi
 echo "▸ JAVA_HOME    = $JAVA_HOME"
 echo "▸ ANDROID_HOME = $ANDROID_HOME"
 
+# ---------------- 后端地址闸门 ----------------
+# `VITE_API_BASE` 是**构建期常量**：`src/api/client.ts` 里默认值是
+# `http://127.0.0.1:8090`，在手机上那是「手机自己」—— 装上去之后
+# 登录 / 注册 / 兑换码 / 招商申请全部失败，而界面只会说「连不上服务器」，
+# 看不出是地址配错了。所以在这里拦一下，别让它悄悄打进包里。
+API_BASE="${VITE_API_BASE:-}"
+if [ -z "$API_BASE" ] && [ -f .env.production ]; then
+  API_BASE="$(grep -E '^VITE_API_BASE=' .env.production | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
+fi
+
+is_loopback=0
+case "$API_BASE" in
+  "" | *127.0.0.1* | *localhost*) is_loopback=1 ;;
+esac
+
+if [ "$is_loopback" = "1" ]; then
+  if [ "$OFFLINE" = "1" ]; then
+    echo ""
+    echo "⚠️  没有配置 VITE_API_BASE，按 --offline 继续。"
+    echo "    这个包**登录 / 兑换码 / 招商申请都用不了**（只会说「连不上服务器」），"
+    echo "    任务、积分、游戏这些离线功能照常。"
+  else
+    echo ""
+    echo "✗ 没有配置后端地址，打出来的 APK 登录会永远失败。"
+    echo ""
+    echo "  VITE_API_BASE 是构建期常量，默认值是 http://127.0.0.1:8090 ——"
+    echo "  在手机上那是「手机自己」，装上去只会说「连不上服务器」。"
+    echo ""
+    echo "  两种做法："
+    echo "    ① 配真地址（推荐）："
+    echo "         echo 'VITE_API_BASE=https://api.你的域名.com' > .env.production"
+    echo "       注意必须是 https：capacitor.config.json 里 allowMixedContent=false，"
+    echo "       http 的接口会被 WebView 直接拦掉。"
+    echo "    ② 真的要打离线包（不要登录）："
+    echo "         bash scripts/build-apk.sh $MODE --offline"
+    echo ""
+    echo "  只是想本机连 8090 调试？先用 adb reverse tcp:8090 tcp:8090 再 --offline。"
+    exit 1
+  fi
+else
+  echo "▸ API_BASE     = $API_BASE"
+fi
+
 # ---------------- 构建 Web ----------------
 echo ""
 echo "▸ [1/3] 构建 Web 产物…"
@@ -58,6 +116,24 @@ if [ -d dist ]; then
   find dist -depth -type d -empty -delete 2>/dev/null || true
 fi
 npm run build
+
+# 构建完再验一次「环境变量真的进产物了」——
+# 文件名写成 `.env.prod`、或者 shell 里 export 了却没传进 vite，
+# 产物里都还是默认值，而日志一片绿。
+if [ "$is_loopback" = "0" ]; then
+  if grep -rq "127.0.0.1:8090" dist/assets/*.js 2>/dev/null; then
+    echo "✗ 产物里还是 127.0.0.1:8090 —— VITE_API_BASE 没生效。"
+    echo "  检查：文件名必须是 .env.production，值不要加引号或空格。"
+    exit 1
+  fi
+  echo "▸ 产物已写入 API_BASE = $API_BASE"
+fi
+
+if [ "$WEB_ONLY" = "1" ]; then
+  echo ""
+  echo "✅ Web 产物已构建（--web-only，跳过 gradle 与 cap sync）"
+  exit 0
+fi
 
 echo "▸ [2/3] 同步到 Android 工程…"
 # cap sync 内部走 fs-extra 的 remove()，会整目录删除再复制。
