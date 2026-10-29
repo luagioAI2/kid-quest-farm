@@ -2207,6 +2207,74 @@ try {
     `pin=${deviceLocal.pinAfter}`,
   )
 
+  /* ---------- 9b. 备份不带游戏本体（体积 + 它会执行） ---------- */
+  // `gameKv.__bundle` 是整段游戏代码（anthill 一款 4.2 MB），而挂载时它会被
+  // `import()` 执行，中间没有哈希也没有签名。所以：备份里不许有它，
+  // 恢复后按名单从**本地包**重装（那条路比对烧进 App 的 sha256）。
+  //
+  // ⚠️ 判据不能只看「库里有没有 __bundle 行」—— 恢复后重装会写一行**真的**进去。
+  //    要验的是「**文件里那段代码**没进来」，所以把名单清空再导，
+  //    这样重装不会发生，`installed()` 必须是空的。
+  const gameBackup = await page.evaluate(async () => {
+    const S = () => window.__kqf__.getState()
+    await window.__kqf__.grantGame('anthill')
+    await S().refresh()
+    const ins = await S().installLocalGame('anthill')
+    await S().refresh()
+
+    const snap = await window.__kqf__.exportBackup()
+    const text = JSON.stringify(snap)
+    const rows = (snap?.data?.gameKv ?? []).map((r) => r.key)
+    const ids = snap?.data?.meta?.installedGameIds ?? null
+
+    // ① 干净备份导回去：游戏要自己装回来
+    const clean = await window.__kqf__.importBackup(JSON.parse(text))
+    await S().refresh()
+    const afterClean = Object.keys(window.__kqf__.plugin.installed() ?? {})
+
+    // ② 带一段「我自己的代码」的备份：那段代码不许落库
+    const evil = JSON.parse(text)
+    evil.data.meta = { ...(evil.data.meta ?? {}), installedGameIds: [] }
+    evil.data.gameKv = [
+      { gameId: 'anthill', key: 'anthill:__bundle', value: 'window.__pwned = true' },
+    ]
+    const bad = await window.__kqf__.importBackup(evil)
+    await S().refresh()
+    const afterEvil = Object.keys(window.__kqf__.plugin.installed() ?? {})
+
+    return {
+      installOk: ins?.ok ?? null,
+      rows,
+      ids,
+      kb: Math.round(text.length / 1024),
+      cleanMsg: clean?.message ?? null,
+      afterClean,
+      evilMsg: bad?.message ?? null,
+      afterEvil,
+      pwned: window.__pwned ?? null,
+    }
+  })
+  check(
+    '备份里不含游戏本体（只带存档）',
+    gameBackup.rows.every((k) => !k.endsWith(':__bundle') && !k.endsWith(':__assets')),
+    `gameKv 行：${gameBackup.rows.join(', ') || '(空)'}`,
+  )
+  check(
+    '备份记着「装过哪些游戏」',
+    Array.isArray(gameBackup.ids) && gameBackup.ids.includes('anthill'),
+    `installedGameIds=${JSON.stringify(gameBackup.ids)}`,
+  )
+  check(
+    '恢复后游戏自动装回来（走本地包，比对 sha256）',
+    gameBackup.cleanMsg?.includes('装回') && gameBackup.afterClean.includes('anthill'),
+    `msg=${gameBackup.cleanMsg} 装回=${JSON.stringify(gameBackup.afterClean)}`,
+  )
+  check(
+    '★★ 别人塞进备份的游戏代码不会落库',
+    gameBackup.afterEvil.length === 0 && gameBackup.pwned === null,
+    `导入后已装=${JSON.stringify(gameBackup.afterEvil)} pwned=${JSON.stringify(gameBackup.pwned)}`,
+  )
+
   /* ---------- 结果汇总 ---------- */
   console.log('\n' + '─'.repeat(58))
   const failed = results.filter((r) => !r.ok)

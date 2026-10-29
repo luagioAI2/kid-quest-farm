@@ -890,6 +890,41 @@ function stripDeviceLocal(s: AppSettings): AppSettings {
   return out
 }
 
+/**
+ * 这一行 `gameKv` 是不是**宿主保留键**（游戏本体 / 资源根）。
+ *
+ * 键形如 `${gameId}:${shortKey}`，见 `db.ts` 的 `gameKvKey()`。
+ */
+function isHostOnlyGameKvKey(key: string): boolean {
+  return key.endsWith(`:${BUNDLE_KEY}`) || key.endsWith(`:${ASSET_BASE_KEY}`)
+}
+
+/**
+ * 备份里**不带游戏本体，只带存档**。
+ *
+ * 原来 `__bundle`（整段游戏代码，`anthill` 一款就 **4.2 MB**）是原样进备份的。
+ * 两个问题，第二个严重：
+ *
+ * 1. **体积**：装一款 4 MB，装五款 20 MB，而其中 99% 的字节是「这台设备上
+ *    本来就有的游戏代码」。备份是要发给微信 / 网盘的。
+ * 2. **它是一段会被执行的代码**。`mountGame()` 读 `__bundle` → `importBundle()`
+ *    → `Blob` → `import()`，中间**没有哈希、没有签名**（`loader.ts` 头注释写着
+ *    「必须发生在调用本函数之前：先验签，再执行」）。下载层是有签名的，
+ *    备份这条路把那道门整个绕过去了。
+ *
+ *    实测（2026-10-30）：把一份真备份里的 `__bundle` 换成自己的模块，
+ *    `importBackup` 照样报「数据已恢复」，挂载时那段代码就在页面里跑起来，
+ *    能读孩子的积分流水。而备份文件正是家长之间会互相传的东西
+ *    （「这是我配好的任务，你导入吧」）。
+ *
+ * 所以：导出剥掉，导入端也**不认**文件里的这两行（两边都不认才算关死）。
+ * 恢复后按 `meta.installedGameIds` 从**本地包**重装 —— 那条路会比对
+ * 烧进 App 的 sha256。存档不受影响（存档是 `<gameId>:` 开头的其他行）。
+ */
+function saveOnlyGameKv(rows: GameKvRow[]): GameKvRow[] {
+  return rows.filter((r) => !isHostOnlyGameKvKey(r.key))
+}
+
 function shipSnapshotOf(ship: WishShipInfo | undefined): WishShipSnapshot | undefined {
   if (!ship) return undefined
   const digits = typeof ship.phone === 'string' ? ship.phone.replace(/[^0-9]/g, '') : ''
@@ -3942,6 +3977,14 @@ export const useApp = create<AppState>((set, get) => ({
       loadQuotaCarry(),
       db.wishCodes.toArray(),
     ])
+    /*
+     * 装过哪些游戏 —— 本体不进备份，恢复时要靠这份名单从本地包重装。
+     * 名单从 `__bundle` 行算（`installedGames` 的唯一事实来源），
+     * 不另存一份，免得两边走散。
+     */
+    const installedGameIds = gameKv
+      .filter((r) => r.key.endsWith(`:${BUNDLE_KEY}`))
+      .map((r) => r.gameId)
     return {
       app: 'kid-quest-farm',
       /**
@@ -3970,8 +4013,12 @@ export const useApp = create<AppState>((set, get) => ({
          * 「导出再导入一次，所有下载来的游戏进度清零」，而且不报错。
          * 宿主内置的农场不在这里（它用 `meta` / 自己的表），所以漏掉的后果
          * **只在装了下载游戏的设备上**才看得见 —— 更容易漏。
+         *
+         * ⚠️ 但**只导存档，不导本体**（`saveOnlyGameKv`）：`__bundle` 是几 MB
+         * 的游戏代码，而且它会被 `import()` 执行 —— 见那个函数的注释。
+         * 装过哪些游戏记在 `meta.installedGameIds`，恢复后从本地包重装。
          */
-        gameKv,
+        gameKv: saveOnlyGameKv(gameKv),
         inventory,
         animals,
         checkIns,
@@ -4031,13 +4078,17 @@ export const useApp = create<AppState>((set, get) => ({
          * 写的就是它）。只剥顶层那个 `settings` 是不够的 —— 这条断言第一次跑
          * 就是这么红的：PIN 换了个门又出去了。所以这里也要剥。
          */
-        meta: Object.fromEntries(
-          meta.map((m) =>
-            m.key === 'settings'
-              ? [m.key, stripDeviceLocal(m.value as AppSettings)]
-              : [m.key, m.value],
+        meta: Object.fromEntries([
+          ...meta.map(
+            (m): [string, unknown] =>
+              m.key === 'settings'
+                ? [m.key, stripDeviceLocal(m.value as AppSettings)]
+                : [m.key, m.value],
           ),
-        ),
+          /* 装过哪些游戏。不是「孩子挣到的东西」，是「这份备份描述的是
+             哪台设备上装了什么」—— 恢复时拿它把本地游戏装回来。 */
+          ['installedGameIds', installedGameIds],
+        ]),
       },
     }
   },
@@ -4087,8 +4138,13 @@ export const useApp = create<AppState>((set, get) => ({
         // 老备份里没有这个字段，`pickArray(undefined)` 返回 null，落到空数组。
         harvestLedger: pickArray<HarvestEntry>(d.harvestLedger) ?? [],
         mallLedger: pickArray<MallEntry>(d.mallLedger) ?? [],
-        // ⚠️ 主键是 `key`（形如 `${gameId}:${k}`），**不是 `id`** —— 和背包一样要显式传键名
-        gameKv: pickArray<GameKvRow>(d.gameKv, 'key') ?? [],
+        /* ⚠️ 主键是 `key`（形如 `${gameId}:${k}`），**不是 `id`** —— 和背包一样要显式传键名
+         *
+         * ⚠️ 而且要**滤掉 `__bundle` / `__assets`**：文件里那两行是游戏代码，
+         * 挂载时会被 `import()` 执行，而这条路没有哈希也没有签名。
+         * 别人发来的备份里放一段代码，导入就等于把它跑起来（见
+         * `saveOnlyGameKv` 的注释）。本体只从**本地包**装（那条路比对 sha256）。 */
+        gameKv: saveOnlyGameKv(pickArray<GameKvRow>(d.gameKv, 'key') ?? []),
         // ⚠️ 背包的主键是 `itemId`，不是 `id` —— 见上面 `pickArray` 的注释
         inventory: pickArray<InventorySlot>(d.inventory, 'itemId') ?? [],
         animals: pickArray<Animal>(d.animals) ?? [],
@@ -4262,6 +4318,9 @@ export const useApp = create<AppState>((set, get) => ({
           if (metaBag && typeof metaBag === 'object' && !Array.isArray(metaBag)) {
             for (const [k, v] of Object.entries(metaBag as Record<string, unknown>)) {
               if (META_FROM_TOP_LEVEL.has(k)) continue
+              /* 导出侧的元信息，不是应用状态 —— 写进库里只会变成
+                 下一次导出时被覆盖的一行垃圾。 */
+              if (k === 'installedGameIds') continue
               if (v === undefined) continue
               await db.meta.put({ key: k, value: v })
             }
@@ -4285,7 +4344,35 @@ export const useApp = create<AppState>((set, get) => ({
        */
       set({ settings: await loadSettings() })
       await get().refresh()
-      return { ok: true, message: '数据已恢复' }
+
+      /* ---- 游戏本体不在备份里：按名单从本地包重装 ----
+       *
+       * 走 `installLocalGame`，也就是**正常的安装路径**：取包 → 比对烧进 App 的
+       * sha256 → 校验经济参数 → 才落库。备份文件里放什么都进不来。
+       *
+       * 存档不用管：它一直躺在 `gameKv` 里（`<gameId>:` 开头的其他行），
+       * 装回来就能接着玩。
+       *
+       * 装不上有两种：这个版本里没有那款游戏、或者没拥有（账本里没有它）。
+       * 都不该让整次恢复失败 —— 数据已经恢复了，只是游戏要手动装一次。 */
+      const wantGames = (d.meta as Record<string, unknown> | undefined)?.installedGameIds
+      let putBack = 0
+      let pending = 0
+      if (Array.isArray(wantGames)) {
+        for (const gid of wantGames) {
+          if (typeof gid !== 'string') continue
+          const r = await get().installLocalGame(gid)
+          if (r.ok) putBack += 1
+          else pending += 1
+        }
+      }
+      const tail =
+        putBack > 0 || pending > 0
+          ? `；游戏装回 ${putBack} 款${
+              pending > 0 ? `，还有 ${pending} 款要去「游戏」页重新装` : ''
+            }`
+          : ''
+      return { ok: true, message: `数据已恢复${tail}` }
     } catch (e) {
       return { ok: false, message: `恢复失败：${(e as Error).message}` }
     }

@@ -3697,6 +3697,66 @@ describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
     ).toBe(1200)
   })
 
+  /* ------------------------------------------------------------
+     备份不带游戏本体 —— 一半是体积，一半是「它会执行」
+     ------------------------------------------------------------
+     `gameKv.__bundle` 是整段游戏代码（`anthill` 一款 4.2 MB），而
+     `mountGame()` 读它 → `importBundle()` → `Blob` → `import()`，
+     中间没有哈希也没有签名。下载层有签名，备份这条路把门绕过去了。
+
+     后果不只是「备份大」：别人发来一份「我配好的任务」，里面塞一段代码，
+     导入就等于把它跑起来 —— 它能读孩子的账本、能 fetch 任意地址。
+     ------------------------------------------------------------ */
+  it('★ 备份里不带游戏本体，只带存档', async () => {
+    await setGameKv('cloudfarm', BUNDLE_KEY, 'export function start() {}')
+    await setGameKv('cloudfarm', ASSET_BASE_KEY, '/games/cloudfarm/')
+    await setGameKv('cloudfarm', 'save', { level: 3 })
+
+    const snap = (await useApp.getState().exportBackup()) as {
+      data: { gameKv: { key: string }[] }
+    }
+    const keys = snap.data.gameKv.map((r) => r.key)
+    expect(keys, '本体不许进备份').not.toContain('cloudfarm:__bundle')
+    expect(keys, '资源根也是宿主保留键').not.toContain('cloudfarm:__assets')
+    expect(keys, '存档必须留着 —— 否则换机等于进度清零').toContain('cloudfarm:save')
+    expect(JSON.stringify(snap), '一个字节的代码都不该在里面').not.toContain(
+      'export function start',
+    )
+  })
+
+  it('★ 备份记下「装过哪些游戏」，否则恢复后装不回来', async () => {
+    await setGameKv('cloudfarm', BUNDLE_KEY, 'x')
+    await setGameKv('corgi', BUNDLE_KEY, 'y')
+    const snap = (await useApp.getState().exportBackup()) as {
+      data: { meta: { installedGameIds?: string[] } }
+    }
+    const ids = snap.data.meta.installedGameIds
+    expect([...(ids ?? [])].sort(), '名单从 __bundle 行派生').toEqual(['cloudfarm', 'corgi'])
+  })
+
+  it('★★ 导入一份自带代码的备份，那段代码不许落库', async () => {
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const evil = {
+      ...snap,
+      data: {
+        ...snap.data,
+        gameKv: [
+          { gameId: 'cloudfarm', key: 'cloudfarm:__bundle', value: 'window.__pwned = true' },
+          { gameId: 'cloudfarm', key: 'cloudfarm:__assets', value: '/evil/' },
+          { gameId: 'cloudfarm', key: 'cloudfarm:save', value: { level: 9 } },
+        ],
+      },
+    }
+    const res = await useApp.getState().importBackup(evil)
+    expect(res.ok, res.message).toBe(true)
+    expect(
+      await getGameKv('cloudfarm', BUNDLE_KEY),
+      '别人发来的备份不许把代码塞进库 —— 挂载时它会被 import() 执行',
+    ).toBeUndefined()
+    expect(await getGameKv('cloudfarm', ASSET_BASE_KEY), '资源根同理').toBeUndefined()
+    expect(await getGameKv('cloudfarm', 'save'), '存档照常恢复').toEqual({ level: 9 })
+  })
+
   it('★ 导入之后 settings 要跟着刷新（否则设置页显示的还是旧的）', async () => {
     // `refresh()` 一开头就是 `const { settings } = get()` —— 它**不重读**
     // settings。导入写完库只调 `refresh()`，于是内存里还是导入前那份：
