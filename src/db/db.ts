@@ -1099,8 +1099,20 @@ export const DEFAULT_SETTINGS: AppSettings = {
    * 所以默认必须是「不限」，由家长自己去设。
    */
   gameDailyMinutes: 0,
-  /** 默认家长密码：0000。首次打开即有密码保护，家长可在设置里改。 */
-  parentPin: '0000',
+  /**
+   * 家长密码。**默认没有**（`undefined`）。
+   *
+   * 2026-10-30 用户原话：「新号不要在引导前就要求设置家长密码，
+   * 需要用的时候才要求第一次设置。」
+   *
+   * 以前默认是 `0000`：引导里还得专门让家长改掉它（「谁都能进家长区」）。
+   * 现在改成「没密码」—— 引导只问小名和头像，家长第一次进家长区
+   * （审核、改任务、规则/游戏/数据栏）时才当场设一个。
+   *
+   * ⚠️ `undefined` 和 `''` 都表示「没设」；判断一律用 `!!settings.parentPin`，
+   *    别写 `=== undefined`（老存档里可能存过空串）。
+   */
+  parentPin: undefined,
 }
 
 export async function loadSettings(): Promise<AppSettings> {

@@ -15,7 +15,7 @@ import { humanizeAgo } from '../../domain/time'
 import { saveBlob, shareOrDownload } from '../../platform/files'
 // 复用家长端同一个 PinPad，不要在这里再抄一份 —— 之前抄出来的副本
 // 带着"第 4 位自动提交读不到最新值"的 bug，两边各修一次很容易漏。
-import { PinPad, ParentPinPanel } from '../parent/ParentGate'
+import { PinFlow, ParentPinPanel } from '../parent/ParentGate'
 import { AccountCard } from '../account/AccountCard'
 import { LoginSheet } from '../account/LoginSheet'
 import { useAccount } from '../../store/useAccount'
@@ -48,7 +48,6 @@ export default function SettingsPage({
   const [tab, setTab] = useState<Tab>('child')
   const [locked, setLocked] = useState(true)
   const [dataLocked, setDataLocked] = useState(true)
-  const [pin, setPin] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -61,9 +60,20 @@ export default function SettingsPage({
   const session = useAccount((s) => s.session)
   const [loginOpen, setLoginOpen] = useState(false)
 
-  /** 家长锁：默认锁定写入型操作，避免孩子乱改规则 */
-  const needsPin = !!settings.parentPin
-  const gateOpen = !needsPin || !locked
+  /**
+   * 家长锁：默认锁定写入型操作，避免孩子乱改规则。
+   *
+   * 2026-10-30 起**一律要过闸门**（不再看有没有设过密码）：
+   * 没设过的第一次进来当场设一个（`PinFlow` 自己判断），
+   * 之后每次进来都要输 —— 以前「没密码 = 直接放行」意味着新装 App
+   * 的规则、游戏、数据三栏对谁都敞着。
+   */
+  /* ⚠️ 还要看 `protectParentActions`：家长在别处（或调试桥）把这个开关关掉时，
+     设置页也不该继续拦人 —— 否则「关掉保护」在设置页这一屏等于没生效，
+     而界面上没有任何提示（e2e 里就是卡在这儿：关了保护还是只能看到密码卡）。 */
+  const protectionOn = settings.protectParentActions !== false
+  const gateOpen = !protectionOn || !locked
+  const dataGateOpen = !protectionOn || !dataLocked
 
   /**
    * 现金 : 积分 参考汇率（1 元 = 多少积分）。
@@ -289,22 +299,12 @@ export default function SettingsPage({
 
         {tab === 'rules' && (
           <>
-            {needsPin && locked ? (
-              <Card title="请输入家长密码" emoji="🔒">
-                <PinPad
-                  value={pin}
-                  onChange={setPin}
-                  onSubmit={(final) => {
-                    const candidate = final ?? pin
-                    if (candidate === settings.parentPin) {
-                      setLocked(false)
-                      setPin('')
-                    } else {
-                      pushToast({ kind: 'warn', title: '密码不对哦', emoji: '🔒' })
-                      setPin('')
-                    }
-                  }}
-                />
+            {!gateOpen ? (
+              <Card
+                title={settings.parentPin ? '请输入家长密码' : '先设一个家长密码'}
+                emoji="🔒"
+              >
+                <PinFlow onPass={() => setLocked(false)} />
               </Card>
             ) : (
               <>
@@ -549,7 +549,10 @@ export default function SettingsPage({
 
                 <Card title="家长密码" emoji="🔑">
                   <p className="mb-3 text-sm text-ink-500">
-                    设一个 4 位数字，防止孩子自己改规则。留空表示不设密码。
+                    设一个 4 位数字，防止孩子自己改规则。
+                    清空它 <span className="font-extrabold text-ink-700">不等于</span> 不要密码 ——
+                    下次进家长区时会重新要求你设一个；
+                    真想完全不设密码，请关掉上面的「保护家长操作」。
                   </p>
                   <PinSetting
                     current={settings.parentPin}
@@ -558,7 +561,7 @@ export default function SettingsPage({
                       void updateSettings({ parentPin: p || undefined })
                       pushToast({
                         kind: 'success',
-                        title: p ? '密码已设置' : '已取消密码',
+                        title: p ? '密码已设置' : '已清空，下次进家长区会要求重新设置',
                         emoji: '🔑',
                       })
                     }}
@@ -581,22 +584,12 @@ export default function SettingsPage({
         */}
         {tab === 'game' && (
           <>
-            {needsPin && locked ? (
-              <Card title="请输入家长密码" emoji="🔒">
-                <PinPad
-                  value={pin}
-                  onChange={setPin}
-                  onSubmit={(final) => {
-                    const candidate = final ?? pin
-                    if (candidate === settings.parentPin) {
-                      setLocked(false)
-                      setPin('')
-                    } else {
-                      pushToast({ kind: 'warn', title: '密码不对哦', emoji: '🔒' })
-                      setPin('')
-                    }
-                  }}
-                />
+            {!gateOpen ? (
+              <Card
+                title={settings.parentPin ? '请输入家长密码' : '先设一个家长密码'}
+                emoji="🔒"
+              >
+                <PinFlow onPass={() => setLocked(false)} />
               </Card>
             ) : (
               <GamesSection gateOpen={gateOpen} />
@@ -606,7 +599,7 @@ export default function SettingsPage({
 
         {tab === 'data' && (
           <>
-            {needsPin && dataLocked ? (
+            {!dataGateOpen ? (
               <Card title="数据操作需要密码" emoji="🔒">
                 <p className="mb-3 text-sm text-ink-500">
                   导出、恢复、清空数据都需要家长密码，防止孩子误操作。
@@ -885,7 +878,7 @@ function PinSetting({
         disabled={disabled}
         onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 4))}
         inputMode="numeric"
-        placeholder="4 位数字，留空取消"
+        placeholder="4 位数字，留空 = 下次再设"
         className="w-full rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] outline-none focus:border-sky-400"
       />
       <button

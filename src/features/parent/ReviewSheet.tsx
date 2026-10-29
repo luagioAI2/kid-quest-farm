@@ -780,7 +780,10 @@ export function ReviewSheetModal({
   const settings = useApp((s) => s.settings)
   const [unlocked, setUnlocked] = useState(false)
 
-  const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+  /* 保护开着就要过闸门 —— **没设过密码也要过**（面板会变成「先设一个」）。
+     2026-10-30 之前这里是 `!!parentPin && ...`：没设密码就完全不设防，
+     而那正是新装的默认状态（引导里点「以后再说」）。 */
+  const needsPin = settings.protectParentActions !== false
 
   // 每次打开都从"锁着"开始
   useEffect(() => {

@@ -266,10 +266,14 @@ postHarvest({ delta: +gain, source, refId, memo })
 
 ```tsx
 // src/features/parent/ParentGate.tsx
-const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+const protectionOn = settings.protectParentActions !== false
+const mode = !protectionOn ? 'open' : settings.parentPin ? 'verify' : 'setup'
 ```
 
-- 默认密码 `0000`（`src/db/db.ts` 的 `DEFAULT_SETTINGS`）。
+- **默认没有密码**（`DEFAULT_SETTINGS.parentPin` 是 `undefined`，2026-10-30 改）。
+  引导里不问密码；第一次真正用到家长区时，闸门才要求当场设一个（输两遍）。
+- 三种状态：`open`（家长关掉了「保护家长操作」）/ `verify`（输已有的）/
+  `setup`（还没设过，设完直接放行）。**没密码 ≠ 不设防** —— 这点写错过一次。
 - 凡是**会永久改变孩子的钱 / 内容**的操作都要过闸门：
   兑换、家长审核、编辑任务、改兑换品、**你的游戏里的「重置存档 / 改赔率」也要**。
 - 孩子端**不许**出现任何能改经济参数或自评质量的入口

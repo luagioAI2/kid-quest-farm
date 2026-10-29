@@ -18,6 +18,7 @@ import { qualityLabelRegex, readQualityLabels } from './lib/quality.mjs'
 // 币种显示名 / 图标从源码读，不在本脚本里再抄一份 —— 见 currency.mjs 文件头
 // （2026-10-16「丰收币 🌾」→「商城币 🎟️」就是抄了第二份的那次事故）
 import { COUPON, MALL, POINTS } from './lib/currency.mjs'
+import { seedParentPin } from './lib/onboarding.mjs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const CHROME_CANDIDATES = [
@@ -151,11 +152,17 @@ try {
   check('向导第二步：问名字和头像', await waitFor('input[aria-label="孩子的小名"]'))
 
   await clickByText('下一步')
-  check('向导第三步：设家长密码', await waitFor('[data-step="pin"]'))
+  /* 2026-10-30 用户要求：「新号不要在引导前就要求设置家长密码，
+     需要用的时候才要求第一次设置。」所以这里从「第三步是设密码」反过来断言。 */
+  check('★ 向导里没有「设家长密码」这一步', await page.evaluate(
+    () => !document.querySelector('[data-step="pin"]'),
+  ))
+  check('向导第三步：直接到完成页', await waitFor('[data-step="done"]'))
 
-  // 走「以后再说」而不是真设密码 —— 后面第 6 节要用默认密码 0000 走家长确认
-  await clickByText('以后再说')
-  check('跳过密码后进到完成页', await waitFor('[data-step="done"]'))
+  /* 后面几节要过家长闸门（审核、改任务、规则页），而新装**没有**家长密码 ——
+     不钉一个的话，第一次进闸门会要求当场设（输两遍），那些节全会卡住。
+     用共享 helper 钉成 0000，和别的脚本保持一致。 */
+  await seedParentPin(page)
 
   await clickByText('带宝贝看一遍')
   check('接着弹出功能导览（第一步：任务）', await waitFor('[data-tour-bubble="tasks"]'))
@@ -686,7 +693,7 @@ try {
 
     /* 光有按钮不算数：点下去要真的打开编辑器，而且载入的是**这张签到任务**
        （标题一致 + 签到模式开着）。否则等于给了个开不出东西的按钮。
-       这一节跑在设密码之前（引导里走的是「以后再说」），所以不用过闸。
+       这一节跑在第一次进家长闸门之前，所以不用过闸。
 
        ⚠️ 不能直接找页面上第一个 aria-label="编辑任务" —— 「今日任务」的卡片
        也有这个按钮，DOM 顺序在前，点到的是别人的卡。必须**从签到卡的标题
@@ -707,8 +714,8 @@ try {
       return true
     })
 
-    /* 编辑器是**家长动作**，被密码锁着 —— `DEFAULT_SETTINGS.parentPin` 是 '0000'，
-       而引导里走的是「以后再说」（不改密码），所以这里就是 0000。
+    /* 编辑器是**家长动作**，被密码锁着 —— 上面 `seedParentPin` 已经把
+       密码钉成了 0000（2026-10-30 起新装默认没有密码，闸门会要求现设）。
        不过闸的话，「✅ 保存修改」永远不会出现（这一条第一次写就栽在这，
        报的是「没出现保存按钮」，看着像编辑入口坏了，其实是门禁在正常工作）。 */
     const gateShown = await page.evaluate(() => {
@@ -1626,10 +1633,13 @@ try {
   // 但设置页**没有对应的开关** —— 也就是说家长根本关不掉。
   // 这条守的是「开关存在、能点、而且真的落库」。
   //
-  // 前置：先把家长密码清掉，让「规则」页签里的开关可用。
-  // 不去模拟 1-2-3-4 的键盘 —— 数字按钮在别的页签也会出现，选择器不稳。
+  /* 前置：先关掉家长保护，让「规则」页签里的开关可用。
+     ⚠️ 2026-10-30 起**不能**再用「清空 parentPin」来开锁了：没密码 =
+     还没设过，闸门会改成要求当场设一个（输两遍），页签永远打不开。
+     关闸门只有 `protectParentActions: false` 这一条路。
+     也不去模拟 1-2-3-4 的键盘 —— 数字按钮在别的页签也会出现，选择器不稳。 */
   const soundToggle = await page.evaluate(async () => {
-    await window.__kqf__.getState().updateSettings({ parentPin: '' })
+    await window.__kqf__.getState().updateSettings({ protectParentActions: false })
     await new Promise((r) => setTimeout(r, 600))
     const tabBtn = [...document.querySelectorAll('button')].find((x) => /规则/.test(x.innerText))
     tabBtn?.click()
@@ -1821,7 +1831,8 @@ try {
      React 收不到 onChange（值会被打回去），必须走原生 setter + 派发 input 事件。 */
   const ratioUi = await page.evaluate(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-    await window.__kqf__.getState().updateSettings({ parentPin: '' })
+    // 同上：关闸门靠 protectParentActions，不是清空密码
+    await window.__kqf__.getState().updateSettings({ protectParentActions: false })
     await sleep(500)
     document.querySelector('button[aria-label="设置"]')?.click()
     await sleep(700)

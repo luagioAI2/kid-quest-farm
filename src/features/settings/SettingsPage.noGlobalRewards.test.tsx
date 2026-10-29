@@ -41,6 +41,9 @@ async function bootStore() {
   await db.delete()
   await db.open()
   await useApp.getState().boot()
+  /* 默认没有家长密码（第一次用家长区才要求设）。这一组测的是规则页内容，
+     不是闸门 —— 先钉一个已知密码，下面「按 4 个 0」才进得去。 */
+  await useApp.getState().updateSettings({ parentPin: '0000' })
 }
 
 /** 打开「规则」页并过掉家长密码闸门（默认 PIN 0000，第 4 位自动提交） */

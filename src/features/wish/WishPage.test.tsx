@@ -85,7 +85,7 @@ describe('心愿商城：数字商品兑换之后', () => {
     await user.click(await screen.findByRole('button', { name: /游戏盲盒/ }))
 
     expect(await screen.findByText(/已经放进你的游戏柜了/)).toBeTruthy()
-    /* 默认设置里家长锁是开着的（`parentPin: '0000'`）。
+    /* 默认设置里家长锁是开着的（保护默认开）。
        数字商品这里**不该**先摆闸门 —— 主内容是交付成功，
        家长那一侧只留一个入口，点了才展开。 */
     expect(
@@ -102,7 +102,7 @@ describe('心愿商城：数字商品兑换之后', () => {
   it('实物订单照旧：先过密码，再去外链买', async () => {
     // 对照组。改数字商品那条分支时最容易顺手把实物也改掉 ——
     // 实物**必须**保留闸门（家长要去淘宝花钱），这条钉住它。
-    await useApp.getState().updateSettings({ parentPin: undefined })
+    await useApp.getState().updateSettings({ protectParentActions: false })
     await db.wishOrders.put(
       committedOrder({
         id: 'wo_toy',
@@ -224,7 +224,7 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
   })
 
   it('★ 没有家长锁时：两个动作都在，回绝之后单子真的结束', async () => {
-    await useApp.getState().updateSettings({ parentPin: undefined })
+    await useApp.getState().updateSettings({ protectParentActions: false })
     await db.wishOrders.put(wishedOrder({}) as never)
     await useApp.getState().refresh()
 
@@ -245,7 +245,7 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
   it('★ 被回绝过之后，详情里还看得见上次的理由', async () => {
     // 没有这一句的话，孩子看到的是一个干干净净的「🤍 想要这个」——
     // 他会以为自己没说过，家长那边则会收到同一个请求第二遍。
-    await useApp.getState().updateSettings({ parentPin: undefined })
+    await useApp.getState().updateSettings({ protectParentActions: false })
     await db.wishOrders.put(
       wishedOrder({
         status: 'cancelled',
@@ -349,7 +349,7 @@ describe('心愿商城：确认页的付款文案和「兑换记录」同源', (
 
   it('★ 纯券单写「20 兑换券」，不写「🎫 20 张」', async () => {
     // 家长锁关掉，否则详情页先撞密码闸门（那条路径另有测试钉）
-    await useApp.getState().updateSettings({ parentPin: undefined })
+    await useApp.getState().updateSettings({ protectParentActions: false })
     await db.wishOrders.put(
       committedOrder({
         id: 'wo_v',
@@ -374,7 +374,7 @@ describe('心愿商城：确认页的付款文案和「兑换记录」同源', (
   })
 
   it('★ 混付单写「10 兑换券 + 10 积分」', async () => {
-    await useApp.getState().updateSettings({ parentPin: undefined })
+    await useApp.getState().updateSettings({ protectParentActions: false })
     await db.wishOrders.put(
       committedOrder({
         id: 'wo_m',
@@ -447,7 +447,7 @@ describe('心愿：游戏类商品能直接买卡 / 输激活码', () => {
    * 少了这一步，测试会停在商品详情页找不到按钮。
    */
   const openParentPricing = async () => {
-    await useApp.getState().updateSettings({ parentPin: undefined })
+    await useApp.getState().updateSettings({ protectParentActions: false })
     await db.wishOrders.put(
       wishedOrder({
         id: 'wo_game_wished',

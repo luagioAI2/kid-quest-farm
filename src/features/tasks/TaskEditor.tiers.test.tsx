@@ -27,6 +27,10 @@ async function bootStore() {
   await db.delete()
   await db.open()
   await useApp.getState().boot()
+  /* 2026-10-30 起默认**没有**家长密码（第一次用家长区才要求设）。
+     这一组测的是阶梯预览，不是闸门 —— 先钉一个已知密码，
+     下面「按 4 个 0 过闸」的写法才成立。 */
+  await useApp.getState().updateSettings({ parentPin: '0000' })
 }
 
 /** 读「坚持的奖励阶梯」那一块里的 +N（按显示顺序） */

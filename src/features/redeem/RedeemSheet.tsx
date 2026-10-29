@@ -260,7 +260,8 @@ export function RedeemBody() {
     return () => window.clearTimeout(t)
   }, [flashId])
 
-  const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+  /* 保护开着就要过闸门 —— 没设过密码也过（面板会变成「先设一个」） */
+  const needsPin = settings.protectParentActions !== false
 
   return (
     <>

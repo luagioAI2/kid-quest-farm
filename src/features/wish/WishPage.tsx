@@ -711,7 +711,8 @@ function DetailView({
   /** 数字商品：家长要主动点一下「完成这一单」，闸门才展开（见下面的注释） */
   const [pinOpen, setPinOpen] = useState(false)
   const settings = useApp((s) => s.settings)
-  const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+  /* 保护开着就要过闸门 —— 没设过密码也过（面板会变成「先设一个」） */
+  const needsPin = settings.protectParentActions !== false
 
   const plan = offer ? planWishRedeem(offer.voucherPrice, vouchers, points) : null
   const alreadyOwned = item.kind === 'gamebox' && !!item.gameId && owned.has(item.gameId)
@@ -1223,7 +1224,8 @@ function OfferView({
   const cur = wishOffers.find((o) => o.itemId === itemId && !o.closedAt)
   const [price, setPrice] = useState(cur?.voucherPrice ?? 30)
   const [pinOk, setPinOk] = useState(false)
-  const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+  /* 保护开着就要过闸门 —— 没设过密码也过（面板会变成「先设一个」） */
+  const needsPin = settings.protectParentActions !== false
 
   // 最近 7 天的日均券收入 —— 给家长一个「定多少合理」的锚
   const perDay = useMemo(() => {

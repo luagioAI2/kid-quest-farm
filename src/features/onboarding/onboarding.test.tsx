@@ -40,15 +40,12 @@ function currentSettings(): AppSettings {
   return useApp.getState().settings
 }
 
-/** 按 PinPad 上的数字键。4 位会自动提交（见 ParentGate 里那段注释）。 */
-async function typePin(user: ReturnType<typeof userEvent.setup>, digits: string) {
-  for (const d of digits) {
-    await user.click(screen.getByRole('button', { name: d }))
-  }
-}
-
 /**
  * 密码页在不在。
+ *
+ * 2026-10-30 起向导里**不该有**这一页（第一次用家长区时才要求设），
+ * 所以这个 helper 现在只用来做**反向断言**。按键盘的 helper 在
+ * `ParentGate.test.tsx` 里 —— 逻辑跟着闸门走了。
  *
  * ⚠️ 用「确定」这个按键判，不用 `queryByText('设一个家长密码')` ——
  * 后者是标题文本，改个文案就失效了；而 `PinPad` 的 12 个键是它的**结构特征**，
@@ -72,75 +69,39 @@ beforeEach(async () => {
    ============================================================ */
 
 describe('家长设置向导', () => {
-  it('首次引导：走到第三步确实是「设一个家长密码」（第 4 条的对照组）', async () => {
+  /* 2026-10-30 用户原话：「新号不要在引导前就要求设置家长密码，
+     需要用的时候才要求第一次设置。」
+
+     所以这一组从「三次密码交互」变成「整条流程里根本不该出现密码键盘」。
+     密码那套交互（输两遍 / 不一致不落库）搬到了 `ParentGate.test.tsx`，
+     因为逻辑跟着闸门走了 —— 留在这儿测的就是「引导里不许设密码」。 */
+
+  it('★ 首次引导全程没有密码页，也不写 parentPin', async () => {
     const user = userEvent.setup()
     render(<SetupWizard onFinish={() => {}} />)
 
     await gotoProfile(user)
-    // 第一步还没到密码页
+    expect(pinPadPresent(), '第一步就不该有键盘').toBe(false)
+
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+
+    // 以前这里必须是密码页（对照组）；现在必须是「都设好啦」
     expect(pinPadPresent()).toBe(false)
-
-    await user.click(screen.getByRole('button', { name: '下一步' }))
-
-    // 同一套查询手法，这里必须查得到 —— 否则第 4 条就是假绿
-    expect(pinPadPresent()).toBe(true)
-    expect(screen.getByText('设一个家长密码')).toBeInTheDocument()
-  })
-
-  it('两次输的不一样 → 报错、回到第一遍，且**不落库**', async () => {
-    await freshStore({ parentPin: '1111' })
-    const user = userEvent.setup()
-    render(<SetupWizard onFinish={() => {}} />)
-
-    await gotoProfile(user)
-    await user.click(screen.getByRole('button', { name: '下一步' }))
-
-    await typePin(user, '1234')
-    // 第一遍输完，提示语应该切到「再输一次」
-    expect(screen.getByText('再输一次，确认没记错')).toBeInTheDocument()
-
-    await typePin(user, '5678')
-
-    expect(screen.getByText('两次不一样，重新设一次吧')).toBeInTheDocument()
-    // 关键：不一致绝不能写进去，老密码原封不动
-    expect(currentSettings().parentPin).toBe('1111')
-    // 而且要回到「第一遍」的状态，不是停在报错里
-    expect(screen.getByText('输入 4 位数字')).toBeInTheDocument()
-  })
-
-  it('两次输的一样 → 落库，并进到「都设好啦」', async () => {
-    const user = userEvent.setup()
-    render(<SetupWizard onFinish={() => {}} />)
-
-    await gotoProfile(user)
-    await user.click(screen.getByRole('button', { name: '下一步' }))
-    await typePin(user, '1234')
-    await typePin(user, '1234')
-
-    // ⚠️ 必须用 findBy*（轮询），不能 getBy*：submitPin 里先 `await updateSettings()`
-    // 再 `setStep('done')`，而写库要走一趟 IndexedDB（fake-indexeddb 用宏任务调度），
-    // 所以点完这一下，界面不是立刻切 —— getBy 会抢在切之前断言，随机红。
     expect(await screen.findByText('都设好啦')).toBeInTheDocument()
-    expect(currentSettings().parentPin).toBe('1234')
+    expect(currentSettings().parentPin, '引导不许写密码').toBeUndefined()
   })
 
-  it('密码可以「以后再说」—— 跳过之后老密码不动', async () => {
-    await freshStore({ parentPin: '1111' })
-    const user = userEvent.setup()
+  it('★ 欢迎页就说清「密码以后要用时再设」', () => {
     render(<SetupWizard onFinish={() => {}} />)
-
-    await gotoProfile(user)
-    await user.click(screen.getByRole('button', { name: '下一步' }))
-    await user.click(screen.getByRole('button', { name: '以后再说' }))
-
-    expect(await screen.findByText('都设好啦')).toBeInTheDocument()
-    expect(currentSettings().parentPin).toBe('1111')
+    expect(screen.getByText(/第一次用到家长区时会提醒你设/)).toBeInTheDocument()
   })
 
   /**
    * ⚠️ 安全回归：这一条守的是「孩子点重看引导就能改家长密码」那个洞。
+   * 密码页已经整个没了，但断言要留着 —— 将来谁再把「设置密码」加回来，
+   * 这条会红。
    */
-  it('重看模式：整条流程里没有密码页，也动不了 parentPin', async () => {
+  it('重看模式：动不了 parentPin', async () => {
     await freshStore({ parentPin: '9999', onboardingDone: true })
     const user = userEvent.setup()
     render(<SetupWizard replay onFinish={() => {}} />)
@@ -150,21 +111,9 @@ describe('家长设置向导', () => {
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
 
-    // 第二步之后**直接到完成**，中间没有密码页
     expect(pinPadPresent()).toBe(false)
-    expect(screen.queryByText('设一个家长密码')).toBeNull()
-    expect(screen.getByText('都设好啦')).toBeInTheDocument()
-
-    // 老密码必须原封不动 —— 这是这一条真正的断言
+    expect(await screen.findByText('都设好啦')).toBeInTheDocument()
     expect(currentSettings().parentPin).toBe('9999')
-  })
-
-  it('重看模式的欢迎页不复述「设家长密码」', () => {
-    render(<SetupWizard replay onFinish={() => {}} />)
-
-    expect(screen.getByText('再看一遍引导')).toBeInTheDocument()
-    // 首次引导的文案里才有「设一个家长密码」这件事
-    expect(screen.queryByText(/设一个家长密码/)).toBeNull()
   })
 
   it('「完成」页的按钮把孩子交给导览', async () => {
@@ -174,8 +123,7 @@ describe('家长设置向导', () => {
 
     await gotoProfile(user)
     await user.click(screen.getByRole('button', { name: '下一步' }))
-    await user.click(screen.getByRole('button', { name: '以后再说' }))
-    // 同上：这一步也是先写库再切页，得等
+    // 这一步是先写库再切页，得等
     await user.click(await screen.findByRole('button', { name: '带宝贝看一遍' }))
 
     expect(onFinish).toHaveBeenCalledTimes(1)

@@ -117,10 +117,7 @@ for (const d of DEVICES) {
       await wait(300)
       await shot('02-name')
       await clickExact(page, '下一步')
-      await waitFor(page, '[data-step="pin"]')
-      await wait(300)
-      await shot('03-pin')
-      await clickExact(page, '以后再说')
+      // 2026-10-30：没有「设家长密码」这一步了（改成第一次用家长区时才要求）
       await waitFor(page, '[data-step="done"]')
       await wait(300)
       await shot('04-done')

@@ -17,6 +17,7 @@
  */
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
+import { seedParentPin } from './lib/onboarding.mjs'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
@@ -211,10 +212,7 @@ try {
 
     await clickByText('下一步')
     await wait(600)
-    await shot('01d-guide-pin')
-
-    await clickByText('以后再说')
-    await wait(600)
+    // 2026-10-30：向导里已经没有「设家长密码」这一步（改成第一次用家长区时才要求）
     await shot('01e-guide-done')
 
     // 给孩子看的功能导览：拍两张，看高亮框有没有真的跟着 tab 走
@@ -272,6 +270,13 @@ try {
   } else {
     console.log('  ! 没弹新手引导（profile 里已经有 onboardingDone 标记，这 10 张会缺）')
   }
+
+  /* 2026-10-30 起新装**没有**家长密码（引导里不再要求设，第一次进家长区
+     才要求）。但这个脚本后面有多处「遇到锁就按 4 个 0」的写法 ——
+     没密码时那会变成「第一遍设置」，按四下只是设好了、还没过闸，
+     后面几张图会拍成密码面板（而且不报错）。所以统一钉一个 0000。
+     ⚠️ 必须在 if/else **之外**：老 profile 不弹引导时同样要钉。 */
+  await seedParentPin(page)
 
   await shot('02-tasks')
 
@@ -491,7 +496,7 @@ try {
         脚本只会打印一句跳过 —— 静默少一张图。 */
   await page.evaluate(async () => {
     const st = () => window.__kqf__.getState()
-    await st().updateSettings({ protectParentActions: false, parentPin: undefined })
+    await st().updateSettings({ protectParentActions: false })
   })
   await wait(300)
   await clickByText('兑换', 'nav')
@@ -536,7 +541,7 @@ try {
         （没有参考价、没有外链按钮），拿它当样本等于漏掉最该看的那半页。 */
   await page.evaluate(async () => {
     const st = () => window.__kqf__.getState()
-    await st().updateSettings({ protectParentActions: false, parentPin: undefined })
+    await st().updateSettings({ protectParentActions: false })
   })
   await wait(400)
 
@@ -790,9 +795,11 @@ try {
 
   /* 11. 设置页（孩子 tab） */
   await page.evaluate(async () => {
-    // 清掉家长锁，免得点齿轮时被 PIN 拦住（PIN 归 e2e 测，截图脚本不管）
+    /* 清掉家长锁，免得点齿轮时被 PIN 拦住（PIN 归 e2e 测，截图脚本不管）。
+       ⚠️ 2026-10-30 起只能靠 protectParentActions:false —— 清 parentPin
+       现在等于「还没设过」，闸门会改成要求当场设一个。 */
     const st = () => window.__kqf__.getState()
-    await st().updateSettings({ protectParentActions: false, parentPin: undefined })
+    await st().updateSettings({ protectParentActions: false })
   })
   await page.evaluate(() => {
     const b = document.querySelector('button[aria-label="设置"]')

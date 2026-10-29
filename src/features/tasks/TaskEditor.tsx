@@ -104,8 +104,9 @@ export function TaskEditor({
   const [rewardItemIds, setRewardItemIds] = useState<string[]>([])
   const [err, setErr] = useState<string | null>(null)
 
-  /** 家长校验：没设密码就等于不设防（省得自己都进不去） */
-  const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+  /* 家长校验：保护开着就要过 —— 没设过密码的，第一次进这里当场设一个
+     （以前是「没设密码 = 不设防」，而新装默认就是没密码，等于没保护） */
+  const needsPin = settings.protectParentActions !== false
   const [unlocked, setUnlocked] = useState(false)
 
   // 关闭时重新上锁，避免孩子趁家长走开继续改
