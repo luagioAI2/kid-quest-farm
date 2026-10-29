@@ -1064,7 +1064,7 @@ void gameName
  *
  * 走到这里手上应该有 3 单：泡泡玛特（取消）、泡泡玛特（完成）、盲盒（完成）。
  */
-console.log('\n── 心愿页：只剩「看」和「许愿」──')
+console.log('\n── 心愿页：只剩「看」和「许愿」，右上角是招商 ──')
 /* 2026-10-29 第三轮，用户原话：
      「不需要在心愿商城显示兑换记录和有一单在等爸妈处理。」
    这一屏原来还挂着「我许的愿」入口和「有 N 单在等爸妈处理」那张卡，
@@ -1086,6 +1086,77 @@ const wishOnly = await page.evaluate(() => {
 check('前提：还在心愿页上（否则下面两条恒真）', wishOnly.onWishPage)
 check('★ 没有「我许的愿」入口', !wishOnly.hasEntry)
 check('★ 没有「等爸妈处理」卡', !wishOnly.hasBanner)
+
+/* ---------- ⑬b 招商：入口在心愿页右上角（2026-10-29 第二轮） ----------
+ *
+ * 用户原话：「在 心愿右上角 把兑换记录 去掉 换成招商按钮。点开 看到招商合作。
+ *   不是在兑换/兑换记录里显示。另外家长申请 不是 邀请商家 而是分享让其他家长
+ *   使用。点申请即可。不需要填 称呼 这些。因为会根据当前账号，申请。」
+ *
+ * 第一版做在「兑换记录」底部、还带一张表单 —— 三处全错。这里钉四件事：
+ *   ① 入口在心愿页**头部右端**（位置是这次的需求本身，不是细节）；
+ *   ② 家长那一路写的是「分享给其他家长」，不是「邀请商家」；
+ *   ③ **一个输入框都没有**（有表单就等于把「点申请即可」做反了）；
+ *   ④ 兑换记录里**没有**它（反向断言，防止有人「顺手搬回去」）。
+ *
+ * ⚠️ 位置用**几何**量，不靠文字 —— `innerText` 里有「招商」两个字，
+ *    放在页面最底下也照样匹配得到。 */
+const merchantEntry = await page.evaluate(() => {
+  const el = document.querySelector('[data-merchant-entry]')
+  if (!el) return { found: false }
+  const r = el.getBoundingClientRect()
+  const row = el.parentElement?.getBoundingClientRect()
+  return {
+    found: true,
+    inHeader: r.top < 120,
+    atRight: !!row && r.right >= row.right - 2,
+  }
+})
+check('心愿页有招商入口', merchantEntry.found)
+check('★ 入口在头部（不是页面底部）', merchantEntry.found && merchantEntry.inHeader)
+check('★ 入口贴着标题行右端（右上角）', merchantEntry.found && merchantEntry.atRight)
+
+await page.evaluate(() => document.querySelector('[data-merchant-entry]')?.click())
+await wait(700)
+await page.screenshot({ path: `${OUT}/09b-merchant.png` })
+
+const merchant = await page.evaluate(() => {
+  const text = document.body.innerText
+  return {
+    onPage: text.includes('招商合作'),
+    hasParent: !!document.querySelector('[data-merchant-role="parent"]'),
+    hasMerchant: !!document.querySelector('[data-merchant-role="merchant"]'),
+    share: text.includes('分享给其他家长'),
+    wrongPitch: text.includes('邀请商家'),
+    inputs: document.querySelectorAll('input, textarea').length,
+  }
+})
+check('前提：进了招商页（否则下面几条恒真）', merchant.onPage)
+check('两路申请都在', merchant.hasParent && merchant.hasMerchant)
+check('★ 家长那一路写「分享给其他家长」', merchant.share)
+check('★ 家长那一路没写成「邀请商家」', !merchant.wrongPitch)
+check('★ 一个输入框都没有（点申请即可）', merchant.inputs === 0, `${merchant.inputs} 个`)
+
+await page.evaluate(() => document.querySelector('[data-merchant-apply="parent"]')?.click())
+await wait(800)
+const applied = await page.evaluate(() => {
+  const text = document.body.innerText
+  return {
+    pending: text.includes('审核中'),
+    admin: !!document.querySelector('[data-merchant-admin]'),
+  }
+})
+check('点一下就提交（显示「审核中」）', applied.pending)
+check('没后端时不给「打开后台」', !applied.admin)
+
+await page.evaluate(() => {
+  document.querySelector('button[aria-label="返回心愿商城"]')?.click()
+})
+await wait(600)
+check(
+  '返回之后回到心愿列表',
+  await page.evaluate(() => !!document.querySelector('[data-merchant-entry]')),
+)
 
 /* 原来那一屏看的东西，现在全在「📜 兑换记录」里 —— 断言跟着搬过去，
    不能因为换了屏就把「取消过的单子还看得见吗」丢掉。 */
@@ -1123,6 +1194,9 @@ const records = await page.evaluate(() => {
     oddPay: rows
       .map((r) => r.innerText.replace(/\n/g, ' '))
       .filter((t) => t.includes('🎫') || /·\s*\d+\s*张/.test(t)),
+    /* 反向：招商入口**不在**这一屏（用户原话「不是在兑换/兑换记录里显示」）。
+       第一版就错在这儿，而且它「看着很正常」—— 只有反向断言拦得住。 */
+    hasMerchantEntry: !!document.querySelector('[data-merchant-entry]'),
   }
 })
 check('兑换记录里 3 单都在', records.count >= 3, `${records.count} 行`)
@@ -1134,6 +1208,7 @@ check(
   records.oddPay.length === 0,
   records.oddPay.join(' | '),
 )
+check('★ 兑换记录里没有招商入口', !records.hasMerchantEntry)
 
 /* 切回「能换什么」再走 —— 下面那一节直接找 `[data-shop-row]`。
    `tab` 是 `RedeemBody` 里的 `useState`，页面没卸载就不会自己复位，

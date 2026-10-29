@@ -19,6 +19,7 @@ import { formatSize } from '@/games/size'
 import { GameIconArt } from '../settings/GameIcon'
 import { Portal } from '@/components/Portal'
 import { ParentPinPanel } from '../parent/ParentGate'
+import { MerchantView } from './MerchantView'
 
 /* ============================================================
    心愿商城（底部导航第 4 格，2026-10-28）
@@ -175,6 +176,11 @@ type WishView =
   | { kind: 'detail'; itemId: string }
   | { kind: 'offer'; itemId: string }
   | { kind: 'confirm'; orderId: string }
+  /**
+   * 招商合作（2026-10-29）。**从右上角进来**，和「看 / 许愿」是两件事，
+   * 所以它是一屏、不是一个弹层 —— 弹层关掉之后就找不回来了。
+   */
+  | { kind: 'merchant' }
 
 export default function WishPage() {
   const wishOffers = useApp((s) => s.wishOffers)
@@ -260,6 +266,10 @@ export default function WishPage() {
    *     （`committed` 那批，过了密码才能点「确认兑换 · 去购买」）。
    *
    * 两张都撤掉之后，这一页只剩两件事：**看**和**许愿**。这正是这一页的定义。
+   *
+   * 那个角**没有空着**：现在放的是「🤝 招商」（2026-10-29 第二轮）。
+   * 换成它，是因为招商和记录同属「家长的事」，而记录已经有了唯一出口
+   * （兑换页），招商还没有出口。
    */
 
   const goList = () => setView({ kind: 'list' })
@@ -284,6 +294,8 @@ export default function WishPage() {
     )
   } else if (view.kind === 'confirm') {
     content = <ConfirmView orderId={view.orderId} onBack={goList} onDone={goList} />
+  } else if (view.kind === 'merchant') {
+    content = <MerchantView onBack={goList} />
   } else if (view.kind === 'detail') {
     const item = wishItemById(view.itemId)
     content = item ? (
@@ -313,6 +325,7 @@ export default function WishPage() {
         points={pointsBalance}
         owned={owned}
         onOpen={(itemId) => setView({ kind: 'detail', itemId })}
+        onMerchant={() => setView({ kind: 'merchant' })}
       />
     )
   }
@@ -361,6 +374,7 @@ function ListView({
   points,
   owned,
   onOpen,
+  onMerchant,
 }: {
   filter: WishFilter
   setFilter: (f: WishFilter) => void
@@ -372,6 +386,8 @@ function ListView({
   points: number
   owned: Set<string>
   onOpen: (id: string) => void
+  /** 右上角「招商」 */
+  onMerchant: () => void
 }) {
   /**
    * ★ 已经拥有的游戏盒子**不再出现在「能换什么」里**（2026-10-29）。
@@ -430,8 +446,24 @@ function ListView({
             </p>
             <p className="text-xs font-bold text-ink-500">看看有什么想要的，告诉爸爸妈妈</p>
           </div>
-          {/* 2026-10-29 这里原来有个「我许的愿」按钮，撤了 —— 见文件里
-              「撤掉的东西别加回来」那段注释。 */}
+          {/* 招商入口（2026-10-29）。用户原话：「在 心愿右上角 把兑换记录
+              去掉 换成招商按钮。点开 看到招商合作。不是在兑换/兑换记录里显示。」
+
+              这个角上原来放的是「我许的愿」（那一屏已随「心愿商城不显示记录」
+              一起撤掉），正好让给招商 —— 一进一出，头部宽度不变。
+
+              ⚠️ 这里**不挂「审核中 / 已开通」的文字徽标**：320 宽上
+              标题会被挤成两行。接后端之后如果要提示，加一颗 8px 圆点，
+              别加字（见 `MerchantView` 里每一路各自的标签）。 */}
+          <button
+            type="button"
+            data-merchant-entry
+            onClick={onMerchant}
+            className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-white px-3 text-[13px] font-extrabold text-ink-700 shadow-flat active:btn-press"
+          >
+            <span aria-hidden>🤝</span>
+            招商
+          </button>
         </div>
       </header>
 
@@ -483,10 +515,11 @@ function ListView({
         )}
 
         {/* 藏了要说一句。不说的话，孩子只会觉得「昨天还有的东西今天没了」，
-            而他要找的那款其实在「我许的愿」里躺着。 */}
+            而他要找的那款其实在「设置 → 游戏」的「我的游戏」里躺着。 */}
         {hiddenOwnedCount > 0 && (
           <p className="px-1 text-[11px] leading-snug text-ink-400">
-            有 {hiddenOwnedCount} 款游戏你已经换到了，不再列在这里 —— 去右上角「我许的愿」看是哪几款。
+            有 {hiddenOwnedCount} 款游戏你已经换到了，不再列在这里 —— 去「设置 → 游戏」的
+            「我的游戏」看你有哪些。
           </p>
         )}
       </div>
@@ -719,7 +752,14 @@ function DetailView({
     setBusy(true)
     await wishCancel(order.id, '爸妈这次先不换')
     setBusy(false)
-    pushToast({ kind: 'info', title: '已回绝', detail: '孩子能在「我许的愿」里看到', emoji: '💬' })
+    pushToast({
+      kind: 'info',
+      title: '已回绝',
+      // 理由的落点是**这一件商品的详情页**（下面那句「上次爸妈说：…」）。
+      // 原来写的是「孩子能在『我许的愿』里看到」—— 那一屏 2026-10-29 下线了。
+      detail: '孩子再点进这件商品就能看到理由',
+      emoji: '💬',
+    })
     onBack()
   }
 

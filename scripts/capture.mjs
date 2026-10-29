@@ -749,20 +749,38 @@ try {
       await wait(800)
       await shot('10j-redeem-records')
 
-      /* 10k. 招商（2026-10-29 新增）
+      /* 10k. 招商（2026-10-29 新增，第二轮改到**心愿页右上角**）
          ------------------------------------------------------------
-         用户要求：「兑换记录显示招商，点击会有家长申请和商家申请。」
-         入口在记录**下面**，所以这张图要能同时看到记录和入口 ——
-         只拍里面那张表，看不出「它挂在哪儿」。
-         ⚠️ 这一段没有后端，界面只有「提交」这一半，图里看到的
-            就是它现在的全部样子。 */
-      await clickByText('招商合作')
+         用户原话：「在 心愿右上角 把兑换记录 去掉 换成招商按钮。
+         点开 看到招商合作。不是在兑换/兑换记录里显示。」
+
+         所以这一张必须**从心愿页进去**拍。走「兑换 → 记录 → 招商」
+         即使拍到的界面一模一样，也证明不了入口在对的地方 ——
+         上一版就是这么错的（入口做在记录底部），图集里看不出来。
+
+         走查要看两件事：
+           · 入口在心愿页**右上角**（和标题同一行）；
+           · 家长那一路写的是「分享给其他家长」，不是「邀请商家」。
+
+         ⚠️ 这一段没有后端，界面只有「申请」这一半。 */
+      await clickByText('心愿', 'nav')
       await wait(700)
-      await shot('10k-merchant')
-      await page.evaluate(() => {
-        document.querySelector('button[aria-label="返回兑换记录"]')?.click()
+      const merchantEntry = await page.evaluate(() => {
+        const b = document.querySelector('[data-merchant-entry]')
+        if (!b) return false
+        b.click()
+        return true
       })
-      await wait(400)
+      if (merchantEntry) {
+        await wait(700)
+        await shot('10k-merchant')
+        await page.evaluate(() => {
+          document.querySelector('button[aria-label="返回心愿商城"]')?.click()
+        })
+        await wait(400)
+      } else {
+        console.log('  ⚠️ 10k 跳过：心愿页右上角没找到招商入口')
+      }
     } else {
       console.log('  ⚠️ 10i 跳过：👀 里没找到「开放兑换」')
     }

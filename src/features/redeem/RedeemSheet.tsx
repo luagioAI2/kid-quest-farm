@@ -10,7 +10,6 @@ import { redeemHistory } from '@/domain/redeemHistory'
 import { WISH_ITEMS } from '@/games/wishCatalog'
 import { Portal } from '@/components/Portal'
 import { BoxView } from '../wish/BoxView'
-import { MerchantView } from './MerchantView'
 import { ParentPinPanel } from '../parent/ParentGate'
 import { BottomSheet, CoinPill } from '../farm/farmUi'
 
@@ -139,25 +138,18 @@ export function RedeemBody() {
 
   const [tab, setTab] = useState<'shop' | 'records' | 'manage'>('shop')
   const [pinOk, setPinOk] = useState(false)
-  /**
-   * 「招商」是不是打开着（2026-10-29）。
-   *
-   * 它是**记录 tab 里的一个子页**，不单独占一个 tab —— 用户要的是
-   * 「兑换记录显示招商」，不是「底栏多一格」。做成子页的另一个好处是
-   * 返回时天然回到记录列表，不用另写一个路由。
-   */
-  const [merchantOpen, setMerchantOpen] = useState(false)
 
-  /**
-   * 切 tab 时把招商关掉。
+  /*
+   * ⚠️ 2026-10-29 撤掉的东西，别加回来：**这一页里没有「招商」**。
    *
-   * 不关的话：在招商表单里点去「能换什么」再点回来，人会落在半张表单上，
-   * 以为自己点错了；而且那半张表单里的输入会**静默保留**，下次进来接着显示。
+   * 第一版做在了这里（记录列表底部一张「招商合作」卡，点开是子页）。
+   * 用户当场纠正：「在 心愿右上角 把兑换记录 去掉 换成招商按钮。
+   * 点开 看到招商合作。**不是在兑换/兑换记录里显示**。」
+   *
+   * 理由站得住：兑换这一格是**孩子自己的账**（换到什么、还没兑现什么），
+   * 招商是**家长的机会**。两者塞进同一屏，孩子翻记录时会撞见一堆
+   * 「分成 / 上架 / 审核」—— 而那不是他要看的东西。
    */
-  const goTab = (t: 'shop' | 'records' | 'manage') => {
-    setTab(t)
-    setMerchantOpen(false)
-  }
 
   // ⚠️ 这里原来读了一次 `settings.pointsPerYuan` 算「现金 : 积分」汇率，
   // 用来在商城头部和每张卡片上标「≈ ¥12」。2026-09-30 用户要求去掉这两处，
@@ -201,19 +193,6 @@ export function RedeemBody() {
    * 两个数故意不等，口径都写在 `domain/wish.ts`。
    */
   const pendingCount = useMemo(() => history.filter((r) => r.pending).length, [history])
-
-  /**
-   * 招商入口右上角那颗小标。
-   *
-   * 只做一件事：让家长知道「这件事有进展了」，不用点进去看。
-   * `approved` 优先于 `pending` —— 两个角色各申请一条时，有一路通过
-   * 就该报「后台已开通」，报「审核中」会让人以为还没过。
-   */
-  const merchantBadge = settings.merchantApps?.some((a) => a.status === 'approved')
-    ? '后台已开通'
-    : settings.merchantApps?.length
-      ? '审核中'
-      : null
 
   const wishRows = useMemo(
     () =>
@@ -291,10 +270,10 @@ export function RedeemBody() {
         data-redeem-tabs
         className="mb-3 flex gap-2 rounded-full border border-ink-900/10 bg-white p-1"
       >
-        <TabBtn active={tab === 'shop'} onClick={() => goTab('shop')}>
+        <TabBtn active={tab === 'shop'} onClick={() => setTab('shop')}>
           🎁 能换什么
         </TabBtn>
-        <TabBtn active={tab === 'records'} onClick={() => goTab('records')}>
+        <TabBtn active={tab === 'records'} onClick={() => setTab('records')}>
           📜 兑换记录
           {pendingCount > 0 ? (
             <span className="tnum ml-1 rounded-full bg-berry-400 px-1.5 text-xs text-white">
@@ -302,7 +281,7 @@ export function RedeemBody() {
             </span>
           ) : null}
         </TabBtn>
-        <TabBtn active={tab === 'manage'} onClick={() => goTab('manage')}>
+        <TabBtn active={tab === 'manage'} onClick={() => setTab('manage')}>
           ⚙️ 管理
         </TabBtn>
       </div>
@@ -364,11 +343,7 @@ export function RedeemBody() {
         </>
       )}
 
-      {tab === 'records' && merchantOpen && (
-        <MerchantView onBack={() => setMerchantOpen(false)} />
-      )}
-
-      {tab === 'records' && !merchantOpen && (
+      {tab === 'records' && (
         <div className="space-y-3 pb-4">
           {history.length === 0 ? (
             <div className="surface flex flex-col items-center gap-2 px-6 py-10 text-center">
@@ -414,33 +389,6 @@ export function RedeemBody() {
               </div>
             ))
           )}
-
-          {/* 招商入口（2026-10-29）。放在记录**下面**而不是顶上：
-              上面是孩子自己的账，招商是给家长看的机会 —— 抢在最前面会让人
-              以为「兑换记录」这一屏主要是在招生意。
-              空记录时也照样显示：这一屏没有内容，正是最该看见它的时候。 */}
-          <button
-            type="button"
-            data-merchant-entry
-            onClick={() => setMerchantOpen(true)}
-            className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-flat active:btn-press"
-          >
-            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-grape-100 text-xl">
-              🤝
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-extrabold text-ink-900">招商合作</span>
-              <span className="mt-0.5 block break-keep text-[11px] font-bold text-ink-500">
-                家长邀请商家拿分成 · 商家自己上架商品
-              </span>
-            </span>
-            {merchantBadge ? (
-              <span className="shrink-0 rounded-full bg-grass-200 px-2 py-0.5 text-[10px] font-extrabold text-grass-700">
-                {merchantBadge}
-              </span>
-            ) : null}
-            <span className="text-lg text-ink-500">›</span>
-          </button>
         </div>
       )}
 

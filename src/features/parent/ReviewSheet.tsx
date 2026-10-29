@@ -218,7 +218,9 @@ function WishReviewCard({
       pushToast({
         kind: 'info',
         title: '已回绝',
-        detail: '孩子能在「我许的愿」里看到',
+        // 「我许的愿」那一屏 2026-10-29 下线了，理由现在写在**商品详情页**上
+        // （「上次爸妈说：…」）。这句跟着改，别让家长去找一个不存在的屏。
+        detail: '孩子会在那件商品的页面看到理由',
         emoji: '💬',
       })
     } finally {
