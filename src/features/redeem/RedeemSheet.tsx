@@ -5,7 +5,8 @@ import type { RedeemCategory, RedeemItem, WishItem } from '@/domain/types'
 import { humanizeAgo } from '@/domain/time'
 import { clampPointsPerYuan, formatYuan } from '@/domain/cash'
 import { describeRedeemPayment, planRedeemPayment, type RedeemPayment } from '@/domain/redeem'
-import { WISH_KIND_META, wishOwnedSet, wishShelf } from '@/domain/wish'
+import { WISH_KIND_META, wishOwnedSet, wishShelf, type WishTone } from '@/domain/wish'
+import { redeemHistory } from '@/domain/redeemHistory'
 import { WISH_ITEMS } from '@/games/wishCatalog'
 import { Portal } from '@/components/Portal'
 import { BoxView } from '../wish/BoxView'
@@ -74,6 +75,19 @@ type ShopRow =
   | { kind: 'family'; cost: number; item: RedeemItem }
   | { kind: 'wish'; cost: number; price: number; item: WishItem }
 
+/**
+ * 记录行上那颗状态标签的配色。
+ *
+ * 色系名来自 `domain/wish.ts` 的 `WishTone`（那里同时管「这单该用什么词」）——
+ * 别在这里另起一套名字，否则同一种状态在两个模块里各叫一个样。
+ */
+const HISTORY_TONE: Record<WishTone, string> = {
+  green: 'bg-grass-200 text-grass-700',
+  amber: 'bg-sun-300 text-ink-900',
+  blue: 'bg-sky-50 text-sky-500',
+  gray: 'bg-ink-100 text-ink-500',
+}
+
 export function RedeemSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <BottomSheet
@@ -129,8 +143,6 @@ export function RedeemBody() {
   // 用来在商城头部和每张卡片上标「≈ ¥12」。2026-09-30 用户要求去掉这两处，
   // 所以这一页**不再需要**汇率 —— 汇率现在只在「设置」和家长端编辑器里用。
 
-  const pending = useMemo(() => redeemRecords.filter((r) => !r.fulfilled), [redeemRecords])
-
   /**
    * 心愿商城里**爸妈已经定好价**的那些 —— 它们就是兑换品。
    *
@@ -151,6 +163,18 @@ export function RedeemBody() {
   const wishOffers = useApp((s) => s.wishOffers)
   const ownedGameIds = useApp((s) => s.ownedGameIds)
   const installedGames = useApp((s) => s.installedGames)
+
+  /**
+   * 「📜 兑换记录」= 家里换的 + 心愿/游戏换的，**一条时间线**。
+   *
+   * 家长 2026-10-29：「孩子刚兑换了一个游戏，为啥我兑换记录里看不到。」
+   * 原因是两张表：家里那几件写 `redeemRecords`，游戏写 `wishOrders`，
+   * 而这一屏原来只读前者 —— 券扣了、游戏装上了、记录里一个字都没有，
+   * 界面上零异常。合并逻辑在 `domain/redeemHistory.ts`。
+   */
+  const history = useMemo(() => redeemHistory(redeemRecords, wishOrders), [redeemRecords, wishOrders])
+  /** tab 上那个数字：还在等爸妈兑现 / 处理的有几单 */
+  const pendingCount = useMemo(() => history.filter((r) => r.pending).length, [history])
 
   const wishRows = useMemo(
     () =>
@@ -228,9 +252,9 @@ export function RedeemBody() {
         </TabBtn>
         <TabBtn active={tab === 'records'} onClick={() => setTab('records')}>
           📜 兑换记录
-          {pending.length > 0 ? (
+          {pendingCount > 0 ? (
             <span className="tnum ml-1 rounded-full bg-berry-400 px-1.5 text-xs text-white">
-              {pending.length}
+              {pendingCount}
             </span>
           ) : null}
         </TabBtn>
@@ -298,31 +322,31 @@ export function RedeemBody() {
 
       {tab === 'records' && (
         <div className="space-y-3 pb-4">
-          {redeemRecords.length === 0 ? (
+          {history.length === 0 ? (
             <div className="surface flex flex-col items-center gap-2 px-6 py-10 text-center">
               <span className="text-5xl">📜</span>
               <p className="font-display font-extrabold text-ink-900">还没有兑换过</p>
               <p className="text-sm text-ink-500">做任务攒积分、种地攒兑换券，都能来这里换</p>
             </div>
           ) : (
-            redeemRecords.map((r) => (
-              <div key={r.id} className="surface flex items-center gap-3 p-3">
+            history.map((r) => (
+              <div key={r.id} data-redeem-record={r.id} className="surface flex items-center gap-3 p-3">
                 <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sun-100 text-xl">
                   {r.emoji}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-extrabold text-ink-900">{r.name}</p>
                   <p className="text-[11px] text-ink-500">
-                    -{describeRedeemPayment(r)} · {humanizeAgo(r.createdAt)}
+                    -{r.pay} · {humanizeAgo(r.createdAt)}
                   </p>
                 </div>
                 <span
                   className={clsx(
                     'shrink-0 rounded-full px-2 py-1 text-[11px] font-bold',
-                    r.fulfilled ? 'bg-grass-200 text-grass-700' : 'bg-sun-300 text-ink-900',
+                    HISTORY_TONE[r.tone],
                   )}
                 >
-                  {r.fulfilled ? '已兑现' : '待兑现'}
+                  {r.tag}
                 </span>
               </div>
             ))

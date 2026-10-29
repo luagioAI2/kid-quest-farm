@@ -1249,6 +1249,41 @@ check(
 check('换完这一行消失（在走流程的不再上架）', walletAfter.rowGone)
 check('扣币之后没被弹到别处', walletAfter.onRedeemTab)
 
+/* ★ 换完必须在「📜 兑换记录」里看得到（2026-10-29 家长报的 bug）
+ *
+ * 「孩子刚兑换了一个游戏，为啥我兑换记录里看不到。」
+ * 记录页原来只读 `redeemRecords`（家里那几件），而游戏/心愿写的是
+ * `wishOrders` —— 券扣了、游戏装上了，记录里一个字都没有，界面零异常。
+ *
+ * ⚠️ 判据要扫**全部行**，不能只看第一行：`wishRedeem` 会复用那条 `wished`
+ *    单子并保留它原来的 `createdAt`，所以刚换的这一单在时间线上可能不在最上面。
+ */
+const recordsTab = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find((x) =>
+    /兑换记录/.test(x.textContent ?? ''),
+  )
+  if (!b) return false
+  b.click()
+  return true
+})
+await wait(800)
+await page.screenshot({ path: `${OUT}/10d-redeem-records.png` })
+const recordRows = await page.evaluate(() =>
+  [...document.querySelectorAll('[data-redeem-record]')].map((r) => (r.textContent ?? '').trim()),
+)
+check('★ 兑换记录里能看到刚换的那一单', recordsTab && recordRows.some((t) => t.includes('泡泡玛特')))
+check(
+  '记录里写出了扣掉多少（对账要看这个）',
+  recordRows.some((t) => t.includes('泡泡玛特') && t.includes('40 兑换券')),
+  recordRows.find((t) => t.includes('泡泡玛特')) ?? '(没找到)',
+)
+/* 前面 ⑪ 换的盲盒（游戏）也必须在同一屏里 —— 家长问的就是「游戏去哪了」 */
+check(
+  '★ 之前换的游戏也在同一份记录里',
+  recordRows.some((t) => t.includes('游戏盲盒')),
+  `${recordRows.length} 行`,
+)
+
 
 /* ---------- ⑩ 底栏 5 格在 390px 下不挤、不换行 ---------- */
 const navFit = await page.evaluate(() => {

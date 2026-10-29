@@ -293,3 +293,40 @@ export const WISH_STATUS_TEXT: Record<string, string> = {
   done: '已经拿到',
   cancelled: '已取消',
 }
+
+/** 状态标签的色系。'blue' 是「等对方动作」，'amber' 是「等你动作」 */
+export type WishTone = 'green' | 'gray' | 'amber' | 'blue'
+
+const STATUS_TONE: Record<string, WishTone> = {
+  wished: 'blue',
+  committed: 'amber',
+  confirmed: 'blue',
+  done: 'green',
+  cancelled: 'gray',
+}
+
+/**
+ * 记录里那一行的状态说法。
+ *
+ * ⚠️ 数字商品交付完还在 `committed`（等家长收尾），但界面上**不能**说
+ * 「等爸妈确认」—— 孩子已经拿到游戏了。这条规则在详情页 / 卡片上已经写过，
+ * 记录页也要一致，否则同一单在两屏里说两种话。
+ *
+ * 2026-10-29 从 `WishPage.tsx` 搬到这里：兑换页的「📜 兑换记录」现在也
+ * 要列这些单子，两处各写一份迟早会飘（家长问的正是「游戏换了为什么
+ * 兑换记录里没有」）。
+ */
+export function orderStatusLabel(o: { status: string; openedGameId?: string }): string {
+  if (o.openedGameId && (o.status === 'committed' || o.status === 'confirmed')) {
+    return '已放进游戏柜'
+  }
+  return WISH_STATUS_TEXT[o.status] ?? o.status
+}
+
+export function orderStatusTone(o: {
+  status: string
+  openedGameId?: string
+}): WishTone {
+  if (o.openedGameId && (o.status === 'committed' || o.status === 'confirmed')) return 'green'
+  return STATUS_TONE[o.status] ?? 'gray'
+}

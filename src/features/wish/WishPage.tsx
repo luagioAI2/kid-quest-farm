@@ -3,10 +3,11 @@ import { useApp } from '@/store/useApp'
 import type { WishItem, WishTint } from '@/domain/types'
 import {
   WISH_KIND_META,
-  WISH_STATUS_TEXT,
   blindBoxRemaining,
   compareWishItem,
   daysToSave,
+  orderStatusLabel,
+  orderStatusTone,
   planWishRedeem,
   wishOwnedSet,
   type WishFilter,
@@ -1548,32 +1549,8 @@ function ConfirmView({
    商品改名或下架之后，这一屏还能正确解释当时发生了什么。
    ============================================================ */
 
-const STATUS_TONE: Record<string, 'green' | 'gray' | 'amber' | 'blue'> = {
-  wished: 'blue',
-  committed: 'amber',
-  confirmed: 'blue',
-  done: 'green',
-  cancelled: 'gray',
-}
-
-/**
- * 记录里那一行的状态说法。
- *
- * ⚠️ 数字商品交付完还在 `committed`（等家长收尾），但界面上**不能**说
- * 「等爸妈确认」—— 孩子已经拿到游戏了。这条规则在详情页 / 卡片上已经写过，
- * 记录页也要一致，否则同一单在两屏里说两种话。
- */
-function orderStatusLabel(o: { status: string; openedGameId?: string }): string {
-  if (o.openedGameId && (o.status === 'committed' || o.status === 'confirmed')) {
-    return '已放进游戏柜'
-  }
-  return WISH_STATUS_TEXT[o.status] ?? o.status
-}
-
-function orderStatusTone(o: { status: string; openedGameId?: string }): 'green' | 'gray' | 'amber' | 'blue' {
-  if (o.openedGameId && (o.status === 'committed' || o.status === 'confirmed')) return 'green'
-  return STATUS_TONE[o.status] ?? 'gray'
-}
+/* 状态说法 / 色系 2026-10-29 搬进 `domain/wish.ts` —— 兑换页的
+   「📜 兑换记录」也要列这些单子，两处各写一份迟早会飘。 */
 
 function OrdersView({
   orders,

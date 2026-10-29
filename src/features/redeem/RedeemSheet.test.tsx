@@ -175,3 +175,69 @@ describe('兑换列表：爸妈定好价的心愿', () => {
     expect(row.className, '得让孩子看见是哪一行').toMatch(/ring-grass-400/)
   })
 })
+
+/* ============================================================
+   兑换记录 = 两张表合一条时间线（2026-10-29）
+   ------------------------------------------------------------
+   家长原话：「孩子刚兑换了一个游戏，为啥我兑换记录里看不到。」
+   原因是家里那几件写 `redeemRecords`、游戏写 `wishOrders`，而记录页
+   只读前者 —— 券扣了、游戏装上了、记录里一个字都没有，界面上零异常。
+   ============================================================ */
+
+describe('兑换记录：兑换里换的都要看得见', () => {
+  it('★ 就地换完，切到「兑换记录」能看到这一单和扣了多少', async () => {
+    await priceItem('wish-popmart', 30)
+    await giveVouchers(50)
+
+    const user = userEvent.setup()
+    render(<RedeemBody />)
+    await ready()
+
+    const row = shopRow('wish-popmart')
+    await user.click(within(row).getByRole('button', { name: /换这个/ }))
+    await user.click(within(row).getByRole('button', { name: /换！/ }))
+    await waitFor(() => expect(useApp.getState().harvestBalance).toBe(20))
+
+    await user.click(screen.getByRole('button', { name: /兑换记录/ }))
+
+    const rec = document.querySelector<HTMLElement>('[data-redeem-record]')
+    expect(rec, '刚换完就该在记录里').toBeTruthy()
+    expect(rec?.textContent).toContain('泡泡玛特盲盒')
+    // 扣了多少必须写出来 —— 只说「换过」的话，家长对不上账
+    expect(rec?.textContent).toContain('-30 兑换券')
+  })
+
+  it('★ 换到的游戏：记录里在，兑换列表里不再出现（一次性）', async () => {
+    // 家长要的两件事一起钉：① 记录里看得到 ② 兑换完就不在列表里
+    await db.wishOrders.put({
+      id: 'wo_game',
+      itemId: 'wish-game-renttower',
+      itemName: '收租公寓',
+      itemEmoji: '🏢',
+      kind: 'gamebox',
+      voucherPrice: 30,
+      status: 'committed',
+      vouchersHeld: 30,
+      pointsHeld: 0,
+      openedGameId: 'renttower',
+      createdAt: Date.now(),
+      committedAt: Date.now(),
+    })
+    await priceItem('wish-game-renttower', 30)
+
+    const user = userEvent.setup()
+    render(<RedeemBody />)
+    await ready()
+
+    expect(
+      document.querySelector('[data-shop-row="wish-game-renttower"]'),
+      '换完的游戏不该再上架',
+    ).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /兑换记录/ }))
+    const rec = document.querySelector<HTMLElement>('[data-redeem-record]')
+    expect(rec?.textContent).toContain('收租公寓')
+    // 数字商品已经交付，不能说「等爸妈确认」（孩子手里已经有这款游戏了）
+    expect(rec?.textContent).toContain('已放进游戏柜')
+  })
+})
