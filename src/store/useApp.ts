@@ -480,6 +480,24 @@ interface AppState {
    */
   wishCancel: (orderId: string, reason?: string) => Promise<void>
 
+  /**
+   * 跨页跳转通道：**从「兑换」页点一条已开放的心愿，跳到心愿商城的商品详情**。
+   *
+   * 2026-10-29 家长要求「定好价的心愿相当于加了一条兑换，应该出现在兑换列表里」。
+   * 但心愿的交付和兑换不是一回事（成交在 App 外面 / 数字商品要装包），
+   * 所以**只在兑换页开一个入口**，点进去还是心愿详情那一套流程。
+   *
+   * ⚠️ 底部 tab 的状态在 `App.tsx` 里（`useState`），组件之间拿不到 setter。
+   *    跨页传数据只能走 store —— 这就是那条通道。`App` 看到它非空就切 tab，
+   *    `WishPage` 挂载后取走并打开详情。**取走要清空**，否则每次切回心愿
+   *    都会被重新拽进同一个商品。
+   */
+  pendingWishItem: string | null
+  /** 设通道并切到心愿 tab（`App` 那边监听 `pendingWishItem`） */
+  jumpToWish: (itemId: string) => void
+  /** 取走并清空。返回 null 表示没有待跳转 */
+  takePendingWishItem: () => string | null
+
   /* ---- 游戏（插件骨架，2026-10-14 起） ---- */
   /**
    * 切换「当前正在玩的游戏」。底部导航的游戏 tab 跟着它走。
@@ -1705,6 +1723,7 @@ export const useApp = create<AppState>((set, get) => ({
   redeemRecords: [],
   wishOffers: [],
   wishOrders: [],
+  pendingWishItem: null,
   farmEvents: [],
   market: createInitialMarket(PRODUCE_BASE_PRICE),
   balance: 0,
@@ -3446,6 +3465,17 @@ export const useApp = create<AppState>((set, get) => ({
       })
     }
     await get().refresh()
+  },
+
+  jumpToWish: (itemId) => {
+    set({ pendingWishItem: itemId })
+  },
+
+  takePendingWishItem: () => {
+    const id = get().pendingWishItem
+    // 取走就清空。不清的话，孩子从心愿页切走再切回来，会被重新拽进同一件商品。
+    if (id) set({ pendingWishItem: null })
+    return id
   },
 
   /* ================= 游戏（插件骨架） ================= */

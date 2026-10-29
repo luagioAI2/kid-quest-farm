@@ -8,7 +8,7 @@ import {
   compareWishItem,
   daysToSave,
   planWishRedeem,
-  redeemedGameIdsFrom,
+  wishOwnedSet,
   type WishFilter,
 } from '@/domain/wish'
 import { humanizeAgo } from '@/domain/time'
@@ -171,19 +171,31 @@ export default function WishPage() {
   const [filter, setFilter] = useState<WishFilter>(null)
 
   /**
+   * 从「兑换」列表点进来时，**直接打开那件商品的详情**。
+   *
+   * 通道是 store 的 `pendingWishItem`（`tab` 状态在 `App` 里，兑换页够不着）。
+   * 取一次就清空 —— 不清的话，孩子从这一格切走再切回来，会被重新拽进
+   * 同一件商品，看着像「返回键坏了」。
+   *
+   * ⚠️ 只在**挂载**时取一次（依赖是稳定的 store 函数）。
+   *    写成「订阅 `pendingWishItem` 就切视图」的话，孩子在里面手动返回列表
+   *    之后，那个值还是非 null，会被立刻弹回详情页。
+   */
+  const takePendingWishItem = useApp((s) => s.takePendingWishItem)
+  useEffect(() => {
+    const id = takePendingWishItem()
+    if (id && wishItemById(id)) setView({ kind: 'detail', itemId: id })
+  }, [takePendingWishItem])
+
+  /**
    * 「已经有了」= 账本买过 + 现在装着 + **心愿单里兑换到手过**。
    *
    * 第三个来源和 `wishRedeem` 里的闸门必须**同一套**：只改一处的话，
    * 卡片上会写着「可兑换」、点下去却被拒，或者反过来 —— 界面说「已经有了」
-   * 但券照扣。两边都从 `redeemedGameIdsFrom` 取，别再各写一遍。
+   * 但券照扣。规则本体在 `wishOwnedSet`，兑换页那一块也用它。
    */
   const owned = useMemo(
-    () =>
-      new Set<string>([
-        ...ownedGameIds,
-        ...Object.keys(installedGames),
-        ...redeemedGameIdsFrom(wishOrders),
-      ]),
+    () => wishOwnedSet(ownedGameIds, installedGames, wishOrders),
     [ownedGameIds, installedGames, wishOrders],
   )
 
@@ -215,30 +227,18 @@ export default function WishPage() {
       .sort((a, b) => (b.cancelledAt ?? b.createdAt) - (a.cancelledAt ?? a.createdAt))[0]
 
   /**
-   * 还等着**家长**处理的单子。
+   * 还等着**家长**处理的单子 —— 只收 `committed` / `confirmed`（券已经扣了）。
    *
-   * 没有这一条的话，家长只能逐个商品点开、看卡片上的标记，才知道有单子
-   * 要处理 —— 孩子换了东西，家长那边一点提示都没有。整条链路里
-   * 「现在该谁动手」只在这一处有答案，所以摆在列表最上面。
+   * 家长原话（2026-10-29）：「心愿商城爸爸妈妈收到心愿，也跟任务一样，
+   * 出现在上边栏的眼睛那，**而不是在心愿商城这里**」。所以原来那张
+   * 「有 N 个心愿等你回应」的卡（`wished` 那一段）从这一页**撤掉了**，
+   * 改由顶栏 👀 的待办队列收（见 `ReviewSheet` 的 `kind: 'wish'`）。
    *
-   * ## ⚠️ 2026-10-29 把「已告诉爸妈」（`wished`）也算进来了
-   *
-   * 原来只收 `committed` / `confirmed` —— 也就是**孩子已经花掉券**的单子。
-   * 结果孩子点完「🤍 想要这个」、屏幕上写着「已经告诉爸妈，等他们定价」，
-   * 而家长那一侧**一片安静**：没有红点、没有卡片、列表里那件商品也还是
-   * 原样（只是标签从「等爸妈开放」变成「已告诉爸妈」）。
-   * 家长原话：「已告诉爸爸妈妈，爸爸妈妈如何处理」。
-   *
-   * 两段要分开摆，因为**该做的动作不一样**：
-   *   · `wished`     —— 还没花钱。家长要**回应**：定个价，或者这次先不换。
-   *   · `committed`  —— 券已经扣了。家长要**去办**：外链买，或者收尾。
-   * 合成一张卡的话，文案只能写成「有 N 单等你处理」，等于什么都没说。
+   * ⚠️ 剩下这一张**不能跟着撤**。它说的不是「孩子表了个态」，
+   *    而是「孩子的券已经扣了，等着你去买」—— 那是**已经成交**的单子，
+   *    处理入口就在这一页（填收货信息、去外链、收尾）。
+   *    放进 👀 的话，家长点完「确认」那一单就消失了，货却没买。
    */
-  const wishes = useMemo(
-    () => wishOrders.filter((o) => o.status === 'wished').sort((a, b) => b.createdAt - a.createdAt),
-    [wishOrders],
-  )
-
   const pendingOrders = useMemo(
     () =>
       wishOrders
@@ -306,7 +306,6 @@ export default function WishPage() {
         offerOf={offerOf}
         activeOrderOf={activeOrderOf}
         pending={pendingOrders}
-        wishes={wishes}
         vouchers={harvestBalance}
         points={pointsBalance}
         owned={owned}
@@ -357,7 +356,6 @@ function ListView({
   offerOf,
   activeOrderOf,
   pending,
-  wishes,
   vouchers,
   points,
   owned,
@@ -368,9 +366,8 @@ function ListView({
   setFilter: (f: WishFilter) => void
   offerOf: (id: string) => ReturnType<typeof useApp.getState>['wishOffers'][number] | undefined
   activeOrderOf: (id: string) => ReturnType<typeof useApp.getState>['wishOrders'][number] | undefined
+  /** 券已经扣了、等爸妈去办的单子（`committed` / `confirmed`） */
   pending: ReturnType<typeof useApp.getState>['wishOrders']
-  /** 孩子点了「想要这个」、还没定价的单子。家长要先回应它们（见 `pendingOrders` 的注释） */
-  wishes: ReturnType<typeof useApp.getState>['wishOrders']
   /** 兑换券余额 */
   vouchers: number
   /** 积分余额（可以补券不够的部分） */
@@ -447,41 +444,12 @@ function ListView({
         </div>
       </header>
 
-      {/* 孩子的心愿 —— 还没花券，等家长**回应**（定价 / 这次先不换）。
-
-          2026-10-29 之前这里什么都没有：孩子点完「🤍 想要这个」，他那一侧写着
-          「已经告诉爸妈，等他们定价」，而家长这一侧没有任何提示。
-          家长原话：「已告诉爸爸妈妈，爸爸妈妈如何处理」。
-
-          ⚠️ 和下面那张「在等爸妈处理」的卡**分开**：那张是券已经扣了的单子，
-          家长要去做；这张只是表个态，家长只需要回一句。 */}
-      {wishes.length > 0 && (
-        <button
-          onClick={() => onOpen(wishes[0].itemId)}
-          aria-label={`${wishes.length} 个心愿等爸妈回应`}
-          className="mt-3 flex w-full items-center gap-3 rounded-3xl bg-sky-50 p-3 text-left shadow-flat active:btn-press"
-        >
-          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-white text-xl">
-            🤍
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-extrabold text-ink-900">
-              有 {wishes.length} 个心愿等你回应
-            </span>
-            <span className="mt-0.5 block truncate text-[11px] font-bold text-ink-500">
-              {wishes
-                .slice(0, 2)
-                .map((o) => o.itemName)
-                .join('、')}
-              {wishes.length > 2 ? ` 等 ${wishes.length} 件` : ''} · 点进去定价，或这次先不换
-            </span>
-          </span>
-          <span className="text-lg text-ink-500">›</span>
-        </button>
-      )}
-
       {/* 待家长处理的单子 —— 整条链路里「现在该谁动手」只有这一处答案。
           没有它，家长要逐个商品点开、看卡片标记才知道孩子换了东西。
+
+          ⚠️ 只收券已经扣了的单子（`committed` / `confirmed`）。孩子只是
+          「想要」的那批**不在这里**了 —— 2026-10-29 起归顶栏 👀 的待办队列，
+          家长原话：「出现在上边栏的眼睛那，而不是在心愿商城这里」。
 
           ⚠️ 点它只回到**商品详情**，不能直接进确认页：确认页上有
           「取消兑换」和「去商店购买」，而密码闸门只渲染在详情页底部。
@@ -629,6 +597,12 @@ function BlindBoxHero({
               <Tag tone="green">🎫 {offer.voucherPrice}</Tag>
               {topUp > 0 && <Tag tone="green">🪙 补 {topUp}</Tag>}
             </>
+          ) : order?.status === 'wished' ? (
+            /* 和 `ItemCard` 同一个顺序：定价优先于「已告诉爸妈」。
+               盲盒是列表第一张卡，孩子点完「想要这个」之后如果这里还写着
+               「等爸妈开放」，他会以为自己那一句没发出去 —— 而详情页
+               写的是「已经告诉爸妈」，两屏对不上。 */
+            <Tag tone="blue">已告诉爸妈</Tag>
           ) : (
             <Tag tone="gray">等爸妈开放</Tag>
           )}

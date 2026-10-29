@@ -195,30 +195,62 @@ await page.screenshot({ path: `${OUT}/04-wished.png` })
 const wished = await page.evaluate(() => document.body.innerText.includes('已经告诉爸妈'))
 check('点完变成「已经告诉爸妈」', wished)
 
-/* ---------- ⑤.5 家长侧必须看得见这个心愿（2026-10-29 新增） ----------
-   改动之前：`wished` 不在家长待办里（待办卡只收 committed / confirmed）。
-   孩子那一侧写着「已经告诉爸妈，等他们定价」，家长那一侧**一片安静** ——
-   没有红点、没有卡片，只能逐个商品点开才可能发现有请求。
-   家长原话：「已告诉爸爸妈妈，爸爸妈妈如何处理。」
+/* ---------- ⑤.5 家长侧必须看得见这个心愿（2026-10-29，当天改到 👀） ----------
+   第一版把待办卡摆在**心愿页顶部**。家长当天改口：
+   「心愿商城爸爸妈妈收到心愿，也跟任务一样，出现在上边栏的眼睛那，
+   **而不是在心愿商城这里**」。所以判据也跟着挪：
 
-   判据取**列表页顶部那张卡**，不是 `wishOrders` 里有没有这条 ——
-   数据一直在，看不见的是入口。 */
+     · 心愿页上**不该再有**那张卡（两个入口并存，家长不知道点哪个）；
+     · 顶栏 👀 要亮出待办红点；
+     · 点开 👀 过密码之后，队列第一条就是这条心愿，而且能就地定价。
+
+   ⚠️ 判据取**页面/DOM 上的入口**，不是 `wishOrders` 里有没有这条 ——
+      数据一直都在，看不见的从来是入口。 */
 await page.evaluate(() => {
   document.querySelector('button[aria-label="返回"]')?.click()
 })
 await wait(600)
-const wishCard = await page.evaluate(() => {
-  const b = [...document.querySelectorAll('button')].find((x) =>
-    (x.textContent ?? '').includes('心愿等你回应'),
-  )
-  return { has: !!b, label: b?.getAttribute('aria-label') ?? '' }
-})
-check('★ 孩子表过态之后，家长侧出现「心愿等你回应」', wishCard.has, wishCard.label)
 
-// 点它回到详情 —— 下一段（定价）要在详情页上做
+const wishEntry = await page.evaluate(() => {
+  const badgeBtn = document.querySelector('[data-tour="header-review"]')
+  return {
+    stillOnWishPage: document.body.innerText.includes('心愿等你回应'),
+    childSees: document.body.innerText.includes('已告诉爸妈'),
+    dot: !!badgeBtn?.querySelector('span'),
+    label: badgeBtn?.getAttribute('aria-label') ?? '',
+  }
+})
+check('★ 心愿页不再摆家长待办卡（已移到顶栏 👀）', !wishEntry.stillOnWishPage)
+check('孩子那一侧仍然写着「已告诉爸妈」', wishEntry.childSees)
+check('★ 顶栏 👀 出现待办红点', wishEntry.dot && /待办/.test(wishEntry.label), wishEntry.label)
+
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('button')].find((x) =>
-    (x.textContent ?? '').includes('心愿等你回应'),
+  document.querySelector('[data-tour="header-review"]')?.click()
+})
+await wait(500)
+const reviewGated = await passPin(page)
+check('打开 👀 要家长密码', reviewGated, reviewGated ? '已用 0000 通过' : '没有设密码')
+const wishCard = await page.evaluate(() => {
+  const el = document.querySelector('[data-wish-review]')
+  return {
+    has: !!el,
+    text: (el?.innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 40),
+  }
+})
+check('★ 家长在 👀 里看到这条心愿', wishCard.has, wishCard.text)
+await page.screenshot({ path: `${OUT}/04b-review-wish.png` })
+
+// 关掉弹层（头部那颗 ✕；遮罩也是 aria-label=关闭，取最后一个）
+await page.evaluate(() => {
+  const bs = [...document.querySelectorAll('button[aria-label="关闭"]')]
+  bs[bs.length - 1]?.click()
+})
+await wait(500)
+
+// 回到那件商品的详情 —— 下一段（定价）要在详情页上做
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+    x.textContent?.includes('泡泡玛特'),
   )
   b?.click()
 })
@@ -993,6 +1025,84 @@ await page.evaluate(() => {
   document.querySelector('button[aria-label="返回"]')?.click()
 })
 await wait(500)
+
+/* ---------- ⑭ 爸妈定好价的心愿 = 兑换列表里的一行（2026-10-29） ----------
+ *
+ * 家长原话：「爸爸妈妈已经定好价格的，相当于添加了兑换，应该出现在兑换列表里。」
+ *
+ * 所以判据是**跨页**的：定价之后，孩子切到「兑换」那一格就该看到它，
+ * 点一下还要能带着「哪一件」跳回心愿那一格。这两件事都只有真跑起来
+ * 才知道 —— 单测里 `tab` 那个 `useState` 根本不存在。
+ *
+ * 走到这里手上定过价的商品：泡泡玛特（`had + 50`）和游戏盲盒（20）。
+ * 儿童学习机**没定过价**，它不该出现在这一块里（对照组）。
+ */
+console.log('\n── 兑换列表里的心愿 ──')
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('[data-tour^="tab-"]')].find((x) =>
+    (x.innerText ?? '').includes('兑换'),
+  )
+  b?.click()
+})
+await wait(900)
+await page.screenshot({ path: `${OUT}/10-redeem-wish-shelf.png` })
+
+const shelf = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('[data-wish-shelf-item]')]
+  const shelfBox = document.querySelector('[data-wish-shelf]')
+  return {
+    has: !!shelfBox,
+    ids: rows.map((r) => r.getAttribute('data-wish-shelf-item')),
+    // 位置：必须在「能换什么」最上面，家里那些兑换品之前。
+    // ⚠️ 找「第一件家里兑换品」要**排除心愿那一块自己的 li**，
+    //    否则比的是它自己，判据恒真。
+    beforeFamilyItems: (() => {
+      const familyLi = [...document.querySelectorAll('main ul li')].find(
+        (li) => !shelfBox?.contains(li),
+      )
+      if (!shelfBox || !familyLi) return null
+      return shelfBox.getBoundingClientRect().top <= familyLi.getBoundingClientRect().top + 1
+    })(),
+  }
+})
+check('★ 兑换页出现「心愿商城 · 爸妈开放了」', shelf.has, shelf.ids.join(','))
+check('★ 定过价的两件都在（盲盒 + 泡泡玛特）', shelf.ids.length >= 2, shelf.ids.join(','))
+check(
+  '没定过价的心愿**不**出现（儿童学习机）',
+  !shelf.ids.includes('wish-study-pad'),
+  shelf.ids.join(','),
+)
+check('心愿那一块摆在兑换品前面', shelf.beforeFamilyItems === true)
+
+// 点一下：切到心愿那一格，并直接打开那件商品
+await page.evaluate(() => {
+  document.querySelector('[data-wish-shelf-item="wish-popmart"]')?.click()
+})
+await wait(900)
+await page.screenshot({ path: `${OUT}/10b-jumped-to-wish.png` })
+const jumped = await page.evaluate(() => ({
+  onWishTab: document.querySelector('[data-tour="tab-wish"]')?.getAttribute('aria-current') === 'page',
+  detail: document.body.innerText.includes('家长支付'),
+  back: !!document.querySelector('button[aria-label="返回"]'),
+  pending: window.__kqf__.getState().pendingWishItem,
+}))
+check(
+  '★ 点一下切到心愿那一格，并打开那件商品',
+  jumped.onWishTab && jumped.detail && jumped.back,
+  `tab=${jumped.onWishTab} 详情=${jumped.detail}`,
+)
+check('通道取走就清空（不然会被反复拽回详情）', jumped.pending == null, String(jumped.pending))
+
+// 返回之后要真的停在列表 —— 「订阅着 pendingWishItem 就切视图」的写法会在这里露馅
+await page.evaluate(() => {
+  document.querySelector('button[aria-label="返回"]')?.click()
+})
+await wait(700)
+const backToList = await page.evaluate(() => ({
+  list: document.body.innerText.includes('看看有什么想要的'),
+  detail: !!document.querySelector('button[aria-label="返回"]'),
+}))
+check('返回之后停在列表（没被重新拽进详情）', backToList.list && !backToList.detail)
 
 /* ---------- ⑩ 底栏 5 格在 390px 下不挤、不换行 ---------- */
 const navFit = await page.evaluate(() => {

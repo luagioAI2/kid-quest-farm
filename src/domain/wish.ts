@@ -14,7 +14,7 @@
    3. **盲盒先算池子再扣券** —— 池子空了要直接拒绝，不能先扣再发现没得开。
    ============================================================ */
 
-import type { WishKind } from './types'
+import type { WishItem, WishKind } from './types'
 import { planRedeemPayment } from './redeem'
 
 /** 分类标签。顺序就是 chips 的顺序（盲盒在前 —— 用户要求优先显示） */
@@ -64,6 +64,115 @@ export function planWishRedeem(
     voucherPaid: p.harvestPaid,
     pointsPaid: p.pointsPaid,
   }
+}
+
+/**
+ * 「已经拥有」的游戏 id 集合 —— 三个来源合并。
+ *
+ *   · `ownedGameIds`   —— 钻石商城买过的
+ *   · `installedGames` —— 现在装着的
+ *   · `redeemedGameIdsFrom(wishOrders)` —— 心愿单里兑换到手过的
+ *
+ * ⚠️ 第三个来源不能省：`uninstallGame` 会把包和存档一起删掉，删完之后
+ *    前两个都认不出来（详见 `redeemedGameIdsFrom` 的注释）。
+ *
+ * ★ 抽成函数是因为**现在有两个地方要用**（心愿列表的过滤、兑换页里
+ *   「已开放的心愿」那一块）。各写一遍的话，一边滤掉了另一边没滤，
+ *   孩子就会在兑换列表里看到自己已经有的游戏 —— 那正是 2026-10-29
+ *   刚修过的那个毛病。
+ */
+export function wishOwnedSet(
+  ownedGameIds: readonly string[],
+  installedGames: Record<string, unknown>,
+  wishOrders: readonly { status: string; openedGameId?: string }[],
+): Set<string> {
+  return new Set<string>([
+    ...ownedGameIds,
+    ...Object.keys(installedGames),
+    ...redeemedGameIdsFrom(wishOrders),
+  ])
+}
+
+/**
+ * 家长**还没回应**的心愿单。
+ *
+ * ## 为什么不是简单的 `status === 'wished'`
+ *
+ * 家长定价之后，那条单子**仍然停在 `wished`** —— 它要等到孩子真的去兑换，
+ * 才会被 `wishRedeem` 复用并翻成 `committed`（见那边「同一件商品如果之前
+ * 只是想要，复用那一行」的注释）。
+ *
+ * 于是「`wished` 还没被回应」和「`wished` 已经开放了、等孩子来换」在
+ * **数据上是同一个状态**。只按状态算的话，上边栏 👀 那个红点会永远消不掉：
+ * 家长定完价、孩子还没换，红点还在；家长再点进去，看到的却是一件已经
+ * 开放的商品 —— 一个点不完的数字比没有红点更糟。
+ *
+ * 判据取「这件商品现在有没有开放价」：定价就是家长的**回应**。
+ *
+ * ⚠️ `closedAt` 的行不算开放（家长把它关了）。关掉之后这条心愿重新变回
+ *    「等你回应」是对的 —— 孩子当初想换的东西又换不了了。
+ */
+export function wishesAwaitingReply<T extends { itemId: string; status: string }>(
+  orders: readonly T[],
+  offers: readonly { itemId: string; voucherPrice: number; closedAt?: number }[],
+): T[] {
+  const priced = new Set(
+    offers.filter((o) => !o.closedAt && o.voucherPrice > 0).map((o) => o.itemId),
+  )
+  return orders.filter((o) => o.status === 'wished' && !priced.has(o.itemId))
+}
+
+/**
+ * 「兑换」列表里那一块「爸妈已经开放的心愿」。
+ *
+ * 家长原话：「爸爸妈妈已经定好价格的，相当于添加了兑换，应该出现在
+ * 兑换列表里」。所以**定价 = 上架**，孩子不用特意切到心愿那一格才发现
+ * 有东西能换。
+ *
+ * ## 四个排除条件，一个都不能少
+ *
+ *   1. **没定价 / 已关闭** —— 那是「等爸妈回应」，不是能换的东西。
+ *   2. **下架了**（`archived`）—— 目录里撤掉的商品不该还挂在兑换列表上。
+ *   3. **已经有了** —— 走 `wishOwnedSet` 同一套规则（游戏盒子）。
+ *      少了这一条，孩子会在这里看到自己早就换到的游戏，点进去又是
+ *      「这个游戏你已经有了」—— 2026-10-29 刚在心愿页修过的毛病。
+ *   4. **盲盒开完了** —— 池子空了还摆在「能换什么」里，点进去只会被拒。
+ *
+ * ★ 另外排除**已经在走流程**的单子（`committed` / `confirmed`）：
+ *   那件东西已经付过钱了，再列一次等于鼓励孩子换第二遍。
+ *   `wished` **不排除** —— 家长定了价，孩子就该能去换，而 `wishRedeem`
+ *   会复用那一行。
+ */
+export function wishShelf(
+  items: readonly WishItem[],
+  offers: readonly { itemId: string; voucherPrice: number; closedAt?: number }[],
+  owned: ReadonlySet<string>,
+  orders: readonly { itemId: string; status: string }[],
+): { item: WishItem; price: number }[] {
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const inFlight = new Set(
+    orders
+      .filter((o) => o.status === 'committed' || o.status === 'confirmed')
+      .map((o) => o.itemId),
+  )
+
+  const out: { item: WishItem; price: number }[] = []
+  for (const offer of offers) {
+    if (offer.closedAt || offer.voucherPrice <= 0) continue
+    if (inFlight.has(offer.itemId)) continue
+
+    const item = byId.get(offer.itemId)
+    if (!item || item.archived) continue
+
+    if (item.kind === 'gamebox' && item.gameId && owned.has(item.gameId)) continue
+    if (item.kind === 'blindbox' && blindBoxRemaining(item.pool ?? [], [...owned]).length === 0) {
+      continue
+    }
+
+    out.push({ item, price: offer.voucherPrice })
+  }
+  // 和心愿页同一个顺序（盲盒在最前），两处看到的先后一致
+  return out.sort((a, b) => compareWishItem(a.item, b.item))
 }
 
 /**

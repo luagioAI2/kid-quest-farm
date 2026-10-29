@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useApp } from '@/store/useApp'
-import type { RedeemCategory, RedeemItem } from '@/domain/types'
+import type { RedeemCategory, RedeemItem, WishItem } from '@/domain/types'
 import { humanizeAgo } from '@/domain/time'
 import { clampPointsPerYuan, formatYuan } from '@/domain/cash'
 import { describeRedeemPayment, planRedeemPayment, type RedeemPayment } from '@/domain/redeem'
+import { WISH_KIND_META, wishOwnedSet, wishShelf } from '@/domain/wish'
+import { WISH_ITEMS } from '@/games/wishCatalog'
 import { ParentPinPanel } from '../parent/ParentGate'
 import { BottomSheet, CoinPill } from '../farm/farmUi'
 
@@ -108,6 +110,35 @@ export function RedeemBody() {
 
   const pending = useMemo(() => redeemRecords.filter((r) => !r.fulfilled), [redeemRecords])
 
+  /**
+   * 心愿商城里**爸妈已经定好价**的那些。
+   *
+   * 家长原话（2026-10-29）：「爸爸妈妈已经定好价格的，相当于添加了兑换，
+   * 应该出现在兑换列表里」。所以定价 = 上架，孩子在这一格就能看到，
+   * 不用特意切到「心愿」那一格才发现有东西能换。
+   *
+   * 四个排除条件（已拥有 / 盲盒开完 / 已下架 / 已在走流程）在
+   * `wishShelf` 里，和心愿页用的是**同一套**「已经拥有」规则
+   * （`wishOwnedSet`）—— 各写一遍的话，一边滤掉了另一边没滤，
+   * 孩子会在这里看到自己早就换到的游戏。
+   */
+  const wishOrders = useApp((s) => s.wishOrders)
+  const wishOffers = useApp((s) => s.wishOffers)
+  const ownedGameIds = useApp((s) => s.ownedGameIds)
+  const installedGames = useApp((s) => s.installedGames)
+  const jumpToWish = useApp((s) => s.jumpToWish)
+
+  const shelf = useMemo(
+    () =>
+      wishShelf(
+        WISH_ITEMS,
+        wishOffers,
+        wishOwnedSet(ownedGameIds, installedGames, wishOrders),
+        wishOrders,
+      ),
+    [wishOffers, ownedGameIds, installedGames, wishOrders],
+  )
+
   const grouped = useMemo(() => {
     const map = new Map<RedeemCategory, RedeemItem[]>()
     for (const it of redeemItems) {
@@ -153,7 +184,7 @@ export function RedeemBody() {
 
       {tab === 'shop' && (
         <>
-          {grouped.length === 0 ? (
+          {grouped.length === 0 && shelf.length === 0 ? (
             <div className="surface flex flex-col items-center gap-2 px-6 py-10 text-center">
               <span className="text-6xl">🛒</span>
               <p className="font-display text-lg font-extrabold text-ink-900">还没有可以换的东西</p>
@@ -170,6 +201,18 @@ export function RedeemBody() {
                   🎫 兑换券先花，不够再用 🪙 积分 —— 两种币 1 比 1 等价，可以一起付。
                 </span>
               </p>
+
+              {/* 心愿那一块摆在最上面：它是**新开放的**，孩子最想看的是
+                  「爸妈今天给我开了什么」，而不是第 20 次刷到同一批零食。 */}
+              {shelf.length > 0 && (
+                <WishShelf
+                  rows={shelf}
+                  harvestBalance={harvestBalance}
+                  balance={balance}
+                  onOpen={(itemId) => jumpToWish(itemId)}
+                />
+              )}
+
               {grouped.map((g) => (
                 <section key={g.category}>
                   <h3 className="mb-2 px-1 font-display text-sm font-extrabold text-ink-500">
@@ -262,6 +305,88 @@ function PaySplit({ plan }: { plan: RedeemPayment }) {
         <span className="font-extrabold text-sun-700">🪙 {plan.pointsPaid}</span>
       ) : null}
     </span>
+  )
+}
+
+/**
+ * 「爸妈已开放的心愿」那一块（2026-10-29）。
+ *
+ * 家长定完价 = 上架，所以它和家里的兑换品摆在同一张列表里。
+ *
+ * ⚠️ **这一块只负责「让人看见」和「把人送过去」，不在这里扣币。**
+ *    心愿商城那边还有一整套流程（装包 / 开盲盒 / 家长确认 / 退券），
+ *    在这里再实现一遍扣款，等于把两条链路各写一次 —— 迟早有一处漏掉
+ *    「已拥有」「池子空了」这类闸门，然后孩子被扣两次。
+ *    所以点一下就是切到心愿那一格、直接打开那件商品（`jumpToWish`）。
+ */
+function WishShelf({
+  rows,
+  harvestBalance,
+  balance,
+  onOpen,
+}: {
+  rows: { item: WishItem; price: number }[]
+  harvestBalance: number
+  balance: number
+  onOpen: (itemId: string) => void
+}) {
+  return (
+    <section data-wish-shelf>
+      <h3 className="mb-2 px-1 font-display text-sm font-extrabold text-ink-500">
+        🛍️ 心愿商城 · 爸妈开放了
+      </h3>
+      <ul className="space-y-3">
+        {rows.map(({ item, price }) => {
+          const plan = planRedeemPayment(price, harvestBalance, balance)
+          const mixed = plan.harvestPaid > 0 && plan.pointsPaid > 0
+          return (
+            <li key={item.id}>
+              <button
+                type="button"
+                data-wish-shelf-item={item.id}
+                onClick={() => onOpen(item.id)}
+                className="surface flex w-full items-center gap-3 p-3 text-left active:btn-press"
+              >
+                <span className="grid size-14 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-sun-100 text-2xl">
+                  {item.emoji}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-display text-base font-extrabold text-ink-900">
+                    {item.name}
+                  </span>
+                  <span className="block truncate text-xs text-ink-500">
+                    {item.partnerName ?? WISH_KIND_META[item.kind].label}
+                  </span>
+                  <span className="mt-1 flex flex-wrap items-center gap-2">
+                    {/* 图标跟着**实际付款**走：纯积分单子（券 0、只靠积分）
+                        挂 🎫 就是自相矛盾 —— 同一行下面刚写着「🪙 80」。 */}
+                    <CoinPill
+                      amount={price}
+                      icon={plan.harvestPaid > 0 ? '🎫' : '🪙'}
+                      tone={plan.affordable ? 'grass' : 'danger'}
+                    />
+                    {mixed ? (
+                      <span className="text-[11px] font-bold text-ink-500">
+                        付款：<PaySplit plan={plan} />
+                      </span>
+                    ) : null}
+                  </span>
+                  {!plan.affordable ? (
+                    <span className="mt-0.5 block text-[11px] font-bold text-berry-500">
+                      两种币加起来还差 {plan.shortfall}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="shrink-0 self-center text-lg text-ink-400">›</span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="mt-1.5 px-1 text-[11px] leading-snug text-ink-400">
+        点一下进心愿商城换 —— 那边会告诉你这件东西怎么拿到。
+      </p>
+    </section>
   )
 }
 

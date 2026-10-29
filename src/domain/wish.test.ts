@@ -6,7 +6,10 @@ import {
   pickBlindBox,
   planWishRedeem,
   redeemedGameIdsFrom,
+  wishShelf,
+  wishesAwaitingReply,
 } from './wish'
+import type { WishItem } from './types'
 
 /* ============================================================
    心愿商城的纯逻辑
@@ -196,5 +199,144 @@ describe('redeemedGameIdsFrom：卸载之后也算买过', () => {
         { status: 'done', openedGameId: 'cloudfarm' },
       ]),
     ).toEqual(['cloudfarm'])
+  })
+})
+
+/* ============================================================
+   心愿的「等家长回应」与「已上架」两个判据（2026-10-29）
+   ------------------------------------------------------------
+   这两条决定的是**入口**，写错都不报错：
+
+   * `wishesAwaitingReply` 多算 → 顶栏 👀 的红点永远消不掉。家长定完价、
+     孩子还没去换的那段时间，红点还亮着，点进去却是一件已经开放的商品 ——
+     一个点不完的数字比没有红点更糟。
+   * `wishesAwaitingReply` 少算 → 孩子的心愿没人看见（这是这次要修的原始问题）。
+   * `wishShelf` 多算 → 兑换列表里摆着换不了的东西（已拥有 / 已关闭 /
+     已经付过钱的单子）。
+   ============================================================ */
+describe('wishesAwaitingReply：家长还没回应的心愿', () => {
+  const o = (patch: Record<string, unknown> = {}) => ({
+    id: 'wo1',
+    itemId: 'a',
+    status: 'wished',
+    createdAt: 1,
+    ...patch,
+  })
+  const offer = (itemId: string, patch: Record<string, unknown> = {}) => ({
+    itemId,
+    voucherPrice: 30,
+    ...patch,
+  })
+
+  it('没定价的 wished 要算进来', () => {
+    expect(wishesAwaitingReply([o()], [])).toHaveLength(1)
+  })
+
+  it('★ 定完价的那条**仍然停在 wished**，但不再算待回应', () => {
+    // 这是最容易写错的一条：`wishRedeem` 要等孩子真的来换才会把它翻成
+    // `committed`，所以「已经回应过」和「还没回应」在数据上是同一个状态。
+    const orders = [o({ status: 'wished' })]
+    expect(wishesAwaitingReply(orders, [offer('a')])).toHaveLength(0)
+  })
+
+  it('★ 家长把它关了（closedAt）→ 重新变回「等你回应」', () => {
+    const closed = [offer('a', { closedAt: 999 })]
+    expect(wishesAwaitingReply([o()], closed)).toHaveLength(1)
+  })
+
+  it('价格是 0 的那行不算开放（写坏了不能当定价）', () => {
+    expect(wishesAwaitingReply([o()], [offer('a', { voucherPrice: 0 })])).toHaveLength(1)
+  })
+
+  it('committed / confirmed / done / cancelled 一律不算', () => {
+    const orders = ['committed', 'confirmed', 'done', 'cancelled'].map((status, i) =>
+      o({ id: `wo${i}`, status }),
+    )
+    expect(wishesAwaitingReply(orders, [])).toHaveLength(0)
+  })
+
+  it('只按**这一件商品**有没有开放价，别的商品的定价不影响它', () => {
+    expect(wishesAwaitingReply([o({ itemId: 'b' })], [offer('a')])).toHaveLength(1)
+  })
+})
+
+describe('wishShelf：兑换列表里该摆哪些心愿', () => {
+  const item = (patch: Record<string, unknown>): WishItem =>
+    ({ id: 'i1', kind: 'toy', name: '玩具', emoji: '🧸', tint: 'sun', ...patch }) as WishItem
+  const offer = (itemId: string, patch: Record<string, unknown> = {}) => ({
+    itemId,
+    voucherPrice: 30,
+    ...patch,
+  })
+  const noOwned = new Set<string>()
+
+  it('定价了就上架，价格带出来', () => {
+    const rows = wishShelf([item({ id: 'a' })], [offer('a', { voucherPrice: 40 })], noOwned, [])
+    expect(rows).toHaveLength(1)
+    expect(rows[0].price).toBe(40)
+  })
+
+  it('没定价 / 价格是 0 → 不上架', () => {
+    expect(wishShelf([item({ id: 'a' })], [], noOwned, [])).toHaveLength(0)
+    expect(wishShelf([item({ id: 'a' })], [offer('a', { voucherPrice: 0 })], noOwned, [])).toHaveLength(0)
+  })
+
+  it('★ 家长关掉的不上架（行还在，只写了 closedAt）', () => {
+    const rows = wishShelf([item({ id: 'a' })], [offer('a', { closedAt: 1 })], noOwned, [])
+    expect(rows).toHaveLength(0)
+  })
+
+  it('★ 已经拥有的游戏盒子不上架', () => {
+    // 和心愿页共用 `wishOwnedSet` 的判据 —— 少了这条，孩子会在兑换列表里
+    // 看到自己早就换到的游戏，点进去又是「这个游戏你已经有了」。
+    const box = item({ id: 'a', kind: 'gamebox', gameId: 'renttower' })
+    expect(wishShelf([box], [offer('a')], new Set(['renttower']), [])).toHaveLength(0)
+    expect(wishShelf([box], [offer('a')], noOwned, [])).toHaveLength(1)
+  })
+
+  it('★ 盲盒池子开完了不上架', () => {
+    const box = item({ id: 'a', kind: 'blindbox', pool: ['x', 'y'] })
+    expect(wishShelf([box], [offer('a')], new Set(['x', 'y']), [])).toHaveLength(0)
+    expect(wishShelf([box], [offer('a')], new Set(['x']), [])).toHaveLength(1)
+  })
+
+  it('★ 已经在走流程（committed / confirmed）的不上架', () => {
+    // 那件东西已经付过钱了，再列一次等于鼓励孩子换第二遍。
+    const rows = wishShelf(
+      [item({ id: 'a' })],
+      [offer('a')],
+      noOwned,
+      [{ itemId: 'a', status: 'committed' }],
+    )
+    expect(rows).toHaveLength(0)
+  })
+
+  it('只是 `wished` 的不挡 —— 家长定了价，孩子就该能去换', () => {
+    const rows = wishShelf([item({ id: 'a' })], [offer('a')], noOwned, [
+      { itemId: 'a', status: 'wished' },
+    ])
+    expect(rows).toHaveLength(1)
+  })
+
+  it('下架（archived）的商品不上架', () => {
+    expect(wishShelf([item({ id: 'a', archived: true })], [offer('a')], noOwned, [])).toHaveLength(0)
+  })
+
+  it('目录里没有的 id 不上架（商品被删了，开放行还留着）', () => {
+    expect(wishShelf([], [offer('gone')], noOwned, [])).toHaveLength(0)
+  })
+
+  it('顺序和心愿页一致：盲盒在最前', () => {
+    const rows = wishShelf(
+      [
+        item({ id: 'a', name: '玩具' }),
+        // 盲盒必须配 `pool` —— 没配池子等于「开完了」，会被上面那条规则滤掉
+        item({ id: 'b', kind: 'blindbox', name: '盲盒', pool: ['x'] }),
+      ],
+      [offer('a'), offer('b')],
+      noOwned,
+      [],
+    )
+    expect(rows.map((r) => r.item.id)).toEqual(['b', 'a'])
   })
 })

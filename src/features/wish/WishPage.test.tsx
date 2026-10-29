@@ -313,11 +313,16 @@ describe('心愿商城：待家长处理的入口', () => {
    ------------------------------------------------------------
    家长原话：「现在心愿商城里 已告诉爸爸妈妈，爸爸妈妈如何处理。」
 
-   改动之前：孩子点完「🤍 想要这个」，他那一侧写着「已经告诉爸妈，等他们定价」，
-   而家长那一侧**一片安静** —— 待办卡只收 `committed` / `confirmed`
-   （券已经扣了的单子），`wished` 不在里面。家长要逐个商品点开才可能发现有请求。
+   第一版把待办卡摆在了**心愿页顶部**。当天家长又提了一句：
+   「心愿商城爸爸妈妈收到心愿，也跟任务一样，出现在上边栏的眼睛那，
+   **而不是在心愿商城这里**」。所以那张卡撤掉了，改由顶栏 👀 的待办队列收
+   （队列本身在 `ReviewSheet.test.tsx` 里钉）。
 
-   这三条钉的是：**看得见 → 有入口 → 有出口**。
+   这里钉的是撤掉之后**还剩什么**：
+     · 家长的处理入口不在这一页了（不能又长回来）；
+     · 孩子自己那一侧仍然看得见「已告诉爸妈」；
+     · 详情页底部的「先不要了 / 回应这个心愿」还在 —— 家长从心愿页
+       进来时也有入口，而且撤回**不进**家长锁。
    ============================================================ */
 const wishedOrder = (patch: Record<string, unknown>) => ({
   id: 'wo_wish',
@@ -333,12 +338,26 @@ const wishedOrder = (patch: Record<string, unknown>) => ({
 })
 
 describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
-  it('★ 列表顶部出现「有 N 个心愿等你回应」', async () => {
+  it('★ 家长待办卡**不在**心愿页了（已移到顶栏 👀）', async () => {
     await db.wishOrders.put(wishedOrder({}) as never)
     await useApp.getState().refresh()
 
     render(<WishPage />)
-    expect(await screen.findByText(/有 1 个心愿等你回应/)).toBeTruthy()
+    await screen.findByText('心愿商城')
+    expect(
+      screen.queryByText(/心愿等你回应/),
+      '两个入口并存的话，家长会分不清该点哪个 —— 家长明确要求只在 👀 里处理',
+    ).toBeNull()
+  })
+
+  it('孩子那一侧仍然写着「已告诉爸妈」', async () => {
+    // 撤卡撤的是**家长**的入口，不能顺手把孩子唯一的反馈也撤掉 ——
+    // 他点完「想要这个」之后，至少要知道这件事已经传达出去了。
+    await db.wishOrders.put(wishedOrder({}) as never)
+    await useApp.getState().refresh()
+
+    render(<WishPage />)
+    expect(await screen.findByText('已告诉爸妈')).toBeTruthy()
   })
 
   it('★ 家长锁开着时：「定价」进闸门，但「先不要了」不进', async () => {
@@ -347,7 +366,7 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
 
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByText(/有 1 个心愿等你回应/))
+    await user.click(await screen.findByRole('button', { name: /游戏盲盒/ }))
 
     expect(await screen.findByText(/爸妈：回应这个心愿/)).toBeTruthy()
     expect(screen.queryByText(/定个价/), '定价要过密码').toBeNull()
@@ -364,7 +383,7 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
 
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByText(/有 1 个心愿等你回应/))
+    await user.click(await screen.findByRole('button', { name: /游戏盲盒/ }))
 
     expect(await screen.findByText(/定个价/)).toBeTruthy()
     await user.click(screen.getByText('先不要了'))

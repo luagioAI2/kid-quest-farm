@@ -657,34 +657,63 @@ try {
   })
   await wait(400)
 
-  /* 10h~10i. 心愿：孩子表过态、等家长回应（2026-10-29 新增）
+  /* 10h~10i. 心愿：家长在 👀 里回应（2026-10-29 新增，当天从心愿页挪过来）
      ------------------------------------------------------------
-     家长原话：「现在心愿商城里 已告诉爸爸妈妈，爸爸妈妈如何处理。」
+     家长原话：「心愿商城爸爸妈妈收到心愿，也跟任务一样，出现在上边栏的
+     眼睛那，而不是在心愿商城这里。爸爸妈妈会查看处理。」
 
-     这一屏必须进图集：改动之前 `wished` 的单子**在家长侧完全不可见**
-     （待办卡只收 committed / confirmed），而那不是报错，是「少了一个入口」——
-     任何结构断言都只会说「页面渲染正常」。
+     所以这两张图拍的是**新的处理链路**，不再是心愿页顶部那张卡：
+       10h —— 顶栏 👀 点开，队列里第一条就是这条心愿，就地能定价；
+       10i —— 开放之后切到「兑换」，孩子的列表里出现「爸妈开放了」那一块。
 
      两条注意：
-     1. 挑一件**没被本脚本定过价**的商品（`wish-dino`）。详情页的
-        `wished` 分支只出现在「还没定价」里面，拿 `wish-popmart`
-        （10d 定过价）会拍成一张普通的兑换页。
-     2. 家长锁在 10c 已经清了，所以这里能直接看到「定个价 / 这次先不换」
-        两颗按钮；想看闸门形态要去 e2e，截图脚本不重复拍锁屏。 */
+     1. 挑一件**没被本脚本定过价**的商品（`wish-dino`）。`wish-popmart`
+        在 10d 已经定过价，它的心愿单不进待办队列（判据是「有没有开放价」）。
+     2. 家长锁在 10c 已经清了，所以 👀 不会被 PIN 拦住；想看闸门形态去 e2e，
+        截图脚本不重复拍锁屏。 */
   await page.evaluate(async () => {
     await window.__kqf__.getState().wishExpress('wish-dino')
   })
   await wait(700)
-  await shot('10h-wish-waiting-parent')
-  if (await clickByText('心愿等你回应')) {
-    await wait(800)
-    await shot('10i-wish-parent-actions')
-    await page.evaluate(() => {
-      document.querySelector('button[aria-label="返回"]')?.click()
-    })
-    await wait(400)
+
+  if (await clickByText('👀')) {
+    await wait(900)
+    await shot('10h-review-wish')
+    if (await clickByText('开放兑换')) {
+      /* 等 toast（「已开放：N 张兑换券」）**出现再消失** —— 它挂在 top-3，
+         会盖住下一页的标题，拍出来是「一张有黄条的图」。
+         ⚠️ 只等「消失」是不够的：点击之后 toast 还没渲染，`!includes(...)`
+            当场就成立，函数立刻返回，2 秒后拍照时黄条正好还在（踩过一次）。 */
+      await page
+        .waitForFunction(() => document.body.innerText.includes('已开放：'), { timeout: 4000 })
+        .catch(() => {})
+      await page
+        .waitForFunction(() => !document.body.innerText.includes('已开放：'), { timeout: 8000 })
+        .catch(() => {})
+      // 关掉弹层：头部的 ✕ 和遮罩都是 `aria-label="关闭"`，取最后一个（头部那颗）
+      await page.evaluate(() => {
+        const bs = [...document.querySelectorAll('button[aria-label="关闭"]')]
+        bs[bs.length - 1]?.click()
+      })
+      await wait(600)
+      await clickByText('兑换', 'nav')
+      await wait(900)
+      // 回到顶部。`clickByText` 会先把按钮 `scrollIntoView`，切完 tab
+      // 滚动位置还留在原处 —— 拍出来只有心愿那一块的**下半截**，
+      // 标题和商品名全在屏幕外，看着像「那一块没渲染」。
+      await page.evaluate(() => {
+        window.scrollTo(0, 0)
+        document.querySelectorAll('*').forEach((el) => {
+          if (el.scrollTop > 0) el.scrollTop = 0
+        })
+      })
+      await wait(400)
+      await shot('10i-redeem-wish-shelf')
+    } else {
+      console.log('  ⚠️ 10i 跳过：👀 里没找到「开放兑换」')
+    }
   } else {
-    console.log('  ⚠️ 10h/10i 跳过：心愿列表里没出现「等你回应」那张卡')
+    console.log('  ⚠️ 10h/10i 跳过：顶栏没找到 👀')
   }
 
   /* 11. 设置页（孩子 tab） */

@@ -14,7 +14,10 @@ import { ParentPinPanel } from './ParentGate'
 import { settleInstance } from '@/domain/settlement'
 import { checkInPayout } from '@/domain/recurrence'
 import { humanizeMinutes, humanizeAgo } from '@/domain/time'
-import type { PendingCheckIn, QualityGrade, TaskInstance } from '@/domain/types'
+import { WISH_KIND_META, wishesAwaitingReply } from '@/domain/wish'
+import { formatPriceCents } from '@/domain/cash'
+import { wishItemById } from '@/games/wishCatalog'
+import type { PendingCheckIn, QualityGrade, TaskInstance, WishOrder } from '@/domain/types'
 
 /* ============================================================
    家长审核面板
@@ -29,10 +32,11 @@ import type { PendingCheckIn, QualityGrade, TaskInstance } from '@/domain/types'
    所以家长只是在"最后一公里"做确认，不是另算一套规则。
    ============================================================ */
 
-/** 待审条目：一条普通任务实例，或一次签到 */
+/** 待审条目：一次签到、一条普通任务实例，或孩子「想要」的心愿 */
 type ReviewItem =
   | { kind: 'task'; key: string; inst: TaskInstance }
   | { kind: 'checkin'; key: string; ci: PendingCheckIn }
+  | { kind: 'wish'; key: string; order: WishOrder }
 
 export function ReviewSheet() {
   const pending = useApp((s) => s.instances)
@@ -42,6 +46,16 @@ export function ReviewSheet() {
   const approveCheckIn = useApp((s) => s.approveCheckIn)
   const rejectCheckIn = useApp((s) => s.rejectCheckIn)
   const pendingCheckIns = usePendingCheckIns()
+  /**
+   * 孩子的心愿。2026-10-29 家长要求：「心愿商城爸爸妈妈收到心愿，
+   * 也跟任务一样，出现在上边栏的眼睛那，而不是在心愿商城这里」。
+   *
+   * 判据不写 `status === 'wished'` —— 家长定完价那条单子**仍然是 `wished`**
+   * （等孩子来换），只按状态算会让这条待办永远清不掉。规则本体在
+   * `wishesAwaitingReply` 里，顶栏红点用的是同一个函数。
+   */
+  const wishOrders = useApp((s) => s.wishOrders)
+  const wishOffers = useApp((s) => s.wishOffers)
 
   const queue = useMemo<ReviewItem[]>(() => {
     const checkIns: ReviewItem[] = pendingCheckIns.map((ci) => ({
@@ -53,10 +67,17 @@ export function ReviewSheet() {
       .filter((i) => i.status === 'submitted')
       .sort((a, b) => (a.submittedAt ?? a.updatedAt) - (b.submittedAt ?? b.updatedAt))
       .map((inst) => ({ kind: 'task', key: inst.id, inst }))
-    // 签到排前面：一条签到点一下确认就完事，先清掉手感更顺；
+    /* 心愿排在最前面。
+       理由和签到不一样：签到晚几分钟确认不影响孩子做下一件事，而一条心愿
+       是**孩子正在等回话** —— 他自己也看不到进展，只能干等。
+       按提出时间正序（先提的先回），不让新请求把旧的压到队尾。 */
+    const wishes: ReviewItem[] = wishesAwaitingReply(wishOrders, wishOffers)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((order) => ({ kind: 'wish', key: `wo:${order.id}`, order }))
+    // 签到排在任务前面：一条签到点一下确认就完事，先清掉手感更顺；
     // 而且签到按天攒，拖着不确认会直接卡住孩子当天的坚持天数。
-    return [...checkIns, ...tasks]
-  }, [pending, pendingCheckIns])
+    return [...wishes, ...checkIns, ...tasks]
+  }, [pending, pendingCheckIns, wishOrders, wishOffers])
 
   const [idx, setIdx] = useState(0)
   const current = queue[Math.min(idx, Math.max(0, queue.length - 1))]
@@ -75,11 +96,22 @@ export function ReviewSheet() {
         <span className="text-5xl anim-float">🎉</span>
         <p className="font-display text-lg font-extrabold text-ink-900">都看完啦，辛苦啦！</p>
         <p className="text-sm font-bold leading-snug text-ink-500">
-          现在没有等确认的任务和签到。
+          现在没有等确认的任务、签到和心愿。
           <br />
           宝贝交上来之后，这里会出现待办。
         </p>
       </div>
+    )
+  }
+
+  if (current.kind === 'wish') {
+    return (
+      <WishReviewCard
+        key={current.key}
+        order={current.order}
+        remaining={queue.length}
+        index={idx}
+      />
     )
   }
 
@@ -108,6 +140,177 @@ export function ReviewSheet() {
       onReject={rejectInstance}
       onNext={() => setIdx((i) => i + 1)}
     />
+  )
+}
+
+/**
+ * 一条心愿的回应卡。
+ *
+ * ## 为什么在**这里**回应，而不是让家长跳去心愿商城
+ *
+ * 2026-10-29 之前，家长的回应入口藏在「心愿商城 → 那件商品 → 详情页底部」。
+ * 孩子点完「🤍 想要这个」之后，家长那边**一片安静** —— 顶栏没有红点、
+ * 心愿页顶部只有一张写着「有 N 个心愿等你回应」的卡，点进去还得自己找。
+ * 家长原话：「爸爸妈妈会查看处理」。
+ *
+ * 所以定价直接摆进审核队列：家长打开 👀 就能看到「谁想要什么」，
+ * 就地给个价、或者这次先不换。**不用记住那件商品在哪一屏。**
+ *
+ * ## 为什么要有「孩子现在有」这个数
+ *
+ * 家长定价靠的是「定多少孩子攒得到」。只给商品参考价（¥59）没用 ——
+ * 券是孩子自己攒的，跟人民币不是一回事。把余额摆出来，家长才能判断
+ * 「定 30 他今天就能换」还是「定 200 得攒两周」。
+ *
+ * ⚠️ 券和积分**都要报**：付款时券不够会自动用积分补（1:1），
+ *    只报券的话，一个「券 0、积分 300」的孩子会被家长定价成「换不起」。
+ */
+function WishReviewCard({
+  order,
+  remaining,
+  index,
+}: {
+  order: WishOrder
+  remaining: number
+  index: number
+}) {
+  const wishSetOffer = useApp((s) => s.wishSetOffer)
+  const wishCancel = useApp((s) => s.wishCancel)
+  const pushToast = useApp((s) => s.pushToast)
+  const harvestBalance = useApp((s) => s.harvestBalance)
+  const balance = useApp((s) => s.balance)
+
+  const item = wishItemById(order.itemId)
+  const meta = item ? WISH_KIND_META[item.kind] : null
+
+  /* 默认 30 张，和心愿页的定价屏（`OfferView`）同一个起点 ——
+     家长在两个入口看到同一个默认值，不会觉得是两套东西。
+     已经定过价、后来被关掉又来的（`voucherPrice` 非 0），从原价起步。 */
+  const [price, setPrice] = useState(() => Math.max(5, order.voucherPrice || 30))
+  const [busy, setBusy] = useState(false)
+
+  const nowHave = harvestBalance + balance
+
+  const approve = async () => {
+    setBusy(true)
+    try {
+      await wishSetOffer(order.itemId, price)
+      pushToast({
+        kind: 'reward',
+        title: `已开放：${price} 张兑换券`,
+        detail: '孩子现在可以换了',
+        emoji: '✅',
+      })
+      /* ⚠️ 这里**不调 `onNext()`**。
+         定价之后这条心愿立刻离开队列（`wishesAwaitingReply` 认的是
+         「这件商品有没有开放价」），`idx` 不动，下一张卡自然顶上来。
+         再调一次 onNext 会**跳过一条** —— 家长会在不知情的情况下漏掉一个待办。
+         （确认/回绝走的是同一套：`wishCancel` 也会让这条离开队列。） */
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const decline = async () => {
+    setBusy(true)
+    try {
+      await wishCancel(order.id, '爸妈这次先不换')
+      pushToast({
+        kind: 'info',
+        title: '已回绝',
+        detail: '孩子能在兑换记录里看到',
+        emoji: '💬',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="px-5 pb-8 pt-4" data-wish-review={order.id}>
+      <div className="surface overflow-hidden">
+        <div className="flex items-center gap-3 bg-sky-50 p-3.5">
+          <span className="text-3xl">{order.itemEmoji}</span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-display text-lg font-extrabold text-ink-900">
+              {order.itemName}
+            </p>
+            <p className="text-xs font-bold text-ink-600">
+              {meta?.label ?? '心愿'}
+              {order.partnerName ? ` · ${order.partnerName}` : ''} · 孩子想要这个
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 divide-x-2 divide-ink-900/5 text-center">
+          <div className="p-3">
+            <p className="text-[11px] font-bold text-ink-500">商品参考价</p>
+            <p className="tnum mt-0.5 font-display text-lg font-extrabold text-ink-900">
+              {item?.priceCents != null ? formatPriceCents(item.priceCents) : '—'}
+            </p>
+          </div>
+          <div className="p-3">
+            <p className="text-[11px] font-bold text-ink-500">孩子现在有</p>
+            <p className="tnum mt-0.5 font-display text-lg font-extrabold text-ink-900">
+              🎫 {harvestBalance} · 🪙 {balance}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <p className="mb-2 px-1 font-display text-sm font-extrabold text-ink-500">
+          定多少兑换券？
+        </p>
+        <div className="flex items-center gap-2 rounded-2xl bg-white p-1 shadow-flat">
+          <button
+            type="button"
+            onClick={() => setPrice((p) => Math.max(1, p - 5))}
+            aria-label="减五张"
+            className="btn h-10 w-10 rounded-xl bg-paper-2 text-lg text-ink-700 active:btn-press"
+          >
+            −
+          </button>
+          <span className="tnum flex-1 text-center font-display text-xl font-extrabold text-ink-900">
+            {price}
+            <span className="ml-1 text-xs font-bold text-ink-500">张</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setPrice((p) => Math.min(9999, p + 5))}
+            aria-label="加五张"
+            className="btn h-10 w-10 rounded-xl bg-paper-2 text-lg text-ink-700 active:btn-press"
+          >
+            +
+          </button>
+        </div>
+        <p className="mt-2 px-1 text-xs font-bold leading-snug text-ink-500">
+          {nowHave >= price
+            ? `孩子现在有 ${nowHave}，定 ${price} 他马上就能换。`
+            : `孩子现在有 ${nowHave}，定 ${price} 还差 ${price - nowHave}。`}
+        </p>
+        {/* 单独一行。接在上面那句后面的话，两句话之间连标点都没有，
+            读起来像「…马上就能换。券不够的部分…」—— 一坨。 */}
+        <p className="mt-1 px-1 text-[11px] font-bold leading-snug text-ink-400">
+          券不够的部分会自动用积分补（1 张 = 1 积分），和「兑换」里一样。
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        <Btn tone="grass" size="hero" full disabled={busy} onClick={() => void approve()}>
+          ✅ 开放兑换 · {price} 张
+        </Btn>
+        <Btn tone="white" size="md" full disabled={busy} onClick={() => void decline()}>
+          💬 这次先不换
+        </Btn>
+      </div>
+
+      {remaining > 1 ? (
+        <p className="mt-3 text-center text-xs text-ink-500">
+          还有 {remaining - 1} 个等你看（第 {index + 1} / {remaining} 个）
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -589,7 +792,7 @@ export function ReviewSheetModal({
       <SheetHead
         title={passed ? '帮宝贝看看' : '请爸爸妈妈来一下'}
         emoji={passed ? '👀' : '🔒'}
-        sub={passed ? '确认任务与签到' : '审核需要密码'}
+        sub={passed ? '确认任务、签到与心愿' : '审核需要密码'}
         id="review-title"
         onClose={onClose}
       />

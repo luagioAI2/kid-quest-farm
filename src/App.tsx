@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { selectPendingCheckIns, selectPendingReview, useApp } from './store/useApp'
+import { wishesAwaitingReply } from './domain/wish'
 import TaskPage from './features/tasks/TaskPage'
 import PointsPage from './features/tasks/PointsPage'
 import RedeemPage from './features/redeem/RedeemPage'
@@ -166,11 +167,29 @@ export default function App() {
   // 家长端红点不动，那条待审就永远没人看见。
   const instances = useApp((s) => s.instances)
   const checkInProgress = useApp((s) => s.checkInProgress)
+  /**
+   * 孩子「想要」的心愿也要算进这个红点（2026-10-29）。
+   *
+   * 家长原话：「心愿商城爸爸妈妈收到心愿，也跟任务一样，出现在上边栏的
+   * 眼睛那，而不是在心愿商城这里」。所以心愿页顶部那张「有 N 个心愿等你
+   * 回应」的卡撤掉了，改从这里进 —— 否则家长根本不知道有孩子在等回话。
+   *
+   * ⚠️ 只算 `wished`（还没定价、没花钱）。`committed`（已扣券、等爸妈
+   *    去买）**不算**：那批要在心愿页里填收货信息、走淘宝，和「审核」不是
+   *    一回事，混进来只会让红点变成一个点不完的数字。
+   *
+   * ⚠️ 而且 `wished` 还要再滤一层「这件商品有没有开放价」——
+   *    家长定完价那条单子**仍然是 `wished`**（等孩子来换），只按状态算的话
+   *    红点永远消不掉。判据在 `wishesAwaitingReply` 里。
+   */
+  const wishOrders = useApp((s) => s.wishOrders)
+  const wishOffers = useApp((s) => s.wishOffers)
   const pendingReview = useMemo(
     () =>
       selectPendingReview(useApp.getState()).length +
-      selectPendingCheckIns(useApp.getState()).length,
-    [instances, checkInProgress],
+      selectPendingCheckIns(useApp.getState()).length +
+      wishesAwaitingReply(wishOrders, wishOffers).length,
+    [instances, checkInProgress, wishOrders, wishOffers],
   )
 
   /**
@@ -192,6 +211,21 @@ export default function App() {
    * 一个被校验、被写进文档、却没人读的字段，比没有这个字段更糟 ——
    * 插件作者会按 3 个字去起名，然后发现宿主根本不在乎。
    */
+  /**
+   * 别处（兑换列表里那块「爸妈已开放的心愿」）点了某件商品 → 切到心愿那一格。
+   *
+   * 为什么走 store 而不是回调：`tab` 是**本组件的 `useState`**，
+   * 兑换页拿不到 `setTab`。这个项目里跨页传数据的唯一通道就是 store
+   * （`MEMORY.md` 第一节第 4 条，同一套做法见 `pendingPrompt`）。
+   *
+   * 真正「打开哪件商品的详情」由 `WishPage` 挂载时自己 `takePendingWishItem()`
+   * 取走 —— 本组件只负责把那一格切过去。
+   */
+  const pendingWishItem = useApp((s) => s.pendingWishItem)
+  useEffect(() => {
+    if (pendingWishItem) setTab('wish')
+  }, [pendingWishItem])
+
   const tabs = useMemo(
     () => [
       STATIC_TABS[0],
