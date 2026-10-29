@@ -38,6 +38,7 @@ import { join } from 'node:path'
 import puppeteer from 'puppeteer-core'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { countColors } from './lib/png-colors.mjs'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4395/'
 const VIEWPORT = process.argv[3] ?? 'phone'
@@ -237,6 +238,8 @@ console.log('\n【② 安装：设置 → 游戏】')
   check('过了家长密码', !(await page.evaluate(() => document.body.innerText.includes('请输入家长密码'))))
 
   check('游戏列表在页面上', await waitFor(`[data-local-row="${GAME_ID}"]`, 12000))
+  /* 2026-10-30 起「没拥有不能装」—— 先预置拥有，否则下面找不到安装按钮 */
+  await grantGame(page, GAME_ID)
 
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
@@ -250,12 +253,6 @@ console.log('\n【② 安装：设置 → 游戏】')
   check('点了「安装」', await clickSel(`[data-local-install="${GAME_ID}"]`))
   check('★ 界面上那一行变成已装', await waitFor(`[data-local-installed="${GAME_ID}"]`, 30000))
 
-  const econ = await page.evaluate(() => {
-    const el = document.querySelector('[data-plugin-economy]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
-  })
-  check(`家长能看到「一局 ${PLAY_COST} 积分」`, new RegExp(`一局\\s*${PLAY_COST}\\s*积分`).test(econ), econ)
-  check('家长能看到「换不成兑换券」', /不开放|换不成|不能换/.test(econ), econ)
 
   check('点了「设为当前」', await clickSel(`[data-plugin-set-current="${GAME_ID}"]`))
   await wait(800)

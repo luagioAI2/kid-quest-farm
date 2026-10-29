@@ -918,10 +918,9 @@ try {
   // 2026-10-25 起没有市场弹层了（列表就在页面上），这里不用关任何东西。
   // 详情弹层已经在上面用 `[data-store-close]` 关掉了。
   await wait(600)
-  await page.evaluate(() => {
-    document.querySelector('[data-plugin-economy]')?.scrollIntoView({ block: 'center' })
-  })
-  await wait(600)
+  // 2026-10-30：原来这里要滚到「这些游戏的经济参数」那张卡 —— 它在 10-29
+  // 「游戏页改成我的游戏」时被删掉了，选择器永远匹配不到（`?.` 静默吞掉）。
+  // 现在装完之后最该拍的是那一行「已装」的状态，它就在当前视口里。
   await shot('11c-games-installed')
 
   /*

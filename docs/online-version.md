@@ -233,6 +233,28 @@ node scripts/_probe-online.mjs http://127.0.0.1:4401/ 834 1112
 > ⚠️ 加了原生插件 `@capacitor/app-launcher@8.0.1`，**打 APK 前要 `npx cap sync android`**，
 > 否则原生侧没有这个插件，`openUrl` 会走 catch 落到 `window.open`（等于没修）。
 
+### 5.6 装包要过「已拥有」这道门（2026-10-30 起）
+
+原来 21 款随包游戏在「我的游戏」里**全部能免费点安装** —— 于是激活码在设置页
+看不出任何区别：激活前也能装，激活后也一样。现在 `installLocalGame` 先判拥有，
+没拥有时那一格显示「去心愿商城」，不摆一个点了才告诉你「还没拥有」的按钮。
+
+「拥有」有**三个来源**，收在 `wishOwnedSet(ownedGameIds, installedGames, wishOrders)`：
+
+| 来源 | 什么时候有 |
+| --- | --- |
+| 本地账本 `game_purchase` / `redemption_code` | 用钻石买 / 用激活码解锁 |
+| 已装包 `installedGames` | 加门槛之前就装上的（**不能因为加门槛把它们锁死**） |
+| 心愿单 `openedGameId` | 心愿商城换到并已开箱 |
+
+⚠️ 只按账本判会把「心愿商城换来的游戏」一起锁死 —— 那批订单不写 `game_purchase`。
+
+⚠️ `installLocalGame` 里的判定**读库不读 store 快照**：兑换流程是
+「先记账本 → 再装包」，同一轮里 store 还没刷新，读快照会把刚兑换的判成没拥有。
+
+e2e 里点安装前要先 `await grantGame(page, GAME_ID)`（`scripts/lib/own.mjs`，
+走 `window.__kqf__.grantGame`）—— 21 个脚本已统一加好。
+
 ---
 
 ## 6. 还没接的（按优先级）

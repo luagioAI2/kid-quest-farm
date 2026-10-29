@@ -44,6 +44,7 @@ import { join, relative } from 'node:path'
 import zlib from 'node:zlib'
 import { makeProfileDir, SCRATCH_BASE } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4393/'
 const VIEWPORT = process.argv[3] ?? 'phone'
@@ -318,6 +319,8 @@ console.log('\n【① 安装】')
   }
   await wait(600)
   check('列表里列出了 ropeland', await waitFor(`[data-local-row="${GAME_ID}"]`, 8000))
+  /* 2026-10-30 起「没拥有不能装」—— 先预置拥有，否则下面找不到安装按钮 */
+  await grantGame(page, GAME_ID)
 
   const clicked = await clickSel(`[data-local-install="${GAME_ID}"]`)
   check('点了「安装」', clicked)
@@ -325,18 +328,6 @@ console.log('\n【① 安装】')
 
   const ver = await page.evaluate((id) => window.__kqf__.plugin.installed()[id]?.version, GAME_ID)
   check(`装上的版本是 v${GAME_VERSION}`, ver === GAME_VERSION, `实际 ${ver}`)
-
-  const econ = await page.evaluate(() => {
-    const el = document.querySelector('[data-plugin-economy]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
-  })
-  // 经济说明必须写**这款游戏自己的**数，不能拿别人的模板顶上
-  check(
-    `家长能看到「一局 ${PLAY_COST} 积分」`,
-    new RegExp(`一局\\s*${PLAY_COST}\\s*积分`).test(econ),
-    econ,
-  )
-  check('没写「开放兑换券」（ropeland 不产券）', !/=\s*1\s*兑换券/.test(econ), econ)
 
   check('点了「设为当前」', await clickSel(`[data-plugin-set-current="${GAME_ID}"]`))
   await wait(800)

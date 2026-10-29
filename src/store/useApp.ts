@@ -78,7 +78,7 @@ import { redeemWishCode } from '../api/wish'
 import { getToken } from '../api/session'
 import { ApiError } from '../api/client'
 import type { ApiWishCodeResult } from '../api/types'
-import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom } from '../domain/wish'
+import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom, wishOwnedSet } from '../domain/wish'
 import { makeHostApi } from '../games/hostApi'
 import { importBundle, mountBundle } from '../games/loader'
 import { catalogPublicKeyRaw } from '../games/catalogKey'
@@ -960,6 +960,35 @@ function ownedGameIdsFrom(mallLedger: readonly MallEntry[]): string[] {
   for (const g of GAMES) if (ownedByDefault(g)) ids.add(g.id)
   for (const id of purchasedIdsFrom(mallLedger)) ids.add(id)
   return [...ids]
+}
+
+/**
+ * 这个孩子**现在真的拥有**哪些游戏 —— **直接读库**。
+ *
+ * ## 为什么读库，不读 `get().ownedGameIds`
+ *
+ * 兑换/购买都是「先写账本 → 再装包」。中间那一刻 store 还没 `refresh()`，
+ * 读快照就会把刚兑换到的判成「没拥有」—— 兑换流程自己把自己卡住。
+ * 这类**顺序依赖不会报错**，只会让人以为「码是坏的」。
+ *
+ * ## 为什么用 `wishOwnedSet` 而不是 `ownedGameIds`
+ *
+ * 「拥有」有**三个来源**，`ownedGameIds` 只覆盖第一个：
+ *   ① 账本（`game_purchase` / `redemption_code`）；
+ *   ② 已装的包（`installedBundles`）—— 卸载再重装时靠它；
+ *   ③ 心愿单的 `openedGameId`（`redeemedGameIdsFrom`）。
+ * 只判账本，会把「心愿商城换来的」和「卸了想重装的」一起锁死 ——
+ * 而这两个恰恰是正常用户最常走的路径。
+ */
+async function ownedGameSetNow(): Promise<Set<string>> {
+  const [ledger, orders, bundles] = await Promise.all([
+    db.mallLedger.toArray(),
+    db.wishOrders.toArray(),
+    listInstalledBundles(),
+  ])
+  const installed: Record<string, true> = {}
+  for (const b of bundles) installed[b.gameId] = true
+  return wishOwnedSet(ownedGameIdsFrom(ledger), installed, orders)
 }
 
 /**
@@ -3676,6 +3705,20 @@ export const useApp = create<AppState>((set, get) => ({
     const entry = localGameById(gameId)
     if (!entry) return { ok: false, message: `这个版本里没有本地游戏「${gameId}」` }
 
+    /* ★ 没拥有就不能装（2026-10-30 家长拍板：「加门槛，没拥有不能装」）。
+     *
+     * 门槛放在 store 里、不放在按钮上 —— 按钮只是入口之一，
+     * 兑换流程 / 调试桥 / 将来的批量装都会绕过它。放在这里才是真的关死。
+     *
+     * 判据是 `ownedGameSetNow()`（读库、三个来源），不是 `get().ownedGameIds`：
+     * 兑换是「先记账本再装包」，读快照会把刚兑换的判成没拥有。 */
+    if (!(await ownedGameSetNow()).has(gameId)) {
+      return {
+        ok: false,
+        message: `「${entry.name}」还没拥有 —— 去心愿商城兑换，或者用激活码`,
+      }
+    }
+
     // ① 取包。本地包走同源 fetch —— 仍然是**网络栈**（dev / Capacitor 都如此），
     //    所以「本地」只省掉了「目录 + 签名」这一步，不省「取字节」。
     let bytes: Bytes
@@ -4496,6 +4539,15 @@ declare global {
         priceMall: number
         defaultOwned: boolean
       }[]
+      /**
+       * 预置「已拥有」（走查脚本用）。
+       *
+       * ⚠️ 2026-10-30 加了「没拥有不能装」的门槛之后，**每个游戏 e2e 都要先有它**，
+       * 否则点 `[data-local-install]` 会点空。拥有关系本来就在客户端本地
+       * （账本 / 心愿单 / 已装包），能开 devtools 的人自己也能改 ——
+       * 这个句柄不是安全边界，别当它是。
+       */
+      grantGame: (gameId: string) => Promise<void>
     }
   }
 }
@@ -4546,6 +4598,22 @@ if (typeof window !== 'undefined') {
         delta,
         source: 'manual_adjust',
         memo: `调试加兑换券 +${delta}`,
+      })
+      await useApp.getState().refresh()
+    },
+    /**
+     * 预置「已拥有」。
+     *
+     * 走的是**和真实兑换完全一样的那一笔账**（`redemption_code`，delta 0）——
+     * 不另开一条只有测试能走的路，否则 e2e 验的就不是生产链路了。
+     */
+    grantGame: async (gameId) => {
+      if (useApp.getState().ownedGameIds.includes(gameId)) return
+      await postMall({
+        delta: 0,
+        source: 'redemption_code',
+        refId: gameId,
+        memo: '调试预置拥有',
       })
       await useApp.getState().refresh()
     },

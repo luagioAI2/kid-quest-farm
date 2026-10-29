@@ -14,7 +14,8 @@ import {
 } from '../../games/storefront'
 import { GAMES, gameById, type GameDef } from '../../games/registry'
 import { formatSize } from '../../games/size'
-import { checkPluginEconomy } from '../../domain/pluginEconomy'
+import { checkPluginEconomy, vouchersPerPlay } from '../../domain/pluginEconomy'
+import { wishOwnedSet } from '../../domain/wish'
 import { GameIconArt } from './GameIcon'
 
 /**
@@ -327,6 +328,8 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
   const installedGames = useApp((s) => s.installedGames)
   const activeGameId = useApp((s) => s.activeGameId)
   const setActiveGame = useApp((s) => s.setActiveGame)
+  const ownedGameIds = useApp((s) => s.ownedGameIds)
+  const wishOrders = useApp((s) => s.wishOrders)
 
   // 内置在前（农场是首款），插件按 `storefront.ts` 的书写顺序跟在后面。
   // 分组顺序由 `GAME_KIND_ORDER` 定，空分类不渲染。
@@ -337,6 +340,13 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
       return local ? { src: 'plugin' as const, local, g, kind: g.kind } : null
     }).filter((r): r is PluginRow => r !== null),
   ]
+
+  /*
+    「拥有」的三个来源收在 `wishOwnedSet` 里 —— **和 `installLocalGame` 的门槛同一口径**。
+    两处各写一份的话，会出现「按钮亮着、点下去说没拥有」这种最难受的组合。
+    这里读 store 快照是安全的：这是渲染，不是写入路径。
+  */
+  const ownedSet = wishOwnedSet(ownedGameIds, installedGames, wishOrders)
 
   /*
     ⚠️ 这里原来有一个 `buy()` —— 点「💎 价格」调 `buyGame`。
@@ -469,7 +479,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                               设为当前
                             </button>
                           )
-                        ) : (
+                        ) : ownedSet.has(local.id) ? (
                           <InstallAction
                             id={local.id}
                             gateOpen={gateOpen}
@@ -477,6 +487,12 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                             onInstall={install}
                             size="xs"
                           />
+                        ) : (
+                          /* 没拥有：**不摆按钮**。摆一个「安装」再点出一句
+                             「还没拥有」是最差的组合 —— 界面先承诺，再当场否认。 */
+                          <span className={PILL_MUTE} data-local-need-own={local.id}>
+                            去心愿商城
+                          </span>
                         )
                       }
                     />
@@ -488,6 +504,9 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
         })}
 
         <p className="mt-4 text-[11px] leading-snug text-ink-500">
+          {/* ⚠️ 这第一句必须留着：21 款游戏现在全是「去心愿商城」，
+              不说一句，孩子只会觉得游戏都不见了。 */}
+          写着「去心愿商城」的还没拥有 —— 在那里用兑换券换，或者用买来的激活码解锁。
           装之前会核对包的内容（本地包对内置哈希）。卸载在「详情」最下面 —— 会把存档一起删掉。
         </p>
 
@@ -792,8 +811,32 @@ function DetailView({
           </div>
         </section>
 
+        {/*
+          经济参数 —— `docs/game-plugin-spec.md` §4.4 要求「必须对家长可见」。
+          它原来在「游戏市场」那张卡里（`PluginStoreCard.tsx`），
+          2026-10-29 那张卡整体删掉时**连它一起删了**，契约就断了（22 个 e2e 的
+          断言还指着它，从此一直红）。现在收进**详情**：家长点进哪款就看哪款，
+          列表页仍然只有「装 / 卸 / 设为当前」，不加回一层。
+          ⚠️ 只有装了才有参数可看（没装时 manifest 还没下来）。
+        */}
+        {installed && (
+          <section className="mt-5" data-plugin-economy>
+            <h4 className="font-display text-base font-extrabold text-ink-900">花多少积分</h4>
+            <p className="mt-2 text-sm leading-relaxed text-ink-700">
+              一局 {installed.economy.playCost} 积分，期望产出 {installed.economy.expectedPayout}{' '}
+              {installed.coin.name}
+              {(() => {
+                const v = vouchersPerPlay(installed.economy)
+                return v > 0
+                  ? `（1 ${installed.coin.name} = ${installed.economy.voucherPerCoin} 兑换券，一局期望 ${+v.toFixed(2)} 兑换券）`
+                  : '（不开放兑换券）'
+              })()}
+            </p>
+          </section>
+        )}
+
         <p className="mt-5 rounded-2xl bg-paper-2 px-3 py-2.5 text-[11px] leading-snug text-ink-500">
-          这个游戏花的是 App 里的积分（家长在「设置 → 游戏」里能看到每一局花多少、期望收回多少）。
+          这个游戏花的是 App 里的积分（每一局花多少、期望收回多少，就在上面「花多少积分」那一栏）。
           它不能自己发积分。
         </p>
 

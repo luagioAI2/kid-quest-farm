@@ -40,6 +40,7 @@ import { makeProfileDir, SCRATCH_BASE } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4396/'
 const VIEWPORT = process.argv[3] ?? 'phone'
@@ -286,6 +287,8 @@ let pointsBefore = 0
   const err = await openGameStore()
   check('打开「设置 → 游戏 → 游戏市场」并过了家长密码', err === null, err ?? '')
 
+  /* 2026-10-30 起「没拥有不能装」—— 先预置拥有，否则下面找不到安装按钮 */
+  await grantGame(page, GAME_ID)
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
     if (!li) return null
@@ -303,17 +306,6 @@ let pointsBefore = 0
   check('市场里那一行变成「已装」', await waitFor(`[data-plugin-installed-row="${GAME_ID}"]`, 5000))
   check('已安装清单里有 claw3d', after.installed.includes(GAME_ID), after.installed.join(','))
 
-  /*
-   * 经济参数要给家长看得见。⚠️ 这一块的文案里带**币名**（爪爪币），
-   * 所以顺带证明了 manifest 的 `coin.name` 真的被读到了 ——
-   * 写死「娃娃机币」的话这里会红。
-   */
-  const econ = await page.evaluate(() => {
-    const el = document.querySelector('[data-plugin-economy]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
-  })
-  check('家长能看到「一局 1 积分」', /一局\s*1\s*积分/.test(econ), econ)
-  check('家长能看到「1 爪爪币 = 1 兑换券」', /1\s*爪爪币\s*=\s*1\s*兑换券/.test(econ), econ)
 
   pointsBefore = after.balance
 

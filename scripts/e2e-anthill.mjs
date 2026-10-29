@@ -54,6 +54,7 @@ import { join } from 'node:path'
 import puppeteer from 'puppeteer-core'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { countColors } from './lib/png-colors.mjs'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4396/'
 /**
@@ -229,6 +230,8 @@ console.log('\n【② 安装：设置 → 游戏】')
 
   // 2026-10-25 起本地游戏列表**直接摊在设置页上**，没有「进入游戏市场」这一步
   check('游戏列表在页面上', await waitFor(`[data-local-row="${GAME_ID}"]`, 12000))
+  /* 2026-10-30 起「没拥有不能装」—— 先预置拥有，否则下面找不到安装按钮 */
+  await grantGame(page, GAME_ID)
 
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
@@ -242,12 +245,20 @@ console.log('\n【② 安装：设置 → 游戏】')
   check('点了「安装」', await clickSel(`[data-local-install="${GAME_ID}"]`))
   check('★ 界面上那一行变成已装', await waitFor(`[data-local-installed="${GAME_ID}"]`, 25000))
 
+  /*
+    经济参数 —— `docs/game-plugin-spec.md` §4.4 写着「必须对家长可见」。
+    它原来在列表页的「游戏市场」卡里（`PluginStoreCard.tsx`），10-29 那张卡
+    整体删掉时连它一起没了 ⇒ 现在收进**详情**，所以要先进详情才看得到。
+    ⚠️ 别改回在列表页找：列表上现在只有「装 / 卸 / 设为当前」，没有参数。
+  */
+  check('点进这款游戏的详情', await clickSel(`[data-store-detail="${GAME_ID}"]`))
   const econ = await page.evaluate(() => {
     const el = document.querySelector('[data-plugin-economy]')
     return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
   })
   check(`家长能看到「一局 ${PLAY_COST} 积分」`, new RegExp(`一局\\s*${PLAY_COST}\\s*积分`).test(econ), econ)
   check('家长能看到「换不成兑换券」', /不开放|换不成|不能换/.test(econ), econ)
+  check('关掉详情', await clickSel('[data-store-close]'))
 
   check('点了「设为当前」', await clickSel(`[data-plugin-set-current="${GAME_ID}"]`))
   await wait(800)

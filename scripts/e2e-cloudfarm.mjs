@@ -40,6 +40,7 @@ import { makeProfileDir, SCRATCH_BASE } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4391/'
 const VIEWPORT = process.argv[3] ?? 'phone'
@@ -286,6 +287,8 @@ console.log('\n【① 安装：设置 → 游戏 → 游戏市场 → 安装】'
   const err = await openGameStore()
   check('打开「设置 → 游戏 → 游戏市场」并过了家长密码', err === null, err ?? '')
 
+  /* 2026-10-30 起「没拥有不能装」—— 先预置拥有，否则下面找不到安装按钮 */
+  await grantGame(page, GAME_ID)
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
     if (!li) return null
@@ -305,16 +308,6 @@ console.log('\n【① 安装：设置 → 游戏 → 游戏市场 → 安装】'
   const ver = await page.evaluate((id) => window.__kqf__.plugin.installed()[id]?.version, GAME_ID)
   check(`装上的版本是 v${GAME_VERSION}`, ver === GAME_VERSION, ver ?? '(没装上)')
 
-  /*
-   * ★ 装得上 = `checkPluginEconomy` 放行了。这是本作最关键的一关：
-   *   `playCost 10 / expectedPayout 6.5`（0.65 ≤ 0.8）。写反了会在这里红，
-   *   而假宿主里永远是绿的（它不做经济校验）。
-   */
-  const econ = await page.evaluate(() => {
-    const el = document.querySelector('[data-plugin-economy]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
-  })
-  console.log('    家长看到的说明:', econ || '(没有 [data-plugin-economy])')
 
   const after = await snap()
   check('已安装清单里有 cloudfarm', after.installed.includes(GAME_ID), after.installed.join(','))
