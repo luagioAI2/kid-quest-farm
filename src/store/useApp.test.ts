@@ -3578,4 +3578,42 @@ describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
     const missed = db.tables.map((t) => t.name).filter((n) => !called.has(n))
     expect(missed, '这些表没被清空 —— 新表要登记进 wipeAll').toEqual([])
   })
+
+  /* ------------------------------------------------------------
+     meta 表：**导出是全量的，导入是手写清单**
+     ------------------------------------------------------------
+     `exportBackup` 把整个 `meta` 拍成 `data.meta`（`Object.fromEntries`，全量），
+     而 `importBackup` 只按手写的 6 个 key 写回（settings / farm.market /
+     farm.plots / farm.totals / farm.day / farm.quotaCarry），**从来没读过
+     `d.meta`**。也就是说导出的那一份是「全量」，导入端只认自己认识的。
+
+     现在 meta 里恰好只剩一个没被点名的 key（`farm.lastEventCheck`，事件概率
+     用的时间戳），丢了也只是「暂时不掷灾害骰子」，看不出来。真正的问题是
+     **下次有人往 meta 里加东西，导出会自动带上、导入会静默丢掉** ——
+     和 `wishCodes` 是同一族：一侧自动、一侧手写，迟早走散。
+     ------------------------------------------------------------ */
+  it('★ 导出 → 导入 不能丢掉「没被点名」的 meta key', async () => {
+    await setMeta('farm.lastEventCheck', 1700000000000)
+    const snap = await useApp.getState().exportBackup()
+    await db.meta.clear()
+
+    const res = await useApp.getState().importBackup(snap)
+    expect(res.ok, res.message).toBe(true)
+    expect(
+      (await db.meta.get('farm.lastEventCheck'))?.value,
+      '没被点名的 meta key 也要回来（导出是全量的）',
+    ).toBe(1700000000000)
+  })
+
+  it('★ 连「将来才会有的 key」也要回来（否则下次还得再补一遍清单）', async () => {
+    // 这条故意用一个**没人读**的 key：如果修法是「把 farm.lastEventCheck
+    // 加进那份手写清单」，上一条会绿、这一条仍然红 —— 逼出通用解。
+    await setMeta('probe.futureKey', { a: 1 })
+    const snap = await useApp.getState().exportBackup()
+    await db.meta.clear()
+
+    const res = await useApp.getState().importBackup(snap)
+    expect(res.ok, res.message).toBe(true)
+    expect((await db.meta.get('probe.futureKey'))?.value).toEqual({ a: 1 })
+  })
 })

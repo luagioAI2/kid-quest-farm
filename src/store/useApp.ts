@@ -4179,6 +4179,38 @@ export const useApp = create<AppState>((set, get) => ({
               await db.meta.put({ key: QUOTA_CARRY_KEY, value: clean })
             }
           }
+          /**
+           * 剩下那些**没被点名**的 meta key —— 照 `d.meta` 原样写回。
+           *
+           * 为什么需要这一步：`exportBackup` 是把整个 `meta` 表拍平的
+           * （`Object.fromEntries(meta.map(...))`，**全量**），而上面那段是
+           * **手写清单**。一侧自动、一侧手写 ⇒ 以后往 meta 里加个新 key，
+           * 导出会自动带上、导入会静默丢掉。
+           *
+           * 已经丢了的那一个：`farm.lastEventCheck`（事件概率用的时间戳）。
+           * 丢了只是「暂时不掷灾害骰子」，看不出来 —— 正因为看不出来，
+           * 才更该在这里一次修掉，而不是等下一个 key 丢。
+           * 2026-10-30 查「导出 / 导入是否对称」时发现。
+           *
+           * 上面那 6 个 key 由顶层字段负责（老备份里没有 `d.meta`），
+           * 这里跳过，免得两种来源打架。
+           */
+          const META_FROM_TOP_LEVEL = new Set<string>([
+            'settings',
+            'farm.market',
+            'farm.plots',
+            'farm.totals',
+            'farm.day',
+            QUOTA_CARRY_KEY,
+          ])
+          const metaBag = d.meta
+          if (metaBag && typeof metaBag === 'object' && !Array.isArray(metaBag)) {
+            for (const [k, v] of Object.entries(metaBag as Record<string, unknown>)) {
+              if (META_FROM_TOP_LEVEL.has(k)) continue
+              if (v === undefined) continue
+              await db.meta.put({ key: k, value: v })
+            }
+          }
         },
       )
       // 老备份没有兑换品 —— 恢复完补一份默认清单
