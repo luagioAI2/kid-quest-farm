@@ -866,6 +866,23 @@ const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
  * —— 绑在**儿童**账号上。整表原样导出等于「备份文件里躺着一份小孩住址」，
  * 而这个文件通常被丢进微信 / 网盘里传来传去。所以导出前必须裁。
  */
+/**
+ * 备份里**不许出现家长 PIN**。
+ *
+ * `settings.parentPin` 是**明文** 4 位（`domain/types.ts` 的注释写着
+ * 「明文仅本地」，`ParentGate` 直接 `pin === settings.parentPin` 比字符串），
+ * 而 `settings` 是整份导出的 ⇒ 每导一次备份，家长锁的密码就跟着那个 JSON
+ * 离开这台设备。而备份文件正是会被发到微信 / 网盘 / 客服的东西。
+ *
+ * 所以导出前剥掉。导入端也**不认**文件里的 PIN（见 `importBackup`）——
+ * 两边都不认，才算真的「仅本地」。
+ */
+function stripParentPin(s: AppSettings): AppSettings {
+  const out = { ...s }
+  delete out.parentPin
+  return out
+}
+
 function shipSnapshotOf(ship: WishShipInfo | undefined): WishShipSnapshot | undefined {
   if (!ship) return undefined
   const digits = typeof ship.phone === 'string' ? ship.phone.replace(/[^0-9]/g, '') : ''
@@ -3977,7 +3994,7 @@ export const useApp = create<AppState>((set, get) => ({
         wishOrders: wishOrders.map(orderToBackup),
         events: farmEvents,
         market,
-        settings,
+        settings: stripParentPin(settings),
         farm,
         /**
          * 从**已经收掉的地块**上结转过来、还没用掉的额度（按产出物 id）。
@@ -4002,7 +4019,18 @@ export const useApp = create<AppState>((set, get) => ({
          * 界面只说一句「这个码已经用过了」。2026-10-30 查备份覆盖面时发现。
          */
         wishCodes,
-        meta: Object.fromEntries(meta.map((m) => [m.key, m.value])),
+        /**
+         * ⚠️ `meta` 里**还有一份** `settings`（同一个对象，`setMeta('settings')`
+         * 写的就是它）。只剥顶层那个 `settings` 是不够的 —— 这条断言第一次跑
+         * 就是这么红的：PIN 换了个门又出去了。所以这里也要剥。
+         */
+        meta: Object.fromEntries(
+          meta.map((m) =>
+            m.key === 'settings'
+              ? [m.key, stripParentPin(m.value as AppSettings)]
+              : [m.key, m.value],
+          ),
+        ),
       },
     }
   },
@@ -4073,6 +4101,18 @@ export const useApp = create<AppState>((set, get) => ({
         events: pickArray<FarmEvent>(d.events) ?? [],
       }
 
+      /**
+       * 本机的家长 PIN。
+       *
+       * ⚠️ **必须在事务前读**：事务里第一件事就是 `db.meta.clear()`，
+       * settings 会跟着没，读出来就永远是 undefined 了。
+       *
+       * PIN 是**凭据**，不是数据：备份里带什么、带不带，都不该改这台设备的锁。
+       * 只清不保的后果是「导入任何一份旧备份 = 家长锁被清空」，孩子拿到文件就能解锁；
+       * 照文件写的后果是「导入一份别人设备的备份 = 锁被改成那个密码」。
+       */
+      const deviceParentPin = (await loadSettings()).parentPin
+
       // 清空 + 写入放在同一个事务里：失败会自动回滚，不会留下半截数据
       await db.transaction(
         'rw',
@@ -4132,7 +4172,11 @@ export const useApp = create<AppState>((set, get) => ({
           if (rows.events.length > 0) await db.farmEvents.bulkPut(rows.events)
           if (rows.wishCodes.length > 0) await db.wishCodes.bulkPut(rows.wishCodes)
           if (d.settings && typeof d.settings === 'object') {
-            await db.meta.put({ key: 'settings', value: d.settings })
+            // 文件里的 `parentPin` 一律不认（可能是别的设备的、也可能是孩子改的）
+            const incoming = { ...(d.settings as AppSettings) }
+            delete incoming.parentPin
+            if (deviceParentPin) incoming.parentPin = deviceParentPin
+            await db.meta.put({ key: 'settings', value: incoming })
           }
           const market = d.market as MarketState | undefined
           if (market && typeof market === 'object' && Array.isArray(market.quotes)) {
@@ -4220,6 +4264,15 @@ export const useApp = create<AppState>((set, get) => ({
           SEED_REDEEM_ITEMS.map((r) => ({ ...r, id: uid('rd'), createdAt: now, updatedAt: now })),
         )
       }
+      /**
+       * 先重读 settings，再 refresh。
+       *
+       * `refresh()` 一开头就是 `const { settings } = get()` —— 它**不重读**。
+       * 只调 refresh 的话，内存里还是导入前那份：设置页显示旧的孩子名字、
+       * 旧的审核开关，而且 refresh 里算「今天是哪天」（`dayStartHour`）、
+       * 时间流速、事件开关用的全是旧值。2026-10-30 查备份时发现。
+       */
+      set({ settings: await loadSettings() })
       await get().refresh()
       return { ok: true, message: '数据已恢复' }
     } catch (e) {

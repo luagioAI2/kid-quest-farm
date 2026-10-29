@@ -543,7 +543,12 @@ e2e 里所有按索引取 tab 的地方都要复查。
    > ⇒ 那张实体卡作废，界面只说「这个码已经用过了」。现在两个方向都登记，
    > 备份 `version` 3 → 4，并且 `useApp.test.ts` 加了**覆盖面闸门**：
    > 枚举 `db.tables`，哪张表没进备份 / 没被清空就直接红。
-2. **完成 30 天后自动抹除**：`ship` 降级成 `{ region, phoneTail }`。启动时扫 `purgeAfter`。
+2. **备份里也不能有家长 PIN**（2026-10-30 补）。`settings.parentPin` 是**明文** 4 位，
+   而 `settings` 整份进备份 —— 每导一次，家长锁的密码就跟着 JSON 离开设备。
+   现在导出剥掉（`stripParentPin`，顶层 `settings` 和 `meta.settings` **两处**都要剥），
+   导入不认文件里的值（只保留本机原来那个）。4 位数字的哈希也挡不住爆破，
+   所以不是「换个哈希」，是**根本不进文件**。
+3. **完成 30 天后自动抹除**：`ship` 降级成 `{ region, phoneTail }`。启动时扫 `purgeAfter`。
 3. **不进日志 / toast / 埋点**。
 4. **孩子端完全看不到** `ship` 和 `buyUrl`。
 

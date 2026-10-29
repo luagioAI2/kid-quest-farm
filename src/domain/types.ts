@@ -1278,7 +1278,15 @@ export interface AppSettings {
    */
   gameClock?: GameClock
 
-  /** 家长锁 PIN（明文仅本地，4 位） */
+  /**
+   * 家长锁 PIN（**明文** 4 位）。
+   *
+   * ⚠️ 它住在 `settings` 里，而 `settings` 是整份进备份的 —— 所以
+   * `exportBackup` 会**剥掉**它（`stripParentPin`），`importBackup` 也
+   * 不认文件里的值（只认本机原来那个）。否则「明文仅本地」是句假话：
+   * 备份文件会被发到微信 / 网盘，而 4 位数字肉眼就能用。
+   */
+  parentPin?: string
   parentPin?: string
 
   /*

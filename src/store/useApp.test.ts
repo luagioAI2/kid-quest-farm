@@ -3616,4 +3616,66 @@ describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
     expect(res.ok, res.message).toBe(true)
     expect((await db.meta.get('probe.futureKey'))?.value).toEqual({ a: 1 })
   })
+
+  /* ------------------------------------------------------------
+     家长 PIN：**它是凭据，不是数据**
+     ------------------------------------------------------------
+     `parentPin` 是**明文**（`domain/types.ts`：「明文仅本地，4 位」，
+     `ParentGate` 直接 `pin === settings.parentPin` 比），而它住在
+     `settings` 里，`exportBackup` 把 `settings` 整个导出去。
+
+     于是那句「明文仅本地」是假的：**每次导出备份，家长锁的密码就跟着
+     那个 JSON 离开这台设备**。而备份文件正是会被发到微信 / 网盘里的东西。
+
+     反方向同样要命：`importBackup` 也是整份 `settings` 覆盖写。所以一份
+     **没有** `parentPin` 的备份（老备份、或者孩子自己删了那行）导入之后，
+     家长锁就被清空了 —— 孩子只要拿到任何一份旧备份就能解锁。
+     ------------------------------------------------------------ */
+  it('★ 备份里不能有家长 PIN（明文，会被发到微信里）', async () => {
+    await useApp.getState().updateSettings({ parentPin: '7391' })
+    const snap = await useApp.getState().exportBackup()
+    expect(JSON.stringify(snap), 'PIN 是凭据，不该离开这台设备').not.toContain('7391')
+  })
+
+  it('★ 导入一份没有 PIN 的备份，不能把家长锁清空', async () => {
+    await useApp.getState().updateSettings({ parentPin: '7391' })
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const settings = { ...(snap.data.settings as Record<string, unknown>), parentPin: undefined }
+    const res = await useApp.getState().importBackup({ ...snap, data: { ...snap.data, settings } })
+    expect(res.ok, res.message).toBe(true)
+    expect(useApp.getState().settings.parentPin, '一份文件不该能清掉家长锁').toBe('7391')
+    expect(
+      ((await db.meta.get('settings'))?.value as { parentPin?: string }).parentPin,
+      '库里也不能被清掉',
+    ).toBe('7391')
+  })
+
+  it('★ 导入一份带别的 PIN 的备份，不能改掉本机的 PIN', async () => {
+    await useApp.getState().updateSettings({ parentPin: '7391' })
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const settings = { ...(snap.data.settings as Record<string, unknown>), parentPin: '1111' }
+    const res = await useApp.getState().importBackup({ ...snap, data: { ...snap.data, settings } })
+    expect(res.ok, res.message).toBe(true)
+    expect(useApp.getState().settings.parentPin, 'PIN 由本机决定，备份说了不算').toBe('7391')
+    expect(
+      ((await db.meta.get('settings'))?.value as { parentPin?: string }).parentPin,
+      '库里也不许被文件改掉',
+    ).toBe('7391')
+  })
+
+  it('★ 导入之后 settings 要跟着刷新（否则设置页显示的还是旧的）', async () => {
+    // `refresh()` 一开头就是 `const { settings } = get()` —— 它**不重读**
+    // settings。导入写完库只调 `refresh()`，于是内存里还是导入前那份：
+    // 设置页显示旧的孩子名字 / 旧的审核开关，而且 `refresh` 里算「今天是哪天」
+    // （`dayStartHour`）、时间流速、事件开关用的全是旧值。
+    await useApp.getState().updateSettings({ childName: '导入前的名字' })
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const settings = { ...(snap.data.settings as Record<string, unknown>), childName: '备份里的名字' }
+
+    const res = await useApp.getState().importBackup({ ...snap, data: { ...snap.data, settings } })
+    expect(res.ok, res.message).toBe(true)
+    expect(useApp.getState().settings.childName, '导入完 store 里的 settings 要跟着变').toBe(
+      '备份里的名字',
+    )
+  })
 })
