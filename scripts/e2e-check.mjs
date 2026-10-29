@@ -1622,6 +1622,9 @@ try {
     // 真的带上了这两个 key（曾经出过「单测绿、产物里没有」的先例）。
     const dataKeys = Object.keys(exported.data ?? {})
     check('导出含心愿商城两张表', dataKeys.includes('wishOffers') && dataKeys.includes('wishOrders'), dataKeys.filter((k) => k.startsWith('wish')).join(',') || '(无 wish 字段)')
+    // 兑换码那张表（v10 加的）：必须跟 `mallLedger` 同进同出。漏了它 ⇒
+    // 清空 / 恢复旧备份之后游戏没了而码还标着「用过」⇒ 那张实体卡作废。
+    check('导出含兑换码表', dataKeys.includes('wishCodes'), dataKeys.filter((k) => k.startsWith('wish')).join(',') || '(无 wish 字段)')
     // 备份里不能有完整收货信息（spec §9.1）。这里只查 key 名 —— 真值断言在单测里。
     check('导出不含 ship 原字段', !JSON.stringify(exported).includes('"ship"'))
   } else {

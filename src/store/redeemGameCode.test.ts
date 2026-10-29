@@ -139,3 +139,62 @@ describe('兑换码：装包失败要退码', () => {
     expect(useApp.getState().ownedGameIds).not.toContain('sugar')
   })
 })
+
+/* ============================================================
+   清空 / 恢复备份之后，这张卡不能凭空作废
+   ------------------------------------------------------------
+   `wishCodes` 记的是「这个码在本机用过了」，而**证明它换到了什么**的那一笔
+   在 `mallLedger`（`source: 'redemption_code'`）。两张表是一件事的两半。
+
+   `wipeAll` / `importBackup` 都会 `mallLedger.clear()`，却从来没碰过
+   `wishCodes`（v10 加这张表时漏登记）⇒ 清空全部数据、或者导入一份「兑换
+   之前」的备份之后：
+
+     游戏没了（账本回到旧快照） + 码还标着「用过」 = **这张实体卡废了**
+
+   而界面上没有任何提示 —— 家长只会看到「这个码已经用过了」，然后开始怀疑
+   自己是不是记错了哪张卡。
+   ============================================================ */
+describe('兑换码：清空 / 恢复备份之后，这张卡不能凭空作废', () => {
+  beforeEach(() => {
+    lookup.mockResolvedValue('sugar')
+    useApp.setState({ installLocalGame: async () => ({ ok: true, message: '' }) })
+  })
+
+  it('★ 清空全部数据之后，同一个码还能再用（否则卡废了、东西也没了）', async () => {
+    await useApp.getState().redeemGameCode(CODE)
+    expect(await db.wishCodes.count(), '前提：兑换成功会记一笔「已用」').toBe(1)
+
+    await useApp.getState().resetAll()
+    expect(
+      useApp.getState().ownedGameIds,
+      '前提：清空之后那款游戏真的没了（否则测不到「卡废了」）',
+    ).not.toContain('sugar')
+
+    const r = await useApp.getState().redeemGameCode(CODE)
+    expect(r.ok, `清空之后这张卡应该还能用，实际：${r.message}`).toBe(true)
+  })
+
+  it('★ 导入一份「兑换之前」的备份，同一个码还能再用', async () => {
+    const before = await useApp.getState().exportBackup()
+    await useApp.getState().redeemGameCode(CODE)
+
+    const res = await useApp.getState().importBackup(before)
+    expect(res.ok, res.message).toBe(true)
+    expect(useApp.getState().ownedGameIds, '前提：回到了兑换之前').not.toContain('sugar')
+
+    const r = await useApp.getState().redeemGameCode(CODE)
+    expect(r.ok, `恢复旧备份之后这张卡应该还能用，实际：${r.message}`).toBe(true)
+  })
+
+  it('★ 导出 → 导入（同一份快照往返）不能把「用过的码」忘掉', async () => {
+    // 反向的那一半：码表要跟着快照一起回来。只清不存的话，
+    // 「恢复备份」就变成了「顺手把码表洗白」。
+    await useApp.getState().redeemGameCode(CODE)
+    const snap = await useApp.getState().exportBackup()
+    await db.wishCodes.clear()
+    const res = await useApp.getState().importBackup(snap)
+    expect(res.ok, res.message).toBe(true)
+    expect(await db.wishCodes.count(), '码表要跟着快照一起回来').toBe(1)
+  })
+})

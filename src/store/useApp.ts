@@ -21,6 +21,7 @@ import type {
   RedeemRecord,
   Task,
   TaskInstance,
+  WishCode,
   WishOffer,
   WishOrder,
   WishShipInfo,
@@ -839,6 +840,7 @@ const BACKUP_ARRAY_FIELDS = [
   'redeemRecords',
   'wishOffers',
   'wishOrders',
+  'wishCodes',
   'events',
 ] as const
 
@@ -3892,6 +3894,7 @@ export const useApp = create<AppState>((set, get) => ({
       farm,
       market,
       quotaCarry,
+      wishCodes,
     ] = await Promise.all([
       db.tasks.toArray(),
       db.taskInstances.toArray(),
@@ -3913,6 +3916,7 @@ export const useApp = create<AppState>((set, get) => ({
       loadFarm(),
       loadMarket(),
       loadQuotaCarry(),
+      db.wishCodes.toArray(),
     ])
     return {
       app: 'kid-quest-farm',
@@ -3922,8 +3926,9 @@ export const useApp = create<AppState>((set, get) => ({
        *
        * v3（2026-10-28）：`data` 里新增 `wishOrders`，且其中的收货信息
        * 一律是脱敏快照（`shipSnapshot`），不会有 `ship`。见 spec §9.1。
+       * v4（2026-10-30）：`data` 里新增 `wishCodes`（已经用过的兑换码）。
        */
-      version: 3,
+      version: 4,
       exportedAt: Date.now(),
       data: {
         tasks,
@@ -3984,6 +3989,19 @@ export const useApp = create<AppState>((set, get) => ({
          * 2026-09-19 排查「背包有一个萝卜却卖不掉」时发现。
          */
         quotaCarry,
+        /**
+         * **已经用过的兑换码**（`wishCodes`，v10 加的表）。
+         *
+         * ⚠️ 必须跟 `mallLedger` **同进同出**。这两张表是一件事的两半：
+         * 账本里那笔 `source: 'redemption_code'` 证明「码换到了什么」，
+         * 这张表证明「这个码在本机用过了」。
+         *
+         * 只清不存（v10 加表时就是这样，两个方向都漏登记）的后果：
+         * 导入一份「兑换之前」的备份、或者点了「清空全部数据」之后，
+         * 游戏回到「没拥有」而码还标着「用过」⇒ **那张实体卡废了**，
+         * 界面只说一句「这个码已经用过了」。2026-10-30 查备份覆盖面时发现。
+         */
+        wishCodes,
         meta: Object.fromEntries(meta.map((m) => [m.key, m.value])),
       },
     }
@@ -4048,6 +4066,10 @@ export const useApp = create<AppState>((set, get) => ({
         wishOffers: pickArray<WishOffer>(d.wishOffers, 'itemId') ?? [],
         // ⚠️ 必须过 `orderFromBackup`：外部文件里可能带着 `ship`
         wishOrders: (pickArray<WishOrder>(d.wishOrders) ?? []).map(orderFromBackup),
+        // ⚠️ 主键是 `codeHash`，**不是 `id`** —— 和背包 / gameKv / wishOffers 同一类坑。
+        // 老备份（v3 及以前）没有这个字段 → 空数组 → 等于「那时候一个码都没用过」，
+        // 和 `mallLedger` 回到同一时刻是**一致**的。
+        wishCodes: pickArray<WishCode>(d.wishCodes, 'codeHash') ?? [],
         events: pickArray<FarmEvent>(d.events) ?? [],
       }
 
@@ -4070,6 +4092,7 @@ export const useApp = create<AppState>((set, get) => ({
           db.harvestLedger,
           db.mallLedger,
           db.gameKv,
+          db.wishCodes,
           db.meta,
         ],
         async () => {
@@ -4089,6 +4112,7 @@ export const useApp = create<AppState>((set, get) => ({
             db.wishOffers.clear(),
             db.wishOrders.clear(),
             db.farmEvents.clear(),
+            db.wishCodes.clear(),
             db.meta.clear(),
           ])
           await db.tasks.bulkPut(rows.tasks)
@@ -4106,6 +4130,7 @@ export const useApp = create<AppState>((set, get) => ({
           if (rows.wishOffers.length > 0) await db.wishOffers.bulkPut(rows.wishOffers)
           if (rows.wishOrders.length > 0) await db.wishOrders.bulkPut(rows.wishOrders)
           if (rows.events.length > 0) await db.farmEvents.bulkPut(rows.events)
+          if (rows.wishCodes.length > 0) await db.wishCodes.bulkPut(rows.wishCodes)
           if (d.settings && typeof d.settings === 'object') {
             await db.meta.put({ key: 'settings', value: d.settings })
           }

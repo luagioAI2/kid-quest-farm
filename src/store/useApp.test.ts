@@ -15,6 +15,7 @@ import {
   savePlots,
   setGameKv,
   setMeta,
+  wipeAll,
 } from '../db/db'
 import {
   selectCheckInTasks,
@@ -3515,5 +3516,66 @@ describe('一次性兑换品', () => {
     expect(item.limitPerDay).toBeUndefined()
     await useApp.getState().redeem(item.id)
     expect(await useApp.getState().redeem(item.id)).toBe(false)
+  })
+})
+
+/* ============================================================
+   覆盖面闸门：加了新表，备份 / 清空必须跟着登记
+   ------------------------------------------------------------
+   这一族 bug 已经犯过三次，全都是「加了表，忘了登记」：
+
+     · `harvestLedger` / `mallLedger` —— 导出漏 → 换机丢记录；
+     · `wishOrders` —— 导出漏 → 券被扣了却没订单可退（2026-10-28）；
+     · `wishCodes`（v10）—— 导出**和**清空都漏 → 清空 / 恢复旧备份之后
+       那张实体卡作废（2026-10-30）。
+
+   三次都是**零报错**：界面照常、其它闸门全绿，只有用户会发现「东西不对」。
+   所以这里不逐个点名单表，而是**枚举 `db.tables`** —— 下次加 v11 的表，
+   这两条会直接红，逼你当场决定「进不进备份、清不清」。
+   ============================================================ */
+describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
+  /** 备份里的字段名和表名不一样的，在这里登记（目前只有农场事件） */
+  const BACKUP_KEY_OF: Record<string, string> = { farmEvents: 'events' }
+  /** 有意**不**进备份的表：写在这里并说清为什么（现在是空的） */
+  const DEVICE_LOCAL: string[] = []
+
+  it('★ 导出覆盖每一张表（漏一张 = 换机丢数据，且零报错）', async () => {
+    const backup = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const data = backup.data
+    // ⚠️ 只数 key 不够：`wishCodes: undefined` 这种「登记了但没真取数」也算有 key，
+    // 而 `JSON.stringify` 会把值为 undefined 的字段整个丢掉 —— 文件里就是没有。
+    // 实测过：写成 `wishCodes: undefined` 时，只数 key 的判据**照样全绿**。
+    const keys = new Set(
+      Object.entries(data)
+        .filter(([, v]) => v !== undefined && v !== null)
+        .map(([k]) => k),
+    )
+    const missing = db.tables
+      .map((t) => t.name)
+      .filter((n) => !DEVICE_LOCAL.includes(n))
+      .filter((n) => !keys.has(BACKUP_KEY_OF[n] ?? n))
+    expect(missing, '这些表没进备份 —— 加表时忘了登记？').toEqual([])
+  })
+
+  it('★ 清空全部数据 = 每一张表都被 clear 过', async () => {
+    // 不去铺数据（空表清不清都是空的，测不出漏），直接看**有没有调 clear**。
+    //
+    // ⚠️ spy 必须挂在**原型**上，不能挂在实例上：`wipeAll` 是在
+    // `db.transaction(...)` 里面调 `db.tasks.clear()` 的，而事务里的
+    // `db.tasks` 是**另一个** Table 实例（事务作用域那一份）——
+    // 在实例上 spy，17 张表会全部报「没被清空」，看着像 bug 其实是用错了尺子。
+    const proto = Object.getPrototypeOf(db.tasks) as { clear: () => Promise<void> }
+    const called = new Set<string>()
+    const spy = vi.spyOn(proto, 'clear').mockImplementation(function (this: { name: string }) {
+      called.add(this.name)
+      return Promise.resolve()
+    })
+    try {
+      await wipeAll()
+    } finally {
+      spy.mockRestore()
+    }
+    const missed = db.tables.map((t) => t.name).filter((n) => !called.has(n))
+    expect(missed, '这些表没被清空 —— 新表要登记进 wipeAll').toEqual([])
   })
 })

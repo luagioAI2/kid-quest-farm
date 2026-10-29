@@ -1147,6 +1147,9 @@ export async function wipeAll(): Promise<void> {
       db.harvestLedger,
       db.mallLedger,
       db.gameKv,
+      db.wishOffers,
+      db.wishOrders,
+      db.wishCodes,
       db.meta,
     ],
     async () => {
@@ -1166,6 +1169,15 @@ export async function wipeAll(): Promise<void> {
         db.wishOffers.clear(),
         db.wishOrders.clear(),
         db.farmEvents.clear(),
+        /**
+         * ⚠️ **已经用过的兑换码必须一起清掉**（v10 加这张表时漏了登记）。
+         *
+         * 不清的后果：家长点「清空全部数据」之后，游戏、积分、农场全没了，
+         * 唯独码表还记着「这个码用过了」⇒ 拿同一张实体卡再兑一次，
+         * 界面只会说「这个码已经用过了」。**卡废了，而东西也没了。**
+         * 2026-10-30 查备份/清空覆盖面时发现（`exportBackup` 那边也漏）。
+         */
+        db.wishCodes.clear(),
         db.meta.clear(),
       ])
     },
