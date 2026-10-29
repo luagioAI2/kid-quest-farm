@@ -330,3 +330,32 @@ export function orderStatusTone(o: {
   if (o.openedGameId && (o.status === 'committed' || o.status === 'confirmed')) return 'green'
   return STATUS_TONE[o.status] ?? 'gray'
 }
+
+/* ============================================================
+   「还没走完」的两个口径 —— **故意不相等**，别拿一个去统一另一个
+   ============================================================ */
+
+/**
+ * 券已经扣了、**还等着爸妈动手**的单子。
+ *
+ * ⚠️ 它**包含已交付的数字商品**：游戏已经装进柜子，但单子还没 `done`，
+ * 家长仍要收尾（心愿页顶部那张卡就是列这个，文案写「已放进游戏柜，等爸妈收尾」）。
+ */
+export function needsParentAction(o: { status: string }): boolean {
+  return o.status === 'committed' || o.status === 'confirmed'
+}
+
+/**
+ * 孩子那一屏（「📜 兑换记录」tab 上那个数字）算的「还没兑现」。
+ *
+ * 和 `needsParentAction` 只差一个条件：**已交付的数字商品不算**。
+ * 理由不是数据，是**读者不同** —— 兑换页是孩子的收银台，那一行的标签已经写着
+ * 绿的「已放进游戏柜」，再挂一个红数字就是自相矛盾（2026-10-29 截图走查抓到的
+ * 正是「红点 1 + 绿标签」）。而家长的收尾待办在心愿页顶部那张卡里，一张都没漏。
+ *
+ * 判据：**同一个 `committed` 单子，心愿页说「有 1 单在等爸妈处理」、
+ * 兑换记录没有徽标 —— 这不是 bug。** 见 `redeemHistory` 的 `pending` 字段。
+ */
+export function childPending(o: { status: string; openedGameId?: string }): boolean {
+  return needsParentAction(o) && !o.openedGameId
+}

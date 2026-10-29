@@ -6,6 +6,7 @@ import {
   blindBoxRemaining,
   compareWishItem,
   daysToSave,
+  needsParentAction,
   orderStatusLabel,
   orderStatusTone,
   planWishRedeem,
@@ -258,7 +259,11 @@ export default function WishPage() {
   const pendingOrders = useMemo(
     () =>
       wishOrders
-        .filter((o) => o.status === 'committed' || o.status === 'confirmed')
+        /* `needsParentAction`，**不是** `childPending` —— 这张卡是给家长看的
+           「我还要做几件事」，已交付的数字商品也在里面（游戏装了，单子还没收尾）。
+           兑换记录 tab 上那个徽标用的是 `childPending`（不含已交付的），
+           两个数故意不等，口径都写在 `domain/wish.ts`。 */
+        .filter((o) => needsParentAction(o))
         .sort((a, b) => b.createdAt - a.createdAt),
     [wishOrders],
   )

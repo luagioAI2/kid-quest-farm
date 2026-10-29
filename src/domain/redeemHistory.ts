@@ -26,7 +26,7 @@
 
 import type { RedeemRecord, WishOrder } from './types'
 import { describeRedeemPayment } from './redeem'
-import { orderStatusLabel, orderStatusTone, type WishTone } from './wish'
+import { childPending, orderStatusLabel, orderStatusTone, type WishTone } from './wish'
 
 export interface HistoryRow {
   /** 主键。两张表各自的 id，不会撞（`rd_` / `wo_`） */
@@ -94,15 +94,17 @@ export function redeemHistory(
       tag: o.status === 'cancelled' ? '已取消 · 已退回' : orderStatusLabel(o),
       tone: orderStatusTone(o),
       /**
-       * ⚠️ 已经交付的数字商品**不算**待兑现。
+       * ⚠️ 用 `childPending`，**不是** `needsParentAction`。
        *
-       * 它确实还停在 `committed`（等家长点「完成这一单」），但东西孩子已经
-       * 拿到手了 —— 计数把它算进去的话，记录页会出现「红点 1 + 绿标签
-       * 已放进游戏柜」这种自相矛盾的一屏（截图走查抓到过）。
-       * 家长那边的收尾提示在心愿页顶部，不靠这个数。
+       * 已经交付的数字商品不算待兑现：它确实还停在 `committed`（等家长点
+       * 「完成这一单」），但东西孩子已经拿到手了 —— 计数把它算进去的话，
+       * 记录页会出现「红点 1 + 绿标签 已放进游戏柜」这种自相矛盾的一屏
+       * （截图走查抓到过）。家长那边的收尾提示在心愿页顶部，不靠这个数。
+       *
+       * 所以同一个单子：心愿页说「有 1 单在等爸妈处理」，这里没有徽标 ——
+       * **故意的**，两个口径都写在 `domain/wish.ts` 里了。
        */
-      pending:
-        (o.status === 'committed' || o.status === 'confirmed') && !o.openedGameId,
+      pending: childPending(o),
       delivered: !!o.openedGameId,
     })
   }

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   blindBoxRemaining,
+  childPending,
   compareWishItem,
   daysToSave,
+  needsParentAction,
   pickBlindBox,
   planWishRedeem,
   redeemedGameIdsFrom,
@@ -338,5 +340,50 @@ describe('wishShelf：兑换列表里该摆哪些心愿', () => {
       [],
     )
     expect(rows.map((r) => r.item.id)).toEqual(['b', 'a'])
+  })
+})
+
+/* ============================================================
+   「还没走完」的两个口径：**故意不相等**
+   ------------------------------------------------------------
+   2026-10-29 差点把它们「统一」掉。实际是两个不同的读者：
+     · 心愿页顶部那张卡 = 家长还要做几件事（`needsParentAction`）
+     · 兑换记录 tab 上的数字 = 孩子这一屏还有几件没兑现（`childPending`）
+   差的那一条就是「已交付但没收尾的数字商品」：游戏已经在柜子里，
+   标签是绿的，再挂个红数字就是自相矛盾（截图走查抓到过）。
+   ============================================================ */
+describe('「还没走完」的两个口径', () => {
+  const cases = [
+    { name: 'committed 实物', o: { status: 'committed' }, parent: true, child: true },
+    { name: 'confirmed 实物', o: { status: 'confirmed' }, parent: true, child: true },
+    {
+      name: 'committed 数字商品（已放进柜子）',
+      o: { status: 'committed', openedGameId: 'renttower' },
+      parent: true,
+      child: false,
+    },
+    {
+      name: 'confirmed 数字商品（已放进柜子）',
+      o: { status: 'confirmed', openedGameId: 'renttower' },
+      parent: true,
+      child: false,
+    },
+    { name: 'done', o: { status: 'done', openedGameId: 'x' }, parent: false, child: false },
+    { name: 'cancelled', o: { status: 'cancelled' }, parent: false, child: false },
+    { name: 'wished（一分钱没扣）', o: { status: 'wished' }, parent: false, child: false },
+  ]
+
+  for (const c of cases) {
+    it(`${c.name}：家长待办 ${c.parent} / 孩子徽标 ${c.child}`, () => {
+      expect(needsParentAction(c.o), '家长待办').toBe(c.parent)
+      expect(childPending(c.o), '孩子徽标').toBe(c.child)
+    })
+  }
+
+  it('★ 两个口径只在「已交付的数字商品」上分叉', () => {
+    const all = cases.map((c) => c.o)
+    const differ = all.filter((o) => needsParentAction(o) !== childPending(o))
+    expect(differ.length, '只有数字商品那一档不同').toBe(2)
+    expect(differ.every((o) => 'openedGameId' in o), '分叉的必须带 openedGameId').toBe(true)
   })
 })

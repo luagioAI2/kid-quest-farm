@@ -173,7 +173,13 @@ export function RedeemBody() {
    * 界面上零异常。合并逻辑在 `domain/redeemHistory.ts`。
    */
   const history = useMemo(() => redeemHistory(redeemRecords, wishOrders), [redeemRecords, wishOrders])
-  /** tab 上那个数字：还在等爸妈兑现 / 处理的有几单 */
+  /**
+   * tab 上那个数字：**记录里还没兑现的**（`childPending`）。
+   *
+   * 已经交付的数字商品不算 —— 那一行的标签是绿的「已放进游戏柜」，再挂红数字
+   * 就自相矛盾。家长的收尾待办在心愿页顶部那张卡（`needsParentAction`），
+   * 两个数故意不等，口径都写在 `domain/wish.ts`。
+   */
   const pendingCount = useMemo(() => history.filter((r) => r.pending).length, [history])
 
   const wishRows = useMemo(
