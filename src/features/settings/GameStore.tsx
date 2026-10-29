@@ -798,7 +798,21 @@ function DetailView({
               列表底部那句说明它看不到，所以这里必须自己说一句怎么解锁。
             */
             <>
-              <span className={PILL_MUTE + ' h-10 px-4 text-sm'} data-local-need-own={g.id}>
+              {/*
+                整串写出来，不拼 `PILL_MUTE`。
+
+                拼接**是能覆盖的**（实测 `h-8 h-10` → 40px、`text-[12.5px] text-sm` → 16px，
+                与 class 书写顺序无关），但那是 Tailwind 生成顺序碰巧如此 ——
+                读的人没法从这一行看出「最后是哪个值生效」，改的人也不敢动。
+                这颗要的尺寸和行内药丸本来就不是一档，写清比省 30 个字符值。
+
+                为什么比上面那排 Chip 大一档：它写的是**状态**，
+                跟「6 岁以上 · 4.3MB」那类规格挤在同一层级会被读成第 4 条规格。
+              */}
+              <span
+                className="grid h-10 shrink-0 place-items-center rounded-full bg-ink-100 px-4 text-sm font-extrabold text-ink-500"
+                data-local-need-own={g.id}
+              >
                 未拥有
               </span>
               <p className="text-[11.5px] font-bold leading-snug text-ink-500">
