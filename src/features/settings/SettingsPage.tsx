@@ -638,7 +638,8 @@ export default function SettingsPage({
                   <p className="mb-3 text-sm text-ink-500">
                     ⚠️ 恢复会覆盖当前全部数据，请先导出一次现有数据。
                     <br />
-                    家长密码不在备份里 —— 它只留在这台设备上，换机后要重新设一个。
+                    家长密码和「今天玩了多久」都不在备份里 —— 这两样只属于这台设备。
+                    换机后要重新设一个密码，游戏时长也从零开始算。
                   </p>
                   <input
                     ref={fileRef}
@@ -662,7 +663,7 @@ export default function SettingsPage({
                 <Card title="备份格式说明" emoji="📄">
                   <p className="text-sm text-ink-500">
                     导出的是纯文本 JSON，包含任务定义、每日实例、积分流水、兑换券流水、背包、农场、
-                    设置（家长密码除外）、心愿单和兑换单。你可以自己保存到网盘，
+                    设置（家长密码和今天的游戏时长除外）、心愿单和兑换单。你可以自己保存到网盘，
                     之后换手机或换浏览器都能导入回来。
                   </p>
                   <button

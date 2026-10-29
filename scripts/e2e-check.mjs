@@ -2139,6 +2139,74 @@ try {
   }
   check('截图已保存', true, 'screenshots/{tasks,farm,redeem,points}.png')
 
+  /* ---------- 9. 备份里不带「这台设备的东西」 ---------- */
+  // 两条都是「只属于这台设备」的状态，而 `settings` 是**整份**进备份的：
+  //   · `parentPin` 明文 4 位 —— 备份文件会被发到微信 / 网盘 / 客服，
+  //     等于把家长锁的密码送出去；
+  //   · `gameClock`（「今天已经玩了多久」）—— 玩满家长设的额度之后，
+  //     导回一份玩之前的备份就能把额度刷回去，限时形同虚设。
+  //
+  // ⚠️ 只验「顶层 settings」不够：`data.meta.settings` 装的是**同一个对象**，
+  //    只剥一处，PIN 就换个门出去（这条是第一次跑就抓出来的）。
+  // ⚠️ 放在**最后**做：`importBackup` 会整库覆盖，前面的段落不该受影响。
+  const deviceLocal = await page.evaluate(async () => {
+    const S = () => window.__kqf__.getState()
+    const sh = S().settings.dayStartHour ?? 0
+    const d = new Date(Date.now() - sh * 3600 * 1000)
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+      d.getDate(),
+    ).padStart(2, '0')}`
+
+    await S().updateSettings({ parentPin: '4321' })
+    await S().updateSettings({ gameClock: { day, sec: 1200 } })
+    await S().refresh()
+
+    const snap = await window.__kqf__.exportBackup()
+    const top = snap?.data?.settings ?? {}
+    const viaMeta = snap?.data?.meta?.settings ?? {}
+    const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
+
+    // 篡改一份：把「今天玩了多久」刷回 0，再导回来
+    const tampered = JSON.parse(JSON.stringify(snap))
+    tampered.data.settings = { ...top, gameClock: { day, sec: 0 } }
+    const res = await window.__kqf__.importBackup(tampered)
+    await S().refresh()
+
+    const out = {
+      topPin: has(top, 'parentPin'),
+      topClock: has(top, 'gameClock'),
+      metaPin: has(viaMeta, 'parentPin'),
+      metaClock: has(viaMeta, 'gameClock'),
+      importOk: res.ok,
+      importMsg: res.message,
+      secAfter: S().settings.gameClock?.sec ?? null,
+      pinAfter: S().settings.parentPin ?? null,
+    }
+    // 还原，别把 4321 留给收尾
+    await S().updateSettings({ parentPin: '0000', gameClock: { day, sec: 0 } })
+    return out
+  })
+  check(
+    '备份里不含家长密码（顶层 + meta 两处都没有）',
+    !deviceLocal.topPin && !deviceLocal.metaPin,
+    `顶层=${deviceLocal.topPin} meta=${deviceLocal.metaPin}`,
+  )
+  check(
+    '备份里不含「今天玩了多久」',
+    !deviceLocal.topClock && !deviceLocal.metaClock,
+    `顶层=${deviceLocal.topClock} meta=${deviceLocal.metaClock}`,
+  )
+  check(
+    '导入一份「时长为 0」的备份，不能把本机额度刷回去',
+    deviceLocal.importOk && deviceLocal.secAfter === 1200,
+    `ok=${deviceLocal.importOk}(${deviceLocal.importMsg}) sec=${deviceLocal.secAfter}`,
+  )
+  check(
+    '导入备份不会改掉本机的家长密码',
+    deviceLocal.pinAfter === '4321',
+    `pin=${deviceLocal.pinAfter}`,
+  )
+
   /* ---------- 结果汇总 ---------- */
   console.log('\n' + '─'.repeat(58))
   const failed = results.filter((r) => !r.ok)

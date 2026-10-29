@@ -867,19 +867,26 @@ const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
  * 而这个文件通常被丢进微信 / 网盘里传来传去。所以导出前必须裁。
  */
 /**
- * 备份里**不许出现家长 PIN**。
+ * 备份里**不许出现「这台设备的东西」**。
  *
- * `settings.parentPin` 是**明文** 4 位（`domain/types.ts` 的注释写着
- * 「明文仅本地」，`ParentGate` 直接 `pin === settings.parentPin` 比字符串），
- * 而 `settings` 是整份导出的 ⇒ 每导一次备份，家长锁的密码就跟着那个 JSON
- * 离开这台设备。而备份文件正是会被发到微信 / 网盘 / 客服的东西。
+ * 两个字段，两类理由：
  *
- * 所以导出前剥掉。导入端也**不认**文件里的 PIN（见 `importBackup`）——
- * 两边都不认，才算真的「仅本地」。
+ *   · `parentPin` —— **凭据**。它是明文 4 位（`ParentGate` 直接
+ *     `pin === settings.parentPin` 比字符串），而 `settings` 是整份导出的
+ *     ⇒ 每导一次备份，家长锁的密码就跟着那个 JSON 离开这台设备。
+ *     备份文件正是会被发到微信 / 网盘 / 客服的东西。
+ *   · `gameClock` —— **这台设备今天的用量**（「今天已经玩了多久」，
+ *     `GamePlayGate` 拿它和 `gameDailyMinutes` 比）。跟着文件走有两个方向的问题：
+ *     孩子玩满 30 分钟之后导入一份玩之前的备份 ⇒ 额度被刷回去；
+ *     换台设备恢复 ⇒ 把「昨天那台设备今天玩了多少」带过来。
+ *
+ * 导出剥掉，导入端也**不认**文件里的值（见 `importBackup`）—— 两边都不认，
+ * 才算真的「仅本地」。
  */
-function stripParentPin(s: AppSettings): AppSettings {
+function stripDeviceLocal(s: AppSettings): AppSettings {
   const out = { ...s }
   delete out.parentPin
+  delete out.gameClock
   return out
 }
 
@@ -3994,7 +4001,7 @@ export const useApp = create<AppState>((set, get) => ({
         wishOrders: wishOrders.map(orderToBackup),
         events: farmEvents,
         market,
-        settings: stripParentPin(settings),
+        settings: stripDeviceLocal(settings),
         farm,
         /**
          * 从**已经收掉的地块**上结转过来、还没用掉的额度（按产出物 id）。
@@ -4027,7 +4034,7 @@ export const useApp = create<AppState>((set, get) => ({
         meta: Object.fromEntries(
           meta.map((m) =>
             m.key === 'settings'
-              ? [m.key, stripParentPin(m.value as AppSettings)]
+              ? [m.key, stripDeviceLocal(m.value as AppSettings)]
               : [m.key, m.value],
           ),
         ),
@@ -4111,7 +4118,9 @@ export const useApp = create<AppState>((set, get) => ({
        * 只清不保的后果是「导入任何一份旧备份 = 家长锁被清空」，孩子拿到文件就能解锁；
        * 照文件写的后果是「导入一份别人设备的备份 = 锁被改成那个密码」。
        */
-      const deviceParentPin = (await loadSettings()).parentPin
+      const deviceSettings = await loadSettings()
+      const deviceParentPin = deviceSettings.parentPin
+      const deviceGameClock = deviceSettings.gameClock
 
       // 清空 + 写入放在同一个事务里：失败会自动回滚，不会留下半截数据
       await db.transaction(
@@ -4175,7 +4184,9 @@ export const useApp = create<AppState>((set, get) => ({
             // 文件里的 `parentPin` 一律不认（可能是别的设备的、也可能是孩子改的）
             const incoming = { ...(d.settings as AppSettings) }
             delete incoming.parentPin
+            delete incoming.gameClock
             if (deviceParentPin) incoming.parentPin = deviceParentPin
+            if (deviceGameClock) incoming.gameClock = deviceGameClock
             await db.meta.put({ key: 'settings', value: incoming })
           }
           const market = d.market as MarketState | undefined

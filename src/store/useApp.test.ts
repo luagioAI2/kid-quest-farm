@@ -3663,6 +3663,40 @@ describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
     ).toBe('7391')
   })
 
+  /* ------------------------------------------------------------
+     「今天玩了多久」也是**这台设备今天的状态**，不是数据
+     ------------------------------------------------------------
+     `settings.gameClock` 是每日游戏时长的闸门来源（`GamePlayGate` 读它）。
+     它跟着备份走有两个方向的问题：
+       · 孩子**玩满 30 分钟**之后导入一份玩之前的备份 ⇒ 额度被刷回去；
+       · 换台设备恢复 ⇒ 把「昨天那台设备今天玩了多少」带过来。
+     和 PIN 同一类：不是孩子挣到的东西，是这台设备的用量。
+     ------------------------------------------------------------ */
+  it('★ 备份里不带「今天玩了多久」', async () => {
+    const day = currentDayKey(useApp.getState().settings.dayStartHour)
+    await useApp.getState().updateSettings({ gameClock: { day, sec: 1200 } })
+    const snap = await useApp.getState().exportBackup()
+    expect(JSON.stringify(snap), '用量不是数据，不该跟着文件走').not.toContain('gameClock')
+  })
+
+  it('★ 导入一份「今天还没玩」的备份，不能把本机额度刷回去', async () => {
+    const day = currentDayKey(useApp.getState().settings.dayStartHour)
+    await useApp.getState().updateSettings({ gameClock: { day, sec: 1200 } })
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const settings = {
+      ...(snap.data.settings as Record<string, unknown>),
+      gameClock: { day, sec: 0 },
+    }
+
+    const res = await useApp.getState().importBackup({ ...snap, data: { ...snap.data, settings } })
+    expect(res.ok, res.message).toBe(true)
+    expect(useApp.getState().settings.gameClock?.sec, '玩过的时长不能被一份文件抹掉').toBe(1200)
+    expect(
+      ((await db.meta.get('settings'))?.value as { gameClock?: { sec: number } }).gameClock?.sec,
+      '库里也不能',
+    ).toBe(1200)
+  })
+
   it('★ 导入之后 settings 要跟着刷新（否则设置页显示的还是旧的）', async () => {
     // `refresh()` 一开头就是 `const { settings } = get()` —— 它**不重读**
     // settings。导入写完库只调 `refresh()`，于是内存里还是导入前那份：
