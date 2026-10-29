@@ -455,6 +455,8 @@ e2e 里所有按索引取 tab 的地方都要复查。
 1. **商城列表** — chips 分类 + 盲盒 hero 置顶 + 两列卡片
    + **待家长处理入口**（有 `committed` / `confirmed` 单子时出现在顶部，
    写清「有 N 单在等爸妈处理」和是哪些商品）
+   ⚠️ 孩子只是「想要」（`wished`）的那批**不在这张卡里** —— 它们进顶栏 👀
+   的待办队列（见 §4）。这一页只管「券已经扣了、等爸妈去办」。
 2. **详情 · 未开放** — 只有「想要这个」
 3. **已表明意向** — 等家长定价
 4. **详情 · 可兑换** — 券价 + 进度 + 「用 N 张兑换」
@@ -601,14 +603,24 @@ e2e 里所有按索引取 tab 的地方都要复查。
 - [x] 手输友好：`i`/`l`→`1`、`o`→`0`，大小写和分隔符都不计较
       —— `gameCode.test.ts`
 
-### 家长待办：`wished` 也要看得见（2026-10-29）
+### 家长待办：`wished` 也要看得见（2026-10-29，入口当天从心愿页挪到 👀）
 
-- [x] 孩子点完「想要这个」，列表顶部出现「有 N 个心愿等你回应」
-      —— `WishPage.test.tsx`
+- [x] 孩子点完「想要这个」，**顶栏 👀 出现待办红点**，点进去队列第一条就是它
+      —— `ReviewSheet.test.tsx` + `e2e-wishmall`（`[data-wish-review]`）
+- [x] 心愿页上**不再**出现「有 N 个心愿等你回应」（两个入口家长不知道点哪个）
+      —— `WishPage.test.tsx` + `e2e-wishmall`
+- [x] 就地定价之后，这条心愿**离开队列**（红点会消）
+      —— `ReviewSheet.test.tsx` + `wishesAwaitingReply` 的单测
+- [x] ★ 判据不是 `status === 'wished'`：定完价那条单子仍然是 `wished`
+      —— `wish.test.ts`（「定完价的那条仍然停在 wished，但不再算待回应」）
+- [x] 定价 = 上架：孩子「兑换」那一格出现「🛍️ 心愿商城 · 爸妈开放了」
+      —— `RedeemSheet.test.tsx` + `e2e-wishmall` ⑭ 段
+- [x] 点那一条 → 切到心愿格并直接打开那件商品；返回后**停在列表**
+      —— `e2e-wishmall` ⑭ 段（`pendingWishItem` 取走即清空）
 - [x] 家长锁开着时：「定价」进闸门，「先不要了」**不进**
       —— `WishPage.test.tsx`（定价查不到 / 撤回查得到）
 - [x] 回绝之后单子真的结束（`cancelled` + `cancelReason`）
-      —— `WishPage.test.tsx` + `e2e-wishmall`
+      —— `WishPage.test.tsx` + `ReviewSheet.test.tsx` + `e2e-wishmall`
 - [x] 被回绝过之后再进详情，看得到上次的理由，也仍然能再点「想要这个」
       —— `WishPage.test.tsx`（不加冷却，故意的）
 
