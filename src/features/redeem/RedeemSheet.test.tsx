@@ -287,3 +287,34 @@ describe('兑换记录：兑换里换的都要看得见', () => {
     expect(tail?.textContent, '分隔符和时间在同一个块里').toMatch(/^ · .+/)
   })
 })
+
+/* ============================================================
+   tab 行：文案是**固定短词**，任何宽度都不许在词中间断行
+   ------------------------------------------------------------
+   2026-10-29，360 宽实测（`scripts/_probe-record-row.mjs`）：
+   红徽标把「📜 兑换记录 1」挤成
+       `📜 兑换记`
+       `录 1`
+   —— 一个控件名字被劈开。390 上刚好放得下，所以截图走查看不出来。
+
+   修法是 `whitespace-nowrap`（tab 文案短且固定，本来就该不可断）。
+   jsdom 量不到宽度，这里只能钉住那条样式 + 探针依赖的锚点；
+   真正的判据在探针里：390 / 360 / 320 / 834 四档都要「标签行数 = 1、
+   三个 tab 一样高、内容不溢出」。
+   ============================================================ */
+describe('兑换页 tab 行', () => {
+  it('★ 三个 tab 都不许断行（360 宽被红徽标挤成「兑换记」/「录」）', async () => {
+    render(<RedeemBody />)
+    await ready()
+
+    const bar = document.querySelector('[data-redeem-tabs]')
+    expect(bar, 'tab 行锚点（探针也靠它）').toBeTruthy()
+    const tabs = [...(bar?.querySelectorAll('button') ?? [])]
+    expect(tabs.length, '三个 tab').toBe(3)
+    for (const t of tabs) {
+      expect(t.className, `「${t.textContent}」不许在词中间断行`).toContain(
+        'whitespace-nowrap',
+      )
+    }
+  })
+})

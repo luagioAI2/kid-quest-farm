@@ -246,7 +246,12 @@ export function RedeemBody() {
 
   return (
     <>
-      <div className="mb-3 flex gap-2 rounded-full border border-ink-900/10 bg-white p-1">
+      {/* `data-redeem-tabs` 给探针一个稳定锚点：tab 文案/徽标都会变，
+          按 class 或按文字找都会在改版时静默失效（见 notes/verify-probes.md）。 */}
+      <div
+        data-redeem-tabs
+        className="mb-3 flex gap-2 rounded-full border border-ink-900/10 bg-white p-1"
+      >
         <TabBtn active={tab === 'shop'} onClick={() => setTab('shop')}>
           🎁 能换什么
         </TabBtn>
@@ -1191,8 +1196,11 @@ function TabBtn({
     <button
       type="button"
       onClick={onClick}
+      /* `whitespace-nowrap`：tab 文案是**固定短词**，不该在词中间断行。
+         360 宽实测被红徽标挤成 `兑换记` / `录` —— 一个控件名字被劈开，
+         比让整行溢出一两个像素难看得多。 */
       className={clsx(
-        'btn flex min-h-[44px] flex-1 items-center justify-center rounded-full text-[14px] active:btn-press',
+        'btn flex min-h-[44px] flex-1 items-center justify-center whitespace-nowrap rounded-full text-[14px] active:btn-press',
         active ? 'bg-grape-400 text-white shadow-flat' : 'bg-transparent text-ink-500',
       )}
     >
