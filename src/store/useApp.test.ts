@@ -2355,6 +2355,23 @@ describe('兑换券：不可逆约束 + 每轮闸门', () => {
     expect(order?.vouchersHeld, '押券数 = 券那部分，不是标价').toBe(30)
     expect(order?.pointsHeld, '押积分必须落盘，否则退不回来').toBe(20)
 
+    /*
+     * 备份往返：`pointsHeld` 现在是**退款凭据**的一半，和 `vouchersHeld` 同级。
+     *
+     * 这一条不是凑数 —— 2026-10-28 真出过「`exportBackup` 漏了整张
+     * `wishOrders`」，结果是券扣了却没有订单可以退（`wishCancel` 读不到行直接
+     * return），孩子的券凭空蒸发、全程不报错。现在多了一种币，同样的漏法
+     * 会再吞一次积分，所以要在**同一个地方**钉住。
+     */
+    const backup = await useApp.getState().exportBackup()
+    const restored = await useApp.getState().importBackup(backup)
+    expect(restored.ok, restored.message).toBe(true)
+    await useApp.getState().refresh()
+    expect(
+      useApp.getState().wishOrders.find((o) => o.itemId === 'wish-popmart')?.pointsHeld,
+      '备份往返不能丢 pointsHeld',
+    ).toBe(20)
+
     await useApp.getState().wishCancel(order!.id, '测试取消')
     await useApp.getState().refresh()
     expect(useApp.getState().harvestBalance, '券原样退回').toBe(30)
