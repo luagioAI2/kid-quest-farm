@@ -549,19 +549,26 @@ export default function SettingsPage({
 
                 <Card title="家长密码" emoji="🔑">
                   <p className="mb-3 text-sm text-ink-500">
-                    设一个 4 位数字，防止孩子自己改规则。
+                    {settings.parentPin
+                      ? '改密码要输两遍 —— 这个密码没有找回入口，输错一位就再也进不去家长区。'
+                      : '设一个 4 位数字，防止孩子自己改规则。没有找回入口，所以输两遍确认。'}
+                    <br />
                     清空它 <span className="font-extrabold text-ink-700">不等于</span> 不要密码 ——
                     下次进家长区时会重新要求你设一个；
                     真想完全不设密码，请关掉上面的「保护家长操作」。
                   </p>
                   <PinSetting
-                    current={settings.parentPin}
+                    hasPin={!!settings.parentPin}
                     disabled={!gateOpen}
                     onSave={(p) => {
-                      void updateSettings({ parentPin: p || undefined })
+                      void updateSettings({ parentPin: p })
+                      pushToast({ kind: 'success', title: '密码已设置', emoji: '🔑' })
+                    }}
+                    onClear={() => {
+                      void updateSettings({ parentPin: undefined })
                       pushToast({
                         kind: 'success',
-                        title: p ? '密码已设置' : '已清空，下次进家长区会要求重新设置',
+                        title: '已清空，下次进家长区会要求重新设置',
                         emoji: '🔑',
                       })
                     }}
@@ -863,34 +870,97 @@ function RatioInput({
   )
 }
 
-function PinSetting({
-  current,
+/**
+ * 设置 / 修改家长密码。
+ *
+ * ## 为什么改密码也要输两遍（2026-10-30）
+ *
+ * 原来这里是**一个输入框 + 预填当前密码**：手滑输错一位、按了保存，
+ * 就再也进不去家长区了 —— 这个密码**没有找回入口**，而且「数据」栏
+ * 也在它后面（连导出备份自救都做不到）。
+ *
+ * 而「第一次设密码」那条路（`ParentGate` 的 `PinFlow`）一直是输两遍的。
+ * 同一个凭据、同一个后果，两条路的口径必须一致，所以这里也改成两遍。
+ *
+ * 另外**不再预填当前密码**：那等于把密码明文摆在一个家长随手能截图的
+ * 输入框里，而它本身没有任何用处（没人会「保存」一个没改过的值）。
+ */
+export function PinSetting({
+  hasPin,
   onSave,
+  onClear,
   disabled,
 }: {
-  current?: string
+  hasPin: boolean
   onSave: (pin: string) => void
+  onClear: () => void
   disabled?: boolean
 }) {
-  const [draft, setDraft] = useState(current ?? '')
-  const valid = draft === '' || /^\d{4}$/.test(draft)
+  const [draft, setDraft] = useState('')
+  const [again, setAgain] = useState('')
+  const [err, setErr] = useState('')
+  const ready = draft.length === 4 && again.length === 4
+
+  const submit = () => {
+    if (!ready) return
+    if (draft !== again) {
+      setErr('两次不一样，重新输一次吧')
+      setDraft('')
+      setAgain('')
+      return
+    }
+    setErr('')
+    onSave(draft)
+    setDraft('')
+    setAgain('')
+  }
+
+  const box =
+    'w-full rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] outline-none focus:border-sky-400 placeholder:text-base placeholder:font-bold placeholder:tracking-normal'
+  const onlyDigits = (v: string) => v.replace(/\D/g, '').slice(0, 4)
+
   return (
     <div className="space-y-3">
       <input
+        data-pin-new
         value={draft}
         disabled={disabled}
-        onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 4))}
+        onChange={(e) => setDraft(onlyDigits(e.target.value))}
         inputMode="numeric"
-        placeholder="4 位数字，留空 = 下次再设"
-        className="w-full rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] outline-none focus:border-sky-400"
+        placeholder={hasPin ? '新的 4 位数字' : '4 位数字'}
+        className={box}
       />
+      <input
+        data-pin-again
+        value={again}
+        disabled={disabled}
+        onChange={(e) => setAgain(onlyDigits(e.target.value))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') submit()
+        }}
+        inputMode="numeric"
+        placeholder="再输一次"
+        className={box}
+      />
+      {err && <p className="text-center text-sm font-bold text-berry-500 anim-fade-in">{err}</p>}
       <button
-        disabled={!valid || disabled}
-        onClick={() => onSave(draft)}
+        data-pin-save
+        disabled={!ready || disabled}
+        onClick={submit}
         className="btn w-full rounded-2xl bg-sun-300 py-3 font-extrabold text-ink-900 shadow-flat disabled:opacity-50"
       >
-        保存密码
+        {hasPin ? '修改密码' : '设置密码'}
       </button>
+      {hasPin && (
+        <button
+          data-pin-clear
+          disabled={disabled}
+          onClick={onClear}
+          className="w-full rounded-2xl py-2 text-sm font-bold text-ink-500 underline decoration-dotted"
+        >
+          清空密码
+        </button>
+      )}
     </div>
   )
 }
