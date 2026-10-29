@@ -74,6 +74,10 @@ import {
 import { DEFAULT_GAME_ID } from '../games/ids'
 import { GAMES, gameById, ownedByDefault, purchasedIdsFrom } from '../games/registry'
 import { wishItemById } from '../games/wishCatalog'
+import { redeemWishCode } from '../api/wish'
+import { getToken } from '../api/session'
+import { ApiError } from '../api/client'
+import type { ApiWishCodeResult } from '../api/types'
 import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom } from '../domain/wish'
 import { makeHostApi } from '../games/hostApi'
 import { importBundle, mountBundle } from '../games/loader'
@@ -3543,6 +3547,13 @@ export const useApp = create<AppState>((set, get) => ({
       return { ok: false, message: '码是 6 位字母或数字，中间那一横不用输' }
     }
 
+    // ★ 登录了就以服务端为准。
+    //
+    // 服务端在**同一个事务**里验码 → 标记已用 → 写 `user_game`，
+    // 「这次调用成功」就等于「游戏已经在他的账号里了」。
+    // 下面那张本机 `codeTable` 只用于没登录的情况（离线 / 单测）。
+    if (getToken()) return redeemCodeOnServer(code)
+
     const gameId = await gameIdForCode(code)
     if (!gameId) return { ok: false, message: '没有这个码，对着卡片再核一遍' }
 
@@ -4790,4 +4801,87 @@ async function maybePayStreakBonus(task: Pick<Task, 'streakPerDay' | 'streakCap'
     memo: `连续 ${streak} 天完成长期任务 🔥`,
   })
   return bonus
+}
+
+/* ============================================================
+   兑换码 · 登录态（服务端是真相）
+   ============================================================ */
+
+/**
+ * 用兑换码解锁游戏 —— **登录状态下走这条路**。
+ *
+ * ## 为什么服务端说了算
+ *
+ * 服务端在一个事务里做完三件事：验码 → CAS 标记已用 → 写 `user_game`。
+ * 所以「调用成功」就等于「游戏已经在他的账号里了」，客户端不需要
+ * （也不应该）再调一次「解锁游戏」—— 那样会出现两套拥有关系，
+ * 换台设备登录就只剩一半。
+ *
+ * ## 本地要补两件事
+ *
+ * ① **账本里记一笔 `redemption_code`（delta 0）**。
+ *    `ownedGameIds` 是从账本推出来的（`purchasedIdsFrom`），
+ *    不记这一笔，「我的游戏」里就不显示已拥有 —— 而服务端明明已经给了。
+ *    delta 必须是 0：码解锁一分钻石都没花，写别的数就是假账。
+ *
+ * ② **插件包要真的装下来**。装完才谈得上「玩」。
+ *
+ * ## ⚠️ 装包失败**不回滚**
+ *
+ * 码已经在服务端用掉了，客户端回滚不掉。硬装成「失败」只会让界面
+ * 说一句失败，而码其实已经没了 —— 那才是最坏的结果。
+ * 「已激活但没装」是有出口的：游戏会出现在「我的游戏」里，点安装就行。
+ * 所以这里照实说「已激活，但没装成功，去点安装」。
+ */
+async function redeemCodeOnServer(
+  code: string,
+): Promise<{ ok: boolean; message: string; gameId?: string }> {
+  let resp: ApiWishCodeResult
+  try {
+    resp = await redeemWishCode(code)
+  } catch (e) {
+    const err = e instanceof ApiError ? e : null
+    /* 这三种必须分开说 —— 家长接下来要做的事完全不同：
+       重新登录 / 过会儿再试 / 别再试了去找卖家。 */
+    if (err?.isAuth) return { ok: false, message: '登录过期了，重新登录再试（这张码没被用掉）' }
+    if (err?.isNetwork) return { ok: false, message: '连不上服务器，这张码没被用掉，过会儿再试' }
+    // 业务错误：码无效 / 已被使用 / 已过期 / 已拥有 —— 服务端给的就是中文
+    return { ok: false, message: err?.message || '兑换没成功' }
+  }
+
+  const gameId = resp.game_id ?? ''
+  if (!gameId) {
+    // 码是真的，但对应的不是游戏卡（券 / 实物）。这一版只处理游戏卡，
+    // 照实说「兑换成功」，别硬编一个游戏名出来。
+    return { ok: true, message: '兑换成功' }
+  }
+
+  const builtin = gameById(gameId)
+  const local = localGameById(gameId)
+  const name = builtin?.name ?? local?.name ?? gameId
+  const app = useApp.getState()
+
+  // ① 账本补一笔，让「已拥有」在界面上成立
+  await postMall({
+    delta: 0,
+    source: 'redemption_code',
+    refId: gameId,
+    memo: `兑换码解锁「${name}」`,
+  })
+
+  // ② 插件包真的装下来
+  let note = ''
+  if (local) {
+    const res = await app.installLocalGame(gameId)
+    if (!res.ok) note = `，但没装成功（${res.message}），去「我的游戏」里点安装`
+  }
+
+  app.pushToast({
+    kind: 'reward',
+    title: `已激活：${name}`,
+    detail: local ? '已经放进你的游戏柜啦' : '底部导航就能切过去',
+    emoji: '🎁',
+  })
+  await app.refresh()
+  return { ok: true, message: `已激活：${name}${note}`, gameId }
 }

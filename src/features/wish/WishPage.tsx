@@ -20,6 +20,7 @@ import { GameIconArt } from '../settings/GameIcon'
 import { Portal } from '@/components/Portal'
 import { ParentPinPanel } from '../parent/ParentGate'
 import { MerchantView } from './MerchantView'
+import { openExternal } from '@/platform/openUrl'
 
 /* ============================================================
    心愿商城（底部导航第 4 格，2026-10-28）
@@ -1396,10 +1397,23 @@ function ConfirmView({
    */
   const digital = isDelivered(order)
 
-  const buy = () => {
+  const buy = async () => {
     // 只在家长确认页出现外链 —— 孩子端读不到 `buyUrl`
-    if (item?.buyUrl) window.open(item.buyUrl, '_blank', 'noopener,noreferrer')
-    else pushToast({ kind: 'info', title: '这件商品没有外链', emoji: '🔗' })
+    if (!item?.buyUrl) {
+      pushToast({ kind: 'info', title: '这件商品没有外链', emoji: '🔗' })
+      return
+    }
+    /* ⚠️ 别写成 `window.open` —— APK 的 WebView 里它**什么都不做**，
+       家长点了没反应也没有报错。走 `openExternal`：装了淘宝就直接进淘宝。 */
+    const ok = await openExternal(item.buyUrl)
+    if (!ok) {
+      pushToast({
+        kind: 'info',
+        title: '这个链接打不开',
+        detail: '复制商品名到淘宝里搜一下试试',
+        emoji: '🔗',
+      })
+    }
   }
 
   return (
@@ -1462,7 +1476,7 @@ function ConfirmView({
         )}
         {item?.buyUrl && (
           <button
-            onClick={buy}
+            onClick={() => void buy()}
             className="btn mt-3 h-12 w-full bg-sun-400 text-base font-extrabold text-ink-900 active:btn-press"
           >
             ↗ {item.buyLabel ?? '去商店购买'}

@@ -7,6 +7,7 @@ import type { ApiMerchantApplication } from '@/api/types'
 import type { MerchantRole } from '@/domain/types'
 import { humanizeAgo } from '@/domain/time'
 import { useApp } from '@/store/useApp'
+import { openExternal } from '@/platform/openUrl'
 import { LoginSheet } from '../account/LoginSheet'
 
 /* ============================================================
@@ -322,7 +323,8 @@ function AppliedBody({ app }: { app: ApiMerchantApplication }) {
           type="button"
           onClick={() => {
             if (!app.admin_url) return
-            window.open(app.admin_url, '_blank', 'noopener,noreferrer')
+            /* 同上：APK 里 `window.open` 不生效，走适配层。 */
+            void openExternal(app.admin_url)
           }}
           data-merchant-admin
           className="btn min-h-[44px] w-full rounded-2xl border border-grass-600/30 bg-grass-400 font-display font-extrabold text-white active:btn-press"
