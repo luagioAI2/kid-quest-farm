@@ -1241,7 +1241,20 @@ function OfferView({
     return earned / 7
   }, [harvestLedger])
 
-  const days = daysToSave(price, perDay)
+  /**
+   * 孩子**现在手上**有多少（券 + 积分，1 比 1）。
+   *
+   * 2026-10-29 加了混付之后，这段估算必须把已有余额算进去 —— 原来只按
+   * 券的日均收入算「要攒几天」，一个「券 0、积分 500」的孩子会被算成
+   * 「要攒 20 天」，而其实定完价他马上就能换。**家长按这个数定价**，
+   * 报错了就会把价压得比实际需要低。
+   */
+  const vouchersNow = useApp((s) => s.harvestBalance)
+  const pointsNow = useApp((s) => s.balance)
+  const nowHave = vouchersNow + pointsNow
+
+  // 要攒的是**差额**，不是整价
+  const days = daysToSave(price - nowHave, perDay)
 
   if (!item) return <EmptyState onBack={onBack} />
 
@@ -1316,14 +1329,23 @@ function OfferView({
         </div>
         <p className="mt-2.5 rounded-xl bg-sun-100 px-2.5 py-2 text-[11px] font-bold leading-relaxed text-sun-700">
           {/* 刚装的应用一条兑换券流水都没有 —— 这时候写「平均每天赚 0 张」
-              是在拿一个假数字当参考。宁可直说还没有数据。 */}
-          {perDay > 0 ? (
+              是在拿一个假数字当参考。宁可直说还没有数据。
+              2026-10-29：积分也能补差额，所以三种情况都要报「现在有多少」。 */}
+          {nowHave >= price ? (
             <>
-              📊 孩子最近 7 天平均每天赚 {Math.round(perDay)} 张
-              {days != null && days > 0 ? `，定 ${price} 张大约要攒 ${days} 天` : ''}
+              📊 孩子现在有 🎫 {vouchersNow} 张 + 🪙 {pointsNow} 积分，定 {price} 他马上就能换。
+            </>
+          ) : perDay > 0 ? (
+            <>
+              📊 孩子现在有 🎫 {vouchersNow} 张 + 🪙 {pointsNow} 积分，还差 {price - nowHave}。
+              最近 7 天平均每天赚 {Math.round(perDay)} 张
+              {days != null && days > 0 ? `，大约要攒 ${days} 天` : ''}
             </>
           ) : (
-            <>📊 还没有兑换券流水。等孩子玩几局游戏、或者去农场收成，这里就能算出「要攒几天」。</>
+            <>
+              📊 孩子现在有 🎫 {vouchersNow} 张 + 🪙 {pointsNow} 积分，还差 {price - nowHave}。
+              等孩子玩几局游戏、或者去农场收成，这里就能算出「要攒几天」。
+            </>
           )}
         </p>
         {/* 家长定的是「券价」，但孩子付款时积分也能补差额 —— 不说清楚的话，

@@ -240,17 +240,17 @@ const offerInfo = await page.evaluate(() => {
   const body = document.body.innerText
   return {
     hasStepper: body.includes('定一个兑换券价格'),
-    hasRef: body.includes('最近 7 天') || body.includes('还没有兑换券流水'),
+    // 2026-10-29：三种分支（现在就够 / 有日均收入 / 没流水）都以
+    // 「孩子现在有 🎫 x 张 + 🪙 y 积分」开头 —— 混付之后必须报已有余额，
+    // 不然「要攒几天」是按整价算的，会把家长带偏。
+    hasRef: body.includes('孩子现在有'),
+    // 定价页必须说清「积分也能补」，否则家长以为「定 80 张 = 必须有 80 张券」
+    hasMixHint: body.includes('积分补'),
   }
 })
 check('定价页有步进器', offerInfo.hasStepper)
-// 新装的应用没有流水，这时显示的是「还没有兑换券流水」而不是「最近 7 天平均…」
-// —— 两种都是对的，断言只要求「有参考区」
-check(
-  '定价页有收入参考',
-  offerInfo.hasRef,
-  offerInfo.hasRef ? '' : '既没有 7 天均值也没有无数据提示',
-)
+check('定价页报出孩子现有余额（券 + 积分）', offerInfo.hasRef, offerInfo.hasRef ? '' : '没有「孩子现在有」')
+check('定价页说明积分能补差额', offerInfo.hasMixHint, offerInfo.hasMixHint ? '' : '没提积分')
 
 /* ---------- ⑦ 真扣券 ---------- */
 console.log('\n── 兑换扣券 ──')
