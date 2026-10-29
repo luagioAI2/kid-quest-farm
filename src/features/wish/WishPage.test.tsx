@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { db } from '@/db/db'
 import { useApp } from '@/store/useApp'
 import { STOREFRONT } from '@/games/storefront'
+import { wishItemById } from '@/games/wishCatalog'
 import WishPage from './WishPage'
 
 /* ============================================================
@@ -419,5 +420,93 @@ describe('心愿商城：分类', () => {
 
     await user.click(screen.getByRole('button', { name: '出行' }))
     expect(await screen.findByText('动物园一日游')).toBeTruthy()
+  })
+})
+
+/* ============================================================
+   游戏类商品：家长可以直接买卡、输激活码（2026-10-30）
+   ------------------------------------------------------------
+   家长原话：「在心愿商城 家长可以购买 打开购买链接（淘宝、天猫、京东等）……
+   对于游戏，购买到的一般是游戏激活码，买到后就可以直接激活游戏。
+   这时候心愿商城的游戏就会到设置/游戏里。」
+
+   改动之前这一页**只有「定券价」**：想花钱买的家长无处可去
+   （游戏类商品的 `buyUrl` 一个都没有），拿到卡也没有输码的地方，
+   得自己摸到「设置 → 游戏 → 有兑换码」。所以两块都摆到家长眼前。
+
+   ⚠️ 同时钉住一个容易写错的分叉：已交付的数字商品**不能**再说
+   「去商店购买」—— 给游戏补上 `buyUrl` 之后，那句差点变成
+   「游戏已经在孩子柜子里了，方式：去商店购买」。
+   ============================================================ */
+describe('心愿：游戏类商品能直接买卡 / 输激活码', () => {
+  /**
+   * 走到家长定价页。
+   *
+   * ⚠️ 必须先有「孩子想要」那张单：`定个价` 只在 `order.status === 'wished'`
+   * 那一支里渲染（家长主动定价的入口在列表头上，不走这条路）。
+   * 少了这一步，测试会停在商品详情页找不到按钮。
+   */
+  const openParentPricing = async () => {
+    await useApp.getState().updateSettings({ parentPin: undefined })
+    await db.wishOrders.put(
+      wishedOrder({
+        id: 'wo_game_wished',
+        itemId: 'wish-game-renttower',
+        itemName: '收租公寓',
+        itemEmoji: '🏢',
+        kind: 'gamebox',
+      }) as never,
+    )
+    await useApp.getState().refresh()
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: /收租公寓/ }))
+    await user.click(await screen.findByText(/定个价/))
+    return user
+  }
+
+  it('★ 家长定价页里有「也可以直接买这一款」，且购买链接真的存在', async () => {
+    await openParentPricing()
+    expect(await screen.findByText(/也可以直接买这一款/)).toBeTruthy()
+
+    const buy = document.querySelector('[data-wish-buy-game]') as HTMLButtonElement | null
+    expect(buy, '游戏类商品必须有购买入口 —— 没有的话家长只能自己搜').toBeTruthy()
+    // 21 款游戏共用同一条推导规则，随便挑一款验链接形状
+    const item = wishItemById('wish-game-renttower')
+    expect(item?.buyUrl, '搜索页而不是具体商品链接（具体链接会失效）').toMatch(
+      /^https:\/\/s\.taobao\.com\/search\?q=/,
+    )
+    expect(decodeURIComponent(item?.buyUrl ?? '')).toContain('激活码')
+  })
+
+  it('★ 输码成功后：调的是 store 的兑换（不是本地解锁），并关掉面板', async () => {
+    const redeemGameCode = vi.fn(async () => ({ ok: true, message: '已激活：收租公寓' }))
+    useApp.setState({ redeemGameCode })
+
+    const user = await openParentPricing()
+    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
+    await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
+
+    expect(redeemGameCode).toHaveBeenCalledWith('abc-def')
+    // 成功后面板关掉（回到商城列表），失败才留在原地显示原因
+    await waitFor(() => expect(screen.queryByText(/也可以直接买这一款/)).toBeNull())
+  })
+
+  it('★ 失败时留在面板里，红字说清原因（码要能对着改一位）', async () => {
+    const redeemGameCode = vi.fn(async () => ({
+      ok: false,
+      message: '这个兑换码已经用过了',
+    }))
+    useApp.setState({ redeemGameCode })
+
+    const user = await openParentPricing()
+    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'ABC-DEG')
+    await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
+
+    const msg = document.querySelector('[data-code-msg]')
+    await waitFor(() => expect(msg?.textContent).toContain('已经用过'))
+    expect((document.querySelector('[data-code-input]') as HTMLInputElement).value).toBe('ABC-DEG')
   })
 })

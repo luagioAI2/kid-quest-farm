@@ -17,6 +17,8 @@ import { saveBlob, shareOrDownload } from '../../platform/files'
 // 带着"第 4 位自动提交读不到最新值"的 bug，两边各修一次很容易漏。
 import { PinPad, ParentPinPanel } from '../parent/ParentGate'
 import { AccountCard } from '../account/AccountCard'
+import { LoginSheet } from '../account/LoginSheet'
+import { useAccount } from '../../store/useAccount'
 import { GamesSection } from './GamesSection'
 import { Card } from './ui'
 
@@ -49,6 +51,15 @@ export default function SettingsPage({
   const [pin, setPin] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  /* 账号入口（2026-10-30）。
+   *
+   * 原来只有「规则」页最底下那张 `AccountCard` —— 而「规则」页整页压在家长
+   * 密码后面，卡片又在最底部。用户原话：「没看到登录界面」。
+   * 登录是家长的动作，但不该要求「先知道它在第 4 栏的第 8 张卡」。
+   * 所以在标题栏放一个常驻入口：没登录写「登录」，登录了写昵称。 */
+  const session = useAccount((s) => s.session)
+  const [loginOpen, setLoginOpen] = useState(false)
 
   /** 家长锁：默认锁定写入型操作，避免孩子乱改规则 */
   const needsPin = !!settings.parentPin
@@ -138,8 +149,33 @@ export default function SettingsPage({
             ←
           </button>
           <h1 className="font-display text-2xl font-extrabold text-ink-900">⚙️ 设置</h1>
+          <span className="flex-1" />
+          {/* 常驻账号入口。放标题栏而不是页里：它和这一页的任何一栏都无关，
+              是「这台设备上登录的是谁」——家长找它时不会想到去翻「规则」。
+              ⚠️ 登录后这里只显示昵称、**不再挂 `data-account-open`**：
+                 走查脚本用它判「还需要登录吗」，一直挂着就永远判「需要」。 */}
+          {session ? (
+            <span
+              data-account-chip
+              className="flex min-h-[40px] max-w-[132px] items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] font-extrabold text-ink-700 shadow-flat"
+            >
+              <span aria-hidden>👤</span>
+              <span className="truncate">{session.user.nickname || '已登录'}</span>
+            </span>
+          ) : (
+            <button
+              type="button"
+              data-account-open
+              onClick={() => setLoginOpen(true)}
+              className="btn flex min-h-[40px] items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] font-extrabold text-ink-700 shadow-flat active:btn-press"
+            >
+              <span aria-hidden>👤</span>
+              登录
+            </button>
+          )}
         </div>
       </header>
+      <LoginSheet open={loginOpen} onClose={() => setLoginOpen(false)} />
 
       <nav>
         {/*

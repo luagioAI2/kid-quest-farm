@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, NETWORK, UNAUTHORIZED, api, bindAuthLost } from './client'
-import { setSession } from './session'
+import { getSession, setSession } from './session'
 import type { ApiUser } from './types'
 
 /* ============================================================
@@ -84,6 +84,100 @@ describe('client：登录态', () => {
     expect((e as ApiError).code).toBe(UNAUTHORIZED)
     expect((e as ApiError).isAuth).toBe(true)
     expect(lost, '401 必须通知上层清登录态').toHaveBeenCalledTimes(1)
+  })
+
+  /* ---- 换票（2026-10-30） ----
+   *
+   * access token 只给 2 小时，refresh token 给 7 天。原来客户端**只存不用**：
+   * 两小时一到，所有在线动作都变成「登录已过期」，登录态被清掉 ——
+   * 一个家长一周开两次的 App，等于每次都要重输手机号 + 密码 + 短信码。
+   */
+  const okJson = (data: unknown) =>
+    ({ ok: true, status: 200, json: async () => ({ code: 200, data }) }) as unknown as Response
+  const unauthorized = () =>
+    ({ ok: false, status: 401, json: async () => ({}) }) as unknown as Response
+
+  it('★ 401 时先换票、再重放一次（不是直接把人踢出去）', async () => {
+    setSession({ token: 'old', refreshToken: 'r1', user, expiresAt: 9_999_999_999 })
+    const seen: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        const auth = (init.headers as Record<string, string>)?.Authorization ?? '-'
+        seen.push(`${url.replace('http://127.0.0.1:8090', '')} ${auth}`)
+        if (url.endsWith('/api/auth/refresh')) {
+          return okJson({ access_token: 'new', refresh_token: 'r2', expires_in: 7200, user })
+        }
+        return auth === 'Bearer new' ? okJson({ ok: 1 }) : unauthorized()
+      }),
+    )
+
+    await expect(api('/x')).resolves.toEqual({ ok: 1 })
+    expect(seen, '第一次 401 → 换票 → 带新票重放').toEqual([
+      '/api/x Bearer old',
+      '/api/auth/refresh -',
+      '/api/x Bearer new',
+    ])
+    expect(getSession()?.token, '新票要写回会话（否则下一次又 401）').toBe('new')
+    expect(getSession()?.refreshToken, 'refresh token 服务端会轮换，旧的立即失效').toBe('r2')
+  })
+
+  it('★ 换票也失败 ⇒ 清登录态，且**不无限重放**', async () => {
+    setSession({ token: 'old', refreshToken: 'r1', user, expiresAt: 9_999_999_999 })
+    const lost = vi.fn()
+    bindAuthLost(lost)
+    const f = vi.fn().mockResolvedValue(unauthorized())
+    vi.stubGlobal('fetch', f)
+
+    const e = await api('/x').catch((err: unknown) => err)
+    expect((e as ApiError).code).toBe(UNAUTHORIZED)
+    expect(lost).toHaveBeenCalledTimes(1)
+    // 原请求 + 换票，一共两次；再来第三次就是死循环
+    expect(f).toHaveBeenCalledTimes(2)
+    /* ⚠️ 这里**不**断言 `getSession() === null`：清登录态是 `useAccount.clear`
+       的事（通过 `bindAuthLost` 注册进来）。测试里换成假的 `lost`，
+       会话当然还在 —— 断言它会是「测一个没实现的期望」。 */
+    expect((e as ApiError).message).toContain('登录已过期')
+  })
+
+  it('★ 并发两个请求同时 401 ⇒ 只换一次票（服务端会轮换，换两次后一次必失败）', async () => {
+    setSession({ token: 'old', refreshToken: 'r1', user, expiresAt: 9_999_999_999 })
+    let refreshCount = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        const auth = (init.headers as Record<string, string>)?.Authorization ?? '-'
+        if (url.endsWith('/api/auth/refresh')) {
+          refreshCount += 1
+          await new Promise((r) => setTimeout(r, 20))
+          return okJson({ access_token: 'new', refresh_token: 'r2', expires_in: 7200, user })
+        }
+        return auth === 'Bearer new' ? okJson({ ok: 1 }) : unauthorized()
+      }),
+    )
+
+    await Promise.all([api('/a'), api('/b')])
+    expect(refreshCount, '两次刷新会让第二次拿到已失效的 refresh token').toBe(1)
+  })
+
+  it('★ 已经过期 ⇒ 发请求前先换票（省掉一次必然 401 的往返）', async () => {
+    setSession({ token: 'old', refreshToken: 'r1', user, expiresAt: 1 })
+    const seen: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        const auth = (init.headers as Record<string, string>)?.Authorization ?? '-'
+        seen.push(`${url.replace('http://127.0.0.1:8090', '')} ${auth}`)
+        if (url.endsWith('/api/auth/refresh')) {
+          return okJson({ access_token: 'new', refresh_token: 'r2', expires_in: 7200, user })
+        }
+        return okJson({ ok: 1 })
+      }),
+    )
+
+    await api('/x')
+    expect(seen[0], '第一个请求就该是换票，不是带着过期票去撞 401').toBe('/api/auth/refresh -')
+    expect(seen[1]).toBe('/api/x Bearer new')
   })
 
   it('登录接口（auth: false）不带 token', async () => {

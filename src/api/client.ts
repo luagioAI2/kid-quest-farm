@@ -1,4 +1,5 @@
-import { getToken } from './session'
+import { getSession, getToken, sessionFrom, setSession } from './session'
+import type { ApiUser } from './types'
 
 /* ============================================================
    后端连接层（2026-10-29）
@@ -72,6 +73,66 @@ interface Resp<T> {
   data?: T
 }
 
+/** `/auth/login`、`/auth/register`、`/auth/refresh` 共用的返回形状 */
+interface TokenPair {
+  access_token: string
+  refresh_token: string
+  expires_in: number
+  user: ApiUser
+}
+
+/**
+ * 用 refresh token 换一套新 token。
+ *
+ * ## 为什么必须有这一步
+ *
+ * 服务端 access token 只给 **2 小时**，而 `refresh_token` 给 7 天。
+ * 2026-10-30 之前客户端**只存不用**：两小时一到，所有在线动作都变成
+ * 「登录已过期，请重新登录」，登录态被清掉。对一个家长一周开两次的 App，
+ * 等于每次打开都要重新输手机号 + 密码 + 短信码。
+ *
+ * ## 三条实现约束
+ *
+ * ① **并发的 401 只刷新一次**（`refreshing` 这个 promise 就是锁）。
+ *    一屏同时发三个请求时，三个 401 各刷一次的话，服务端会**轮换**三次
+ *    refresh token（旧 token 立即失效）—— 后两次必然失败，
+ *    登录态被自己清掉。
+ * ② **用裸 fetch，不走 `api()`** —— 走 `api()` 会在 401 时再触发一次刷新，
+ *    无限递归；而且刷新接口本身不该带旧 token。
+ * ③ **失败一律返回 false，不抛**。调用方决定是「重试一次」还是「清登录态」。
+ */
+let refreshing: Promise<boolean> | null = null
+
+async function refreshSession(): Promise<boolean> {
+  if (refreshing) return refreshing
+
+  const s = getSession()
+  if (!s?.refreshToken) return false
+
+  refreshing = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: s.refreshToken }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      })
+      if (!res.ok) return false
+      const payload = (await res.json()) as Resp<TokenPair>
+      if (payload.code !== 200 || !payload.data) return false
+      setSession(sessionFrom(payload.data))
+      return true
+    } catch {
+      // 断网 / 超时 / 返回不是 JSON —— 都算「这次刷不了」，交给调用方处理
+      return false
+    } finally {
+      refreshing = null
+    }
+  })()
+
+  return refreshing
+}
+
 /**
  * 发一个请求，成功返回 `data`，失败抛 `ApiError`。
  *
@@ -80,8 +141,15 @@ interface Resp<T> {
 export async function api<T>(
   path: string,
   body: Record<string, unknown> = {},
-  opts: { auth?: boolean } = {},
+  opts: { auth?: boolean; _retried?: boolean } = {},
 ): Promise<T> {
+  /* 已经过期就先换一套，省掉一次必然失败的往返。
+     `auth: false` 的接口（登录 / 发码）不碰这一步 —— 那时候本来就没有会话。 */
+  if (opts.auth !== false && !opts._retried) {
+    const s = getSession()
+    if (s && s.expiresAt * 1000 <= Date.now()) await refreshSession()
+  }
+
   const token = getToken()
   // `auth: false` 用于登录这类「本来就没有 token」的接口 ——
   // 但已经登录时仍然带上，服务端能借它做风控
@@ -105,6 +173,12 @@ export async function api<T>(
   }
 
   if (res.status === 401) {
+    /* 先试一次「换票再重放」。服务端 401 有两种：token 过期（换票能救）
+       和账号被停用（换票救不了，服务端会继续给 401）。
+       `_retried` 保证只重放一次 —— 不然服务端一直 401 就是死循环。 */
+    if (opts.auth !== false && !opts._retried && (await refreshSession())) {
+      return api<T>(path, body, { ...opts, _retried: true })
+    }
     // token 过期 / 被踢：把本地登录态清掉，让人重新登 ——
     // 否则他会一直点、一直「失败」，而界面上没有任何提示说该重登
     onAuthLost?.()

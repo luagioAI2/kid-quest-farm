@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useApp } from '@/store/useApp'
 import type { WishItem, WishTint } from '@/domain/types'
 import {
@@ -1170,6 +1170,40 @@ function OfferView({
   const settings = useApp((s) => s.settings)
   const pushToast = useApp((s) => s.pushToast)
 
+  /* ---- 游戏类：直接买卡 → 输激活码（2026-10-30） ----
+   *
+   * 家长站在这一页时的真实处境是：孩子在心愿商城看上了某款游戏，
+   * 而这款游戏的卡在淘宝上卖。原来这一页只有「定券价」—— 想花钱买的家长
+   * 无处可去（购买链接在游戏类商品上也是空的），拿到卡也没有输码的地方，
+   * 得自己摸到「设置 → 游戏 → 有兑换码」。
+   *
+   * 所以把「买」和「激活」都摆到家长眼前：买卡、输码、游戏直接进「我的游戏」。
+   */
+  const redeemGameCode = useApp((s) => s.redeemGameCode)
+  const [codeOpen, setCodeOpen] = useState(false)
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [codeMsg, setCodeMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function submitCode(e: FormEvent) {
+    e.preventDefault()
+    if (busy || !item) return
+    setBusy(true)
+    try {
+      const r = await redeemGameCode(code)
+      if (r.ok) {
+        /* 成功后**不写 codeMsg**：`onDone()` 会把这个面板卸载掉，
+           消息跟着消失。改用全局 toast，它挂在 App 上，关面板也还在。 */
+        pushToast({ kind: 'reward', title: r.message, detail: '已经放进「我的游戏」', emoji: '🎁' })
+        onDone()
+      } else {
+        setCodeMsg({ ok: false, text: r.message })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /**
    * 孩子到底有没有表达过意向。
    *
@@ -1327,6 +1361,89 @@ function OfferView({
         </div>
       </div>
 
+      {/* 游戏类才有：买卡 → 输码。**和家长定价并列摆着** —— 两条路是
+          「孩子自己攒券换」和「爸妈直接买」，家长得当场看见这两条，
+          而不是定完价再自己去找「设置 → 游戏 → 有兑换码」。 */}
+      {item.kind === 'gamebox' && item.gameId && (
+        <div className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
+          <p className="text-sm font-extrabold">也可以直接买这一款</p>
+          <p className="mt-1 text-[11px] font-bold leading-relaxed text-ink-500">
+            淘宝 / 天猫上的游戏卡，背面那串就是激活码。买到后在这儿输一次，
+            游戏就进「我的游戏」，孩子那边不用再攒券。
+          </p>
+
+          {item.buyUrl ? (
+            <button
+              data-wish-buy-game
+              onClick={async () => {
+                /* ⚠️ 别写 `window.open` —— APK 的 WebView 里它什么都不做，
+                   点了没反应也没有报错。`openExternal` 装了淘宝就直接进淘宝。 */
+                const ok = await openExternal(item.buyUrl!)
+                if (!ok) {
+                  pushToast({
+                    kind: 'info',
+                    title: '这个链接打不开',
+                    detail: `复制「${item.name} 激活码」到淘宝里搜一下`,
+                    emoji: '🔗',
+                  })
+                }
+              }}
+              className="btn mt-3 h-11 w-full bg-sun-400 text-sm font-extrabold text-ink-900 active:btn-press"
+            >
+              ↗ {item.buyLabel ?? '去商店购买'}
+            </button>
+          ) : (
+            /* 链接是运营一条条填的（`wish_item.buy_url`），没填的不该装成
+               「点了没反应」。直接说清楚，并给出**能自己动手**的那条路。 */
+            <p
+              data-wish-buy-none
+              className="mt-2 rounded-xl bg-paper-2 px-2.5 py-2 text-[11px] font-bold leading-relaxed text-ink-500"
+            >
+              这一款还没配购买链接 —— 直接在淘宝搜「{item.name} 激活码」就行。
+            </p>
+          )}
+
+          {!codeOpen ? (
+            <button
+              data-code-open
+              onClick={() => setCodeOpen(true)}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink-300 bg-white/60 py-2 text-[12.5px] font-bold text-ink-600"
+            >
+              🎟️ 已经买到卡了？输激活码
+            </button>
+          ) : (
+            <form onSubmit={submitCode} data-code-box className="mt-2 rounded-xl border border-ink-200 bg-white p-2.5">
+              <div className="flex gap-2">
+                <input
+                  data-code-input
+                  value={code}
+                  onChange={(ev) => setCode(ev.target.value)}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  maxLength={8}
+                  placeholder="ABC-DEF"
+                  className="min-w-0 flex-1 rounded-lg border border-ink-200 px-3 py-2 font-mono text-[15px] uppercase tracking-[0.18em] text-ink-800 outline-none focus:border-grass-400"
+                />
+                <button
+                  type="submit"
+                  data-code-submit
+                  disabled={busy || code.trim().length === 0}
+                  className="shrink-0 rounded-lg bg-grass-500 px-4 py-2 text-[13px] font-extrabold text-white disabled:opacity-50"
+                >
+                  {busy ? '激活中…' : '激活'}
+                </button>
+              </div>
+              {codeMsg && (
+                <p data-code-msg data-code-ok="0" className="mt-2 text-[12px] font-bold text-berry-500">
+                  {codeMsg.text}
+                </p>
+              )}
+            </form>
+          )}
+        </div>
+      )}
+
       <p className="mt-3 rounded-2xl bg-sky-50 px-3.5 py-2.5 text-[11px] font-bold leading-relaxed text-sky-500">
         🔒 兑换券只能靠玩和农场产出，不能买、也不能换积分。定了价以后孩子攒够就能自己换。
       </p>
@@ -1463,7 +1580,11 @@ function ConfirmView({
         <div className="mt-2 flex items-center justify-between py-1.5 text-sm">
           <span className="text-xs font-bold text-ink-500">方式</span>
           <span className="text-xs font-bold text-ink-600">
-            {item?.buyUrl ? '去商店购买' : 'App 内直接解锁'}
+            {/* ⚠️ 已交付的数字商品**不能**再说「去商店购买」。
+                2026-10-30 给游戏类商品补上 `buyUrl` 之后，这一行差点变成
+                「游戏已经在孩子柜子里了，方式：去商店购买」——
+                家长会以为还得再去买一次。先判 `digital`，再判链接。 */}
+            {digital ? '已经放进游戏柜' : item?.buyUrl ? '去商店购买' : 'App 内直接解锁'}
           </span>
         </div>
         {item?.priceCents != null && (
@@ -1474,7 +1595,7 @@ function ConfirmView({
             </span>
           </div>
         )}
-        {item?.buyUrl && (
+        {!digital && item?.buyUrl && (
           <button
             onClick={() => void buy()}
             className="btn mt-3 h-12 w-full bg-sun-400 text-base font-extrabold text-ink-900 active:btn-press"
