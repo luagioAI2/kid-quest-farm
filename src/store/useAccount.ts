@@ -31,6 +31,13 @@ interface AccountState {
   login: (mobile: string, password: string) => Promise<boolean>
   register: (mobile: string, password: string, code: string, nickname?: string) => Promise<boolean>
   sendCode: (mobile: string, scene: SmsScene) => Promise<boolean>
+  /**
+   * 忘记密码：验证码 + 新密码。
+   *
+   * 成功后服务端会把**这台账号所有设备的票全撤掉**，所以这里只返回 true，
+   * 不写会话 —— 调用方应该把人送回登录态，让他用新密码登一次。
+   */
+  resetPassword: (mobile: string, code: string, password: string) => Promise<boolean>
   signOut: () => Promise<void>
   /** 用服务端最新资料覆盖本地那份（昵称/头像可能被后台改过） */
   refresh: () => Promise<void>
@@ -78,6 +85,18 @@ export const useAccount = create<AccountState>((set, get) => ({
     set({ busy: true, error: null })
     try {
       await auth.sendSmsCode(mobile.trim(), scene)
+      set({ busy: false })
+      return true
+    } catch (e) {
+      set({ busy: false, error: message(e) })
+      return false
+    }
+  },
+
+  resetPassword: async (mobile, code, password) => {
+    set({ busy: true, error: null })
+    try {
+      await auth.resetPassword(mobile.trim(), code.trim(), password)
       set({ busy: false })
       return true
     } catch (e) {

@@ -27,6 +27,19 @@ export const register = (mobile: string, password: string, code: string, nicknam
     { auth: false },
   )
 
+/**
+ * 忘记密码：验证码 + 新密码。
+ *
+ * 服务端在改完之后会 `RevokeAllByUID` —— **所有设备一起下线**。
+ * 所以重置成功后客户端不该再假装还登着（本来这里也是在未登录态调用的）。
+ */
+export const resetPassword = (mobile: string, code: string, password: string) =>
+  api<{ reset: boolean }>(
+    '/auth/reset-password',
+    { mobile, code, new_password: password },
+    { auth: false },
+  )
+
 /** 当前账号资料（手机号是脱敏的，见 `ApiUser.mobile`） */
 export const profile = () => api<ApiUser>('/user/profile')
 
