@@ -240,4 +240,50 @@ describe('兑换记录：兑换里换的都要看得见', () => {
     // 数字商品已经交付，不能说「等爸妈确认」（孩子手里已经有这款游戏了）
     expect(rec?.textContent).toContain('已放进游戏柜')
   })
+
+  /* 2026-10-29，320 宽真机探针（`scripts/_probe-record-row.mjs`）量到的排版事故：
+     混付单的 `-100 兑换券 + 50 积分 · 刚刚` 约 150px，右边标签「已取消 · 已退回」
+     占 93px 之后只剩 ~135px ⇒ 必然折行。折行可以接受，但**默认规则下 CJK 能断在
+     任意两个字之间**，实测断成了
+         `-100 兑换券 + 50 积`
+         `分 · 刚刚`
+     —— 「积分」被劈开，金额还留着个孤零零的 `·` 在行尾。
+
+     jsdom 不做布局，量不到宽度，但能钉住**那两条防止它再犯的样式**：
+     `break-keep`（只在空格处断）+ 把 `·` 和时间绑成不可断的块。
+     断言写得像"查 class"是故意的 —— 谁重写这一行，谁就得回来重跑一次 320 的探针。 */
+  it('★ 记录行的付款文案：只许在空格处断行，分隔符不许跟时间分开', async () => {
+    await db.wishOrders.put({
+      id: 'wo_mixed',
+      itemId: 'wish-puzzle',
+      itemName: '1000 片拼图',
+      itemEmoji: '🧩',
+      kind: 'collectible',
+      voucherPrice: 150,
+      status: 'cancelled',
+      vouchersHeld: 100,
+      pointsHeld: 50,
+      createdAt: Date.now(),
+    })
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<RedeemBody />)
+    await ready()
+    await user.click(screen.getByRole('button', { name: /兑换记录/ }))
+
+    const rec = document.querySelector<HTMLElement>('[data-redeem-record]')
+    expect(rec, '单子在记录里').toBeTruthy()
+    // 混付要写出两种币各扣了多少
+    expect(rec?.textContent).toContain('-100 兑换券 + 50 积分')
+
+    const pay = rec?.querySelectorAll('p')[1]
+    expect(pay, '第二行是付款').toBeTruthy()
+    expect(pay?.className, 'CJK 不许在词中间断行').toContain('break-keep')
+    const tail = pay?.querySelector('span')
+    expect(tail?.className, '`· 时间` 绑成一块，别让 `·` 落在行尾').toContain(
+      'whitespace-nowrap',
+    )
+    expect(tail?.textContent, '分隔符和时间在同一个块里').toMatch(/^ · .+/)
+  })
 })

@@ -336,8 +336,23 @@ export function RedeemBody() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-extrabold text-ink-900">{r.name}</p>
-                  <p className="text-[11px] text-ink-500">
-                    -{r.pay} · {humanizeAgo(r.createdAt)}
+                  {/* `break-keep`（`word-break: keep-all`）不是装饰 —— 320 宽的手机上
+                      混付单会放不下：`-100 兑换券 + 50 积分 · 刚刚` 约 150px，
+                      而标签「已取消 · 已退回」占 93px 之后只剩 ~135px。
+                      默认规则下 CJK 可以在**任意两个字之间**断行，于是实测断成了
+                        `-100 兑换券 + 50 积`
+                        `分 · 刚刚`
+                      —— 「积分」被劈开，金额还留着个孤零零的 `·` 在行尾。
+                      加 keep-all 后只允许在空格处断，变成
+                        `-100 兑换券 + 50`
+                        `积分 · 刚刚`
+                      390（主战场）上本来就是单行，不受影响。
+                      ⚠️ 别改成 `whitespace-nowrap`：那会溢出列宽、压到标签上。 */}
+                  <p className="break-keep text-[11px] text-ink-500">
+                    -{r.pay}
+                    {/* `·` 和它后面的时间绑成一个不可断的块。分开写的话 320 上会断成
+                        `… + 50 积分 ·` / `刚刚` —— 分隔符孤零零挂在行尾。 */}
+                    <span className="whitespace-nowrap"> · {humanizeAgo(r.createdAt)}</span>
                   </p>
                 </div>
                 <span
