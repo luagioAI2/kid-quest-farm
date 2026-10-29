@@ -2275,6 +2275,138 @@ try {
     `导入后已装=${JSON.stringify(gameBackup.afterEvil)} pwned=${JSON.stringify(gameBackup.pwned)}`,
   )
 
+  /* ---------- 9c. 「清空全部数据」（不可撤销，走真实界面） ---------- */
+  // 这个按钮和数据导出 / 恢复挤在同一屏，是**唯一**不可撤销的操作，
+  // 而 e2e 一直零覆盖 —— 它坏了也没人知道，直到某个家长按下去。
+  //
+  // 走真实界面：⚙️ → 数据 tab → 过家长密码 → 清空 → 确认。
+  // 放在**最后**：它会把整个库清空（和导入同理）。
+  //
+  // ⚠️ 这一段**先把家长保护打开**（前面 7b 段关掉了）。两个理由：
+  //    ① 要验的是「有密码才点得到清空」这条安全属性，门开着就白测了；
+  //    ② `dataGateOpen = !protectParentActions || !dataLocked` ——
+  //       关掉保护时这一屏直接是开的，键盘根本不渲染。硬点会报
+  //       「卡在密码键盘上」，看着像按钮坏了，其实是判据写死了。
+  const wiped = await (async () => {
+    // 先造一点「清空之后不该剩下」的东西
+    await page.evaluate(async () => {
+      const S = () => window.__kqf__.getState()
+      await window.__kqf__.addPoints(300)
+      await window.__kqf__.grantGame('anthill')
+      await S().refresh()
+      await S().installLocalGame('anthill')
+      await S().updateSettings({ childName: '小明', protectParentActions: true })
+      await S().refresh()
+    })
+    await new Promise((r) => setTimeout(r, 900))
+
+    const steps = []
+    const clickText = async (needle, label) => {
+      const ok = await page.evaluate((n) => {
+        const b = [...document.querySelectorAll('button')].find((x) => x.innerText.includes(n))
+        if (!b) return false
+        b.click()
+        return true
+      }, needle)
+      steps.push({ label, ok })
+      await new Promise((r) => setTimeout(r, 800))
+      return ok
+    }
+
+    if (!(await clickText('⚙️', '进设置页'))) return { steps, stuck: '进设置页' }
+    if (!(await clickText('数据', '数据 tab'))) return { steps, stuck: '数据 tab' }
+
+    /* 安全属性：**没输密码时，清空按钮不该出现在页面上**。
+       只看「点不到」不够 —— 渲染出来但被禁用，家长一样会被吓到，
+       而且以后谁把 disabled 去掉就悄悄放行了。 */
+    const locked = await page.evaluate(() => ({
+      hasDanger: /清空全部数据/.test(document.body.innerText),
+      hasGate: /数据操作需要密码/.test(document.body.innerText),
+    }))
+
+    // 过密码门：从 store 读当前的，别写死 0000
+    const pin = await page.evaluate(() => window.__kqf__.getState().settings.parentPin ?? '')
+    if (!pin) return { steps, stuck: '要密码但 store 里没有 pin', locked }
+    for (const d of pin) {
+      const ok = await page.evaluate(async (ch) => {
+        const b = [...document.querySelectorAll('button')].find((x) => x.innerText.trim() === ch)
+        if (!b) return false
+        b.click()
+        await new Promise((r) => setTimeout(r, 300))
+        return true
+      }, d)
+      if (!ok) return { steps, stuck: '密码键盘上的 ' + d, locked }
+    }
+    await new Promise((r) => setTimeout(r, 900))
+    const unlocked = await page.evaluate(() => /清空全部数据/.test(document.body.innerText))
+
+    if (!(await clickText('清空全部数据', '第一次点清空'))) return { steps, stuck: '清空全部数据', locked }
+    if (!(await clickText('确认清空', '确认'))) return { steps, stuck: '确认清空', locked }
+    await new Promise((r) => setTimeout(r, 2500))
+
+    const after = await page.evaluate(async () => {
+      const S = () => window.__kqf__.getState()
+      const db = await new Promise((res, rej) => {
+        const r = indexedDB.open('kid-quest-farm')
+        r.onsuccess = () => res(r.result)
+        r.onerror = () => rej(r.error)
+      })
+      const gameKv = await new Promise((res) => {
+        const req = db.transaction('gameKv', 'readonly').objectStore('gameKv').count()
+        req.onsuccess = () => res(req.result)
+        req.onerror = () => res(-1)
+      })
+      db.close()
+      return {
+        gameKv,
+        installed: Object.keys(S().installedGames ?? {}),
+        pin: S().settings.parentPin ?? null,
+        childName: S().settings.childName,
+        tasks: S().tasks.length,
+        text: document.body.innerText.replace(/\s+/g, ' '),
+      }
+    })
+    return { steps, locked, unlocked, after }
+  })()
+
+  check(
+    '「清空全部数据」的每一步都点得到',
+    !wiped.stuck,
+    wiped.stuck ? `卡在「${wiped.stuck}」` : wiped.steps.map((x) => x.label).join(' → '),
+  )
+  check(
+    '★ 没输家长密码时，清空按钮根本不在页面上',
+    !!wiped.locked && !wiped.locked.hasDanger && wiped.locked.hasGate,
+    wiped.locked
+      ? `看到清空按钮=${wiped.locked.hasDanger} 看到密码门=${wiped.locked.hasGate}`
+      : '没走到',
+  )
+  check(
+    '★ 输对密码之后清空按钮才出现',
+    wiped.unlocked === true,
+    `unlocked=${wiped.unlocked}`,
+  )
+  check(
+    '清空之后游戏包真的没了',
+    !!wiped.after && wiped.after.gameKv === 0 && wiped.after.installed.length === 0,
+    wiped.after ? `gameKv=${wiped.after.gameKv} 已装=${JSON.stringify(wiped.after.installed)}` : '没走到',
+  )
+  check(
+    '清空之后家长密码要重设',
+    !!wiped.after && wiped.after.pin === null,
+    wiped.after ? `pin=${JSON.stringify(wiped.after.pin)}` : '没走到',
+  )
+  check(
+    '清空之后孩子名字回到默认',
+    !!wiped.after && wiped.after.childName !== '小明' && !!wiped.after.childName,
+    wiped.after ? `childName=${wiped.after.childName}` : '没走到',
+  )
+  check(
+    '清空之后界面还能用（没白屏）',
+    !!wiped.after && /设置|今日任务/.test(wiped.after.text) && wiped.after.tasks > 0,
+    wiped.after ? `tasks=${wiped.after.tasks}` : '没走到',
+  )
+
   /* ---------- 结果汇总 ---------- */
   console.log('\n' + '─'.repeat(58))
   const failed = results.filter((r) => !r.ok)
