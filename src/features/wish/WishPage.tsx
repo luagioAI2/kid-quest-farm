@@ -331,11 +331,36 @@ function ListView({
   onOpen: (id: string) => void
   onOrders: () => void
 }) {
+  /**
+   * ★ 已经拥有的游戏盒子**不再出现在「能换什么」里**（2026-10-29）。
+   *
+   * 家长原话：「兑换的东西有比如游戏，兑换了就有了，不需要再兑换，
+   * 不需要显示在能换什么。」
+   *
+   * 之前它还在，只是标签从「等爸妈开放」变成「已经有了」—— 那条卡片
+   * 既换不了、也没有任何可做的动作，纯粹占位置。孩子翻十几次
+   * 都是同一堆自己已经有的东西。
+   *
+   * ⚠️ **只藏游戏盒子**，不藏盲盒：盲盒不是「拥有」，是「开完了」，
+   *    它上面那句「这些游戏你都有啦」本身是信息，藏掉就什么都不剩了。
+   * ⚠️ 藏了要**说一句**（下面那个计数），不然孩子只会觉得列表莫名其妙变短。
+   */
   const items = useMemo(() => {
-    const all = WISH_ITEMS.filter((i) => !i.archived).sort(compareWishItem)
+    const all = WISH_ITEMS.filter((i) => !i.archived)
+      .filter((i) => !(i.kind === 'gamebox' && i.gameId && owned.has(i.gameId)))
+      .sort(compareWishItem)
     if (!filter) return all
     return all.filter((i) => i.kind === filter)
-  }, [filter])
+  }, [filter, owned])
+
+  /** 被藏起来的已拥有游戏数。只用来在列表底部解释一句 */
+  const hiddenOwnedCount = useMemo(
+    () =>
+      WISH_ITEMS.filter(
+        (i) => !i.archived && i.kind === 'gamebox' && i.gameId && owned.has(i.gameId),
+      ).length,
+    [owned],
+  )
 
   // 盲盒单独拎出来做 hero（用户要求：优先显示游戏盲盒）。
   // 「全部」之外的分档里不重复展示它。
@@ -487,6 +512,14 @@ function ListView({
 
         {items.length === 0 && (
           <p className="py-10 text-center text-sm text-ink-500">这一类里还没有东西</p>
+        )}
+
+        {/* 藏了要说一句。不说的话，孩子只会觉得「昨天还有的东西今天没了」，
+            而他要找的那款其实在「兑换记录」里躺着。 */}
+        {hiddenOwnedCount > 0 && (
+          <p className="px-1 text-[11px] leading-snug text-ink-400">
+            有 {hiddenOwnedCount} 款游戏你已经换到了，不再列在这里 —— 去右上角「兑换记录」看是哪几款。
+          </p>
         )}
       </div>
 

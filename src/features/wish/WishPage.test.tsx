@@ -63,7 +63,12 @@ describe('心愿商城：数字商品兑换之后', () => {
 
     render(<WishPage />)
     expect(await screen.findByText('已放进游戏柜'), '盲盒 hero 的说法').toBeTruthy()
-    expect(screen.getByText('已经有了'), '盒子卡片走 alreadyOwned 那条').toBeTruthy()
+    /* 2026-10-29 改了：已拥有的游戏盒子**整张不显示**了（家长：
+       「兑换了就有了，不需要再兑换，不需要显示在能换什么」）。
+       原来这里断言它写「已经有了」—— 那张卡换不了、也没有任何可做的动作，
+       只是占位置。现在它直接不在列表里，改由底部那句计数解释。 */
+    expect(screen.queryByText('已经有了'), '已拥有的游戏盒子不该再列出来').toBeNull()
+    expect(screen.getByText(/1 款游戏你已经换到了/), '藏了要说一句').toBeTruthy()
     expect(
       screen.queryByText('等爸妈确认'),
       '孩子已经拿到游戏了，「等爸妈确认」是在描述一个不存在的步骤',
@@ -390,5 +395,45 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
 
     expect(await screen.findByText(/上次爸妈说/)).toBeTruthy()
     expect(screen.getByText('🤍 想要这个'), '仍然允许再点一次，不加冷却').toBeTruthy()
+  })
+})
+
+/* ============================================================
+   已经换到的游戏不再列出来（2026-10-29）
+   ------------------------------------------------------------
+   家长原话：「兑换的东西有比如游戏，兑换了就有了，不需要再兑换，
+   不需要显示在能换什么。」
+
+   改动之前：那张卡还在，只是标签变成「已经有了」—— 换不了、也没有任何
+   可做的动作，纯粹占位置。孩子翻十几次都是同一堆自己已经有的东西。
+
+   ⚠️ 只藏**游戏盒子**，不藏盲盒：盲盒不是「拥有」，是「开完了」，
+      它上面那句「这些游戏你都有啦」本身是信息。
+   ============================================================ */
+describe('心愿商城：已经换到的游戏不再列出来', () => {
+  it('★ 拥有之后那张卡消失，底部说明有 1 款', async () => {
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_owned',
+        itemId: 'wish-game-renttower',
+        itemName: '收租公寓',
+        itemEmoji: '🏢',
+        kind: 'gamebox',
+        openedGameId: 'renttower',
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+    expect(screen.queryByText('收租公寓'), '已经拥有的游戏不该在列表里').toBeNull()
+    expect(screen.getByText(/1 款游戏你已经换到了/), '藏了要说一句').toBeTruthy()
+  })
+
+  it('对照组：没拥有的游戏照旧在列表里', async () => {
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+    expect(screen.getByText('收租公寓'), '没换到的游戏不该被藏').toBeTruthy()
+    expect(screen.queryByText(/款游戏你已经换到了/), '一款都没换过就别摆这句').toBeNull()
   })
 })
