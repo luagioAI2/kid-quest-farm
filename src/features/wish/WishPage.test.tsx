@@ -218,6 +218,75 @@ describe('心愿商城：我许的愿（原「兑换记录」）', () => {
     expect(screen.queryByText('等爸妈确认')).toBeNull()
   })
 
+  it('★ 付款文案和「兑换记录」一字不差：写「20 兑换券」，不写「🎫 20 张」', async () => {
+    /* 同一笔钱两屏两种说法，家长对账时要先在脑子里翻译一次：
+         兑换记录  -20 兑换券 · 3 小时前
+         我许的愿  🎫 20 张
+       而且本页定价预览本来就写着「付款：20 兑换券」—— 同一屏里都有两种。
+       现在统一走 `describeRedeemPayment`，这条用例钉三档：纯券 / 混付 / 纯积分。
+
+       ⚠️ 它抓的是**文案**，抓不到 `paidText` 里 `pointsPaid: o.pointsHeld ?? 0`
+       那个 `?? 0`（实测：改成 `o.pointsHeld` 这条用例照样绿，因为没改过价的
+       单子上 `cost - harvestPaid` 恰好等于 `pointsHeld`）。那个 `?? 0` 的
+       意义在**家长改价之后**，靠注释守，不靠这条用例。 */
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_v',
+        itemName: '收租公寓',
+        itemEmoji: '🏢',
+        status: 'done',
+        doneAt: Date.now(),
+        openedGameId: 'renttower',
+        vouchersHeld: 20,
+        createdAt: Date.now() - 30_000,
+      }) as never,
+    )
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_m',
+        itemName: '泡泡玛特盲盒',
+        itemEmoji: '🧸',
+        kind: 'collectible',
+        vouchersHeld: 10,
+        pointsHeld: 10,
+        createdAt: Date.now() - 60_000,
+      }) as never,
+    )
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_p',
+        itemName: '恐龙拼图',
+        itemEmoji: '🦕',
+        kind: 'study',
+        vouchersHeld: 0,
+        pointsHeld: 20,
+        createdAt: Date.now() - 90_000,
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: '我许的愿' }))
+
+    const rowOf = async (name: string) => {
+      const cell = await screen.findByText(name)
+      return cell.closest('button')?.textContent ?? ''
+    }
+
+    const voucherRow = await rowOf('收租公寓')
+    expect(voucherRow, '纯券单').toContain('20 兑换券')
+    expect(voucherRow, '别写「🎫 20 张」').not.toContain('🎫')
+    expect(voucherRow, '别写量词「张」').not.toContain('张')
+
+    expect(await rowOf('泡泡玛特盲盒'), '混付单要写清各付多少').toContain(
+      '10 兑换券 + 10 积分',
+    )
+    const pointsRow = await rowOf('恐龙拼图')
+    expect(pointsRow, '纯积分单').toContain('20 积分')
+    expect(pointsRow, '纯积分单不写「0 兑换券」').not.toContain('0 兑换券')
+  })
+
   it('点一条记录能回到那件商品', async () => {
     await db.wishOrders.put(
       committedOrder({

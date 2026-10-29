@@ -54,15 +54,33 @@ import { ParentPinPanel } from '../parent/ParentGate'
  * `{vouchersHeld} 张`，混付的单子会**漏掉积分**，看着像少扣了钱。
  *
  * `pointsHeld` 缺省 0：老订单全是纯券单，走这条分支不会多出「+ 0 积分」。
+ *
+ * 文案**不再自己拼**。原来这里输出「🎫 20 张」，而「兑换记录」输出
+ * 「20 兑换券」—— 同一笔钱两种说法，家长对账时得先在脑子里做一次翻译。
+ * 更刺眼的是本文件第 903 行：定价预览早就用 `describeRedeemPayment`
+ * 写着「付款：20 兑换券」，也就是说**同一屏里**就有两种说法。
+ * 现在只做参数适配，句子交给那个函数出。
+ *
+ * ⚠️ 两边默认值相反，别在这里「顺手简化」成 `pointsPaid: o.pointsHeld`：
+ * `paidOf` 里 `pointsPaid` 缺省是 `cost - harvestPaid`。**没改过价的单子
+ * 上这两者恰好相等**（`vouchersHeld + pointsHeld === voucherPrice`），
+ * 所以变异测试抓不到 —— 但家长**改过价**之后就不等了：一条当年 20 券
+ * 付掉的老单子，家长把价改成 30，`30 - 20` 会让它凭空多出「+ 10 积分」。
+ * 显式 `?? 0` 才能保证「这一单当时付了什么」永远只由那两个字段说了算。
+ *
+ * ⚠️ `wished` 单（0 券 0 积分）会返回「0 积分」。调用方要自己先判
+ * 「到底付没付」，别把「只是想要」写成「已付 0 积分」。
  */
-function paidText(o: { vouchersHeld: number; pointsHeld?: number }): string {
-  const parts: string[] = []
-  if (o.vouchersHeld > 0) parts.push(`🎫 ${o.vouchersHeld} 张`)
-  const points = o.pointsHeld ?? 0
-  if (points > 0) parts.push(`🪙 ${points} 积分`)
-  // 理论上不会发生（`wished` 阶段不扣钱），但空字符串会让句子变成
-  // 「孩子已付 」—— 少一个词比多一个错数更容易被当成排版问题放过。
-  return parts.length > 0 ? parts.join(' + ') : '0'
+function paidText(o: {
+  vouchersHeld: number
+  pointsHeld?: number
+  voucherPrice: number
+}): string {
+  return describeRedeemPayment({
+    cost: o.voucherPrice,
+    harvestPaid: o.vouchersHeld,
+    pointsPaid: o.pointsHeld ?? 0,
+  })
 }
 
 /**
@@ -1497,7 +1515,7 @@ function ConfirmView({
           </span>
         </div>
         <p className="mt-1 rounded-xl bg-sky-50 px-2.5 py-2 text-[11px] font-bold leading-relaxed text-sky-500">
-          ↩️ 如果最后没买成，点「取消兑换」，{paidText(order)} 会原样退回去。
+          ↩️ 如果最后没买成，点「取消兑换」，{paidText(order)}会原样退回去。
         </p>
         {/* 数字商品：取消要连带收回游戏。**必须先说清楚** ——
             家长点这个按钮的动机通常是「价格定错了」，不会想到

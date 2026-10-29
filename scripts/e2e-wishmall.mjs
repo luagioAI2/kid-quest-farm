@@ -1084,6 +1084,13 @@ const ordersView = await page.evaluate(() => {
     // 记录里也要标出「已放进游戏柜」，不然「已拿到」和「游戏在哪」是两回事
     delivered: text.includes('已放进游戏柜'),
     empty: text.includes('还没有换过东西'),
+    /* 付款文案必须和「📜 兑换记录」一字不差（「20 兑换券」）。
+       这里原来自己拼成「🎫 20 张」，同一笔钱两屏两种说法，
+       家长对账时得先在脑子里做一次翻译。断言写成「反例清单为空」，
+       比正面匹配稳 —— 单子付了多少钱随前面的流程变，别写死数字。 */
+    oddPay: rows
+      .map((r) => r.innerText.replace(/\n/g, ' '))
+      .filter((t) => t.includes('🎫') || /·\s*\d+\s*张/.test(t)),
   }
 })
 check('兑换记录列出全部 3 单', ordersView.count === 3, `${ordersView.count} 单`)
@@ -1091,6 +1098,11 @@ check('取消过的单子还在（不是消失了）', ordersView.hasCancelled)
 check('两单完成的是「已经拿到」', ordersView.doneCount === 2, `${ordersView.doneCount} 单`)
 check('已交付的数字商品有标记', ordersView.delivered)
 check('有单子时不显示空态', !ordersView.empty)
+check(
+  '付款文案和「兑换记录」一字不差（不写「🎫 N 张」）',
+  ordersView.oddPay.length === 0,
+  ordersView.oddPay.join(' | '),
+)
 
 await page.evaluate(() => {
   document.querySelector('button[aria-label="返回"]')?.click()
