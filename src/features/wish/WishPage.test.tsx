@@ -336,7 +336,7 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
     expect(await screen.findByText(/有 1 个心愿等你回应/)).toBeTruthy()
   })
 
-  it('★ 家长锁开着时：详情里先是一道入口，不是直接给按钮', async () => {
+  it('★ 家长锁开着时：「定价」进闸门，但「先不要了」不进', async () => {
     await db.wishOrders.put(wishedOrder({}) as never)
     await useApp.getState().refresh()
 
@@ -345,10 +345,11 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
     await user.click(await screen.findByText(/有 1 个心愿等你回应/))
 
     expect(await screen.findByText(/爸妈：回应这个心愿/)).toBeTruthy()
-    expect(
-      screen.queryByText('这次先不换'),
-      '没过密码不该看到回绝按钮 —— 否则孩子能自己把心愿撤掉',
-    ).toBeNull()
+    expect(screen.queryByText(/定个价/), '定价要过密码').toBeNull()
+    /* 撤回**不进闸门**：撤的是孩子自己表的态，不花钱、不碰账本。
+       放进闸门里的话，家长锁一开，孩子后悔了只能干等 ——
+       而家长那边根本不知道有个作废的请求还挂着。 */
+    expect(screen.getByText('先不要了'), '撤回不该被家长锁挡住').toBeTruthy()
   })
 
   it('★ 没有家长锁时：两个动作都在，回绝之后单子真的结束', async () => {
@@ -361,12 +362,33 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
     await user.click(await screen.findByText(/有 1 个心愿等你回应/))
 
     expect(await screen.findByText(/定个价/)).toBeTruthy()
-    await user.click(screen.getByText('这次先不换'))
+    await user.click(screen.getByText('先不要了'))
 
     await waitFor(async () => {
       const row = await db.wishOrders.get('wo_wish')
       expect(row?.status, '回绝之后不能还停在 wished').toBe('cancelled')
       expect(row?.cancelReason).toContain('先不换')
     })
+  })
+
+  it('★ 被回绝过之后，详情里还看得见上次的理由', async () => {
+    // 没有这一句的话，孩子看到的是一个干干净净的「🤍 想要这个」——
+    // 他会以为自己没说过，家长那边则会收到同一个请求第二遍。
+    await useApp.getState().updateSettings({ parentPin: undefined })
+    await db.wishOrders.put(
+      wishedOrder({
+        status: 'cancelled',
+        cancelledAt: Date.now(),
+        cancelReason: '这次先不换',
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: /游戏盲盒/ }))
+
+    expect(await screen.findByText(/上次爸妈说/)).toBeTruthy()
+    expect(screen.getByText('🤍 想要这个'), '仍然允许再点一次，不加冷却').toBeTruthy()
   })
 })

@@ -158,6 +158,21 @@ export default function WishPage() {
     )
 
   /**
+   * 某件商品**最近一次被取消**的单子（只看有理由的）。
+   *
+   * 用途只有一个：孩子被回绝之后再点进这一屏，能看到「上次爸妈说：…」，
+   * 而不是面对一个干干净净的「🤍 想要这个」—— 那样他会以为自己没说过，
+   * 家长那边则会收到同一个请求第二遍。
+   *
+   * ⚠️ 只是**提示**，不是冷却：仍然允许再点一次。心愿不是一次性资源，
+   *    用时间锁挡住孩子只会让家长在不知情的情况下继续收请求。
+   */
+  const lastCancelledOf = (itemId: string) =>
+    wishOrders
+      .filter((o) => o.itemId === itemId && o.status === 'cancelled' && o.cancelReason)
+      .sort((a, b) => (b.cancelledAt ?? b.createdAt) - (a.cancelledAt ?? a.createdAt))[0]
+
+  /**
    * 还等着**家长**处理的单子。
    *
    * 没有这一条的话，家长只能逐个商品点开、看卡片上的标记，才知道有单子
@@ -229,6 +244,7 @@ export default function WishPage() {
         item={item}
         offer={offerOf(item.id)}
         order={activeOrderOf(item.id)}
+        lastCancelled={lastCancelledOf(item.id)}
         balance={harvestBalance}
         owned={owned}
         onBack={goList}
@@ -595,6 +611,7 @@ function DetailView({
   item,
   offer,
   order,
+  lastCancelled,
   balance,
   owned,
   onBack,
@@ -605,6 +622,8 @@ function DetailView({
   item: WishItem
   offer: { voucherPrice: number } | undefined
   order: { id: string; status: string; openedGameId?: string } | undefined
+  /** 最近一次被取消、且写了理由的单子。只用来在「想要这个」下面补一句「上次爸妈说：…」 */
+  lastCancelled: { cancelReason?: string } | undefined
   balance: number
   owned: Set<string>
   onBack: () => void
@@ -879,10 +898,18 @@ function DetailView({
              *
              * 2026-10-29 之前这里只有一行「已经告诉爸妈，等他们定价」——
              * 孩子看着像是在等一个永远不会来的回复，家长那边连提示都没有。
-             * 现在把**家长的动作**摆出来：定个价，或者这次先不换。
+             * 现在把**家长的动作**摆出来：定个价。
              *
-             * ⚠️ 顺序不能反：主内容先写孩子的处境，家长那一侧跟在下面。
-             *    没有 PIN 的家庭会直接看到这两个按钮（那是家长自己关的保护）。
+             * ## ★ 撤回按钮**不进家长闸门**
+             *
+             * 「先不要了」撤的是**孩子自己表的态**，不花钱、不碰账本
+             * （`wishCancel` 对 `wished` 那条路径没有账本操作）。
+             * 放进闸门里的话，家长锁一开，孩子后悔了就只能干等 ——
+             * 而家长那边根本不知道有个作废的请求还挂着。
+             *
+             * 所以这里只有一个撤回按钮，两种形态共用：家长按是「回绝」，
+             * 孩子按是「撤回」，落库是同一件事（`cancelReason` 写
+             * 「这次先不换」，兑换记录里两边都看得见）。
              */
             <div className="space-y-2">
               <div className="rounded-2xl bg-sky-50 px-4 py-3 text-center text-sm font-extrabold text-sky-500">
@@ -905,32 +932,40 @@ function DetailView({
                   </button>
                 )
               ) : (
-                <div className="flex gap-2">
-                  <button
-                    onClick={onOffer}
-                    data-wish-price
-                    className="btn h-12 flex-1 rounded-2xl bg-grass-500 text-sm font-extrabold text-white active:btn-press"
-                  >
-                    🎫 定个价
-                  </button>
-                  <button
-                    onClick={() => void doDecline()}
-                    disabled={busy}
-                    data-wish-decline
-                    className="btn h-12 flex-none rounded-2xl bg-white px-4 text-sm font-extrabold text-ink-600 shadow-flat active:btn-press disabled:opacity-50"
-                  >
-                    这次先不换
-                  </button>
-                </div>
+                <button
+                  onClick={onOffer}
+                  data-wish-price
+                  className="btn h-12 w-full rounded-2xl bg-grass-500 text-sm font-extrabold text-white active:btn-press"
+                >
+                  🎫 定个价
+                </button>
               )}
+              <button
+                onClick={() => void doDecline()}
+                disabled={busy}
+                data-wish-decline
+                className="btn h-10 w-full rounded-2xl bg-transparent text-[13px] font-bold text-ink-400 active:btn-press disabled:opacity-50"
+              >
+                先不要了
+              </button>
             </div>
           ) : (
-            <button
-              onClick={() => void wishExpress(item.id)}
-              className="btn h-12 w-full bg-sun-400 text-base font-extrabold text-ink-900 active:btn-press"
-            >
-              🤍 想要这个
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => void wishExpress(item.id)}
+                className="btn h-12 w-full bg-sun-400 text-base font-extrabold text-ink-900 active:btn-press"
+              >
+                🤍 想要这个
+              </button>
+              {/* 上次被回绝过：把理由摆出来，别让孩子以为自己没说过。
+                  仍然允许再点一次 —— 心愿不是一次性资源，加冷却只会让
+                  家长在不知情的情况下继续收到同一个请求。 */}
+              {lastCancelled?.cancelReason && (
+                <p className="px-1 text-center text-[11px] font-bold leading-snug text-ink-400">
+                  上次爸妈说：{lastCancelled.cancelReason}
+                </p>
+              )}
+            </div>
           )
         ) : (
           <button
