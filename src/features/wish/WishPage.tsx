@@ -1634,7 +1634,14 @@ function OrdersView({
                   <span className="block truncate text-sm font-extrabold text-ink-900">
                     {o.itemName}
                   </span>
-                  <span className="mt-0.5 block truncate text-[11px] font-bold text-ink-500">
+                  {/* ⚠️ 这一行原来是 `truncate` —— `truncate` 自带 `white-space: nowrap`，
+                      所以它**永远不折行**，放不下就直接省略号。320 宽实测：
+                        `刚刚 · 100 兑换券 + 50…`
+                      金额被吃掉 14px。对账看的就是这个数，`…` 一挡就什么都不知道了。
+                      改成 `break-keep`（只在空格处断）—— 和「📜 兑换记录」那一行同一套
+                      规则，宁可折两行也不截断。
+                      ⚠️ 上面**商品名**那行保留 `truncate`：名字截了还认得出，金额截了不行。 */}
+                  <span className="mt-0.5 block break-keep text-[11px] font-bold text-ink-500">
                     {humanizeAgo(o.createdAt)}
                     {o.vouchersHeld > 0 || (o.pointsHeld ?? 0) > 0
                       ? ` · ${paidText(o)}`

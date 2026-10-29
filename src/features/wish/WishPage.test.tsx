@@ -287,6 +287,47 @@ describe('心愿商城：我许的愿（原「兑换记录」）', () => {
     expect(pointsRow, '纯积分单不写「0 兑换券」').not.toContain('0 兑换券')
   })
 
+  it('★ 记录行的付款文案不许被省略号截断（320 宽实测被吃掉 14px）', async () => {
+    /* 这一行原来是 `truncate` —— `truncate` 自带 `white-space: nowrap`，
+       所以它**永远不折行**，放不下就直接省略号。320 宽实测：
+         `刚刚 · 100 兑换券 + 50…`
+       金额少了 14px。对账看的就是这个数，`…` 一挡就什么都不知道了。
+       改成 `break-keep` 之后折两行，金额完整。
+
+       jsdom 不做布局，量不到那 14px，但能钉住「别再改回 truncate」。
+       ⚠️ 商品名那行**保留** `truncate`：名字截了还认得出，金额截了不行。 */
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_wide',
+        itemId: 'wish-puzzle',
+        itemName: '1000 片拼图',
+        itemEmoji: '🧩',
+        kind: 'collectible',
+        voucherPrice: 150,
+        vouchersHeld: 100,
+        pointsHeld: 50,
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: '我许的愿' }))
+
+    const row = (await screen.findByText('1000 片拼图')).closest('button')
+    expect(row, '记录行').toBeTruthy()
+    // 结构取法：`min-w-0` 那一列的第一个子元素是商品名，第二个才是「时间 · 付款」
+    const col = row?.querySelector('span.min-w-0')
+    const pay = col?.children[1] as HTMLElement | undefined
+    expect(pay, '付款那一段').toBeTruthy()
+    expect(pay?.textContent, '金额要完整').toContain('100 兑换券 + 50 积分')
+    expect(pay?.className, '不许截断').not.toContain('truncate')
+    expect(pay?.className, '只在空格处断行').toContain('break-keep')
+    // 对照：商品名仍然截断（否则长名字会把行撑坏）
+    const nameEl = col?.children[0] as HTMLElement | undefined
+    expect(nameEl?.className, '商品名保留 truncate').toContain('truncate')
+  })
+
   it('点一条记录能回到那件商品', async () => {
     await db.wishOrders.put(
       committedOrder({
