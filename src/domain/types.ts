@@ -1287,7 +1287,6 @@ export interface AppSettings {
    * 备份文件会被发到微信 / 网盘，而 4 位数字肉眼就能用。
    */
   parentPin?: string
-  parentPin?: string
 
   /*
    * 这里原来有 `merchantApps?: MerchantApplication[]`（本地存招商申请）。

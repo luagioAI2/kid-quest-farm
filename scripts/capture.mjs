@@ -809,6 +809,25 @@ try {
   await wait(700)
   await shot('11-settings')
 
+  /* 11d. 设置 · 数据 tab：导出 / 恢复 / 危险操作
+     ------------------------------------------------------------
+     这一屏**从来没进过图集**。它上面有「导出备份」「从备份恢复」和
+     「清空全部数据」（不可撤销）—— 第 4 层走查对这一屏等于没验。
+     2026-10-30 给「从备份恢复」补了一句「家长密码不在备份里」，
+     才发现没有任何一张图能看到那句话。
+
+     ★ 滚到「从备份恢复」那张卡：它在折叠线以下，不滚就是没拍。 */
+  await clickByText('数据')
+  await wait(900)
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('*')].find(
+      (x) => x.children.length === 0 && /从备份恢复/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'center' })
+  })
+  await wait(800)
+  await shot('11d-settings-data')
+
   /* 12b. 设置 · 规则 tab：音效 / 震动开关
      这两个字段一直存在、默认开着，但**以前没有开关**（家长关不掉）。
      新加的界面必须进图集，否则走查时根本看不到它。 */
