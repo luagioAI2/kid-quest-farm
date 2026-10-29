@@ -91,3 +91,95 @@ describe('设置 → 游戏：每天玩多久', () => {
     expect(screen.getByRole('button', { name: '30 分钟' })).toBeDisabled()
   })
 })
+
+/* ============================================================
+   没拥有不能装（2026-10-30 家长拍板）
+   ------------------------------------------------------------
+   门槛本身在 `installLocalGame` 里（单测在 store），这里钉的是**界面**：
+
+     · 没拥有的那一行**不许出现安装按钮** —— 摆一个按钮再点出一句
+       「还没拥有」是最差的组合：界面先承诺，再当场否认；
+     · 那颗灰药丸是 `span`（不可点），却坐在动作列里、外面裹着
+       `pointer-events-auto` ⇒ 整行别处都能点进详情，唯独这块点下去没事发生。
+       所以它**只能陈述状态**，不能写「去…」这种像指令的话。
+   ============================================================ */
+describe('设置 → 游戏：没拥有不能装', () => {
+  const GAME = 'cloudfarm'
+
+  it('★ 没拥有：没有安装按钮，只写「未拥有」', () => {
+    useApp.setState({ ownedGameIds: [], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    expect(document.querySelector(`[data-local-install="${GAME}"]`)).toBeNull()
+    const need = document.querySelector(`[data-local-need-own="${GAME}"]`)
+    expect(need).toBeTruthy()
+    // 不是按钮 ⇒ 不能让人以为点了会有反应
+    expect(need!.tagName).toBe('SPAN')
+    expect(need!.textContent?.trim()).toBe('未拥有')
+  })
+
+  it('★ 拥有之后才出现安装按钮，那颗「未拥有」消失', () => {
+    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    expect(document.querySelector(`[data-local-need-own="${GAME}"]`)).toBeNull()
+    expect(document.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
+  })
+
+  it('★ 表底说明指向「兑换」，不写「在那里用券换」', () => {
+    // 心愿商城**不收钱**（`WishPage` 只把人送到兑换，见 `jumpToRedeem`）。
+    // 旧文案写「在那里用兑换券换」⇒ 家长照着去心愿页找付款按钮，只会看到「去兑换换」。
+    useApp.setState({ ownedGameIds: [], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    const p = [...document.querySelectorAll('p')].find((x) =>
+      /还不能装/.test(x.textContent ?? ''),
+    )
+    expect(p).toBeTruthy()
+    expect(p!.textContent).toMatch(/兑换/)
+    expect(p!.textContent).not.toMatch(/在那里/)
+  })
+})
+
+/* ============================================================
+   没拥有不能装（2026-10-30 家长拍板）
+   ------------------------------------------------------------
+   门槛本身在 `installLocalGame` 里（单测在 store），这里钉的是**界面**：
+
+     · 没拥有的那一行**不许出现安装按钮** —— 摆一个按钮再点出一句
+       「还没拥有」是最差的组合：界面先承诺，再当场否认；
+     · 那颗灰药丸是 `span`（不可点），却坐在动作列里、外面裹着
+       `pointer-events-auto` ⇒ 整行别处都能点进详情，唯独这块点下去没事发生。
+       所以它**只能陈述状态**，不能写「去…」这种像指令的话。
+   ============================================================ */
+describe('设置 → 游戏：没拥有不能装', () => {
+  const GAME = 'cloudfarm'
+
+  it('★ 没拥有：没有安装按钮，只写「未拥有」', () => {
+    useApp.setState({ ownedGameIds: [], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    expect(document.querySelector(`[data-local-install="${GAME}"]`)).toBeNull()
+    const need = document.querySelector(`[data-local-need-own="${GAME}"]`)
+    expect(need).toBeTruthy()
+    // 不是按钮 ⇒ 不能让人以为点了会有反应
+    expect(need!.tagName).toBe('SPAN')
+    expect(need!.textContent?.trim()).toBe('未拥有')
+  })
+
+  it('★ 拥有之后才出现安装按钮，那颗「未拥有」消失', () => {
+    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    expect(document.querySelector(`[data-local-need-own="${GAME}"]`)).toBeNull()
+    expect(document.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
+  })
+
+  it('★ 表底说明指向「兑换」，不写「在那里用券换」', () => {
+    // 心愿商城**不收钱**（`WishPage` 只把人送到兑换，见 `jumpToRedeem`）。
+    // 旧文案写「在那里用兑换券换」⇒ 家长照着去心愿页找付款按钮，只会看到「去兑换换」。
+    useApp.setState({ ownedGameIds: [], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    const p = [...document.querySelectorAll('p')].find((x) =>
+      /还不能装/.test(x.textContent ?? ''),
+    )
+    expect(p).toBeTruthy()
+    expect(p!.textContent).toMatch(/兑换/)
+    expect(p!.textContent).not.toMatch(/在那里/)
+  })
+})

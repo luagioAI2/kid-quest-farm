@@ -18,6 +18,7 @@
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
 import { seedParentPin } from './lib/onboarding.mjs'
+import { grantGame } from './lib/own.mjs'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
@@ -892,36 +893,99 @@ try {
   await page.waitForFunction(() => !!document.querySelector('[data-local-row]'), {
     timeout: 10000,
   })
+  /*
+    ★ 拍之前必须滚到列表上。这张图以前只拍卡片顶部（「每天玩多久」+「我的游戏」
+      开头），21 行游戏全在折叠线以下 —— 等于这一屏从来没被走查过。
+      `block:'center'` 而不是 `'start'`：`'start'` 会把它顶到顶栏底下被盖住一半。
+  */
+  await page.evaluate(() => {
+    document.querySelector('[data-local-row]')?.scrollIntoView({ block: 'center' })
+  })
   await wait(400)
   await shot('11b2-games-market')
 
+  /*
+    11b4：表格底下那两句说明（「未拥有」怎么解锁 / 兑换码在哪 / 卸载在哪）。
+    它是**家长唯一的操作指引**，而且 2026-10-30 改过口径（原来写「去心愿商城换」，
+    而心愿商城不收钱）—— 不进图集就等于这次改文案没验过。
+  */
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('p')].find((x) =>
+      /还不能装/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'center' })
+  })
+  await wait(400)
+  await shot('11b4-games-footnote')
+
   // 详情页（第一款的「帮助孩子 / 截图 / 关于」）
+  await page.evaluate(() => {
+    document.querySelector('[data-store-detail]')?.scrollIntoView({ block: 'center' })
+  })
+  await wait(200)
   await page.evaluate(() => document.querySelector('[data-store-detail]')?.click())
   await wait(900)
   await shot('11b3-games-detail')
   await page.evaluate(() => document.querySelector('[data-store-close]')?.click())
   await wait(600)
 
-  const localInstallClicked = await page.evaluate(() => {
-    const b = document.querySelector('[data-local-install]')
+  /*
+    2026-10-30 起「没拥有不能装」—— 这一屏的默认状态是**一款都装不了**：
+    21 行全是「去心愿商城」那颗灰药丸，页面上一个 `[data-local-install]` 都没有。
+
+    本脚本原来直接找安装按钮，找不到就抛「本地包清单是空的？」。这句话是**错的**
+    （清单里有 21 款，只是都没拥有），而且它把整轮截图拦在这里 —— 11c 之后的
+    十几张图全部停在上一次的样子，看起来像「这批改动没碰那些屏」。
+    正是 `notes/verify-probes.md` 里那条：**锚点失效的报错会指向错误的原因**。
+
+    所以先预置拥有（和 `e2e-anthill` 等套件同一口径，走 `window.__kqf__.grantGame`），
+    再走家长那条路点「安装」—— 截图要拍的是**界面**，用 `installFromUrl` 绕过
+    就拍不到「正在装…」和装完那一行的状态。
+  */
+  const needOwnId = await page.evaluate(
+    () => document.querySelector('[data-local-need-own]')?.getAttribute('data-local-need-own') ?? '',
+  )
+  if (!needOwnId) {
+    throw new Error(
+      '游戏列表里既没有「安装」也没有「去心愿商城」—— 这一屏没渲染成预期状态，先看图 11b2。',
+    )
+  }
+  await grantGame(page, needOwnId)
+  await wait(600)
+
+  const localInstallClicked = await page.evaluate((id) => {
+    const b = document.querySelector(`[data-local-install="${id}"]`)
     if (!b) return false
     b.scrollIntoView({ block: 'center' })
     b.click()
     return true
-  })
+  }, needOwnId)
   // 找不到就**炸掉**，别静默拍一张「没装成」的图（静默的错图比缺图更糟）
   if (!localInstallClicked) {
-    throw new Error('截图脚本找不到游戏市场里的安装按钮（本地包清单是空的？）')
+    throw new Error(
+      `预置拥有后 ${needOwnId} 那一行仍然没有安装按钮 —— 门槛和列表不同源（见 GameStore 的 ownedSet 注释）。`,
+    )
   }
-  await page.waitForFunction(() => !!document.querySelector('[data-local-installed]'), {
-    timeout: 25000,
-  })
+  /*
+    ★★ 判据必须钉在**刚点的那一款**上，不能是「页面上有任何一个已安装」。
+
+    这一条踩过：本轮之前先兑换了「细胞守卫」，所以 `[data-local-installed]`
+    一开始就存在 —— 下面这个 wait 立刻返回，图 11c 拍到的是
+    「云边小农场 · 正在装…」，而 11d 拿到的 `installedId` 是**细胞守卫**
+    （`querySelector` 取的是 DOM 里第一个，不是刚装的那个）。
+    两张图各自单看都说得通，摆在一起才发现 11c 没装完、11d 是另一款。
+
+    同一条也适用于「等它加载完」的每一处：**等具体那一个**。
+  */
+  await page.waitForFunction(
+    (id) => !!document.querySelector(`[data-local-installed="${id}"]`),
+    { timeout: 25000 },
+    needOwnId,
+  )
   // ⚠️ 必须在关掉市场**之前**读这一行：弹层一关就整体卸载，
   //    `[data-local-installed]` 会从 DOM 里消失 ⇒ 读成空串 ⇒ 静默不卸载 ⇒
   //    后面每一张图都带着一个装进来的游戏。
-  const installedId = await page.evaluate(
-    () => document.querySelector('[data-local-installed]')?.getAttribute('data-local-installed') ?? '',
-  )
+  const installedId = needOwnId
   // 2026-10-25 起没有市场弹层了（列表就在页面上），这里不用关任何东西。
   // 详情弹层已经在上面用 `[data-store-close]` 关掉了。
   await wait(600)

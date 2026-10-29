@@ -20,7 +20,15 @@ import { GameMarket } from './GameStore'
 
 const openBox = async () => {
   render(<GameMarket gateOpen />)
-  await userEvent.click(screen.getByText(/有兑换码/))
+  /*
+    ★ 按**角色**找这颗按钮，不按文本找。
+
+    原来写的是 `screen.getByText(/有兑换码/)` —— 2026-10-30 我在同一张卡
+    底部加了一句说明，里面带了「有兑换码的话…」，于是这个正则同时命中
+    说明文字和按钮 ⇒ `getByText` 抛「找到多个」，3 条测试一起红，
+    而报错里看不出是文案的问题。
+  */
+  await userEvent.click(screen.getByRole('button', { name: /有兑换码/ }))
   return document.querySelector('[data-code-input]') as HTMLInputElement
 }
 
@@ -31,7 +39,7 @@ beforeEach(() => {
 describe('设置 → 游戏：兑换码', () => {
   it('★ 家长锁没开时打不开（孩子不能自己换游戏）', () => {
     render(<GameMarket gateOpen={false} />)
-    const btn = screen.getByText(/有兑换码/).closest('button') as HTMLButtonElement
+    const btn = screen.getByRole('button', { name: /有兑换码/ }) as HTMLButtonElement
     expect(btn.disabled).toBe(true)
     expect(document.querySelector('[data-code-box]')).toBeNull()
   })
