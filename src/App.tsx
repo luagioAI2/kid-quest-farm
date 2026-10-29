@@ -212,19 +212,19 @@ export default function App() {
    * 插件作者会按 3 个字去起名，然后发现宿主根本不在乎。
    */
   /**
-   * 别处（兑换列表里那块「爸妈已开放的心愿」）点了某件商品 → 切到心愿那一格。
+   * 心愿页说「去兑换换」→ 切到兑换那一格。
    *
    * 为什么走 store 而不是回调：`tab` 是**本组件的 `useState`**，
-   * 兑换页拿不到 `setTab`。这个项目里跨页传数据的唯一通道就是 store
+   * 心愿页拿不到 `setTab`。这个项目里跨页传数据的唯一通道就是 store
    * （`MEMORY.md` 第一节第 4 条，同一套做法见 `pendingPrompt`）。
    *
-   * 真正「打开哪件商品的详情」由 `WishPage` 挂载时自己 `takePendingWishItem()`
+   * 真正「滚到哪一行」由 `RedeemBody` 挂载时自己 `takePendingRedeemItem()`
    * 取走 —— 本组件只负责把那一格切过去。
    */
-  const pendingWishItem = useApp((s) => s.pendingWishItem)
+  const pendingRedeemItem = useApp((s) => s.pendingRedeemItem)
   useEffect(() => {
-    if (pendingWishItem) setTab('wish')
-  }, [pendingWishItem])
+    if (pendingRedeemItem) setTab('redeem')
+  }, [pendingRedeemItem])
 
   const tabs = useMemo(
     () => [

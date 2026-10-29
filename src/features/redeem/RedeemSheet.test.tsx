@@ -1,75 +1,133 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { db } from '@/db/db'
+import { db, postHarvest } from '@/db/db'
 import { useApp } from '@/store/useApp'
 import { RedeemBody } from './RedeemSheet'
 
 /* ============================================================
-   兑换列表里的「爸妈已开放的心愿」（2026-10-29）
+   爸妈定好价的心愿 = 普通的兑换品（2026-10-29，第二轮）
    ------------------------------------------------------------
-   家长原话：「爸爸妈妈已经定好价格的，相当于添加了兑换，应该出现在
-   兑换列表里。」
+   家长原话：
+     「爸爸妈妈已经定好价格的，相当于添加了兑换，应该出现在兑换列表里。」
+     「兑换 里的东西都是一样，都能用兑换券或者积分，包括游戏也一样。
+      不需要去心愿商城换。心愿商城只是标明心愿的。」
 
-   所以 **定价 = 上架**：家长在 👀 里给一件心愿商品定完价，孩子切到
-   「兑换」这一格就该看到它，不用特意跑去「心愿」那一格才发现有东西能换。
+   第一版把这条读成了「在兑换里摆一块心愿货架、点一下跳到心愿页去换」，
+   家长当场否掉 —— 那等于在兑换里开一道门，通往**另一个收银台**。
 
-   ⚠️ 这一块**不在这里扣币**。心愿商城那边还有一整套流程（装包 / 开盲盒 /
-      家长确认 / 退券），在这里再实现一遍扣款等于把两条链路各写一次 ——
-      迟早有一处漏掉「已拥有」「池子空了」这类闸门，然后孩子被扣两次。
-      点一下只是切到心愿那一格并打开那件商品（`jumpToWish`）。
+   所以这里守的三件事：
+     ① **同一张表**：心愿商品和家里的兑换品排在同一个列表里（分类 `gift`），
+        没有「🛍️ 心愿商城 · 爸妈开放了」这一块；
+     ② **同一套付款**：`planRedeemPayment`（券优先、1:1、可混付），
+        按钮上写的分摊 = 实际扣的；
+     ③ **就地成交**：点「换这个」→「换！」就在这一行扣币、生成订单，
+        `pendingRedeemItem` 那条通道只负责「从心愿页跳过来时滚到这一行」。
    ============================================================ */
 
 beforeEach(async () => {
   await db.delete()
   await db.open()
   await useApp.getState().boot()
+  // store 是模块级单例，上一个用例留下的跳转通道会漏到这里来
+  useApp.setState({ pendingRedeemItem: null })
 })
 
-/* 标题带 🛍️ 前缀，按整串匹配会漏 —— 用正则锚在文字上 */
-const SHELF_RE = /心愿商城 · 爸妈开放了/
+/** 首屏渲染完的判据。断言「没有」之前必须等它，否则断言的是「还没渲染」 */
+const ready = () => screen.findByRole('button', { name: /能换什么/ })
 
-describe('兑换列表：爸妈已经定好价的心愿', () => {
-  it('★ 定价之后出现在「能换什么」里', async () => {
-    await db.wishOffers.put({
-      itemId: 'wish-blindbox',
-      voucherPrice: 20,
-      openedAt: Date.now(),
-    } as never)
-    await useApp.getState().refresh()
+/** 发兑换券。走账本而不是直接改 `harvestBalance` —— 余额是 Σ delta 派生的 */
+async function giveVouchers(n: number) {
+  await postHarvest({ delta: n, source: 'manual_adjust', memo: 'test' })
+  await useApp.getState().refresh()
+}
+
+/** 家长定价。`closed` 模拟「家长关掉了兑换」 */
+async function priceItem(itemId: string, voucherPrice: number, closed = false) {
+  await db.wishOffers.put({
+    itemId,
+    voucherPrice,
+    openedAt: Date.now(),
+    ...(closed ? { closedAt: Date.now() } : {}),
+  })
+  await useApp.getState().refresh()
+}
+
+/** 按商品 id 找到列表里那一行 —— 家里也有好几件叫「🎁 换这个」的，必须限定在行内 */
+function shopRow(itemId: string): HTMLElement {
+  const el = document.querySelector<HTMLElement>(`[data-shop-row="${itemId}"]`)
+  if (!el) throw new Error(`兑换列表里没有 ${itemId} 这一行`)
+  return el
+}
+
+describe('兑换列表：爸妈定好价的心愿', () => {
+  it('★ 定价之后就是普通一行，没有「心愿商城」那一块', async () => {
+    await priceItem('wish-popmart', 30)
 
     render(<RedeemBody />)
+    await ready()
 
-    expect(await screen.findByText(SHELF_RE), '定完价就该出现在这里').toBeTruthy()
-    expect(screen.getByText('游戏盲盒')).toBeTruthy()
+    const row = shopRow('wish-popmart')
+    expect(within(row).getByText('泡泡玛特盲盒')).toBeTruthy()
+    // 家长反对的就是这个标题 —— 它意味着「兑换里还有另一个入口」
+    expect(screen.queryByText(/心愿商城 · 爸妈开放了/), '不该再另起一块').toBeNull()
+    // 也不该长得像「外面来的东西」：付款行和家里那几件一模一样
+    expect(within(row).getByText(/付款：/)).toBeTruthy()
   })
 
-  it('对照组：没定价的心愿不出现（那是「等爸妈回应」）', async () => {
+  it('对照组：没定价的心愿不出现（那只是「想要」，不是能换）', async () => {
     render(<RedeemBody />)
-    // 等首屏渲染完再断言「没有」，否则断言的是「还没渲染」
-    await screen.findByRole('button', { name: /能换什么/ })
-    expect(screen.queryByText(SHELF_RE)).toBeNull()
+    await ready()
+
+    // 先确认列表真的渲染了，否则「没有」可能只是「整页空白」
+    expect(screen.getAllByRole('button', { name: /换这个/ }).length).toBeGreaterThan(0)
+    expect(screen.queryByText('泡泡玛特盲盒')).toBeNull()
   })
 
-  it('★ 点一下切到心愿那一格，并打开那件商品', async () => {
-    await db.wishOffers.put({
-      itemId: 'wish-blindbox',
-      voucherPrice: 20,
-      openedAt: Date.now(),
-    } as never)
-    await useApp.getState().refresh()
+  it('★ 就地兑换：在这一行扣 30 张券，生成 committed 单子', async () => {
+    await priceItem('wish-popmart', 30)
+    await giveVouchers(50)
 
     const user = userEvent.setup()
     render(<RedeemBody />)
-    await user.click(await screen.findByText('游戏盲盒'))
+    await ready()
 
-    // 跨页通道：`tab` 状态在 App 里，兑换页够不着 —— 只能走 store
-    expect(useApp.getState().pendingWishItem, '要能带着「哪一件」过去').toBe('wish-blindbox')
+    const row = shopRow('wish-popmart')
+    await user.click(within(row).getByRole('button', { name: /换这个/ }))
+    // 二次确认：扣币不可逆，不能一点就没
+    await user.click(within(row).getByRole('button', { name: /换！/ }))
+
+    // 判据看**账本派生的余额**，不看按钮文案 —— 文案对了而没扣是经典静默失败
+    await waitFor(() => expect(useApp.getState().harvestBalance).toBe(20))
+    expect(useApp.getState().balance, '券够的时候不该动积分').toBe(50)
+
+    const order = await db.wishOrders.where('itemId').equals('wish-popmart').first()
+    expect(order?.status).toBe('committed')
+    expect(order?.vouchersHeld).toBe(30)
+    expect(order?.pointsHeld).toBe(0)
+
+    const spent = await db.harvestLedger.where('source').equals('wish_redeem').toArray()
+    expect(spent.map((r) => r.delta), '券账上要有一笔 -30').toEqual([-30])
+  })
+
+  it('★ 券不够时用积分补，按钮写的是「两种币加起来还差多少」', async () => {
+    // 启动积分 50 + 券 10 = 60，标价 300 → 差 240
+    await priceItem('wish-popmart', 300)
+    await giveVouchers(10)
+
+    render(<RedeemBody />)
+    await ready()
+
+    const row = shopRow('wish-popmart')
+    const btn = within(row).getByRole('button', { name: /还差 240/ }) as HTMLButtonElement
+    expect(btn.disabled, '不够就不该能点').toBe(true)
+    // 只报积分会让孩子以为「我只有 50 分」，而他兜里还有 10 张券
+    expect(within(row).getByText(/两种币加起来还差 240/)).toBeTruthy()
   })
 
   it('已经拥有的游戏盒子不列出来', async () => {
     // 这条规则和心愿页共用 `wishOwnedSet` —— 各写一遍的话，
-    // 一边滤掉了另一边没滤，孩子会在兑换列表里看到自己早就换到的游戏。
+    // 一边滤掉了另一边没滤，孩子会在这里看到自己早就换到的游戏。
     await db.wishOrders.put({
       id: 'wo_owned',
       itemId: 'wish-game-renttower',
@@ -82,33 +140,38 @@ describe('兑换列表：爸妈已经定好价的心愿', () => {
       openedGameId: 'renttower',
       createdAt: Date.now(),
       doneAt: Date.now(),
-    } as never)
-    await db.wishOffers.put({
-      itemId: 'wish-game-renttower',
-      voucherPrice: 30,
-      openedAt: Date.now(),
-    } as never)
-    await useApp.getState().refresh()
+    })
+    await priceItem('wish-game-renttower', 30)
 
     render(<RedeemBody />)
-    await screen.findByRole('button', { name: /能换什么/ })
+    await ready()
+
     expect(screen.queryByText('收租公寓'), '已经换到的游戏不该再出现').toBeNull()
-    expect(screen.queryByText(SHELF_RE), '唯一一件被滤掉，整块就不该摆').toBeNull()
+    expect(document.querySelector('[data-shop-row="wish-game-renttower"]')).toBeNull()
   })
 
   it('已经关掉的心愿也不出现', async () => {
     // 家长「关闭」写的是 `closedAt`，行还在 —— 只按「有没有这一行」算的话，
     // 关掉的商品会一直挂在孩子的兑换列表上。
-    await db.wishOffers.put({
-      itemId: 'wish-blindbox',
-      voucherPrice: 20,
-      openedAt: Date.now() - 1000,
-      closedAt: Date.now(),
-    } as never)
-    await useApp.getState().refresh()
+    await priceItem('wish-popmart', 30, true)
 
     render(<RedeemBody />)
-    await screen.findByRole('button', { name: /能换什么/ })
-    expect(screen.queryByText(SHELF_RE)).toBeNull()
+    await ready()
+
+    expect(screen.queryByText('泡泡玛特盲盒')).toBeNull()
+  })
+
+  it('★ 从心愿页「去兑换换」过来：滚到那一行、闪一下，通道取走就清空', async () => {
+    await priceItem('wish-popmart', 30)
+
+    // 跨页通道：`tab` 状态在 App 里，心愿页够不着 —— 只能走 store
+    useApp.getState().jumpToRedeem('wish-popmart')
+
+    render(<RedeemBody />)
+
+    // 取走要清空：不清的话，孩子切走再切回兑换会被反复滚到同一行
+    await waitFor(() => expect(useApp.getState().pendingRedeemItem).toBeNull())
+    const row = shopRow('wish-popmart')
+    expect(row.className, '得让孩子看见是哪一行').toMatch(/ring-grass-400/)
   })
 })

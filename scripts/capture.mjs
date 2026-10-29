@@ -593,9 +593,30 @@ try {
   })
   if (priced && (await clickByText('游戏盲盒'))) {
     await wait(700)
-    // 按钮文案 2026-10-29 起是「🎫 用 20 换」（去掉「张」—— 券 + 积分混付）。
-    // 还按老文案找会**静默点空**：开箱页不出现，只有一行 ⚠️，图集里少一张图。
-    await clickByText('用 20 换')
+    /* 2026-10-29 起盲盒也在**兑换**那一格成交 —— 详情里只剩一颗
+       「🎁 去「兑换」换」。按老文案（「用 20 换」）点会**静默点空**：
+       开箱页不出现，只有一行 ⚠️，图集里少一张图。 */
+    await clickByText('去「兑换」换')
+    await wait(900)
+    const rowClicked = await page.evaluate(() => {
+      const row = document.querySelector('[data-shop-row="wish-blindbox"]')
+      const b = [...(row?.querySelectorAll('button') ?? [])].find((x) =>
+        /换这个/.test(x.textContent ?? ''),
+      )
+      if (!b) return false
+      b.click()
+      return true
+    })
+    await wait(450)
+    if (rowClicked) {
+      await page.evaluate(() => {
+        const row = document.querySelector('[data-shop-row="wish-blindbox"]')
+        const b = [...(row?.querySelectorAll('button') ?? [])].find((x) =>
+          /换！/.test(x.textContent ?? ''),
+        )
+        b?.click()
+      })
+    }
     await page
       .waitForFunction(() => document.body.innerText.includes('抽到了新游戏'), { timeout: 30000 })
       .catch(() => console.log('  ⚠️ 10e 开箱页没出现：盲盒没换成功（先看 10b 有没有定价）'))
@@ -604,6 +625,11 @@ try {
     // 回到列表，别把「收下」留给下一步的设置页
     await clickByText('收下')
     await wait(600)
+    /* 开箱层盖在**兑换**那一格上，收下之后仍停在兑换。
+       不回心愿列表的话，10f 在兑换页里找 `.grid > button`（那里没有网格），
+       只会打印一句跳过 —— 静默少一张图。 */
+    await clickByText('心愿', 'nav')
+    await wait(700)
   } else {
     console.log('  ⚠️ 10e 跳过：列表里没找到「游戏盲盒」')
   }
@@ -664,7 +690,13 @@ try {
 
      所以这两张图拍的是**新的处理链路**，不再是心愿页顶部那张卡：
        10h —— 顶栏 👀 点开，队列里第一条就是这条心愿，就地能定价；
-       10i —— 开放之后切到「兑换」，孩子的列表里出现「爸妈开放了」那一块。
+       10i —— 开放之后切到「兑换」，孩子那一格**多出一行**（分类「礼物」，
+              和家里的兑换品按价混排）。
+
+     ⚠️ 10i 在 2026-10-29 改过一次口径：第一版拍的是「🛍️ 心愿商城 · 爸妈
+        开放了」那一块，家长当场否掉（「不需要去心愿商城换」）。现在心愿商品
+        就是普通一行，所以要**把那一行滚进屏幕**再拍 —— 它排在「礼物」分类里，
+        直接拍首屏只会拍到零食和屏幕时间，看图的人以为没做。
 
      两条注意：
      1. 挑一件**没被本脚本定过价**的商品（`wish-dino`）。`wish-popmart`
@@ -675,6 +707,11 @@ try {
     await window.__kqf__.getState().wishExpress('wish-dino')
   })
   await wait(700)
+  /* 上面那句「已经告诉爸妈」的 toast 挂在 top-3，会盖住 👀 弹层的标题
+     （拍出来是「一张被黄条压住的图」）。等它自己消失再拍。 */
+  await page
+    .waitForFunction(() => window.__kqf__.getState().toasts.length === 0, { timeout: 8000 })
+    .catch(() => {})
 
   if (await clickByText('👀')) {
     await wait(900)
@@ -698,17 +735,20 @@ try {
       await wait(600)
       await clickByText('兑换', 'nav')
       await wait(900)
-      // 回到顶部。`clickByText` 会先把按钮 `scrollIntoView`，切完 tab
-      // 滚动位置还留在原处 —— 拍出来只有心愿那一块的**下半截**，
-      // 标题和商品名全在屏幕外，看着像「那一块没渲染」。
-      await page.evaluate(() => {
-        window.scrollTo(0, 0)
-        document.querySelectorAll('*').forEach((el) => {
-          if (el.scrollTop > 0) el.scrollTop = 0
-        })
+      // 心愿商品是「礼物」分类里的一行，**不在首屏** —— 先把它滚到屏幕中间。
+      // 顺手把它当判据：找不到就说明这一行没渲染（别默默拍一张别的图交差）。
+      const rowFound = await page.evaluate(() => {
+        const el = document.querySelector('[data-shop-row="wish-dino"]')
+        if (!el) return false
+        el.scrollIntoView({ block: 'center' })
+        return true
       })
-      await wait(400)
-      await shot('10i-redeem-wish-shelf')
+      if (rowFound) {
+        await wait(400)
+        await shot('10i-redeem-wish-row')
+      } else {
+        console.log('  ⚠️ 10i 跳过：兑换列表里没找到 wish-dino 那一行')
+      }
     } else {
       console.log('  ⚠️ 10i 跳过：👀 里没找到「开放兑换」')
     }

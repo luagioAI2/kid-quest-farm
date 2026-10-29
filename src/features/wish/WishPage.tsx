@@ -147,7 +147,6 @@ type WishView =
   | { kind: 'detail'; itemId: string }
   | { kind: 'offer'; itemId: string }
   | { kind: 'confirm'; orderId: string }
-  | { kind: 'box'; gameId: string }
   | { kind: 'orders' }
 
 export default function WishPage() {
@@ -171,21 +170,19 @@ export default function WishPage() {
   const [filter, setFilter] = useState<WishFilter>(null)
 
   /**
-   * 从「兑换」列表点进来时，**直接打开那件商品的详情**。
+   * 这一页**不扣币**（2026-10-29 家长口径）。
    *
-   * 通道是 store 的 `pendingWishItem`（`tab` 状态在 `App` 里，兑换页够不着）。
-   * 取一次就清空 —— 不清的话，孩子从这一格切走再切回来，会被重新拽进
-   * 同一件商品，看着像「返回键坏了」。
+   * 原话：「兑换 里的东西都是一样，都能用兑换券或者积分，包括游戏也一样。
+   * 不需要去心愿商城换。**心愿商城只是标明心愿的**。让爸妈知道你要换啥，
+   * 等爸妈确认后添加到兑换里。」
    *
-   * ⚠️ 只在**挂载**时取一次（依赖是稳定的 store 函数）。
-   *    写成「订阅 `pendingWishItem` 就切视图」的话，孩子在里面手动返回列表
-   *    之后，那个值还是非 null，会被立刻弹回详情页。
+   * 所以这里只有两个动作：**许愿**（`wishExpress`）和**看**。家长定完价
+   * 之后，商品出现在「兑换」那一格，孩子在那儿换；这一页的详情只留一个
+   * 「去兑换换」的入口（`jumpToRedeem`）。
+   *
+   * ⚠️ 别把 `wishRedeem` 再搬回来。两个页面都能扣币，家长就分不清
+   *    「哪一步是花钱的」，而这正是这次要收掉的东西。
    */
-  const takePendingWishItem = useApp((s) => s.takePendingWishItem)
-  useEffect(() => {
-    const id = takePendingWishItem()
-    if (id && wishItemById(id)) setView({ kind: 'detail', itemId: id })
-  }, [takePendingWishItem])
 
   /**
    * 「已经有了」= 账本买过 + 现在装着 + **心愿单里兑换到手过**。
@@ -277,8 +274,6 @@ export default function WishPage() {
         onOpen={(itemId) => setView({ kind: 'detail', itemId })}
       />
     )
-  } else if (view.kind === 'box') {
-    content = <BoxView gameId={view.gameId} onDone={goList} />
   } else if (view.kind === 'detail') {
     const item = wishItemById(view.itemId)
     content = item ? (
@@ -293,7 +288,6 @@ export default function WishPage() {
         onBack={goList}
         onOffer={() => setView({ kind: 'offer', itemId: item.id })}
         onConfirm={(orderId) => setView({ kind: 'confirm', orderId })}
-        onBox={(gameId) => setView({ kind: 'box', gameId })}
       />
     ) : (
       <EmptyState onBack={goList} />
@@ -704,7 +698,6 @@ function DetailView({
   onBack,
   onOffer,
   onConfirm,
-  onBox,
 }: {
   item: WishItem
   offer: { voucherPrice: number } | undefined
@@ -719,10 +712,9 @@ function DetailView({
   onBack: () => void
   onOffer: () => void
   onConfirm: (orderId: string) => void
-  onBox: (gameId: string) => void
 }) {
   const wishExpress = useApp((s) => s.wishExpress)
-  const wishRedeem = useApp((s) => s.wishRedeem)
+  const jumpToRedeem = useApp((s) => s.jumpToRedeem)
   const wishCancel = useApp((s) => s.wishCancel)
   const pushToast = useApp((s) => s.pushToast)
 
@@ -746,18 +738,17 @@ function DetailView({
 
   const meta = WISH_KIND_META[item.kind]
 
-  const doRedeem = async () => {
-    if (busy) return
-    setBusy(true)
-    const res = await wishRedeem(item.id)
-    setBusy(false)
-    if (!res.ok) {
-      pushToast({ kind: 'warn', title: res.message, emoji: '🎫' })
-      return
-    }
-    if (res.gameId) onBox(res.gameId)
-    else onBack()
-  }
+  /**
+   * 「去兑换换」—— 这一页**不扣币**。
+   *
+   * 家长口径（2026-10-29）：「兑换 里的东西都是一样…不需要去心愿商城换。
+   * 心愿商城只是标明心愿的。」所以这里只把人**送到兑换那一行**
+   * （`jumpToRedeem` → `App` 切 tab → `RedeemBody` 取走并滚到那一行）。
+   *
+   * 真正的扣款在 `RedeemBody` 里，走 `wishRedeem` —— 和 `RedeemItem` 用的是
+   * 同一套 `planRedeemPayment` 分账，所以这一页上面那句「付款：🎫 x + 🪙 y」
+   * 和点下去真扣的仍然是同一组数。
+   */
 
   /**
    * 家长回绝一个心愿（`wished` → `cancelled`）。
@@ -1067,20 +1058,19 @@ function DetailView({
           )
         ) : (
           <button
-            onClick={() => void doRedeem()}
-            disabled={!plan?.affordable || busy}
+            onClick={() => jumpToRedeem(item.id)}
+            disabled={!plan?.affordable}
+            data-wish-to-redeem
             className={
               'btn h-12 w-full text-base font-extrabold active:btn-press ' +
               (plan?.affordable ? 'bg-grass-500 text-white' : 'bg-ink-100 text-ink-500')
             }
           >
-            {busy
-              ? '正在兑换…'
-              : plan?.affordable
-                ? // 图标跟着**实际付款**走：纯积分单子（券 0、只靠积分）挂 🎫
-                  // 就是自相矛盾 —— 同一屏上面刚写着「付款：80 积分」。
-                  `${plan.voucherPaid > 0 ? '🎫' : '🪙'} 用 ${offer.voucherPrice} 换`
-                : `还差 ${plan?.shortfall ?? 0}`}
+            {plan?.affordable
+              ? // 这里**不写「用 N 换」**：点下去不是在这里换，而是去「兑换」。
+                // 写着「换」会让孩子以为当场就扣币（2026-10-29 改口径之前确实是）。
+                '🎁 去「兑换」换'
+              : `还差 ${plan?.shortfall ?? 0}`}
           </button>
         )}
       </div>
@@ -1541,60 +1531,6 @@ function ConfirmView({
           {digital ? '完成这一单' : '已经买好了'}
         </button>
       </div>
-    </div>
-  )
-}
-
-/* ============================================================
-   ⑤ 开盲盒
-   ============================================================ */
-
-function BoxView({ gameId, onDone }: { gameId: string; onDone: () => void }) {
-  const entry = STOREFRONT.find((s) => s.id === gameId)
-
-  return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 pt-safe">
-      <div className="flex h-36 w-36 items-center justify-center rounded-[2rem] bg-sun-100 text-7xl shadow-float">
-        🎁
-      </div>
-      <p className="mt-3 font-display text-xs font-extrabold tracking-[0.3em] text-sun-500">
-        ✦ ✦ ✦
-      </p>
-      <h2 className="mt-2 font-display text-2xl font-extrabold">抽到了新游戏</h2>
-      <p className="mt-1 text-center text-sm font-bold leading-relaxed text-ink-600">
-        这张盲盒里是这一款
-        <br />
-        已经放进你的游戏柜了
-      </p>
-
-      {entry && (
-        <div className="mt-5 flex w-full items-center gap-3 rounded-3xl bg-white p-3 shadow-float">
-          <span
-            className={
-              'flex h-14 w-14 flex-none items-center justify-center rounded-2xl text-2xl ' +
-              TINT_BG[(entry.tint as WishTint) ?? 'sun']
-            }
-          >
-            {entry.emoji}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-display text-base font-extrabold">{entry.name}</span>
-            <span className="mt-0.5 block text-[11px] font-bold text-ink-500">
-              {entry.pitch}
-            </span>
-          </span>
-          <span className="rounded-full bg-berry-100 px-2 py-0.5 text-[10px] font-extrabold text-berry-500">
-            NEW
-          </span>
-        </div>
-      )}
-
-      <button
-        onClick={onDone}
-        className="btn mt-6 h-12 w-full bg-grass-500 text-base font-extrabold text-white active:btn-press"
-      >
-        收下
-      </button>
     </div>
   )
 }

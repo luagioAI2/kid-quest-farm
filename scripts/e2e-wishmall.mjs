@@ -73,6 +73,81 @@ async function passPin(page) {
   return true
 }
 
+/* ---------------- 「兑换」那一格：2026-10-29 起唯一的收银台 ----------------
+ *
+ * 家长口径：「兑换 里的东西都是一样，都能用兑换券或者积分，包括游戏也一样。
+ * 不需要去心愿商城换。心愿商城只是标明心愿的。」
+ *
+ * 所以心愿详情**不再扣币**，只有一颗「🎁 去「兑换」换」—— 点下去是切到
+ * 兑换那一格（`jumpToRedeem` → `pendingRedeemItem`）。真正成交要三步：
+ *
+ *   ① 详情里点 `[data-wish-to-redeem]`   → 切到「兑换」
+ *   ② 兑换列表里点那一行的「换这个」      → 展开二次确认
+ *   ③ 二次确认里点「换！」               → 扣币 + 生成订单
+ *
+ * ⚠️ 这三步必须**分开写**：合成一个 `page.click` 会在第 ① 步之后立刻找第 ② 步
+ *    的按钮，而那时候页面还在心愿那一格 —— 静默空点，后面整段断言全红，
+ *    报的却是「券没扣」。
+ */
+const goWish = async () => {
+  await page.click('[data-tour="tab-wish"]')
+  await wait(700)
+}
+
+/** 心愿列表里点开某件商品（按卡片文字认，别按位置） */
+const openWishCard = async (name) => {
+  const ok = await page.evaluate((n) => {
+    const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+      x.textContent?.includes(n),
+    )
+    if (!b) return false
+    b.click()
+    return true
+  }, name)
+  await wait(650)
+  return ok
+}
+
+/**
+ * 在「兑换」那一格把某件心愿换掉。
+ *
+ * 返回 `{ ok, at }` —— `at` 说明卡在哪一步（`detail` / `row` / `confirm`），
+ * 因为「没换成功」有四种完全不同的原因，只说一句「券没扣」查不出来。
+ */
+async function redeemInShop(itemId) {
+  const jumped = await page.evaluate(() => {
+    const b = document.querySelector('[data-wish-to-redeem]')
+    if (!b || b.disabled) return false
+    b.click()
+    return true
+  })
+  if (!jumped) return { ok: false, at: 'detail' }
+  await wait(1000)
+
+  const opened = await page.evaluate((id) => {
+    const row = document.querySelector(`[data-shop-row="${id}"]`)
+    const b = [...(row?.querySelectorAll('button') ?? [])].find((x) =>
+      /换这个/.test(x.textContent ?? ''),
+    )
+    if (!b || b.disabled) return false
+    b.click()
+    return true
+  }, itemId)
+  if (!opened) return { ok: false, at: 'row' }
+  await wait(450)
+
+  const confirmed = await page.evaluate((id) => {
+    const row = document.querySelector(`[data-shop-row="${id}"]`)
+    const b = [...(row?.querySelectorAll('button') ?? [])].find((x) =>
+      /换！/.test(x.textContent ?? ''),
+    )
+    if (!b) return false
+    b.click()
+    return true
+  }, itemId)
+  return { ok: confirmed, at: confirmed ? 'done' : 'confirm' }
+}
+
 const browser = await puppeteer.launch({
   executablePath: chrome,
   headless: 'new',
@@ -284,7 +359,7 @@ check('定价页有步进器', offerInfo.hasStepper)
 check('定价页报出孩子现有余额（券 + 积分）', offerInfo.hasRef, offerInfo.hasRef ? '' : '没有「孩子现在有」')
 check('定价页说明积分能补差额', offerInfo.hasMixHint, offerInfo.hasMixHint ? '' : '没提积分')
 
-/* ---------- ⑦ 真扣券 ---------- */
+/* ---------- ⑦ 真扣券（2026-10-29 起只在「兑换」那一格扣） ---------- */
 console.log('\n── 兑换扣券 ──')
 
 // 用默认 30 张开放
@@ -303,25 +378,24 @@ const before = await page.evaluate(() => window.__kqf__.getState().harvestBalanc
 check('调试发券到账', before === 100, `余额 ${before}`)
 
 // 回列表 → 点开泡泡玛特
-await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
-    x.textContent?.includes('泡泡玛特'),
-  )
-  b?.click()
+await openWishCard('泡泡玛特')
+const priceShown = await page.evaluate(() => {
+  const body = document.body.innerText
+  return {
+    cta: /去「兑换」换/.test(body),
+    price: /换这个要\s*30/.test(body),
+    // 详情页上**不许**再出现「就地换」的按钮文案 —— 那是第一版的做法，
+    // 家长当场否掉：在兑换里开一道门通往另一个收银台。
+    inPlace: /用\s*30\s*换/.test(body),
+  }
 })
-await wait(600)
-const priceShown = await page.evaluate(() => /用\s*30\s*换/.test(document.body.innerText))
-check('定价后出现「用 30 换」', priceShown)
+check('定价后详情给出「🎁 去「兑换」换」', priceShown.cta)
+check('并且写明这件要 30', priceShown.price)
+check('详情里不再有「就地换」的按钮（收银台只有一个）', !priceShown.inPlace)
 
-await page.evaluate(() => {
-  // ⚠️ 2026-10-29 起按钮文案是「🎫 用 30 换」（去掉「张」——
-  //    现在是券 + 积分混付，差额不是「张」）。别锚 `^用`，开头有 emoji。
-  const b = [...document.querySelectorAll('button')].find((x) =>
-    /用\s*\d+\s*换/.test((x.textContent ?? '').trim()),
-  )
-  b?.click()
-})
-await wait(1200)
+const redeem1 = await redeemInShop('wish-popmart')
+check('★ 从详情 → 兑换那一行 → 就地换掉', redeem1.ok, `卡在 ${redeem1.at}`)
+await wait(800)
 
 const afterRedeem = await page.evaluate(() => {
   const s = window.__kqf__.getState()
@@ -334,13 +408,8 @@ check('托管数记的是 30', afterRedeem.held === 30, String(afterRedeem.held)
 
 /* ---------- ⑧ 取消退券 ---------- */
 console.log('\n── 取消退券 ──')
-await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
-    x.textContent?.includes('泡泡玛特'),
-  )
-  b?.click()
-})
-await wait(600)
+await goWish()
+await openWishCard('泡泡玛特')
 await passPin(page)
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find((x) =>
@@ -403,19 +472,14 @@ const openCard = async () => {
   })
   await wait(600)
 }
-// 再兑换一次（上一单已取消，价格还是 30、余额 100）
+// 再兑换一次（上一单已取消，价格还是 30、余额 100）。
+// ⚠️ 2026-10-29 起「兑换」只发生在兑换那一格 —— 这里是
+//    「详情 → 去兑换 → 那一行 → 换！」，不再是一颗就地扣币的按钮。
 await openCard()
-await page.evaluate(() => {
-  // ⚠️ 文案是「🎫 用 30 换」——**开头有 emoji**，正则别锚 `^用`。
-  //    第一版锚了行首，一次都没匹配上，整段 ④b 变成空点击：没有兑换、
-  //    没有 done 单子，而报错是「订单走到 done ✗」，看着像功能坏了。
-  //    （2026-10-29 起「张」也去掉了：现在是券 + 积分混付。）
-  const b = [...document.querySelectorAll('button')].find((x) =>
-    /用\s*\d+\s*换/.test((x.textContent ?? '').trim()),
-  )
-  b?.click()
-})
-await wait(1000)
+const redeem2 = await redeemInShop('wish-popmart')
+check('第二次兑换（为了走到 done）', redeem2.ok, `卡在 ${redeem2.at}`)
+await wait(700)
+await goWish()
 await openCard()
 await passPin(page) // committed 状态下，详情页底部就是 PIN 闸门
 await wait(300)
@@ -478,7 +542,7 @@ const poor = await page.evaluate(() => {
   // ⚠️ 2026-10-29 起可以券 + 积分混付，「还差」后面**不再有「张」** ——
   //    差额是两种币合起来算的，写「张」就成了谎话。
   const action = btns.find((x) =>
-    /^(?:🎫\s*)?(?:还差|用)\s*\d+/.test((x.textContent ?? '').trim()),
+    /^(?:还差\s*\d+|🎁\s*去「兑换」换)$/.test((x.textContent ?? '').trim()),
   )
   const note = [...document.querySelectorAll('*')].find(
     (x) => x.children.length === 0 && /换这个要\s*\d+/.test(x.textContent ?? ''),
@@ -539,7 +603,7 @@ await wait(400)
 const mixUi = await page.evaluate(() => {
   const btns = [...document.querySelectorAll('button')]
   const action = btns.find((x) =>
-    /^(?:🎫\s*)?(?:还差|用)\s*\d+/.test((x.textContent ?? '').trim()),
+    /^(?:还差\s*\d+|🎁\s*去「兑换」换)$/.test((x.textContent ?? '').trim()),
   )
   const note = [...document.querySelectorAll('*')].find(
     (x) => x.children.length === 0 && /换这个要\s*\d+/.test(x.textContent ?? ''),
@@ -604,7 +668,7 @@ await wait(500)
 const purePoints = await page.evaluate(() => {
   const btns = [...document.querySelectorAll('button')]
   const action = btns.find((x) =>
-    /^(?:🎫|🪙)?\s*(?:还差|用)\s*\d+\s*换?/.test((x.textContent ?? '').trim()),
+    /^(?:还差\s*\d+|🎁\s*去「兑换」换)$/.test((x.textContent ?? '').trim()),
   )
   const note = [...document.querySelectorAll('*')].find(
     (x) => x.children.length === 0 && /换这个要\s*\d+/.test(x.textContent ?? ''),
@@ -616,13 +680,20 @@ const purePoints = await page.evaluate(() => {
   }
 })
 check('前提：积分够 60（否则测不了纯积分）', zeroed.points >= 60, `积分 ${zeroed.points}`)
-check('券 0 也能换 —— 按钮是亮的', !purePoints.disabled, purePoints.text)
+check('券 0 也能换 —— 按钮是亮的', !purePoints.disabled && /去「兑换」换/.test(purePoints.text), purePoints.text)
 check(
   '纯积分时付款只写积分，不写「0 兑换券」',
   /付款：\s*60\s*积分$/.test(purePoints.note),
   purePoints.note,
 )
-check('纯积分时按钮图标是 🪙，不是 🎫', /^🪙/.test(purePoints.text), purePoints.text)
+/* 2026-10-29 改口径后，这颗按钮**不再标币种**（它只是「去兑换」）。
+   原来那句「图标必须是 🪙 不能是 🎫」的判据跟着作废了 —— 现在要守的是
+   「币种只出现在付款行里」，所以反向断言：按钮上不许再挂 🎫。 */
+check(
+  '纯积分时按钮不挂 🎫（币种只在付款行里说）',
+  !purePoints.text.includes('🎫'),
+  purePoints.text,
+)
 await page.screenshot({ path: `${OUT}/06d-pure-points.png` })
 
 // 券原样还回去
@@ -772,12 +843,9 @@ await page.evaluate(() => {
   b?.click()
 })
 await wait(700)
-await page.evaluate(() => {
-  const b = [...document.querySelectorAll('button')].find((x) =>
-    /用\s*\d+\s*换/.test((x.textContent ?? '').trim()),
-  )
-  b?.click()
-})
+// 2026-10-29：盲盒也在「兑换」那一格成交 —— 开箱层跟着搬到了那边（Portal）
+const redeemBox = await redeemInShop('wish-blindbox')
+check('★ 盲盒在兑换那一格换掉（不是心愿页）', redeemBox.ok, `卡在 ${redeemBox.at}`)
 // 装包要读本地包 + 装配，给足时间，用轮询而不是固定 sleep
 await page
   .waitForFunction(() => document.body.innerText.includes('抽到了新游戏'), { timeout: 30000 })
@@ -805,7 +873,9 @@ check(
   `${beforeDigital.balance} → ${opened.balance}`,
 )
 
-// 收下 → 列表：不许再说「等爸妈确认」
+// 收下 → 回心愿列表：不许再说「等爸妈确认」
+// ⚠️ 开箱层盖在**兑换**那一格上，收下之后仍停在兑换 —— 得先切回心愿，
+//    否则下面读的是兑换列表，`已放进游戏柜` 当然找不到（第一版就这么红过）。
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find(
     (x) => (x.textContent ?? '').trim() === '收下',
@@ -813,6 +883,7 @@ await page.evaluate(() => {
   b?.click()
 })
 await wait(900)
+await goWish()
 await page.screenshot({ path: `${OUT}/07b-list-after-box.png` })
 const listAfterBox = await page.evaluate(() => {
   const body = document.body.innerText
@@ -1026,18 +1097,32 @@ await page.evaluate(() => {
 })
 await wait(500)
 
-/* ---------- ⑭ 爸妈定好价的心愿 = 兑换列表里的一行（2026-10-29） ----------
+/* ---------- ⑭ 爸妈定好价的心愿 = 兑换列表里的普通一行（2026-10-29，第二轮） ----------
  *
- * 家长原话：「爸爸妈妈已经定好价格的，相当于添加了兑换，应该出现在兑换列表里。」
+ * 家长原话（两轮，第二轮回过头纠正了第一轮的做法）：
+ *   「爸爸妈妈已经定好价格的，相当于添加了兑换，应该出现在兑换列表里。」
+ *   「兑换 里的东西都是一样，都能用兑换券或者积分，包括游戏也一样。
+ *    不需要去心愿商城换。心愿商城只是标明心愿的。」
  *
- * 所以判据是**跨页**的：定价之后，孩子切到「兑换」那一格就该看到它，
- * 点一下还要能带着「哪一件」跳回心愿那一格。这两件事都只有真跑起来
- * 才知道 —— 单测里 `tab` 那个 `useState` 根本不存在。
+ * 第一版做成了「兑换里摆一块心愿货架、点一下跳到心愿页去换」—— 被当场否掉：
+ * 那等于在兑换里开一道门，通往**另一个收银台**。
  *
- * 走到这里手上定过价的商品：泡泡玛特（`had + 50`）和游戏盲盒（20）。
- * 儿童学习机**没定过价**，它不该出现在这一块里（对照组）。
+ * 所以这一段守三件事，而且只有真跑起来才知道（单测里 `tab` 那个 useState 不存在）：
+ *   ① 心愿商品是**普通一行**（`[data-shop-row]`），没有「爸妈开放了」那块标题；
+ *   ② 它和家里的兑换品在**同一个 ul** 里（同一张表，按价混排）；
+ *   ③ 点「换这个」→「换！」**就地扣币**并生成 committed 单子，不跳页。
+ *
+ * 走到这里手上定过价的商品：泡泡玛特、游戏盲盒（20）。
+ * 儿童学习机**没定过价**，它不该出现（对照组）。
  */
 console.log('\n── 兑换列表里的心愿 ──')
+
+// 先把泡泡玛特的价钉成 40：保证「两种币加起来够」，后面点「换！」不会灰着
+await page.evaluate(async () => {
+  await window.__kqf__.getState().wishSetOffer('wish-popmart', 40)
+})
+await wait(500)
+
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('[data-tour^="tab-"]')].find((x) =>
     (x.innerText ?? '').includes('兑换'),
@@ -1045,64 +1130,125 @@ await page.evaluate(() => {
   b?.click()
 })
 await wait(900)
-await page.screenshot({ path: `${OUT}/10-redeem-wish-shelf.png` })
+await page.screenshot({ path: `${OUT}/10-redeem-wish-row.png` })
 
 const shelf = await page.evaluate(() => {
-  const rows = [...document.querySelectorAll('[data-wish-shelf-item]')]
-  const shelfBox = document.querySelector('[data-wish-shelf]')
+  const row = document.querySelector('[data-shop-row="wish-popmart"]')
+  const ul = row?.closest('ul')
   return {
-    has: !!shelfBox,
-    ids: rows.map((r) => r.getAttribute('data-wish-shelf-item')),
-    // 位置：必须在「能换什么」最上面，家里那些兑换品之前。
-    // ⚠️ 找「第一件家里兑换品」要**排除心愿那一块自己的 li**，
-    //    否则比的是它自己，判据恒真。
-    beforeFamilyItems: (() => {
-      const familyLi = [...document.querySelectorAll('main ul li')].find(
-        (li) => !shelfBox?.contains(li),
-      )
-      if (!shelfBox || !familyLi) return null
-      return shelfBox.getBoundingClientRect().top <= familyLi.getBoundingClientRect().top + 1
-    })(),
+    hasPop: !!row,
+    hasBox: !!document.querySelector('[data-shop-row="wish-blindbox"]'),
+    hasStudyPad: !!document.querySelector('[data-shop-row="wish-study-pad"]'),
+    // 家长反对的正是这个标题 —— 它意味着「兑换里还有另一个入口」
+    hasBlockTitle: document.body.innerText.includes('爸妈开放了'),
+    // 「同一张表」的判据：这一行所在的 ul 里还有**家里的**兑换品
+    // （没有 data-shop-row 的 li）。分成两块的话这里恒 false。
+    sameListAsFamily:
+      !!ul && [...ul.children].some((li) => li.tagName === 'LI' && !li.hasAttribute('data-shop-row')),
   }
 })
-check('★ 兑换页出现「心愿商城 · 爸妈开放了」', shelf.has, shelf.ids.join(','))
-check('★ 定过价的两件都在（盲盒 + 泡泡玛特）', shelf.ids.length >= 2, shelf.ids.join(','))
-check(
-  '没定过价的心愿**不**出现（儿童学习机）',
-  !shelf.ids.includes('wish-study-pad'),
-  shelf.ids.join(','),
-)
-check('心愿那一块摆在兑换品前面', shelf.beforeFamilyItems === true)
+check('★ 定过价的心愿就是兑换列表里的一行', shelf.hasPop)
+check('盲盒（定过价 20）也在同一张表里', shelf.hasBox)
+check('★ 没有「心愿商城 · 爸妈开放了」那一块', !shelf.hasBlockTitle)
+check('没定过价的心愿不出现（儿童学习机）', !shelf.hasStudyPad)
+check('★ 和家里的兑换品在同一个列表里（不是另起一块）', shelf.sameListAsFamily)
 
-// 点一下：切到心愿那一格，并直接打开那件商品
+// 心愿页 →「去「兑换」换」→ 落到兑换那一格、并闪到那一行。
+// `tab` 是 App 的 useState，心愿页拿不到 setter ⇒ 只能走 store 通道。
+await page.click('[data-tour="tab-wish"]')
+await wait(700)
 await page.evaluate(() => {
-  document.querySelector('[data-wish-shelf-item="wish-popmart"]')?.click()
-})
-await wait(900)
-await page.screenshot({ path: `${OUT}/10b-jumped-to-wish.png` })
-const jumped = await page.evaluate(() => ({
-  onWishTab: document.querySelector('[data-tour="tab-wish"]')?.getAttribute('aria-current') === 'page',
-  detail: document.body.innerText.includes('家长支付'),
-  back: !!document.querySelector('button[aria-label="返回"]'),
-  pending: window.__kqf__.getState().pendingWishItem,
-}))
-check(
-  '★ 点一下切到心愿那一格，并打开那件商品',
-  jumped.onWishTab && jumped.detail && jumped.back,
-  `tab=${jumped.onWishTab} 详情=${jumped.detail}`,
-)
-check('通道取走就清空（不然会被反复拽回详情）', jumped.pending == null, String(jumped.pending))
-
-// 返回之后要真的停在列表 —— 「订阅着 pendingWishItem 就切视图」的写法会在这里露馅
-await page.evaluate(() => {
-  document.querySelector('button[aria-label="返回"]')?.click()
+  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+    x.textContent?.includes('泡泡玛特'),
+  )
+  b?.click()
 })
 await wait(700)
-const backToList = await page.evaluate(() => ({
-  list: document.body.innerText.includes('看看有什么想要的'),
-  detail: !!document.querySelector('button[aria-label="返回"]'),
-}))
-check('返回之后停在列表（没被重新拽进详情）', backToList.list && !backToList.detail)
+const jumpBtn = await page.evaluate(() => {
+  const b = document.querySelector('[data-wish-to-redeem]')
+  return { exists: !!b, disabled: !!b?.disabled, text: (b?.textContent ?? '').trim() }
+})
+check('心愿详情里有「去「兑换」换」', jumpBtn.exists, jumpBtn.text)
+check('前提：这一件孩子换得起（否则按钮是灰的）', !jumpBtn.disabled, jumpBtn.text)
+
+await page.evaluate(() => document.querySelector('[data-wish-to-redeem]')?.click())
+await wait(1000)
+await page.screenshot({ path: `${OUT}/10b-jumped-to-redeem.png` })
+const jumped = await page.evaluate(() => {
+  const row = document.querySelector('[data-shop-row="wish-popmart"]')
+  return {
+    onRedeemTab:
+      document.querySelector('[data-tour="tab-redeem"]')?.getAttribute('aria-current') === 'page',
+    flash: !!row && /ring-grass-400/.test(row.className),
+    pending: window.__kqf__.getState().pendingRedeemItem,
+  }
+})
+check('★ 跳过来落在「兑换」那一格', jumped.onRedeemTab)
+check('★ 并且闪到那一行（不是让孩子自己翻）', jumped.flash)
+check(
+  '通道取走就清空（不然切回来会被反复拽到同一行）',
+  jumped.pending == null,
+  String(jumped.pending),
+)
+
+/* 就地换：点「换这个」→「换！」
+ *
+ * ⚠️ 判据看**账本派生的余额**和 `wishOrders`，不看按钮文案 ——
+ *    「文案对了但没扣」是这个项目最经典的静默失败。
+ */
+const walletBefore = await page.evaluate(() => {
+  const st = window.__kqf__.getState()
+  return { vouchers: st.harvestBalance, points: st.balance }
+})
+const confirmOpened = await page.evaluate(() => {
+  const row = document.querySelector('[data-shop-row="wish-popmart"]')
+  const b = [...(row?.querySelectorAll('button') ?? [])].find((x) =>
+    /换这个/.test(x.textContent ?? ''),
+  )
+  if (!b) return { ok: false }
+  b.click()
+  return { ok: true }
+})
+await wait(500)
+const confirmed = await page.evaluate(() => {
+  const row = document.querySelector('[data-shop-row="wish-popmart"]')
+  const b = [...(row?.querySelectorAll('button') ?? [])].find((x) =>
+    /换！/.test(x.textContent ?? ''),
+  )
+  if (!b) return { ok: false, hint: (row?.innerText ?? '').slice(0, 160) }
+  b.click()
+  return { ok: true }
+})
+check('点「换这个」展开二次确认', confirmOpened.ok)
+check('二次确认里有「换！」（就地成交，不跳页）', confirmed.ok, confirmed.hint ?? '')
+await wait(1500)
+await page.screenshot({ path: `${OUT}/10c-redeemed-in-place.png` })
+
+const walletAfter = await page.evaluate(() => {
+  const st = window.__kqf__.getState()
+  const order = st.wishOrders.find((o) => o.itemId === 'wish-popmart' && o.status === 'committed')
+  return {
+    vouchers: st.harvestBalance,
+    points: st.balance,
+    onRedeemTab:
+      document.querySelector('[data-tour="tab-redeem"]')?.getAttribute('aria-current') === 'page',
+    rowGone: !document.querySelector('[data-shop-row="wish-popmart"]'),
+    order: order
+      ? { price: order.voucherPrice, held: order.vouchersHeld, points: order.pointsHeld ?? 0 }
+      : null,
+  }
+})
+const spent = walletBefore.vouchers + walletBefore.points - (walletAfter.vouchers + walletAfter.points)
+check('★ 就地扣了 40（券 + 积分合计）', spent === 40, `少了 ${spent}`)
+check('★ 生成 committed 单子（不是跳去心愿页换）', !!walletAfter.order, JSON.stringify(walletAfter.order))
+check(
+  '押的就是实际扣掉的两种币（退款按它退）',
+  !!walletAfter.order && walletAfter.order.held + walletAfter.order.points === 40,
+  JSON.stringify(walletAfter.order),
+)
+check('换完这一行消失（在走流程的不再上架）', walletAfter.rowGone)
+check('扣币之后没被弹到别处', walletAfter.onRedeemTab)
+
 
 /* ---------- ⑩ 底栏 5 格在 390px 下不挤、不换行 ---------- */
 const navFit = await page.evaluate(() => {

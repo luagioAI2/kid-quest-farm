@@ -481,22 +481,23 @@ interface AppState {
   wishCancel: (orderId: string, reason?: string) => Promise<void>
 
   /**
-   * 跨页跳转通道：**从「兑换」页点一条已开放的心愿，跳到心愿商城的商品详情**。
+   * 跨页通道：心愿页说「去兑换换」时，把「哪一件」带到兑换那一格。
    *
-   * 2026-10-29 家长要求「定好价的心愿相当于加了一条兑换，应该出现在兑换列表里」。
-   * 但心愿的交付和兑换不是一回事（成交在 App 外面 / 数字商品要装包），
-   * 所以**只在兑换页开一个入口**，点进去还是心愿详情那一套流程。
+   * 2026-10-29 家长口径：「兑换 里的东西都是一样，都能用兑换券或者积分，
+   * 包括游戏也一样。**不需要去心愿商城换**。心愿商城只是标明心愿的。」
+   *
+   * 所以扣币只剩兑换那一处，心愿页的详情只负责「看 + 许愿」。孩子在那儿
+   * 点「去兑换换」时，得让他**落到那一行**，而不是自己在一长串商品里翻。
    *
    * ⚠️ 底部 tab 的状态在 `App.tsx` 里（`useState`），组件之间拿不到 setter。
-   *    跨页传数据只能走 store —— 这就是那条通道。`App` 看到它非空就切 tab，
-   *    `WishPage` 挂载后取走并打开详情。**取走要清空**，否则每次切回心愿
-   *    都会被重新拽进同一个商品。
+   *    跨页传数据只能走 store（同 `pendingPrompt` 那套）。**取走要清空** ——
+   *    不清的话，孩子切走再切回兑换，会被反复滚到同一行。
    */
-  pendingWishItem: string | null
-  /** 设通道并切到心愿 tab（`App` 那边监听 `pendingWishItem`） */
-  jumpToWish: (itemId: string) => void
+  pendingRedeemItem: string | null
+  /** 设通道并切到兑换 tab（`App` 那边监听） */
+  jumpToRedeem: (itemId: string) => void
   /** 取走并清空。返回 null 表示没有待跳转 */
-  takePendingWishItem: () => string | null
+  takePendingRedeemItem: () => string | null
 
   /* ---- 游戏（插件骨架，2026-10-14 起） ---- */
   /**
@@ -1723,7 +1724,7 @@ export const useApp = create<AppState>((set, get) => ({
   redeemRecords: [],
   wishOffers: [],
   wishOrders: [],
-  pendingWishItem: null,
+  pendingRedeemItem: null,
   farmEvents: [],
   market: createInitialMarket(PRODUCE_BASE_PRICE),
   balance: 0,
@@ -3467,14 +3468,13 @@ export const useApp = create<AppState>((set, get) => ({
     await get().refresh()
   },
 
-  jumpToWish: (itemId) => {
-    set({ pendingWishItem: itemId })
+  jumpToRedeem: (itemId) => {
+    set({ pendingRedeemItem: itemId })
   },
 
-  takePendingWishItem: () => {
-    const id = get().pendingWishItem
-    // 取走就清空。不清的话，孩子从心愿页切走再切回来，会被重新拽进同一件商品。
-    if (id) set({ pendingWishItem: null })
+  takePendingRedeemItem: () => {
+    const id = get().pendingRedeemItem
+    if (id) set({ pendingRedeemItem: null })
     return id
   },
 
