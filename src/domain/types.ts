@@ -811,12 +811,25 @@ export interface RedeemRecord {
  * 心愿商城的商品类型。
  *
  * `blindbox` / `gamebox` 是**游戏**，兑换后在 App 内直接解锁；
- * 其余三类是**实物**，兑换后家长去外链买。
+ * 其余是**实物**，兑换后家长去外链买。
  *
- * ⚠️ 这五类共用一个 `kind` 字段而不是拆成两张表，是因为它们在列表里
+ * ⚠️ 这几类共用一个 `kind` 字段而不是拆成两张表，是因为它们在列表里
  * 要**混排**（用户要求：游戏盲盒优先显示）。拆表会让列表排序变成归并逻辑。
+ *
+ * 2026-10-29：`collectible` 的中文名从「收藏」改成「其他」，并在它前面
+ * 补了 `food`（美食）/ `outing`（出行）两档 —— 用户原话「收藏换成其他，
+ * 前面再加美食，出行」。**只改 label 和新增两档，`collectible` 这个
+ * 内部名保留**：改名会让 `WishItem.kind` 的存量数据和测试全部对不上，
+ * 而界面上根本没机会看到英文名。
  */
-export type WishKind = 'blindbox' | 'gamebox' | 'toy' | 'study' | 'collectible'
+export type WishKind =
+  | 'blindbox'
+  | 'gamebox'
+  | 'toy'
+  | 'study'
+  | 'food'
+  | 'outing'
+  | 'collectible'
 
 /** 图标底色档位（对应 `theme.css` 的色板） */
 export type WishTint = 'sun' | 'grass' | 'sky' | 'grape' | 'tan' | 'berry'
@@ -1085,6 +1098,49 @@ export interface GameClock {
   sec: number
 }
 
+/* ---------------- 招商（2026-10-29） ----------------
+   两路人马共用一套申请单：
+     · `parent`   —— 家长邀请商家入驻，**拿商家收益的分成**
+     · `merchant` —— 商家自己把东西挂进心愿商城
+
+   ⚠️ 现在**没有后端**，所以这里只落「谁、什么时候、申请了什么」，
+      审核结果和后台地址都是**留给后端回填**的字段（见 `adminUrl`）。
+      别在客户端自己把状态推成 `approved` —— 那等于给所有用户
+      凭空发一个后台入口。 */
+
+/** 申请人是家长还是商家 */
+export type MerchantRole = 'parent' | 'merchant'
+
+/**
+ * 审核状态。
+ *
+ * `pending` = 已提交、等后台审核；`approved` = 后台审核过了，
+ * **`adminUrl` 此时才可能有值**。没有 `rejected` —— 被拒的单子
+ * 现在不落地（后端接进来之后再加，加了要同步改 `merchantStatusOf`）。
+ */
+export type MerchantStatus = 'pending' | 'approved'
+
+export interface MerchantApplication {
+  role: MerchantRole
+  status: MerchantStatus
+  /** 提交时间 */
+  createdAt: number
+  /** 家长昵称 / 店铺名。列表里就显示这个，不再回查用户资料 */
+  name: string
+  /** 手机号或微信，后端联系用 */
+  contact: string
+  /** 一句话介绍（商家：卖什么；家长：想邀请哪家店） */
+  note?: string
+  /**
+   * **后台地址**。只有 `status === 'approved'` 时才渲染。
+   *
+   * 由后端在审核通过时写进来，客户端**不自己拼**这个 URL ——
+   * 拼出来的地址一旦猜错，用户点进去就是一个 404 页面，
+   * 而界面上写着「已通过审核」，看着像我们把他账号弄丢了。
+   */
+  adminUrl?: string
+}
+
 export interface AppSettings {
   /** 孩子昵称 */
   childName: string
@@ -1254,6 +1310,19 @@ export interface AppSettings {
 
   /** 家长锁 PIN（明文仅本地，4 位） */
   parentPin?: string
+
+  /**
+   * 招商申请单（2026-10-29）。按角色各存一条，最多两条。
+   *
+   * 可选 + 用数组而不是两张表：老库里没有这个字段时 `loadSettings` 会和
+   * `DEFAULT_SETTINGS` 合并成空数组，**不需要 Dexie 版本升级**。
+   * 为一屏纯 UI 的东西加一张表，就要连带写迁移和「老库升级」的 e2e，
+   * 不值。
+   *
+   * ⚠️ 目前**只有客户端提交**这一半（`status: 'pending'`）。
+   *    `approved` + `adminUrl` 要等后端接进来才有值，别自己造。
+   */
+  merchantApps?: MerchantApplication[]
 }
 
 /* ---------------- 数据快照（导出用） ---------------- */

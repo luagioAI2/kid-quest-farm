@@ -895,9 +895,10 @@ const listAfterBox = await page.evaluate(() => {
 })
 check('列表不再说「等爸妈确认」', !listAfterBox.waiting)
 check('列表写「已放进游戏柜」', listAfterBox.delivered)
-/* 家长端唯一的提示：孩子换了东西，列表顶部要说清有几单、是什么。
-   没有它，家长只能逐个商品点开看标记。 */
-check('列表顶部有「等爸妈处理」入口', listAfterBox.banner)
+/* 2026-10-29 用户要求：「不需要在心愿商城显示兑换记录和有一单在等爸妈处理。」
+   两块都撤了，这里**反向**钉住 —— 别哪天又长回来。
+   家长的入口是顶栏 👀（`wished` 那批）和商品详情页底部（`committed` 那批）。 */
+check('心愿列表不再有「等爸妈处理」卡', !listAfterBox.banner)
 
 // 详情：主内容是「已经拿到」，不是密码闸门 + 去购买
 await page.evaluate(() => {
@@ -956,7 +957,6 @@ const digitalDone = await page.evaluate(() => {
     doneAt: !!o?.doneAt,
     balance: s.harvestBalance,
     refunds: s.harvestLedger.filter((e) => e.source === 'wish_refund').length,
-    banner: document.body.innerText.includes('在等爸妈处理'),
   }
 })
 check('订单收尾到 done', digitalDone.status === 'done', String(digitalDone.status))
@@ -1064,50 +1064,88 @@ void gameName
  *
  * 走到这里手上应该有 3 单：泡泡玛特（取消）、泡泡玛特（完成）、盲盒（完成）。
  */
-console.log('\n── 我许的愿（原「兑换记录」）──')
+console.log('\n── 心愿页：只剩「看」和「许愿」──')
+/* 2026-10-29 第三轮，用户原话：
+     「不需要在心愿商城显示兑换记录和有一单在等爸妈处理。」
+   这一屏原来还挂着「我许的愿」入口和「有 N 单在等爸妈处理」那张卡，
+   两块都下线了，记录统一归「📜 兑换记录」。
+
+   ⚠️ 这一段原来断言的是那一屏的内容。改成「不许再出现」——
+      只删断言的话，这一节会**静默变绿**（找不到按钮 ⇒ 0 单 ⇒ 全部通过），
+      正是本项目最怕的那种假绿。所以先钉「还在心愿页上」当反向对照。 */
+const wishOnly = await page.evaluate(() => {
+  const text = document.body.innerText
+  return {
+    hasEntry: [...document.querySelectorAll('button')].some(
+      (x) => (x.textContent ?? '').trim() === '我许的愿',
+    ),
+    hasBanner: text.includes('在等爸妈处理'),
+    onWishPage: text.includes('心愿商城'),
+  }
+})
+check('前提：还在心愿页上（否则下面两条恒真）', wishOnly.onWishPage)
+check('★ 没有「我许的愿」入口', !wishOnly.hasEntry)
+check('★ 没有「等爸妈处理」卡', !wishOnly.hasBanner)
+
+/* 原来那一屏看的东西，现在全在「📜 兑换记录」里 —— 断言跟着搬过去，
+   不能因为换了屏就把「取消过的单子还看得见吗」丢掉。 */
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('button')].find(
-    (x) => (x.textContent ?? '').trim() === '我许的愿',
+  const b = [...document.querySelectorAll('[data-tour^="tab-"]')].find((x) =>
+    (x.innerText ?? '').includes('兑换'),
   )
   b?.click()
 })
-await wait(700)
-await page.screenshot({ path: `${OUT}/09-orders.png` })
+await wait(800)
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find((x) =>
+    (x.textContent ?? '').includes('兑换记录'),
+  )
+  b?.click()
+})
+await wait(800)
+await page.screenshot({ path: `${OUT}/09-redeem-records.png` })
 
-const ordersView = await page.evaluate(() => {
-  const rows = [...document.querySelectorAll('[data-wish-order]')]
+const records = await page.evaluate(() => {
+  const rows = [...document.querySelectorAll('[data-redeem-record]')]
   const text = document.body.innerText
   return {
     count: rows.length,
     hasCancelled: text.includes('已取消'),
     doneCount: rows.filter((r) => r.innerText.includes('已经拿到')).length,
-    // 记录里也要标出「已放进游戏柜」，不然「已拿到」和「游戏在哪」是两回事
-    delivered: text.includes('已放进游戏柜'),
-    empty: text.includes('还没有换过东西'),
-    /* 付款文案必须和「📜 兑换记录」一字不差（「20 兑换券」）。
-       这里原来自己拼成「🎫 20 张」，同一笔钱两屏两种说法，
-       家长对账时得先在脑子里做一次翻译。断言写成「反例清单为空」，
+    /* 已交付的数字商品在这一屏写的是「已经拿到」（`done` 就是拿到了）。
+       ⚠️ 原来这里断言的是「已放进游戏柜」—— 那是 `committed` 阶段的话，
+       走到这一步两单都已经 `done`，那句话本来就不该出现（旧断言是被
+       「我许的愿」那一屏的上下文喂绿的，搬过来就红了）。
+       真正要守的是**别退回旧词**：这一屏一行都不许说「等爸妈确认」。 */
+    staleWording: rows.filter((r) => r.innerText.includes('等爸妈确认')).length,
+    /* 付款文案只许一种说法（「20 兑换券」）。这里写成「反例清单为空」，
        比正面匹配稳 —— 单子付了多少钱随前面的流程变，别写死数字。 */
     oddPay: rows
       .map((r) => r.innerText.replace(/\n/g, ' '))
       .filter((t) => t.includes('🎫') || /·\s*\d+\s*张/.test(t)),
   }
 })
-check('兑换记录列出全部 3 单', ordersView.count === 3, `${ordersView.count} 单`)
-check('取消过的单子还在（不是消失了）', ordersView.hasCancelled)
-check('两单完成的是「已经拿到」', ordersView.doneCount === 2, `${ordersView.doneCount} 单`)
-check('已交付的数字商品有标记', ordersView.delivered)
-check('有单子时不显示空态', !ordersView.empty)
+check('兑换记录里 3 单都在', records.count >= 3, `${records.count} 行`)
+check('取消过的单子还在（不是消失了）', records.hasCancelled)
+check('两单完成的是「已经拿到」', records.doneCount >= 2, `${records.doneCount} 单`)
+check('没有一行还在说「等爸妈确认」', records.staleWording === 0, `${records.staleWording} 行`)
 check(
   '付款文案和「兑换记录」一字不差（不写「🎫 N 张」）',
-  ordersView.oddPay.length === 0,
-  ordersView.oddPay.join(' | '),
+  records.oddPay.length === 0,
+  records.oddPay.join(' | '),
 )
 
+/* 切回「能换什么」再走 —— 下面那一节直接找 `[data-shop-row]`。
+   `tab` 是 `RedeemBody` 里的 `useState`，页面没卸载就不会自己复位，
+   停在这一页会让下一节找 0 行（而它报的会是「兑换列表里没有这一行」）。 */
 await page.evaluate(() => {
-  document.querySelector('button[aria-label="返回"]')?.click()
+  const b = [...document.querySelectorAll('button')].find((x) =>
+    (x.textContent ?? '').includes('能换什么'),
+  )
+  b?.click()
 })
-await wait(500)
+await wait(600)
+
 
 /* ---------- ⑭ 爸妈定好价的心愿 = 兑换列表里的普通一行（2026-10-29，第二轮） ----------
  *

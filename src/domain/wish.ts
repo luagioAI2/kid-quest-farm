@@ -17,7 +17,18 @@
 import type { WishItem, WishKind } from './types'
 import { planRedeemPayment } from './redeem'
 
-/** 分类标签。顺序就是 chips 的顺序（盲盒在前 —— 用户要求优先显示） */
+/**
+ * 分类标签。顺序就是 chips 的顺序（盲盒在前 —— 用户要求优先显示）。
+ *
+ * 2026-10-29 用户要求：「收藏换成其他，前面再加美食，出行。」
+ * ⇒ 新增 `food` / `outing` 两档，`collectible` 的**显示名**从「收藏」改成
+ * 「其他」（内部名不动，见 `WishKind` 的注释）。
+ *
+ * ⚠️ 这里多一档，心愿页和兑换页的 chips 就各多一个 —— chips 是从
+ *    `Object.keys(WISH_KIND_META)` 生成的，不需要另改界面。但**空分类
+ *    会真的出现一个点进去什么都没有的按钮**，所以 `wishCatalog.ts`
+ *    里给这两档各配了样例商品。
+ */
 export const WISH_KIND_META: Record<
   WishKind,
   { label: string; emoji: string; digital: boolean }
@@ -26,7 +37,9 @@ export const WISH_KIND_META: Record<
   gamebox: { label: '游戏', emoji: '🎮', digital: true },
   toy: { label: '玩具', emoji: '🧸', digital: false },
   study: { label: '学习', emoji: '📚', digital: false },
-  collectible: { label: '收藏', emoji: '✨', digital: false },
+  food: { label: '美食', emoji: '🍰', digital: false },
+  outing: { label: '出行', emoji: '🎡', digital: false },
+  collectible: { label: '其他', emoji: '✨', digital: false },
 }
 
 /** 「全部」这一档在 UI 里是 `null`，不是某个 `WishKind` */

@@ -152,6 +152,39 @@ const PHYSICAL: WishItem[] = [
     buyLabel: '去淘宝购买',
     sortOrder: 24,
   },
+  /* ---- 2026-10-29 新增两档分类的样例（用户要求「前面再加美食，出行」）----
+     没有这两条的话，心愿页和兑换页会各多出一个**点进去是空的**分类按钮。
+     和上面几条一样是样例数据，接商家时整块替换。 */
+  {
+    id: 'wish-cake',
+    kind: 'food',
+    name: '生日蛋糕',
+    emoji: '🍰',
+    tint: 'berry',
+    partnerName: '甜心烘焙',
+    priceCents: 12800,
+    ageRange: [3, 99],
+    note: '6 寸 · 可以写名字',
+    notice: '要提前一天预订，爸妈下单时记得选日期。',
+    buyUrl: taobaoSearch('生日蛋糕 6寸 儿童'),
+    buyLabel: '去淘宝预订',
+    sortOrder: 25,
+  },
+  {
+    id: 'wish-zoo',
+    kind: 'outing',
+    name: '动物园一日游',
+    emoji: '🎡',
+    tint: 'grass',
+    partnerName: '城市动物园',
+    priceCents: 12000,
+    ageRange: [3, 12],
+    note: '含 1 大 1 小两张门票',
+    notice: '出行类按当天预约情况走，去之前先确认场次。',
+    buyUrl: taobaoSearch('动物园 门票 亲子'),
+    buyLabel: '去淘宝看看',
+    sortOrder: 26,
+  },
 ]
 
 /** 全部商品。顺序由 `compareWishItem` 在渲染时决定，这里只管内容 */

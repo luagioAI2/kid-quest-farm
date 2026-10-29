@@ -6,14 +6,10 @@ import {
   blindBoxRemaining,
   compareWishItem,
   daysToSave,
-  needsParentAction,
-  orderStatusLabel,
-  orderStatusTone,
   planWishRedeem,
   wishOwnedSet,
   type WishFilter,
 } from '@/domain/wish'
-import { humanizeAgo } from '@/domain/time'
 import { describeRedeemPayment } from '@/domain/redeem'
 import { formatPriceCents } from '@/domain/cash'
 import { WISH_BLINDBOX_ID, WISH_ITEMS, wishItemById } from '@/games/wishCatalog'
@@ -162,12 +158,23 @@ function Meta({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * 视图。2026-10-29 用户要求「不需要在心愿商城显示兑换记录和有一单在等爸妈处理」
+ * ⇒ 原来那个 `{ kind: 'orders' }`（「我许的愿」）**整屏删掉了**。
+ *
+ * 不是把它藏起来：兑换页的「📜 兑换记录」已经是**两张表合一条时间线**
+ * （`redeemHistory`），心愿单里 `done` / `cancelled` 的单子在那边看得见。
+ * 留着入口只会让人在两个「记录」之间猜哪个才是全部的。
+ *
+ * ⚠️ 代价（知情接受）：**没付过钱的 `wished` 单在记录里没有**（那是故意的，
+ *    一分钱没扣就不算一笔账）。它现在的出口是商品详情页那句
+ *    「已经告诉爸妈，等他们回应」，以及家长那边顶栏 👀 的待办队列。
+ */
 type WishView =
   | { kind: 'list' }
   | { kind: 'detail'; itemId: string }
   | { kind: 'offer'; itemId: string }
   | { kind: 'confirm'; orderId: string }
-  | { kind: 'orders' }
 
 export default function WishPage() {
   const wishOffers = useApp((s) => s.wishOffers)
@@ -243,30 +250,17 @@ export default function WishPage() {
       .filter((o) => o.itemId === itemId && o.status === 'cancelled' && o.cancelReason)
       .sort((a, b) => (b.cancelledAt ?? b.createdAt) - (a.cancelledAt ?? a.createdAt))[0]
 
-  /**
-   * 还等着**家长**处理的单子 —— 只收 `committed` / `confirmed`（券已经扣了）。
+  /*
+   * ⚠️ 2026-10-29 撤掉的东西，别加回来：
    *
-   * 家长原话（2026-10-29）：「心愿商城爸爸妈妈收到心愿，也跟任务一样，
-   * 出现在上边栏的眼睛那，**而不是在心愿商城这里**」。所以原来那张
-   * 「有 N 个心愿等你回应」的卡（`wished` 那一段）从这一页**撤掉了**，
-   * 改由顶栏 👀 的待办队列收（见 `ReviewSheet` 的 `kind: 'wish'`）。
+   *   · **「我许的愿」那一屏**（原 `OrdersView`）—— 兑换页的「📜 兑换记录」
+   *     已经合并了两张表，这里再摆一个「记录」只会让人猜哪个是全的。
+   *   · **「有 N 单在等爸妈处理」那张卡** —— 用户原话「不需要在心愿商城显示」。
+   *     家长的入口现在是顶栏 👀（`wished` 那批）和商品详情页底部
+   *     （`committed` 那批，过了密码才能点「确认兑换 · 去购买」）。
    *
-   * ⚠️ 剩下这一张**不能跟着撤**。它说的不是「孩子表了个态」，
-   *    而是「孩子的券已经扣了，等着你去买」—— 那是**已经成交**的单子，
-   *    处理入口就在这一页（填收货信息、去外链、收尾）。
-   *    放进 👀 的话，家长点完「确认」那一单就消失了，货却没买。
+   * 两张都撤掉之后，这一页只剩两件事：**看**和**许愿**。这正是这一页的定义。
    */
-  const pendingOrders = useMemo(
-    () =>
-      wishOrders
-        /* `needsParentAction`，**不是** `childPending` —— 这张卡是给家长看的
-           「我还要做几件事」，已交付的数字商品也在里面（游戏装了，单子还没收尾）。
-           兑换记录 tab 上那个徽标用的是 `childPending`（不含已交付的），
-           两个数故意不等，口径都写在 `domain/wish.ts`。 */
-        .filter((o) => needsParentAction(o))
-        .sort((a, b) => b.createdAt - a.createdAt),
-    [wishOrders],
-  )
 
   const goList = () => setView({ kind: 'list' })
 
@@ -290,14 +284,6 @@ export default function WishPage() {
     )
   } else if (view.kind === 'confirm') {
     content = <ConfirmView orderId={view.orderId} onBack={goList} onDone={goList} />
-  } else if (view.kind === 'orders') {
-    content = (
-      <OrdersView
-        orders={wishOrders}
-        onBack={goList}
-        onOpen={(itemId) => setView({ kind: 'detail', itemId })}
-      />
-    )
   } else if (view.kind === 'detail') {
     const item = wishItemById(view.itemId)
     content = item ? (
@@ -323,12 +309,10 @@ export default function WishPage() {
         setFilter={setFilter}
         offerOf={offerOf}
         activeOrderOf={activeOrderOf}
-        pending={pendingOrders}
         vouchers={harvestBalance}
         points={pointsBalance}
         owned={owned}
         onOpen={(itemId) => setView({ kind: 'detail', itemId })}
-        onOrders={() => setView({ kind: 'orders' })}
       />
     )
   }
@@ -373,26 +357,21 @@ function ListView({
   setFilter,
   offerOf,
   activeOrderOf,
-  pending,
   vouchers,
   points,
   owned,
   onOpen,
-  onOrders,
 }: {
   filter: WishFilter
   setFilter: (f: WishFilter) => void
   offerOf: (id: string) => ReturnType<typeof useApp.getState>['wishOffers'][number] | undefined
   activeOrderOf: (id: string) => ReturnType<typeof useApp.getState>['wishOrders'][number] | undefined
-  /** 券已经扣了、等爸妈去办的单子（`committed` / `confirmed`） */
-  pending: ReturnType<typeof useApp.getState>['wishOrders']
   /** 兑换券余额 */
   vouchers: number
   /** 积分余额（可以补券不够的部分） */
   points: number
   owned: Set<string>
   onOpen: (id: string) => void
-  onOrders: () => void
 }) {
   /**
    * ★ 已经拥有的游戏盒子**不再出现在「能换什么」里**（2026-10-29）。
@@ -451,65 +430,10 @@ function ListView({
             </p>
             <p className="text-xs font-bold text-ink-500">看看有什么想要的，告诉爸爸妈妈</p>
           </div>
-          {/* 「我许的愿」：许过什么、走到哪一步了。没有这一屏，`done` / `cancelled`
-              的单子在界面上**彻底消失**（卡片只看得到「还没走完」的那些）。
-
-              ⚠️ 2026-10-29 从「兑换记录」改名 —— 兑换页那边也有一屏叫「兑换记录」，
-                 而且合并之后**内容有重叠**（它也列心愿单）。同一个名字指两屏，
-                 孩子和家长都得靠位置去猜；改名的成本远低于让他们猜。
-                 分工：兑换记录 = 钱花在哪（含家里那几件），我许的愿 = 我提过什么、到哪了
-                 （含还没定价的 `wished`，那一类在兑换记录里**没有**，因为一分钱没扣）。 */}
-          <button
-            onClick={onOrders}
-            className="flex-none rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-ink-600 shadow-flat active:btn-press"
-          >
-            我许的愿
-          </button>
+          {/* 2026-10-29 这里原来有个「我许的愿」按钮，撤了 —— 见文件里
+              「撤掉的东西别加回来」那段注释。 */}
         </div>
       </header>
-
-      {/* 待家长处理的单子 —— 整条链路里「现在该谁动手」只有这一处答案。
-          没有它，家长要逐个商品点开、看卡片标记才知道孩子换了东西。
-
-          ⚠️ 只收券已经扣了的单子（`committed` / `confirmed`）。孩子只是
-          「想要」的那批**不在这里**了 —— 2026-10-29 起归顶栏 👀 的待办队列，
-          家长原话：「出现在上边栏的眼睛那，而不是在心愿商城这里」。
-
-          ⚠️ 点它只回到**商品详情**，不能直接进确认页：确认页上有
-          「取消兑换」和「去商店购买」，而密码闸门只渲染在详情页底部。
-          直连确认页 = 孩子绕开家长密码 —— 这个坑 2026-10-28 已经踩过一次
-          （当时是详情页右上角那个「确认兑换」入口）。 */}
-      {pending.length > 0 && (
-        <button
-          onClick={() => onOpen(pending[0].itemId)}
-          /* `aria-label` 是必须的：不加的话这个按钮的**可访问名**会把商品名
-             也拼进去，走查/测试里按商品名找卡片会一次命中两个元素。 */
-          aria-label={`待处理订单：${pending.length} 单`}
-          className="mt-3 flex w-full items-center gap-3 rounded-3xl bg-white p-3 text-left shadow-flat active:btn-press"
-        >
-          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-sun-100 text-xl">
-            🔔
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-extrabold text-ink-900">
-              有 {pending.length} 单在等爸妈处理
-            </span>
-            <span className="mt-0.5 block truncate text-[11px] font-bold text-ink-500">
-              {pending
-                .slice(0, 2)
-                .map((o) => o.itemName)
-                .join('、')}
-              {pending.length > 2 ? ` 等 ${pending.length} 件` : ''} ·{' '}
-              {pending.every((o) => o.openedGameId)
-                ? '已放进游戏柜，等爸妈收尾'
-                : pending.every((o) => !o.openedGameId)
-                  ? '等爸妈去商店买'
-                  : '点这里去看'}
-            </span>
-          </span>
-          <span className="text-lg text-ink-500">›</span>
-        </button>
-      )}
 
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
         {chips.map((c) => (
@@ -1561,115 +1485,6 @@ function ConfirmView({
           {digital ? '完成这一单' : '已经买好了'}
         </button>
       </div>
-    </div>
-  )
-}
-
-/* ============================================================
-   ⑥ 我许的愿（2026-10-29 从「兑换记录」改名）
-   ------------------------------------------------------------
-   为什么必须有这一屏：`done` 和 `cancelled` 的单子在别处**看不见** ——
-   卡片只显示「还没走完」的那几个（`activeOrderOf`），待办入口也只算
-   `committed` / `confirmed`。于是孩子换到手的东西、家长取消掉的单子，
-   过一天就彻底消失，连「我到底换过没有」都查不到。
-
-   数据就是 `wishOrders`（不新开表、不加 Dexie 版本号）：快照字段
-   （`itemName` / `itemEmoji` / `voucherPrice`）本来就是为历史准备的 ——
-   商品改名或下架之后，这一屏还能正确解释当时发生了什么。
-   ============================================================ */
-
-/* 状态说法 / 色系 2026-10-29 搬进 `domain/wish.ts` —— 兑换页的
-   「📜 兑换记录」也要列这些单子，两处各写一份迟早会飘。 */
-
-function OrdersView({
-  orders,
-  onBack,
-  onOpen,
-}: {
-  orders: ReturnType<typeof useApp.getState>['wishOrders']
-  onBack: () => void
-  onOpen: (itemId: string) => void
-}) {
-  const sorted = useMemo(
-    () => [...orders].sort((a, b) => b.createdAt - a.createdAt).slice(0, 50),
-    [orders],
-  )
-
-  return (
-    <div className="pb-4">
-      <div className="flex items-center gap-2 pt-safe pt-3">
-        <button
-          onClick={onBack}
-          aria-label="返回"
-          className="btn flex h-10 w-10 items-center justify-center rounded-xl bg-white text-lg text-ink-700 shadow-flat"
-        >
-          ←
-        </button>
-        <span className="font-display text-base font-extrabold">我许的愿</span>
-        <span className="flex-1" />
-        <span className="text-[11px] font-bold text-ink-500">最近 {sorted.length} 条</span>
-      </div>
-
-      {sorted.length === 0 ? (
-        <div className="flex min-h-[45vh] flex-col items-center justify-center gap-2">
-          <span className="text-4xl">🧾</span>
-          <p className="text-sm font-extrabold text-ink-600">还没有换过东西</p>
-          <p className="text-xs font-bold text-ink-500">看到喜欢的，先告诉爸爸妈妈</p>
-        </div>
-      ) : (
-        <div className="mt-3 space-y-2">
-          {sorted.map((o) => {
-            const item = wishItemById(o.itemId)
-            return (
-              <button
-                key={o.id}
-                data-wish-order={o.id}
-                onClick={() => onOpen(o.itemId)}
-                className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-flat active:btn-press"
-              >
-                <span
-                  className={
-                    'flex h-11 w-11 flex-none items-center justify-center rounded-2xl text-xl ' +
-                    TINT_BG[item?.tint ?? 'sun']
-                  }
-                >
-                  {o.itemEmoji}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-extrabold text-ink-900">
-                    {o.itemName}
-                  </span>
-                  {/* ⚠️ 这一行原来是 `truncate` —— `truncate` 自带 `white-space: nowrap`，
-                      所以它**永远不折行**，放不下就直接省略号。320 宽实测：
-                        `刚刚 · 100 兑换券 + 50…`
-                      金额被吃掉 14px。对账看的就是这个数，`…` 一挡就什么都不知道了。
-                      改成 `break-keep`（只在空格处断）—— 和「📜 兑换记录」那一行同一套
-                      规则，宁可折两行也不截断。
-                      ⚠️ 上面**商品名**那行保留 `truncate`：名字截了还认得出，金额截了不行。 */}
-                  <span className="mt-0.5 block break-keep text-[11px] font-bold text-ink-500">
-                    {humanizeAgo(o.createdAt)}
-                    {o.vouchersHeld > 0 || (o.pointsHeld ?? 0) > 0
-                      ? ` · ${paidText(o)}`
-                      : ' · 只是想要'}
-                    {/* 未结束的数字单子，状态标签已经写了「已放进游戏柜」，
-                        这里只在**结束之后**补一句（那时标签写的是「已经拿到」） */}
-                    {o.openedGameId && o.status === 'done' ? ' · 已放进游戏柜' : ''}
-                  </span>
-                  {/* 取消原因要看得见。家长回绝一个心愿之后，孩子能查到
-                      「爸妈这次先不换」—— 否则单子只是从「等回应」变成灰色，
-                      孩子不知道是没看见、还是不同意。 */}
-                  {o.status === 'cancelled' && o.cancelReason && (
-                    <span className="mt-0.5 block truncate text-[11px] font-bold text-ink-400">
-                      {o.cancelReason}
-                    </span>
-                  )}
-                </span>
-                <Tag tone={orderStatusTone(o)}>{orderStatusLabel(o)}</Tag>
-              </button>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }
