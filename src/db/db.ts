@@ -23,6 +23,7 @@ import type {
   TaskInstance,
   WishOffer,
   WishOrder,
+  WishCode,
 } from '../domain/types'
 
 /* ============================================================
@@ -74,6 +75,8 @@ class KidQuestFarmDB extends Dexie {
   wishOffers!: Table<WishOffer, string>
   /** 心愿单 / 兑换单。`ship` 是敏感信息，见 `WishShipInfo` 的注释 */
   wishOrders!: Table<WishOrder, string>
+  /** 已经用掉的兑换码（主键是 sha256，**不是明文**）。见 `WishCode` 的注释 */
+  wishCodes!: Table<WishCode, string>
   meta!: Table<MetaRow, string>
 
   constructor() {
@@ -188,6 +191,21 @@ class KidQuestFarmDB extends Dexie {
     this.version(9).stores({
       wishOffers: 'itemId',
       wishOrders: 'id, itemId, status, createdAt',
+    })
+
+    // v10：兑换码（2026-10-28，spec §6 的 P2）。
+    //
+    // 只有一张表：**已经用掉的码**。主键是 sha256，不是明文 ——
+    // 明文码印在卡片上，设备里没有留一份的理由。
+    //
+    // ⚠️ 这张表只防**本机**重用。没有服务器、没有账号，「一码一次」换台设备
+    //    就不成立 ⇒ 文案里不能写「一次性」（界面不许承诺做不到的事）。
+    //
+    // ⚠️ 没有 `.stores({...})` 之外的改动：v9 的两张表原样沿用，
+    //    Dexie 只补这一张。`scripts/e2e-upgrade.mjs` 会解析这一串对账，
+    //    新加版本时**必须**保持「一个 version 一行 `.stores`」的形状。
+    this.version(10).stores({
+      wishCodes: 'codeHash, gameId, usedAt',
     })
   }
 }

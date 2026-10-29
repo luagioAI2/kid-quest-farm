@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { useApp } from '../../store/useApp'
 import { Card } from './ui'
 import { Portal } from '../../components/Portal'
@@ -490,12 +490,124 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
         <p className="mt-4 text-[11px] leading-snug text-ink-500">
           装之前会核对包的内容（本地包对内置哈希）。卸载在「详情」最下面 —— 会把存档一起删掉。
         </p>
+
+        <CodeRedeem gateOpen={gateOpen} />
       </Card>
 
       {detailId && (
         <GameDetailSheet id={detailId} gateOpen={gateOpen} onClose={() => setDetailId(null)} />
       )}
     </>
+  )
+}
+
+/* ============================================================
+   ①.5 兑换码（spec §6 的 P2）
+   ============================================================ */
+
+/**
+ * 「有兑换码？」—— 输 6 位码，把那一款游戏解锁并装好。
+ *
+ * ## 为什么放在这张卡里，而不是孩子端
+ *
+ * 码是**付款凭证**。这个 App 里一切跟钱有关的动作都在家长栏后面
+ * （`gateOpen`），这里跟着同一条规矩。孩子想自己输，家长开着闸门就行。
+ *
+ * ## 为什么不用弹层
+ *
+ * 弹层要 Portal 到 `document.body`（外壳有隐式层叠上下文，z-index 没用），
+ * 还要处理 Esc / 焦点陷阱 / 点背景关闭 —— 为一个输入框付这些代价不值。
+ * 展开成一行就够了，而且家长栏本来就是竖着滚的。
+ *
+ * ## 文案
+ *
+ * **不写「一次性」**。防重只在这台设备上成立（没有账号、没有服务器），
+ * 写「一次性」就是界面承诺了它做不到的事。
+ */
+function CodeRedeem({ gateOpen }: { gateOpen: boolean }) {
+  const redeemGameCode = useApp((s) => s.redeemGameCode)
+  const [open, setOpen] = useState(false)
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (busy || !gateOpen) return
+    setBusy(true)
+    try {
+      const r = await redeemGameCode(code)
+      setMsg({ ok: r.ok, text: r.message })
+      // 成功才清空 —— 失败时留着刚敲的码，好对着改一位
+      if (r.ok) setCode('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        data-code-open
+        disabled={!gateOpen}
+        onClick={() => setOpen(true)}
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink-300 bg-white/60 py-2 text-[12.5px] font-bold text-ink-600 disabled:opacity-50"
+      >
+        🎟️ 有兑换码？
+      </button>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} data-code-box className="mt-3 rounded-xl border border-ink-200 bg-white p-3">
+      <label htmlFor="game-code" className="text-[12.5px] font-bold text-ink-700">
+        把卡片上的 6 位码输进来
+      </label>
+      <p className="mt-0.5 text-[11px] leading-snug text-ink-500">
+        字母不区分大小写，中间那一横不用输。兑换成功后那一款会直接装好，也一直算「已拥有」。
+      </p>
+
+      <div className="mt-2 flex gap-2">
+        <input
+          id="game-code"
+          data-code-input
+          value={code}
+          onChange={(ev) => setCode(ev.target.value)}
+          // 手机键盘默认小写、码是大写 —— 归一化在 store 里做。
+          // 别用 `text-transform` 去「改正」显示：那样用户看不到自己敲了什么。
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="text"
+          maxLength={8}
+          placeholder="ABC-DEF"
+          className="min-w-0 flex-1 rounded-lg border border-ink-200 px-3 py-2 font-mono text-[15px] uppercase tracking-[0.18em] text-ink-800 outline-none focus:border-grass-400"
+        />
+        <button
+          type="submit"
+          data-code-submit
+          disabled={busy || !gateOpen || code.trim().length === 0}
+          className="shrink-0 rounded-lg bg-grass-500 px-4 py-2 text-[13px] font-extrabold text-white disabled:opacity-50"
+        >
+          {busy ? '兑换中…' : '兑换'}
+        </button>
+      </div>
+
+      {msg && (
+        <p
+          data-code-msg
+          data-code-ok={msg.ok ? '1' : '0'}
+          className={`mt-2 text-[12px] font-bold ${msg.ok ? 'text-grass-600' : 'text-berry-500'}`}
+        >
+          {msg.text}
+        </p>
+      )}
+
+      <p className="mt-2 text-[11px] leading-snug text-ink-400">
+        同一个码在这台手机上只能兑换一次。设备里只留哈希，不留明文。
+      </p>
+    </form>
   )
 }
 

@@ -111,6 +111,14 @@ export function RedeemBody() {
   const grouped = useMemo(() => {
     const map = new Map<RedeemCategory, RedeemItem[]>()
     for (const it of redeemItems) {
+      /*
+       * ⚠️ 这里**不再自己滤「一次性已换过」**。
+       *
+       * 那条规则在 `doRefresh` 里（`visibleRedeemItems`），因为它属于
+       * `redeemItems` 的定义 —— 「孩子现在能换的东西」。
+       * 摆在组件里的话，将来第二个读 `redeemItems` 的地方就得自己再记得滤一遍，
+       * 漏了不报错，只是那件东西又冒出来了。
+       */
       const list = map.get(it.category) ?? []
       list.push(it)
       map.set(it.category, list)
@@ -414,6 +422,9 @@ function ManagePanel() {
 
   const pending = redeemRecords.filter((r) => !r.fulfilled)
 
+  /** 已经换过的商品 id —— 管理页靠它标出「一次性 · 已换过」，见下面那行 meta */
+  const redeemedIds = useMemo(() => new Set(redeemRecords.map((r) => r.itemId)), [redeemRecords])
+
   /** 上架 / 下架。下架是可逆的，所以不做二次确认，只给个 toast 反馈。 */
   const toggleArchived = async (it: RedeemItem) => {
     const next = !it.archived
@@ -550,7 +561,16 @@ function ManagePanel() {
                   </p>
                   <p className="truncate text-[11px] text-ink-500">
                     {it.cost} 分 · {CATEGORY_META[it.category].label}
-                    {it.limitPerDay != null ? ` · 每天 ${it.limitPerDay} 次` : ''}
+                    {it.once ? (
+                      <span className="font-bold text-grape-500">
+                        {' '}
+                        · 一次性{redeemedIds.has(it.id) ? ' · 已换过（商城里不再显示）' : ''}
+                      </span>
+                    ) : it.limitPerDay != null ? (
+                      ` · 每天 ${it.limitPerDay} 次`
+                    ) : (
+                      ''
+                    )}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
@@ -614,6 +634,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
   const [cost, setCost] = useState(item?.cost ?? 50)
   const [note, setNote] = useState(item?.note ?? '')
   const [limitPerDay, setLimitPerDay] = useState<number | undefined>(item?.limitPerDay)
+  const [once, setOnce] = useState(!!item?.once)
   const [err, setErr] = useState('')
 
   const save = async () => {
@@ -633,6 +654,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
         cost,
         note: note.trim() || undefined,
         limitPerDay,
+        once,
       })
       pushToast({ kind: 'success', title: '改好啦', emoji: '✅' })
     } else {
@@ -643,6 +665,7 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
         cost,
         note: note.trim() || undefined,
         limitPerDay,
+        once,
         createdByParent: true,
       })
       pushToast({ kind: 'success', title: `加上了「${name.trim()}」`, emoji: '🎁' })
@@ -770,25 +793,59 @@ function RedeemEditor({ item, onDone }: { item?: RedeemItem; onDone: () => void 
           />
         </Field>
 
-        <Field label="每天最多换几次（0 = 不限）">
+        <Field label="能换几次">
           <div className="flex flex-wrap gap-1.5">
-            {[0, 1, 2, 3].map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setLimitPerDay(v === 0 ? undefined : v)}
-                className={clsx(
-                  'btn rounded-pill px-3 py-2 text-sm font-bold active:btn-press',
-                  (v === 0 ? limitPerDay == null : limitPerDay === v)
-                    ? 'bg-sun-300 text-ink-900'
-                    : 'bg-white text-ink-500',
-                )}
-              >
-                {v === 0 ? '不限' : `${v} 次`}
-              </button>
-            ))}
+            <button
+              type="button"
+              data-once-off
+              onClick={() => setOnce(false)}
+              className={clsx(
+                'btn rounded-pill px-3 py-2 text-sm font-bold active:btn-press',
+                !once ? 'bg-sun-300 text-ink-900' : 'bg-white text-ink-500',
+              )}
+            >
+              可以重复换
+            </button>
+            <button
+              type="button"
+              data-once-on
+              onClick={() => setOnce(true)}
+              className={clsx(
+                'btn rounded-pill px-3 py-2 text-sm font-bold active:btn-press',
+                once ? 'bg-grape-400 text-white' : 'bg-white text-ink-500',
+              )}
+            >
+              只换一次
+            </button>
           </div>
+          <p className="mt-2 text-[11px] leading-snug text-ink-500">
+            {once
+              ? '换到手就「有了」，所以换过之后它就不再出现在孩子的「能换什么」里。一款游戏、一个玩具、一次生日礼物，都是这种。'
+              : '每天都能换的东西（零食、看 20 分钟动画）选这个。下面可以再限一天换几次。'}
+          </p>
         </Field>
+
+        {!once && (
+          <Field label="每天最多换几次（0 = 不限）">
+            <div className="flex flex-wrap gap-1.5">
+              {[0, 1, 2, 3].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setLimitPerDay(v === 0 ? undefined : v)}
+                  className={clsx(
+                    'btn rounded-pill px-3 py-2 text-sm font-bold active:btn-press',
+                    (v === 0 ? limitPerDay == null : limitPerDay === v)
+                      ? 'bg-sun-300 text-ink-900'
+                      : 'bg-white text-ink-500',
+                  )}
+                >
+                  {v === 0 ? '不限' : `${v} 次`}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
 
         {err && <p className="mt-2 text-sm font-bold text-berry-500">{err}</p>}
 

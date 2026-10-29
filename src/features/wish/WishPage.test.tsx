@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { db } from '@/db/db'
 import { useApp } from '@/store/useApp'
@@ -300,5 +300,73 @@ describe('心愿商城：待家长处理的入口', () => {
     // 详情页：先撞家长密码（默认 pin = 0000）
     expect(await screen.findByText('请爸爸妈妈来一下')).toBeTruthy()
     expect(screen.queryByText('取消兑换'), '确认页的按钮不许在这里出现').toBeNull()
+  })
+})
+
+/* ============================================================
+   孩子说了「想要」，家长那边要看得见（2026-10-29）
+   ------------------------------------------------------------
+   家长原话：「现在心愿商城里 已告诉爸爸妈妈，爸爸妈妈如何处理。」
+
+   改动之前：孩子点完「🤍 想要这个」，他那一侧写着「已经告诉爸妈，等他们定价」，
+   而家长那一侧**一片安静** —— 待办卡只收 `committed` / `confirmed`
+   （券已经扣了的单子），`wished` 不在里面。家长要逐个商品点开才可能发现有请求。
+
+   这三条钉的是：**看得见 → 有入口 → 有出口**。
+   ============================================================ */
+const wishedOrder = (patch: Record<string, unknown>) => ({
+  id: 'wo_wish',
+  itemId: 'wish-blindbox',
+  itemName: '游戏盲盒',
+  itemEmoji: '🎁',
+  kind: 'blindbox' as const,
+  voucherPrice: 0,
+  status: 'wished' as const,
+  vouchersHeld: 0,
+  createdAt: Date.now(),
+  ...patch,
+})
+
+describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
+  it('★ 列表顶部出现「有 N 个心愿等你回应」', async () => {
+    await db.wishOrders.put(wishedOrder({}) as never)
+    await useApp.getState().refresh()
+
+    render(<WishPage />)
+    expect(await screen.findByText(/有 1 个心愿等你回应/)).toBeTruthy()
+  })
+
+  it('★ 家长锁开着时：详情里先是一道入口，不是直接给按钮', async () => {
+    await db.wishOrders.put(wishedOrder({}) as never)
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByText(/有 1 个心愿等你回应/))
+
+    expect(await screen.findByText(/爸妈：回应这个心愿/)).toBeTruthy()
+    expect(
+      screen.queryByText('这次先不换'),
+      '没过密码不该看到回绝按钮 —— 否则孩子能自己把心愿撤掉',
+    ).toBeNull()
+  })
+
+  it('★ 没有家长锁时：两个动作都在，回绝之后单子真的结束', async () => {
+    await useApp.getState().updateSettings({ parentPin: undefined })
+    await db.wishOrders.put(wishedOrder({}) as never)
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByText(/有 1 个心愿等你回应/))
+
+    expect(await screen.findByText(/定个价/)).toBeTruthy()
+    await user.click(screen.getByText('这次先不换'))
+
+    await waitFor(async () => {
+      const row = await db.wishOrders.get('wo_wish')
+      expect(row?.status, '回绝之后不能还停在 wished').toBe('cancelled')
+      expect(row?.cancelReason).toContain('先不换')
+    })
   })
 })

@@ -158,12 +158,30 @@ export default function WishPage() {
     )
 
   /**
-   * 还等着**家长**处理的单子（已兑换 / 已确认）。
+   * 还等着**家长**处理的单子。
    *
    * 没有这一条的话，家长只能逐个商品点开、看卡片上的标记，才知道有单子
    * 要处理 —— 孩子换了东西，家长那边一点提示都没有。整条链路里
    * 「现在该谁动手」只在这一处有答案，所以摆在列表最上面。
+   *
+   * ## ⚠️ 2026-10-29 把「已告诉爸妈」（`wished`）也算进来了
+   *
+   * 原来只收 `committed` / `confirmed` —— 也就是**孩子已经花掉券**的单子。
+   * 结果孩子点完「🤍 想要这个」、屏幕上写着「已经告诉爸妈，等他们定价」，
+   * 而家长那一侧**一片安静**：没有红点、没有卡片、列表里那件商品也还是
+   * 原样（只是标签从「等爸妈开放」变成「已告诉爸妈」）。
+   * 家长原话：「已告诉爸爸妈妈，爸爸妈妈如何处理」。
+   *
+   * 两段要分开摆，因为**该做的动作不一样**：
+   *   · `wished`     —— 还没花钱。家长要**回应**：定个价，或者这次先不换。
+   *   · `committed`  —— 券已经扣了。家长要**去办**：外链买，或者收尾。
+   * 合成一张卡的话，文案只能写成「有 N 单等你处理」，等于什么都没说。
    */
+  const wishes = useMemo(
+    () => wishOrders.filter((o) => o.status === 'wished').sort((a, b) => b.createdAt - a.createdAt),
+    [wishOrders],
+  )
+
   const pendingOrders = useMemo(
     () =>
       wishOrders
@@ -229,6 +247,7 @@ export default function WishPage() {
         offerOf={offerOf}
         activeOrderOf={activeOrderOf}
         pending={pendingOrders}
+        wishes={wishes}
         balance={harvestBalance}
         owned={owned}
         onOpen={(itemId) => setView({ kind: 'detail', itemId })}
@@ -278,6 +297,7 @@ function ListView({
   offerOf,
   activeOrderOf,
   pending,
+  wishes,
   balance,
   owned,
   onOpen,
@@ -288,6 +308,8 @@ function ListView({
   offerOf: (id: string) => ReturnType<typeof useApp.getState>['wishOffers'][number] | undefined
   activeOrderOf: (id: string) => ReturnType<typeof useApp.getState>['wishOrders'][number] | undefined
   pending: ReturnType<typeof useApp.getState>['wishOrders']
+  /** 孩子点了「想要这个」、还没定价的单子。家长要先回应它们（见 `pendingOrders` 的注释） */
+  wishes: ReturnType<typeof useApp.getState>['wishOrders']
   balance: number
   owned: Set<string>
   onOpen: (id: string) => void
@@ -335,6 +357,39 @@ function ListView({
           </button>
         </div>
       </header>
+
+      {/* 孩子的心愿 —— 还没花券，等家长**回应**（定价 / 这次先不换）。
+
+          2026-10-29 之前这里什么都没有：孩子点完「🤍 想要这个」，他那一侧写着
+          「已经告诉爸妈，等他们定价」，而家长这一侧没有任何提示。
+          家长原话：「已告诉爸爸妈妈，爸爸妈妈如何处理」。
+
+          ⚠️ 和下面那张「在等爸妈处理」的卡**分开**：那张是券已经扣了的单子，
+          家长要去做；这张只是表个态，家长只需要回一句。 */}
+      {wishes.length > 0 && (
+        <button
+          onClick={() => onOpen(wishes[0].itemId)}
+          aria-label={`${wishes.length} 个心愿等爸妈回应`}
+          className="mt-3 flex w-full items-center gap-3 rounded-3xl bg-sky-50 p-3 text-left shadow-flat active:btn-press"
+        >
+          <span className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-white text-xl">
+            🤍
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-extrabold text-ink-900">
+              有 {wishes.length} 个心愿等你回应
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] font-bold text-ink-500">
+              {wishes
+                .slice(0, 2)
+                .map((o) => o.itemName)
+                .join('、')}
+              {wishes.length > 2 ? ` 等 ${wishes.length} 件` : ''} · 点进去定价，或这次先不换
+            </span>
+          </span>
+          <span className="text-lg text-ink-500">›</span>
+        </button>
+      )}
 
       {/* 待家长处理的单子 —— 整条链路里「现在该谁动手」只有这一处答案。
           没有它，家长要逐个商品点开、看卡片标记才知道孩子换了东西。
@@ -559,6 +614,7 @@ function DetailView({
 }) {
   const wishExpress = useApp((s) => s.wishExpress)
   const wishRedeem = useApp((s) => s.wishRedeem)
+  const wishCancel = useApp((s) => s.wishCancel)
   const pushToast = useApp((s) => s.pushToast)
 
   const [busy, setBusy] = useState(false)
@@ -592,6 +648,25 @@ function DetailView({
     }
     if (res.gameId) onBox(res.gameId)
     else onBack()
+  }
+
+  /**
+   * 家长回绝一个心愿（`wished` → `cancelled`）。
+   *
+   * ⚠️ 走 `wishCancel` 而不是自己 `update`：它在**事务里重读状态**，
+   * 而且对 `wished` 这条路径**不碰账本**（还没扣过券）。
+   * 自己写一行 `status: 'cancelled'` 会绕过那道重读。
+   *
+   * 没有这个动作的话，孩子的心愿会永远停在「等他们定价」——
+   * 他既不能自己撤回，家长也没有「不换」这个选项。
+   */
+  const doDecline = async () => {
+    if (busy || !order) return
+    setBusy(true)
+    await wishCancel(order.id, '爸妈这次先不换')
+    setBusy(false)
+    pushToast({ kind: 'info', title: '已回绝', detail: '孩子能在兑换记录里看到', emoji: '💬' })
+    onBack()
   }
 
   /*
@@ -799,8 +874,55 @@ function DetailView({
            * 2026-10-28 走查抓到（`e2e-wishmall.mjs` 的「定价后出现兑换按钮」）。
            */
           order?.status === 'wished' ? (
-            <div className="rounded-2xl bg-sky-50 px-4 py-3 text-center text-sm font-extrabold text-sky-500">
-              已经告诉爸妈，等他们定价
+            /*
+             * 孩子表过态、家长还没定价。
+             *
+             * 2026-10-29 之前这里只有一行「已经告诉爸妈，等他们定价」——
+             * 孩子看着像是在等一个永远不会来的回复，家长那边连提示都没有。
+             * 现在把**家长的动作**摆出来：定个价，或者这次先不换。
+             *
+             * ⚠️ 顺序不能反：主内容先写孩子的处境，家长那一侧跟在下面。
+             *    没有 PIN 的家庭会直接看到这两个按钮（那是家长自己关的保护）。
+             */
+            <div className="space-y-2">
+              <div className="rounded-2xl bg-sky-50 px-4 py-3 text-center text-sm font-extrabold text-sky-500">
+                已经告诉爸妈，等他们回应
+              </div>
+              {needsPin && !pinOk ? (
+                pinOpen ? (
+                  <ParentPinPanel
+                    title="请爸爸妈妈来一下"
+                    hint="回应这个心愿需要密码"
+                    onPass={() => setPinOk(true)}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setPinOpen(true)}
+                    data-wish-parent
+                    className="btn h-11 w-full rounded-2xl bg-white text-sm font-extrabold text-ink-600 shadow-flat active:btn-press"
+                  >
+                    👤 爸妈：回应这个心愿
+                  </button>
+                )
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={onOffer}
+                    data-wish-price
+                    className="btn h-12 flex-1 rounded-2xl bg-grass-500 text-sm font-extrabold text-white active:btn-press"
+                  >
+                    🎫 定个价
+                  </button>
+                  <button
+                    onClick={() => void doDecline()}
+                    disabled={busy}
+                    data-wish-decline
+                    className="btn h-12 flex-none rounded-2xl bg-white px-4 text-sm font-extrabold text-ink-600 shadow-flat active:btn-press disabled:opacity-50"
+                  >
+                    这次先不换
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button
@@ -1420,6 +1542,14 @@ function OrdersView({
                         这里只在**结束之后**补一句（那时标签写的是「已经拿到」） */}
                     {o.openedGameId && o.status === 'done' ? ' · 已放进游戏柜' : ''}
                   </span>
+                  {/* 取消原因要看得见。家长回绝一个心愿之后，孩子能查到
+                      「爸妈这次先不换」—— 否则单子只是从「等回应」变成灰色，
+                      孩子不知道是没看见、还是不同意。 */}
+                  {o.status === 'cancelled' && o.cancelReason && (
+                    <span className="mt-0.5 block truncate text-[11px] font-bold text-ink-400">
+                      {o.cancelReason}
+                    </span>
+                  )}
                 </span>
                 <Tag tone={orderStatusTone(o)}>{orderStatusLabel(o)}</Tag>
               </button>

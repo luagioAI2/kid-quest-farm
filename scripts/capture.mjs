@@ -478,6 +478,51 @@ try {
     await shot(name)
   }
 
+  /* 09b. 兑换品编辑器：「能换几次」开关（2026-10-29 新增）
+     ------------------------------------------------------------
+     家长原话：「兑换的东西有比如游戏，兑换了就有了……所以添加兑换时，
+     需要设置是否一次性。」
+
+     这一屏是家长真正要做决定的地方，必须进图集：开关摆错位置、
+     或者文案写成「一次性」（那是承诺，做得到才写），只有看图才发现。
+     ⚠️ 拍完要按「返回管理」再切走 —— 不然下一屏会停在编辑器里。
+     ⚠️ **先清家长锁**：管理 tab 整个就是一道 PIN 闸门（`needsPin && !pinOk`
+        → 只渲染 `ParentPinPanel`），不清的话连「新增一个兑换品」都找不到，
+        脚本只会打印一句跳过 —— 静默少一张图。 */
+  await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    await st().updateSettings({ protectParentActions: false, parentPin: undefined })
+  })
+  await wait(300)
+  await clickByText('兑换', 'nav')
+  await wait(600)
+  if (await clickByText('管理')) {
+    await wait(500)
+    if (await clickByText('新增一个兑换品')) {
+      await wait(600)
+      /* ⚠️ 必须**滚到那个开关上**再拍。
+         第一版直接拍，出来的是编辑器顶部（图标墙 + 分类），
+         「能换几次」在折叠线以下 —— 图集里根本看不到这次改的东西，
+         走查时等于没走。 */
+      await page.evaluate(() => {
+        const el = [...document.querySelectorAll('p, label')].find((x) =>
+          (x.textContent ?? '').includes('能换几次'),
+        )
+        el?.scrollIntoView({ block: 'center' })
+      })
+      await wait(400)
+      await shot('09b-redeem-once')
+      await clickByText('返回管理')
+      await wait(350)
+    } else {
+      console.log('  ⚠️ 09b 跳过：管理页没找到「新增一个兑换品」')
+    }
+  } else {
+    console.log('  ⚠️ 09b 跳过：兑换页没找到「管理」')
+  }
+  await clickByText('心愿', 'nav')
+  await wait(600)
+
   /* 10c~10d. 心愿商城：商品详情 + 家长定价（2026-10-28 新增，P1）
      ------------------------------------------------------------
      为什么必须进图集：这个页面的问题**结构断言全看不见** ——
@@ -593,6 +638,36 @@ try {
     document.querySelector('button[aria-label="返回"]')?.click()
   })
   await wait(400)
+
+  /* 10h~10i. 心愿：孩子表过态、等家长回应（2026-10-29 新增）
+     ------------------------------------------------------------
+     家长原话：「现在心愿商城里 已告诉爸爸妈妈，爸爸妈妈如何处理。」
+
+     这一屏必须进图集：改动之前 `wished` 的单子**在家长侧完全不可见**
+     （待办卡只收 committed / confirmed），而那不是报错，是「少了一个入口」——
+     任何结构断言都只会说「页面渲染正常」。
+
+     两条注意：
+     1. 挑一件**没被本脚本定过价**的商品（`wish-dino`）。详情页的
+        `wished` 分支只出现在「还没定价」里面，拿 `wish-popmart`
+        （10d 定过价）会拍成一张普通的兑换页。
+     2. 家长锁在 10c 已经清了，所以这里能直接看到「定个价 / 这次先不换」
+        两颗按钮；想看闸门形态要去 e2e，截图脚本不重复拍锁屏。 */
+  await page.evaluate(async () => {
+    await window.__kqf__.getState().wishExpress('wish-dino')
+  })
+  await wait(700)
+  await shot('10h-wish-waiting-parent')
+  if (await clickByText('心愿等你回应')) {
+    await wait(800)
+    await shot('10i-wish-parent-actions')
+    await page.evaluate(() => {
+      document.querySelector('button[aria-label="返回"]')?.click()
+    })
+    await wait(400)
+  } else {
+    console.log('  ⚠️ 10h/10i 跳过：心愿列表里没出现「等你回应」那张卡')
+  }
 
   /* 11. 设置页（孩子 tab） */
   await page.evaluate(async () => {

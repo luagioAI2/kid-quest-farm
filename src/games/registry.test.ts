@@ -71,18 +71,27 @@ describe('gameById', () => {
 })
 
 describe('purchasedIdsFrom（拥有关系从账本派生）', () => {
-  it('只认「买游戏的支出」', () => {
+  it('只认「买游戏的支出」和「兑换码」，别的来源一律不算', () => {
     const ids = purchasedIdsFrom([
       { source: 'game_purchase', refId: 'a', delta: -50 },
-      // 别的来源一律不算 —— 尤其是手工调整，它不是购买
+      // 手工调整不是购买（家长发钻石 / 扣钻石都不该让游戏变成已拥有）
       { source: 'manual_adjust', refId: 'b', delta: -50 },
-      { source: 'redemption_code', refId: 'c', delta: 50 },
+      // ★ 兑换码：**delta 恒为 0**，判据不看正负 —— 码解锁一分钻石都没花
+      { source: 'redemption_code', refId: 'c', delta: 0 },
       // 没有 refId 的记账不指向任何游戏
       { source: 'game_purchase', delta: -50 },
       // 正数的 game_purchase 是退款，不是购买
       { source: 'game_purchase', refId: 'd', delta: 50 },
     ])
-    expect(ids).toEqual(['a'])
+    expect(ids).toEqual(['a', 'c'])
+  })
+
+  it('★ 兑换码那条必须是 delta 0 —— 用 `delta < 0` 当判据会把它整个漏掉', () => {
+    // 这条钉的是 spec §6 点名的坑：`purchasedIdsFrom` 原来只认
+    // `source === 'game_purchase' && delta < 0`。码解锁的 delta 是 0，
+    // 漏掉的症状是「兑换成功、游戏也装了，但界面上不显示已拥有」—— 零报错。
+    const ids = purchasedIdsFrom([{ source: 'redemption_code', refId: 'x', delta: 0 }])
+    expect(ids, '码解锁之后必须算已拥有').toEqual(['x'])
   })
 
   it('同一个游戏买两次只算一次', () => {

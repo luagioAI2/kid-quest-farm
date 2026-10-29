@@ -356,7 +356,7 @@ export interface HarvestEntry {
  */
 export type MallSource =
   | 'game_purchase' // 买游戏（负数）
-  | 'redemption_code' // 兑换码（【提案】—— 本轮没有入口）
+  | 'redemption_code' // 兑换码解锁（**delta 恒为 0**，见 `purchasedIdsFrom`）
   | 'manual_adjust' // 家长手工调整
 
 /**
@@ -735,6 +735,19 @@ export interface RedeemItem {
   note?: string
   /** 一次最多换几个（防止一口气把积分花光，可不填） */
   limitPerDay?: number
+  /**
+   * **一次性**：换过就不再出现（2026-10-29 家长要求）。
+   *
+   * 有些东西换到手就是「有了」，再换没有意义 —— 一款游戏、一个玩具、
+   * 一次生日礼物。这类东西如果留在「能换什么」里，孩子会以为还能再换一次，
+   * 家长也会收到重复的兑现请求。
+   *
+   * ⚠️ 和 `limitPerDay` 不是一回事：那个**每天重置**，这个是**永不重置**。
+   *    两个都填时以 `once` 为准（换过一次就再也不出现）。
+   * ⚠️ 判据是**兑换记录**（`redeemRecords` 里有没有这个 `itemId`），
+   *    不是库存 —— 库存是家长手填的，记录才是事实。
+   */
+  once?: boolean
   /** 库存，-1/undefined 表示无限 */
   stock?: number
   /** 是否下架 */
@@ -849,6 +862,34 @@ export interface WishOffer {
   openedAt: number
   /** 关闭时间。关掉不删行 —— 孩子之前换过的历史还要能解释 */
   closedAt?: number
+}
+
+/**
+ * 一张**已经用掉**的兑换码（P2，spec §6）。
+ *
+ * ## 主键是码的 sha256，不是码本身
+ *
+ * 明文码写在卡片上、家长念给孩子听，它不该在设备里留一份。
+ * 这张表存在的唯一理由是**防重**：同一个码不能用第二次。
+ *
+ * ## ⚠️ 防重是**本机**的
+ *
+ * 这个 App 没有账号、没有服务器，所以「一个码只能用一次」只在这一台设备上成立。
+ * 换一台设备（或者清库重装）可以再用一次。**文案里不能写「一次性」** ——
+ * 那是界面承诺了它做不到的事（本项目最忌这一条）。
+ *
+ * ## 为什么不复用 `mallLedger`
+ *
+ * 账本那行记的是「谁被解锁了」（`refId` = 游戏 id），它的读者是
+ * `purchasedIdsFrom`。而这张表记的是「哪些码被用过了」，读者是兑换流程自己。
+ * 两件事的生命周期也不同：账本行要留着对账，码行只是为了挡住第二次输入。
+ */
+export interface WishCode {
+  /** sha256(归一化后的码)，小写十六进制 */
+  codeHash: string
+  /** 这个码解锁的游戏 id（快照 —— 码表以后改了也能解释当时解的是什么） */
+  gameId: string
+  usedAt: number
 }
 
 /**

@@ -3394,3 +3394,74 @@ describe('首装赠送 500 钻石（2026-10-17）', () => {
     expect(useApp.getState().mallBalance).toBe(0)
   })
 })
+
+/* ============================================================
+   一次性兑换品（2026-10-29 家长要求）
+   ------------------------------------------------------------
+   「兑换的东西有比如游戏，兑换了就有了，不需要再兑换，
+     不需要显示在能换什么。」
+
+   判据有三条，缺一条就是「界面看着对、账其实错了」：
+     ① 换过之后**从孩子端列表消失**（`redeemItems`）
+     ② 管理端**还看得见**（`allRedeemItems`）—— 否则家长以为被删了
+     ③ 绕过界面直接调 `redeem` 也换不了（旧页面 / 两个标签页）
+   ============================================================ */
+describe('一次性兑换品', () => {
+  async function makeOnce(cost = 10) {
+    await useApp.getState().updateSettings({ redeemEnabled: true })
+    return useApp.getState().addRedeemItem({
+      name: '换一款游戏',
+      emoji: '🎮',
+      category: 'gift',
+      cost,
+      once: true,
+      createdByParent: true,
+    })
+  }
+
+  const kidIds = () => useApp.getState().redeemItems.map((i) => i.id)
+  const adminIds = () => useApp.getState().allRedeemItems.map((i) => i.id)
+
+  it('★ 换过之后从「能换什么」里消失，管理端还在', async () => {
+    const item = await makeOnce()
+    expect(kidIds()).toContain(item.id)
+
+    expect(await useApp.getState().redeem(item.id)).toBe(true)
+
+    expect(kidIds(), '换过就不该再出现在孩子端').not.toContain(item.id)
+    expect(adminIds(), '管理端必须还看得见，否则家长以为被删了').toContain(item.id)
+    expect(useApp.getState().redeemRecords.some((r) => r.itemId === item.id)).toBe(true)
+  })
+
+  it('★ 绕过界面再换一次：拒绝，且余额不再掉', async () => {
+    const item = await makeOnce()
+    await useApp.getState().redeem(item.id)
+    const after = useApp.getState().balance
+
+    // 旧页面 / 另一个标签页还画着那个按钮，点下去必须被拦住
+    expect(await useApp.getState().redeem(item.id)).toBe(false)
+    expect(useApp.getState().balance).toBe(after)
+    expect(useApp.getState().redeemRecords.filter((r) => r.itemId === item.id)).toHaveLength(1)
+  })
+
+  it('对照组：不是一次性的商品换过之后**照旧**留在列表里', async () => {
+    await useApp.getState().updateSettings({ redeemEnabled: true })
+    const item = await useApp.getState().addRedeemItem({
+      name: '看 20 分钟动画',
+      emoji: '📺',
+      category: 'screen',
+      cost: 10,
+      createdByParent: true,
+    })
+
+    expect(await useApp.getState().redeem(item.id)).toBe(true)
+    expect(kidIds(), '每天都能换的东西不该消失').toContain(item.id)
+  })
+
+  it('一次性商品不填 limitPerDay 也拦得住第二次（两条规则互不依赖）', async () => {
+    const item = await makeOnce()
+    expect(item.limitPerDay).toBeUndefined()
+    await useApp.getState().redeem(item.id)
+    expect(await useApp.getState().redeem(item.id)).toBe(false)
+  })
+})

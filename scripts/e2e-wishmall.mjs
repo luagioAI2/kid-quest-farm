@@ -195,6 +195,35 @@ await page.screenshot({ path: `${OUT}/04-wished.png` })
 const wished = await page.evaluate(() => document.body.innerText.includes('已经告诉爸妈'))
 check('点完变成「已经告诉爸妈」', wished)
 
+/* ---------- ⑤.5 家长侧必须看得见这个心愿（2026-10-29 新增） ----------
+   改动之前：`wished` 不在家长待办里（待办卡只收 committed / confirmed）。
+   孩子那一侧写着「已经告诉爸妈，等他们定价」，家长那一侧**一片安静** ——
+   没有红点、没有卡片，只能逐个商品点开才可能发现有请求。
+   家长原话：「已告诉爸爸妈妈，爸爸妈妈如何处理。」
+
+   判据取**列表页顶部那张卡**，不是 `wishOrders` 里有没有这条 ——
+   数据一直在，看不见的是入口。 */
+await page.evaluate(() => {
+  document.querySelector('button[aria-label="返回"]')?.click()
+})
+await wait(600)
+const wishCard = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find((x) =>
+    (x.textContent ?? '').includes('心愿等你回应'),
+  )
+  return { has: !!b, label: b?.getAttribute('aria-label') ?? '' }
+})
+check('★ 孩子表过态之后，家长侧出现「心愿等你回应」', wishCard.has, wishCard.label)
+
+// 点它回到详情 —— 下一段（定价）要在详情页上做
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find((x) =>
+    (x.textContent ?? '').includes('心愿等你回应'),
+  )
+  b?.click()
+})
+await wait(600)
+
 /* ---------- ⑥ 家长定价 ---------- */
 console.log('\n── 家长定价 ──')
 await page.evaluate(() => {

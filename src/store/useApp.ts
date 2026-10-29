@@ -80,6 +80,8 @@ import { importBundle, mountBundle } from '../games/loader'
 import { catalogPublicKeyRaw } from '../games/catalogKey'
 import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
 import { localGameById } from '../games/localGames'
+import { codeHashOf, gameIdForCode } from '../games/codeLookup'
+import { isGameCode, normalizeGameCode } from '../domain/gameCode'
 import type { Bytes } from '../games/bytes'
 import { assertSha256, type CatalogGame } from '../games/verify'
 import { checkPluginEconomy } from '../domain/pluginEconomy'
@@ -496,6 +498,33 @@ interface AppState {
   buyGame: (id: string) => Promise<{ ok: boolean; message: string }>
 
   /**
+   * **兑换码解锁一款游戏**（2026-10-28，spec §6 的 P2）。
+   *
+   * ```
+   *   付款 → 拿到卡片上的 6 位码 → 在这里输进去 → 那款游戏变成「已拥有」并装好
+   * ```
+   *
+   * ## 三件事必须一起成立，少一件就是「静默成功」
+   *
+   *   ① `wishCodes` 里记一笔（防同一个码在本机用第二次）；
+   *   ② `mallLedger` 里记一笔 `source: 'redemption_code'`、**delta 0**
+   *      —— `ownedGameIds` 是从账本推导的，不写这一笔界面上就**不显示已拥有**，
+   *      而兑换流程照样返回成功（spec §6 点名的坑）；
+   *   ③ 插件游戏还要真的装包。
+   *
+   * ## 什么时候**不**烧码
+   *
+   * 码是一次性资源，浪费一张就少卖一张。所以这几种情况都提前返回、不写库：
+   * 格式不对 / 表里没有 / 本机用过 / 已经有了 / 这个版本没有这款游戏。
+   *
+   * ## 装包失败要退码
+   *
+   * 事务提交之后才装包（装包是网络 + 执行，不能塞进 Dexie 事务）。装失败就把
+   * 刚写的那两行删掉 —— 否则孩子拿到一句「装包失败」而码已经没了，只能找客服。
+   */
+  redeemGameCode: (code: string) => Promise<{ ok: boolean; message: string; gameId?: string }>
+
+  /**
    * **家长手动发钻石**（2026-10-16 起）。
    *
    * ## 为什么现在必须有一个发币入口
@@ -558,6 +587,8 @@ export interface NewRedeemInput {
   note?: string
   limitPerDay?: number
   stock?: number
+  /** 一次性：换过就从「能换什么」里消失（见 `RedeemItem.once`） */
+  once?: boolean
   createdByParent?: boolean
 }
 
@@ -1227,6 +1258,19 @@ async function doRefresh(
   // 已安装的插件游戏：**从 `gameKv` 派生**（扫 `__bundle` 行），不另存清单。
   const installedGames = await loadInstalledGames()
 
+  /*
+   * ★ 一次性商品换过之后，**从孩子端列表里消失**（2026-10-29 家长要求）。
+   *
+   * 放在这里而不是组件里：`redeemItems` 的定义就是「孩子现在能换的东西」，
+   * 而「换过的一次性商品」不再属于这个集合。摆在组件里的话，将来第二个
+   * 读 `redeemItems` 的地方（比如首页的推荐位）就得自己再记得滤一遍 ——
+   * 漏了不报错，只是那件东西又冒出来了。
+   *
+   * ⚠️ `allRedeemItems` 不受影响：管理页要看得见它，否则家长会以为被删了。
+   */
+  const redeemedIds = new Set(redeemRecords.map((r) => r.itemId))
+  const visibleRedeemItems = redeemItems.filter((it) => !(it.once && redeemedIds.has(it.id)))
+
   set({
     tasks,
     allTasks,
@@ -1246,7 +1290,7 @@ async function doRefresh(
     quotaCarry,
     checkIns,
     checkInProgress,
-    redeemItems,
+    redeemItems: visibleRedeemItems,
     allRedeemItems,
     redeemRecords,
     wishOffers,
@@ -2898,14 +2942,17 @@ export const useApp = create<AppState>((set, get) => ({
    * 用旧余额算出的分账会把已经花掉的兑换券又花一次。
    */
   redeem: async (itemId) => {
-    const { balance, harvestBalance, settings, redeemItems } = get()
+    const { balance, harvestBalance, settings, allRedeemItems } = get()
     if (!settings.redeemEnabled) {
       get().pushToast({ kind: 'info', title: '兑换还没开放哦', emoji: '🔒' })
       return false
     }
 
-    const item = redeemItems.find((i) => i.id === itemId)
-    if (!item) return false
+    // ⚠️ 查 `allRedeemItems` 而不是 `redeemItems`：后者已经把
+    // 「已下架」和「换过的一次性商品」滤掉了，查它会**在两道守卫之前**
+    // 就返回 `false` —— 结果一样（换不了），但孩子看不到任何提示。
+    const item = allRedeemItems.find((i) => i.id === itemId)
+    if (!item || item.archived) return false
 
     const preview = planRedeemPayment(item.cost, harvestBalance, balance)
     if (!preview.affordable) {
@@ -2926,6 +2973,29 @@ export const useApp = create<AppState>((set, get) => ({
           title: `今天「${item.name}」已经换过 ${used} 次了`,
           detail: '明天再来吧',
           emoji: '⏳',
+        })
+        return false
+      }
+    }
+
+    /*
+     * 一次性：换过就永远不再出现（2026-10-29）。
+     *
+     * ⚠️ 界面那边已经把它从「能换什么」里滤掉了，这里还留一道**是为了
+     *    挡住「打开着旧页面」**：孩子停在商城页、家长在另一处换掉了，
+     *    再点一下就会换第二次 —— 而界面此时还画着那个按钮。
+     *
+     * 判据是**兑换记录**，不是库存也不是 `limitPerDay`：
+     * 那个每天重置，这个永不重置。
+     */
+    if (item.once) {
+      const ever = get().redeemRecords.some((r) => r.itemId === itemId)
+      if (ever) {
+        get().pushToast({
+          kind: 'warn',
+          title: `「${item.name}」只能换一次`,
+          detail: '这个已经换过啦',
+          emoji: '☝️',
         })
         return false
       }
@@ -3372,6 +3442,79 @@ export const useApp = create<AppState>((set, get) => ({
     // ⚠️ 买完**不自动切成当前**。家长可能是在提前囤游戏；
     //    切「当前」是一次显式操作（家长栏里那一行上的按钮）。
     return { ok: true, message: `已购买「${g.name}」` }
+  },
+
+  redeemGameCode: async (raw) => {
+    const code = normalizeGameCode(raw)
+    if (!isGameCode(code)) {
+      // 分开说：格式不对是「敲错了」，表里没有是「这张卡不对」。
+      // 合成一句「码无效」会让家长在两种情况下做同一件事（重敲一遍），
+      // 而其中一种重敲多少次都没用。
+      return { ok: false, message: '码是 6 位字母或数字，中间那一横不用输' }
+    }
+
+    const gameId = await gameIdForCode(code)
+    if (!gameId) return { ok: false, message: '没有这个码，对着卡片再核一遍' }
+
+    // 这个版本里有没有这款游戏。**没有就先别烧码** ——
+    // 孩子升到新版本还能用；烧掉了就只能找客服补。
+    const builtin = gameById(gameId)
+    const local = localGameById(gameId)
+    if (!builtin && !local) {
+      return { ok: false, message: '这个码对应的游戏这个版本里还没有，换新版本再试' }
+    }
+    const name = builtin?.name ?? local?.name ?? gameId
+
+    // 已经有了就别浪费一张码
+    if (get().ownedGameIds.includes(gameId) || get().installedGames[gameId]) {
+      return { ok: false, message: `「${name}」你已经有了，这张码先留着` }
+    }
+
+    const hash = await codeHashOf(code)
+    const now = Date.now()
+    let ledgerId = ''
+    let claimed = false
+
+    await db.transaction('rw', [db.wishCodes, db.mallLedger], async () => {
+      // 事务内**重读**：两个标签页同时输同一个码，只该成一次。
+      // 靠按钮 disabled 挡不住这个（心愿商城退款那里记过同一次事故）。
+      if (await db.wishCodes.get(hash)) return
+      await db.wishCodes.put({ codeHash: hash, gameId, usedAt: now })
+      // ★ delta 恒为 0：码解锁一分钻石都没花。写 0 是**事实**，
+      //   而 `purchasedIdsFrom` 对 `redemption_code` 不看 delta（见那边的表）。
+      const row = await postMall({
+        delta: 0,
+        source: 'redemption_code',
+        refId: gameId,
+        memo: `兑换码解锁「${name}」`,
+      })
+      ledgerId = row.id
+      claimed = true
+    })
+
+    if (!claimed) return { ok: false, message: '这个码已经用过了' }
+
+    // 插件游戏要真的装包。装不上就把刚写的两行撤掉 ——
+    // 否则孩子拿到一句「装包失败」而码已经没了。
+    if (local) {
+      const res = await get().installLocalGame(gameId)
+      if (!res.ok) {
+        await db.transaction('rw', [db.wishCodes, db.mallLedger], async () => {
+          await db.wishCodes.delete(hash)
+          if (ledgerId) await db.mallLedger.delete(ledgerId)
+        })
+        return { ok: false, message: `装包没成功，码没扣：${res.message}` }
+      }
+    }
+
+    get().pushToast({
+      kind: 'reward',
+      title: `解锁成功：${name}`,
+      detail: local ? '已经放进你的游戏柜啦' : '底部导航就能切过去',
+      emoji: '🎁',
+    })
+    await get().refresh()
+    return { ok: true, message: `解锁成功：${name}`, gameId }
   },
 
   mintMall: async (amount, memo) => {

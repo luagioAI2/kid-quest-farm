@@ -90,15 +90,26 @@ export function ownedByDefault(g: GameDef): boolean {
  * **拥有关系不另存一份**：买了游戏就是账本里那一笔 `game_purchase`。
  * 存成 `settings.ownedGames` 之类的话，退款 / 清库 / 导入备份时
  * 两份就会走散（本项目在 `Task` / `TaskInstance` 上已经吃过一次这个亏）。
+ *
+ * ## ⚠️ 两种来源，判据不一样
+ *
+ * | 来源 | delta | 为什么 |
+ * | --- | --- | --- |
+ * | `game_purchase` | **必须 < 0** | 只认支出那一笔。将来加了退款（正数、同 refId）这里要一起改，否则退了款还显示「已购买」 |
+ * | `redemption_code` | **0** | 码解锁**一分钻石都没花**，写 0 是事实。拿 `delta < 0` 当判据会把它漏掉 —— 症状是「码兑换成功了，界面上却不显示已拥有」，而且零报错 |
+ *
+ * 这两行是 spec §6 点名的坑：「码解锁不是加个输入框」。
+ * 改动这里之前先看 `useApp.test.ts` 里那条「码解锁之后算已拥有」。
  */
 export function purchasedIdsFrom(
   entries: readonly { source: string; refId?: string; delta: number }[],
 ): string[] {
   const out = new Set<string>()
   for (const e of entries) {
-    // 只认**支出**那一笔。将来如果加了退款（正数、同 refId），
-    // 这里必须一起改，否则退了款还显示「已购买」。
-    if (e.source === 'game_purchase' && e.refId && e.delta < 0) out.add(e.refId)
+    if (!e.refId) continue
+    if (e.source === 'game_purchase' && e.delta < 0) out.add(e.refId)
+    // 码解锁不看 delta：它就是 0
+    else if (e.source === 'redemption_code') out.add(e.refId)
   }
   return [...out]
 }
