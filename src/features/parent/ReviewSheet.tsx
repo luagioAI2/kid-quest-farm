@@ -218,7 +218,7 @@ function WishReviewCard({
       pushToast({
         kind: 'info',
         title: '已回绝',
-        detail: '孩子能在兑换记录里看到',
+        detail: '孩子能在「我许的愿」里看到',
         emoji: '💬',
       })
     } finally {

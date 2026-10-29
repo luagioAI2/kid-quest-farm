@@ -98,7 +98,7 @@ describe('家长审核面板：孩子的心愿', () => {
     await waitFor(async () => {
       const row = await db.wishOrders.get('wo_wish')
       expect(row?.status, '回绝之后不能还停在 wished').toBe('cancelled')
-      expect(row?.cancelReason, '孩子要在兑换记录里看到理由').toContain('先不换')
+      expect(row?.cancelReason, '孩子要在「我许的愿」里看到理由').toContain('先不换')
     })
     expect(await screen.findByText(/都看完啦/)).toBeTruthy()
   })

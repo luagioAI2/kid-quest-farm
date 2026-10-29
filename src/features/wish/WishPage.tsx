@@ -428,13 +428,19 @@ function ListView({
             </p>
             <p className="text-xs font-bold text-ink-500">看看有什么想要的，告诉爸爸妈妈</p>
           </div>
-          {/* 兑换记录：换过什么、到哪一步了。没有这一屏，`done` / `cancelled`
-              的单子在界面上**彻底消失**（卡片只看得到「还没走完」的那些）。 */}
+          {/* 「我许的愿」：许过什么、走到哪一步了。没有这一屏，`done` / `cancelled`
+              的单子在界面上**彻底消失**（卡片只看得到「还没走完」的那些）。
+
+              ⚠️ 2026-10-29 从「兑换记录」改名 —— 兑换页那边也有一屏叫「兑换记录」，
+                 而且合并之后**内容有重叠**（它也列心愿单）。同一个名字指两屏，
+                 孩子和家长都得靠位置去猜；改名的成本远低于让他们猜。
+                 分工：兑换记录 = 钱花在哪（含家里那几件），我许的愿 = 我提过什么、到哪了
+                 （含还没定价的 `wished`，那一类在兑换记录里**没有**，因为一分钱没扣）。 */}
           <button
             onClick={onOrders}
             className="flex-none rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-ink-600 shadow-flat active:btn-press"
           >
-            兑换记录
+            我许的愿
           </button>
         </div>
       </header>
@@ -530,10 +536,10 @@ function ListView({
         )}
 
         {/* 藏了要说一句。不说的话，孩子只会觉得「昨天还有的东西今天没了」，
-            而他要找的那款其实在「兑换记录」里躺着。 */}
+            而他要找的那款其实在「我许的愿」里躺着。 */}
         {hiddenOwnedCount > 0 && (
           <p className="px-1 text-[11px] leading-snug text-ink-400">
-            有 {hiddenOwnedCount} 款游戏你已经换到了，不再列在这里 —— 去右上角「兑换记录」看是哪几款。
+            有 {hiddenOwnedCount} 款游戏你已经换到了，不再列在这里 —— 去右上角「我许的愿」看是哪几款。
           </p>
         )}
       </div>
@@ -766,7 +772,7 @@ function DetailView({
     setBusy(true)
     await wishCancel(order.id, '爸妈这次先不换')
     setBusy(false)
-    pushToast({ kind: 'info', title: '已回绝', detail: '孩子能在兑换记录里看到', emoji: '💬' })
+    pushToast({ kind: 'info', title: '已回绝', detail: '孩子能在「我许的愿」里看到', emoji: '💬' })
     onBack()
   }
 
@@ -999,7 +1005,7 @@ function DetailView({
              *
              * 所以这里只有一个撤回按钮，两种形态共用：家长按是「回绝」，
              * 孩子按是「撤回」，落库是同一件事（`cancelReason` 写
-             * 「这次先不换」，兑换记录里两边都看得见）。
+             * 「这次先不换」，两屏都看得见）。
              */
             <div className="space-y-2">
               <div className="rounded-2xl bg-sky-50 px-4 py-3 text-center text-sm font-extrabold text-sky-500">
@@ -1537,7 +1543,7 @@ function ConfirmView({
 }
 
 /* ============================================================
-   ⑥ 兑换记录
+   ⑥ 我许的愿（2026-10-29 从「兑换记录」改名）
    ------------------------------------------------------------
    为什么必须有这一屏：`done` 和 `cancelled` 的单子在别处**看不见** ——
    卡片只显示「还没走完」的那几个（`activeOrderOf`），待办入口也只算
@@ -1576,7 +1582,7 @@ function OrdersView({
         >
           ←
         </button>
-        <span className="font-display text-base font-extrabold">兑换记录</span>
+        <span className="font-display text-base font-extrabold">我许的愿</span>
         <span className="flex-1" />
         <span className="text-[11px] font-bold text-ink-500">最近 {sorted.length} 条</span>
       </div>

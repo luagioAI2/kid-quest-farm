@@ -153,14 +153,14 @@ describe('心愿商城：单个游戏就是那个游戏', () => {
   })
 })
 
-describe('心愿商城：兑换记录', () => {
+describe('心愿商城：我许的愿（原「兑换记录」）', () => {
   /* `done` / `cancelled` 的单子在别处**看不见** —— 卡片只显示还没走完的，
      待办入口只算 committed/confirmed。没有这一屏，孩子换到手的东西过一天
      就彻底消失，连「我到底换过没有」都查不到。 */
   it('没有单子时是空态，不摆一堆空白', async () => {
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByRole('button', { name: '兑换记录' }))
+    await user.click(await screen.findByRole('button', { name: '我许的愿' }))
     expect(await screen.findByText('还没有换过东西')).toBeTruthy()
   })
 
@@ -193,7 +193,7 @@ describe('心愿商城：兑换记录', () => {
 
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByRole('button', { name: '兑换记录' }))
+    await user.click(await screen.findByRole('button', { name: '我许的愿' }))
 
     expect(await screen.findByText('收租公寓')).toBeTruthy()
     expect(screen.getByText('泡泡玛特盲盒')).toBeTruthy()
@@ -212,7 +212,7 @@ describe('心愿商城：兑换记录', () => {
 
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByRole('button', { name: '兑换记录' }))
+    await user.click(await screen.findByRole('button', { name: '我许的愿' }))
 
     expect(await screen.findByText('已放进游戏柜')).toBeTruthy()
     expect(screen.queryByText('等爸妈确认')).toBeNull()
@@ -235,7 +235,7 @@ describe('心愿商城：兑换记录', () => {
 
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByRole('button', { name: '兑换记录' }))
+    await user.click(await screen.findByRole('button', { name: '我许的愿' }))
     await user.click(await screen.findByText('收租公寓'))
     // 详情页：这个游戏已经有了
     expect(await screen.findByText('这个游戏你已经有了')).toBeTruthy()

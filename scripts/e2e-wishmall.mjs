@@ -1064,10 +1064,10 @@ void gameName
  *
  * 走到这里手上应该有 3 单：泡泡玛特（取消）、泡泡玛特（完成）、盲盒（完成）。
  */
-console.log('\n── 兑换记录 ──')
+console.log('\n── 我许的愿（原「兑换记录」）──')
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find(
-    (x) => (x.textContent ?? '').trim() === '兑换记录',
+    (x) => (x.textContent ?? '').trim() === '我许的愿',
   )
   b?.click()
 })
