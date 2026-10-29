@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { Portal } from '../../components/Portal'
+import { useApp } from '../../store/useApp'
 
 /* ============================================================
    新手引导 · 第二步：功能导览（4 步给孩子 + 2 步给家长）
@@ -143,7 +144,27 @@ export function ChildTour({
 }) {
   const [i, setI] = useState(0)
   const [rect, setRect] = useState<DOMRect | null>(null)
-  const step = STEPS[i]
+
+  /*
+    「农场」那一步**只在当前游戏真是农场时才出现**。
+
+    游戏那一格的 `data-tour` 是 `tab-<当前游戏 id>`（App.tsx），所以孩子把当前
+    游戏换成插件包之后，`tab-farm` 就找不到了 —— `measure()` 拿到 `null`，
+    而挖洞层是 `{rect && …}`：结果是**不压暗**、气泡浮在中间、整屏还被
+    z-[60] 的拦截层压着点不动。孩子看到的是一张指不到任何东西的卡片。
+
+    设置页有「重看新手引导」，所以这不是「只在新装时才可能」的岔路。
+
+    少讲一步，好过指着一个不存在的东西讲 —— 而且这一步的文案讲的是
+    「买种子、种地、养小动物」，当前游戏不是农场时它本来也驴唇不对马嘴。
+  */
+  const activeGameId = useApp((s) => s.activeGameId)
+  const steps = useMemo(
+    () => STEPS.filter((s) => s.anchor !== 'tab-farm' || (activeGameId || 'farm') === 'farm'),
+    [activeGameId],
+  )
+  // 导览开着的时候当前游戏被改掉（两个标签页）⇒ 步数变少，别让 `i` 越界
+  const step = steps[Math.min(i, steps.length - 1)]
 
   // 切步骤 → 同步切 tab（孩子看到的是「点开这个 tab 会看到什么」）
   useEffect(() => {
@@ -170,7 +191,7 @@ export function ChildTour({
     }
   }, [measure])
 
-  const last = i === STEPS.length - 1
+  const last = i >= steps.length - 1
 
   /**
    * 气泡往哪边放。
@@ -274,7 +295,7 @@ export function ChildTour({
 
           <div className="mt-3 flex items-center gap-2">
             <span className="tnum mr-auto text-xs font-extrabold text-ink-500">
-              {i + 1} / {STEPS.length}
+              {Math.min(i + 1, steps.length)} / {steps.length}
             </span>
             <button
               type="button"

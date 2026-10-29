@@ -21,7 +21,7 @@
  */
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppSettings } from '@/domain/types'
 import { DEFAULT_SETTINGS, db } from '@/db/db'
 import { useApp } from '@/store/useApp'
@@ -263,5 +263,89 @@ describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
 
     // 这一条是上面那条的反面 —— 两者一起才说明断言有分辨力
     expect(shell.contains(bubble)).toBe(true)
+  })
+})
+
+/* ============================================================
+   当前游戏不是农场时，「农场」那一步必须消失
+   ------------------------------------------------------------
+   游戏那一格的 `data-tour` 是 `tab-<当前游戏 id>`（App.tsx）。孩子把当前游戏
+   换成插件包之后，`tab-farm` 就找不到了 —— `measure()` 拿到 `null`，而挖洞层是
+   `{rect && …}`：结果是**不压暗**、气泡浮在中间、整屏还被拦截层压着点不动。
+   一张指不到任何东西的卡片。
+
+   设置页有「重看新手引导」，所以这不是「只在新装时才可能」的岔路。
+   ============================================================ */
+describe('功能导览：当前游戏不是农场时', () => {
+  beforeEach(() => {
+    useApp.setState({ activeGameId: 'cloudfarm' })
+  })
+  // 别的测试按默认（农场）跑，别让这条的副作用漏出去
+  afterEach(() => {
+    useApp.setState({ activeGameId: 'farm' })
+  })
+
+  it('★ 少一步：只剩五步，全程不出现 farm', async () => {
+    const user = userEvent.setup()
+    render(<ChildTour onFinish={() => {}} onStepChange={() => {}} />)
+    expect(screen.getByText('1 / 5')).toBeInTheDocument()
+
+    const seen: string[] = []
+    for (let n = 0; n < 5; n++) {
+      seen.push(screen.getByRole('dialog').getAttribute('data-tour-bubble') ?? '')
+      const next = screen.queryByRole('button', { name: '下一步' })
+      if (!next) break
+      await user.click(next)
+    }
+    expect(seen).toEqual(['tasks', 'redeem', 'points', 'review', 'settings'])
+  })
+
+  it('★ 对照组：当前是农场时仍然是六步', () => {
+    // 没有这一条，「1 / 5」也可能是因为步数常量被删错了
+    useApp.setState({ activeGameId: 'farm' })
+    render(<ChildTour onFinish={() => {}} onStepChange={() => {}} />)
+    expect(screen.getByText('1 / 6')).toBeInTheDocument()
+  })
+})
+
+/* ============================================================
+   当前游戏不是农场时，「农场」那一步必须消失
+   ------------------------------------------------------------
+   游戏那一格的 `data-tour` 是 `tab-<当前游戏 id>`（App.tsx）。孩子把当前游戏
+   换成插件包之后，`tab-farm` 就找不到了 —— `measure()` 拿到 `null`，而挖洞层是
+   `{rect && …}`：结果是**不压暗**、气泡浮在中间、整屏还被拦截层压着点不动。
+   一张指不到任何东西的卡片。
+
+   设置页有「重看新手引导」，所以这不是「只在新装时才可能」的岔路。
+   ============================================================ */
+describe('功能导览：当前游戏不是农场时', () => {
+  beforeEach(() => {
+    useApp.setState({ activeGameId: 'cloudfarm' })
+  })
+  // 别的测试按默认（农场）跑，别让这条的副作用漏出去
+  afterEach(() => {
+    useApp.setState({ activeGameId: 'farm' })
+  })
+
+  it('★ 少一步：只剩五步，全程不出现 farm', async () => {
+    const user = userEvent.setup()
+    render(<ChildTour onFinish={() => {}} onStepChange={() => {}} />)
+    expect(screen.getByText('1 / 5')).toBeInTheDocument()
+
+    const seen: string[] = []
+    for (let n = 0; n < 5; n++) {
+      seen.push(screen.getByRole('dialog').getAttribute('data-tour-bubble') ?? '')
+      const next = screen.queryByRole('button', { name: '下一步' })
+      if (!next) break
+      await user.click(next)
+    }
+    expect(seen).toEqual(['tasks', 'redeem', 'points', 'review', 'settings'])
+  })
+
+  it('★ 对照组：当前是农场时仍然是六步', () => {
+    // 没有这一条，「1 / 5」也可能是因为步数常量被删错了
+    useApp.setState({ activeGameId: 'farm' })
+    render(<ChildTour onFinish={() => {}} onStepChange={() => {}} />)
+    expect(screen.getByText('1 / 6')).toBeInTheDocument()
   })
 })
