@@ -16,6 +16,7 @@ import { saveBlob, shareOrDownload } from '../../platform/files'
 // 复用家长端同一个 PinPad，不要在这里再抄一份 —— 之前抄出来的副本
 // 带着"第 4 位自动提交读不到最新值"的 bug，两边各修一次很容易漏。
 import { PinPad, ParentPinPanel } from '../parent/ParentGate'
+import { AccountCard } from '../account/AccountCard'
 import { GamesSection } from './GamesSection'
 import { Card } from './ui'
 
@@ -527,6 +528,11 @@ export default function SettingsPage({
                     }}
                   />
                 </Card>
+
+                {/* 账号（2026-10-29，在线版）。放在家长区最后一张：
+                    它不改任何孩子数据，只是「这台设备上登录的是谁」——
+                    招商申请要经过审核，服务端得知道是谁在申请。 */}
+                <AccountCard />
               </>
             )}
           </>

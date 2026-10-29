@@ -1095,9 +1095,13 @@ check('★ 没有「等爸妈处理」卡', !wishOnly.hasBanner)
  *
  * 第一版做在「兑换记录」底部、还带一张表单 —— 三处全错。这里钉四件事：
  *   ① 入口在心愿页**头部右端**（位置是这次的需求本身，不是细节）；
- *   ② 家长那一路写的是「分享给其他家长」，不是「邀请商家」；
+ *   ② 未登录时**不许有申请按钮**，也不许偷偷存本地假装成功；
  *   ③ **一个输入框都没有**（有表单就等于把「点申请即可」做反了）；
  *   ④ 兑换记录里**没有**它（反向断言，防止有人「顺手搬回去」）。
+ *
+ * 「家长那一路写的是『分享给其他家长』不是『邀请商家』」这条搬到了
+ * `MerchantView.test.tsx` 与 `_probe-online.mjs` —— 未登录时那两路卡片
+ * 根本不渲染，留在这里只会变成「找不到 ⇒ 断言恒假/恒真」。
  *
  * ⚠️ 位置用**几何**量，不靠文字 —— `innerText` 里有「招商」两个字，
  *    放在页面最底下也照样匹配得到。 */
@@ -1120,34 +1124,50 @@ await page.evaluate(() => document.querySelector('[data-merchant-entry]')?.click
 await wait(700)
 await page.screenshot({ path: `${OUT}/09b-merchant.png` })
 
+/* ⚠️ 这一屏现在**真的连服务端**了（`/api/merchant/apply|my`）。
+   申请要审核、通过后回填后台链接 —— 两件事都得有账号，所以这里
+   必然是「未登录」那一屏。e2e 只钉**未登录时的行为**：
+   说清楚为什么登录 + 给一个登录按钮 + **绝不假装申请成功**。
+
+   「点一下就提交 / 服务端回填 name+contact / 通过后才给后台链接」
+   那条路在 `scripts/_probe-online.mjs`（它会真登录，对着跑着的后端走完整个来回）。
+   两条路分开是因为 e2e 不能依赖后端在跑 —— 依赖了就会在没起后端时
+   红成一片，而人第一反应是「我改的代码坏了」。 */
+await page.evaluate(() => {
+  // 清掉登录态，让这一屏确定是未登录 —— 不清的话，上一轮残留的
+  // session 会让「没有申请按钮」假红，而只断言「有 need-login」又会在
+  // 残留时假红。清掉 → 重挂载 → 断言，才是确定的。
+  try {
+    localStorage.removeItem('kqf.api.session.v1')
+  } catch {
+    /* 隐私模式之类，忽略 */
+  }
+})
+await page.evaluate(() => {
+  document.querySelector('button[aria-label="返回心愿商城"]')?.click()
+})
+await wait(400)
+await page.evaluate(() => document.querySelector('[data-merchant-entry]')?.click())
+await wait(700)
+
 const merchant = await page.evaluate(() => {
   const text = document.body.innerText
   return {
     onPage: text.includes('招商合作'),
-    hasParent: !!document.querySelector('[data-merchant-role="parent"]'),
-    hasMerchant: !!document.querySelector('[data-merchant-role="merchant"]'),
-    share: text.includes('分享给其他家长'),
-    wrongPitch: text.includes('邀请商家'),
+    needLogin: !!document.querySelector('[data-merchant-need-login]'),
+    loginBtn: !!document.querySelector('[data-merchant-login]'),
+    hasApply: !!document.querySelector('[data-merchant-apply]'),
+    hasRole: !!document.querySelector('[data-merchant-role]'),
     inputs: document.querySelectorAll('input, textarea').length,
+    saysAccount: text.includes('账号'),
   }
 })
 check('前提：进了招商页（否则下面几条恒真）', merchant.onPage)
-check('两路申请都在', merchant.hasParent && merchant.hasMerchant)
-check('★ 家长那一路写「分享给其他家长」', merchant.share)
-check('★ 家长那一路没写成「邀请商家」', !merchant.wrongPitch)
-check('★ 一个输入框都没有（点申请即可）', merchant.inputs === 0, `${merchant.inputs} 个`)
-
-await page.evaluate(() => document.querySelector('[data-merchant-apply="parent"]')?.click())
-await wait(800)
-const applied = await page.evaluate(() => {
-  const text = document.body.innerText
-  return {
-    pending: text.includes('审核中'),
-    admin: !!document.querySelector('[data-merchant-admin]'),
-  }
-})
-check('点一下就提交（显示「审核中」）', applied.pending)
-check('没后端时不给「打开后台」', !applied.admin)
+check('★ 没登录时先说清楚「为什么要登录」', merchant.needLogin && merchant.saysAccount)
+check('★ 没登录时给一个登录按钮', merchant.loginBtn)
+check('★ 没登录时没有申请按钮（不能偷偷存本地假装成功）', !merchant.hasApply)
+check('★ 没登录时也不画两路卡片（画了却点不了更像坏了）', !merchant.hasRole)
+check('★ 这一屏一个输入框都没有', merchant.inputs === 0, `${merchant.inputs} 个`)
 
 await page.evaluate(() => {
   document.querySelector('button[aria-label="返回心愿商城"]')?.click()

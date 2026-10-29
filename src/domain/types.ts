@@ -1099,49 +1099,17 @@ export interface GameClock {
 }
 
 /* ---------------- 招商（2026-10-29） ----------------
-   两路人马共用一套申请单：
-     · `parent`   —— 家长邀请商家入驻，**拿商家收益的分成**
-     · `merchant` —— 商家自己把东西挂进心愿商城
 
-   ⚠️ 现在**没有后端**，所以这里只落「谁、什么时候、申请了什么」，
-      审核结果和后台地址都是**留给后端回填**的字段（见 `adminUrl`）。
-      别在客户端自己把状态推成 `approved` —— 那等于给所有用户
-      凭空发一个后台入口。 */
+   ⚠️ 2026-10-29 晚：申请单**搬到服务端了**（`tf-platform-api` 的
+      `/api/merchant/*`）。这里只留「申请人是谁」这一档，其余字段
+      （状态 / 后台地址 / 审核时间）都由服务端给，见 `src/api/types.ts`
+      的 `ApiMerchantApplication`。
+
+      别再把申请单存进 `AppSettings` —— 两份状态一定会对不上，而
+      「界面写着审核中、后台其实已通过」这种不一致没人查得出来。 */
 
 /** 申请人是家长还是商家 */
 export type MerchantRole = 'parent' | 'merchant'
-
-/**
- * 审核状态。
- *
- * `pending` = 已提交、等后台审核；`approved` = 后台审核过了，
- * **`adminUrl` 此时才可能有值**。没有 `rejected` —— 被拒的单子
- * 现在不落地（后端接进来之后再加，加了要同步改 `merchantStatusOf`）。
- */
-export type MerchantStatus = 'pending' | 'approved'
-
-export interface MerchantApplication {
-  role: MerchantRole
-  status: MerchantStatus
-  /** 提交时间 */
-  createdAt: number
-  /**
-   * 一句话备注。**现在一键申请不填**，留给后端回填（比如「由 XXX 邀请」）。
-   *
-   * ⚠️ 这里**没有**「称呼 / 联系方式」字段 —— 用户 2026-10-29 明确说
-   *    「点申请即可，不需要填称呼这些，因为会根据当前账号申请」。
-   *    身份归账号体系，别让用户再手填一遍后端本来就知道的东西。
-   */
-  note?: string
-  /**
-   * **后台地址**。只有 `status === 'approved'` 时才渲染。
-   *
-   * 由后端在审核通过时写进来，客户端**不自己拼**这个 URL ——
-   * 拼出来的地址一旦猜错，用户点进去就是一个 404 页面，
-   * 而界面上写着「已通过审核」，看着像我们把他账号弄丢了。
-   */
-  adminUrl?: string
-}
 
 export interface AppSettings {
   /** 孩子昵称 */
@@ -1313,18 +1281,11 @@ export interface AppSettings {
   /** 家长锁 PIN（明文仅本地，4 位） */
   parentPin?: string
 
-  /**
-   * 招商申请单（2026-10-29）。按角色各存一条，最多两条。
-   *
-   * 可选 + 用数组而不是两张表：老库里没有这个字段时 `loadSettings` 会和
-   * `DEFAULT_SETTINGS` 合并成空数组，**不需要 Dexie 版本升级**。
-   * 为一屏纯 UI 的东西加一张表，就要连带写迁移和「老库升级」的 e2e，
-   * 不值。
-   *
-   * ⚠️ 目前**只有客户端提交**这一半（`status: 'pending'`）。
-   *    `approved` + `adminUrl` 要等后端接进来才有值，别自己造。
+  /*
+   * 这里原来有 `merchantApps?: MerchantApplication[]`（本地存招商申请）。
+   * 2026-10-29 晚删掉：申请单搬去服务端了（`/api/merchant/*`）。
+   * 留着它只会变成第二份真相 —— 而且是一份**永远停在 pending** 的真相。
    */
-  merchantApps?: MerchantApplication[]
 }
 
 /* ---------------- 数据快照（导出用） ---------------- */
