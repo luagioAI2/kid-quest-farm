@@ -527,7 +527,21 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
       </Card>
 
       {detailId && (
-        <GameDetailSheet id={detailId} gateOpen={gateOpen} onClose={() => setDetailId(null)} />
+        /*
+          ★ 把「有没有拥有」传下去。详情页里那颗大按钮和列表行是**同一个动作的
+          两个入口** —— 列表那边判了拥有、详情这边没判，就会出现
+          「列表写『未拥有』、点进详情一个大黄『安装』」（2026-10-30 截图实拍到的）。
+          点下去当然装不成，弹一句「没装成 / 还没拥有」——
+          正是列表注释里说的「界面先承诺，再当场否认」。
+
+          不要让它自己去 `wishOwnedSet` 算：两处各写一份，迟早走散。
+        */
+        <GameDetailSheet
+          id={detailId}
+          gateOpen={gateOpen}
+          owned={ownedSet.has(detailId)}
+          onClose={() => setDetailId(null)}
+        />
       )}
     </>
   )
@@ -649,10 +663,13 @@ function CodeRedeem({ gateOpen }: { gateOpen: boolean }) {
 function GameDetailSheet({
   id,
   gateOpen,
+  owned,
   onClose,
 }: {
   id: string
   gateOpen: boolean
+  /** 已拥有（含兑换码 / 心愿兑换 / 已装包三种来源，由 `GameMarket` 统一算） */
+  owned: boolean
   onClose: () => void
 }) {
   const { install, installingId } = useInstall()
@@ -690,6 +707,7 @@ function GameDetailSheet({
           <DetailView
             g={g}
             gateOpen={gateOpen}
+            owned={owned}
             installingId={installingId}
             onInstall={install}
             onClose={onClose}
@@ -703,12 +721,14 @@ function GameDetailSheet({
 function DetailView({
   g,
   gateOpen,
+  owned,
   installingId,
   onInstall,
   onClose,
 }: {
   g: StorefrontEntry
   gateOpen: boolean
+  owned: boolean
   installingId: string | null
   onInstall: (id: string) => void
   onClose: () => void
@@ -763,14 +783,30 @@ function DetailView({
         {/* ⚠️ `flex` 不能省：`InstallAction` 的「已安装」是个 `<span class="grid">`，
             在块级容器里会自动铺满整行 —— 而「安装」是 `<button>`（inline-block，只有内容宽）。
             少了这一层，同一位置装前是一个小药丸、装后是一条通栏绿条，看着像换了个控件。 */}
-        <div className="mt-3 flex">
-          <InstallAction
-            id={g.id}
-            gateOpen={gateOpen}
-            installingId={installingId}
-            onInstall={onInstall}
-            size="lg"
-          />
+        <div className="mt-3 flex flex-col items-start gap-1.5">
+          {owned ? (
+            <InstallAction
+              id={g.id}
+              gateOpen={gateOpen}
+              installingId={installingId}
+              onInstall={onInstall}
+              size="lg"
+            />
+          ) : (
+            /*
+              没拥有：和列表行同一个口径 —— 不摆按钮。详情页是**单独的屏**，
+              列表底部那句说明它看不到，所以这里必须自己说一句怎么解锁。
+            */
+            <>
+              <span className={PILL_MUTE + ' h-10 px-4 text-sm'} data-local-need-own={g.id}>
+                未拥有
+              </span>
+              <p className="text-[11.5px] font-bold leading-snug text-ink-500">
+                让孩子在「心愿」里说要哪款，你定价之后到「兑换」里换；
+                兑换码输在列表最下面。
+              </p>
+            </>
+          )}
         </div>
 
         {/* 练什么 —— 列表里已经不放这一栏了，家长要看就点进详情（2026-10-25） */}

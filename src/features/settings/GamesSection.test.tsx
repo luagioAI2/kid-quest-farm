@@ -124,6 +124,68 @@ describe('设置 → 游戏：没拥有不能装', () => {
     expect(document.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
   })
 
+  it('★ 详情页同一个口径：没拥有时也不摆安装按钮', async () => {
+    /*
+      列表和详情是**同一个动作的两个入口**。2026-10-30 实拍发现：
+      列表行写着「未拥有」，点进详情却是一个大黄「安装」——
+      点下去当然装不成，弹「没装成 / 还没拥有」。
+      正是列表注释里那句「界面先承诺，再当场否认」。
+    */
+    useApp.setState({ ownedGameIds: [], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    const open = document.querySelector(`[data-store-detail="${GAME}"]`) as HTMLElement
+    expect(open).toBeTruthy()
+    await userEvent.click(open)
+
+    const dlg = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
+    expect(dlg).toBeTruthy()
+    expect(dlg!.querySelector(`[data-local-install="${GAME}"]`)).toBeNull()
+    expect(dlg!.querySelector(`[data-local-need-own="${GAME}"]`)).toBeTruthy()
+    // 详情页是单独的屏，列表底部那句说明它看不到 ⇒ 这里必须自己说一句
+    expect(dlg!.textContent).toMatch(/兑换/)
+  })
+
+  it('★ 详情页：拥有之后那颗按钮回来', async () => {
+    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    const open = document.querySelector(`[data-store-detail="${GAME}"]`) as HTMLElement
+    await userEvent.click(open)
+    const dlg = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
+    expect(dlg!.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
+    expect(dlg!.querySelector(`[data-local-need-own="${GAME}"]`)).toBeNull()
+  })
+
+  it('★ 详情页同一个口径：没拥有时也不摆安装按钮', async () => {
+    /*
+      列表和详情是**同一个动作的两个入口**。2026-10-30 实拍发现：
+      列表行写着「未拥有」，点进详情却是一个大黄「安装」——
+      点下去当然装不成，弹「没装成 / 还没拥有」。
+      正是列表注释里那句「界面先承诺，再当场否认」。
+    */
+    useApp.setState({ ownedGameIds: [], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    const open = document.querySelector(`[data-store-detail="${GAME}"]`) as HTMLElement
+    expect(open).toBeTruthy()
+    await userEvent.click(open)
+
+    const dlg = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
+    expect(dlg).toBeTruthy()
+    expect(dlg!.querySelector(`[data-local-install="${GAME}"]`)).toBeNull()
+    expect(dlg!.querySelector(`[data-local-need-own="${GAME}"]`)).toBeTruthy()
+    // 详情页是单独的屏，列表底部那句说明它看不到 ⇒ 这里必须自己说一句
+    expect(dlg!.textContent).toMatch(/兑换/)
+  })
+
+  it('★ 详情页：拥有之后那颗按钮回来', async () => {
+    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    const open = document.querySelector(`[data-store-detail="${GAME}"]`) as HTMLElement
+    await userEvent.click(open)
+    const dlg = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
+    expect(dlg!.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
+    expect(dlg!.querySelector(`[data-local-need-own="${GAME}"]`)).toBeNull()
+  })
+
   it('★ 表底说明指向「兑换」，不写「在那里用券换」', () => {
     // 心愿商城**不收钱**（`WishPage` 只把人送到兑换，见 `jumpToRedeem`）。
     // 旧文案写「在那里用兑换券换」⇒ 家长照着去心愿页找付款按钮，只会看到「去兑换换」。
