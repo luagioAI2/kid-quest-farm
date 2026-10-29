@@ -304,7 +304,7 @@ export default function SettingsPage({
                 title={settings.parentPin ? '请输入家长密码' : '先设一个家长密码'}
                 emoji="🔒"
               >
-                <PinFlow onPass={() => setLocked(false)} />
+                <PinFlow onPass={() => setLocked(false)} adultCheck={false} />
               </Card>
             ) : (
               <>
@@ -589,7 +589,7 @@ export default function SettingsPage({
                 title={settings.parentPin ? '请输入家长密码' : '先设一个家长密码'}
                 emoji="🔒"
               >
-                <PinFlow onPass={() => setLocked(false)} />
+                <PinFlow onPass={() => setLocked(false)} adultCheck={false} />
               </Card>
             ) : (
               <GamesSection gateOpen={gateOpen} />
@@ -608,6 +608,9 @@ export default function SettingsPage({
                   title="请爸爸妈妈来一下"
                   hint="导出、恢复或清空数据，需要先输密码"
                   onPass={() => setDataLocked(false)}
+                  /* 设置页是家长自己从 ⚙️ 导航过来的，不再考一次加法；
+                     其它闸门（审核 / 兑换 / 加任务 / 心愿）才考。 */
+                  adultCheck={false}
                 />
               </Card>
             ) : (

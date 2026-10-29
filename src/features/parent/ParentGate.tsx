@@ -117,6 +117,12 @@ export function PinPad({
   )
 }
 
+/** 一道两位数加法。两位数 × 两位数的心算，孩子要花好一会儿，大人一眼就出。 */
+function randomCheck() {
+  const pick = () => 11 + Math.floor(Math.random() * 39) // 11~49
+  return { a: pick(), b: pick() }
+}
+
 /**
  * 键盘本体：自己判断「输密码」还是「第一次设密码」。
  *
@@ -127,15 +133,29 @@ export function PinPad({
  *
  * 项目**没有找回入口**。家长手滑输错一位、自己又没记住，就再也进不去
  * 家长区（打不了分、改不了任务）。多一步确认远比事后救火便宜。
+ *
+ * ## 为什么设密码前还要答一道加法（2026-10-30）
+ *
+ * 「没密码 = 第一次用到才要求设」这条需求放出了一个洞：**孩子先到就先设**。
+ * 顶栏的 👀「家长确认」本来就是给孩子点的（他要看自己交了什么），
+ * 新装时点进去会看到「设一个 4 位数字」的键盘 —— 孩子随手设一个，
+ * 家长就**永远进不去了**（没有找回入口），而且孩子从此拥有家长权限。
+ *
+ * 加一道两位数加法，不指望挡住有心人（真要绕过，去设置里也能设），
+ * 只挡「随手点进去就设了」这种。`adultCheck={false}` 可以关掉 ——
+ * 设置页就是这么用的（那里是家长自己主动导航过去的，不需要再考一次）。
  */
 export function PinFlow({
   onPass,
   onCancel,
   cancelLabel = '先算了',
+  adultCheck = true,
 }: {
   onPass: () => void
   onCancel?: () => void
   cancelLabel?: string
+  /** 第一次设密码前先答一道加法（见上面那段）。设置页传 false。 */
+  adultCheck?: boolean
 }) {
   const settings = useApp((s) => s.settings)
   const updateSettings = useApp((s) => s.updateSettings)
@@ -146,6 +166,28 @@ export function PinFlow({
   const [first, setFirst] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  /* 家长验证（只在「第一次设密码」时出现）。
+     ⚠️ 用 `checkPassed` 而不是「`check === null`」判断过没过：
+     `hasPin` 是异步读出来的，拿它做初始化条件会在设置还没加载完时把题跳过。 */
+  const [check, setCheck] = useState(randomCheck)
+  const [checkVal, setCheckVal] = useState('')
+  const [checkErr, setCheckErr] = useState('')
+  const [checkPassed, setCheckPassed] = useState(false)
+  const needCheck = !hasPin && adultCheck && !checkPassed
+
+  const submitCheck = () => {
+    if (Number(checkVal) === check.a + check.b) {
+      setCheckPassed(true)
+      setCheckErr('')
+      setCheckVal('')
+      return
+    }
+    // 答错就换一道，别让人在同一道上反复试
+    setCheck(randomCheck())
+    setCheckVal('')
+    setCheckErr('不对哦，换一道再试试')
+  }
 
   const submit = useCallback(
     async (finalValue?: string) => {
@@ -189,17 +231,65 @@ export function PinFlow({
 
   return (
     <div className="space-y-4">
-      {stage && (
-        <p className="text-center text-sm font-extrabold text-ink-700">{stage}</p>
-      )}
-      <PinPad value={pin} onChange={setPin} onSubmit={(v) => void submit(v)} disabled={busy} />
-      {error && (
-        <p className="text-center text-sm font-bold text-berry-500 anim-fade-in">{error}</p>
-      )}
-      {!hasPin && (
-        <p className="text-center text-xs font-bold leading-relaxed text-ink-500">
-          这个密码<span className="text-berry-500">没有找回入口</span>，记牢一点。
-        </p>
+      {/* 家长验证：只在「第一次设密码」这一步出现，见文件里那段注释 */}
+      {needCheck ? (
+        <div className="space-y-3">
+          <p className="text-center text-sm font-extrabold text-ink-700">
+            先确认一下是家长：
+            <span
+              data-parent-check
+              data-a={check.a}
+              data-b={check.b}
+              className="ml-1 text-base text-ink-900"
+            >
+              {check.a} + {check.b} = ?
+            </span>
+          </p>
+          <input
+            data-parent-check-input
+            type="tel"
+            inputMode="numeric"
+            value={checkVal}
+            onChange={(e) => setCheckVal(e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submitCheck()
+            }}
+            placeholder="填答案"
+            className="w-full rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-4 py-3 text-center text-xl font-bold outline-none focus:border-sky-400"
+          />
+          {checkErr && (
+            <p className="text-center text-sm font-bold text-berry-500 anim-fade-in">{checkErr}</p>
+          )}
+          <button
+            type="button"
+            data-parent-check-submit
+            disabled={!checkVal}
+            onClick={submitCheck}
+            className="btn w-full rounded-2xl bg-sun-300 py-3 font-extrabold text-ink-900 shadow-flat disabled:opacity-40"
+          >
+            继续
+          </button>
+        </div>
+      ) : (
+        <>
+          {stage && (
+            <p className="text-center text-sm font-extrabold text-ink-700">{stage}</p>
+          )}
+          <PinPad
+            value={pin}
+            onChange={setPin}
+            onSubmit={(v) => void submit(v)}
+            disabled={busy}
+          />
+          {error && (
+            <p className="text-center text-sm font-bold text-berry-500 anim-fade-in">{error}</p>
+          )}
+          {!hasPin && (
+            <p className="text-center text-xs font-bold leading-relaxed text-ink-500">
+              这个密码<span className="text-berry-500">没有找回入口</span>，记牢一点。
+            </p>
+          )}
+        </>
       )}
       {onCancel && (
         <button
@@ -227,11 +317,14 @@ export function ParentPinPanel({
   hint,
   onPass,
   onCancel,
+  adultCheck = true,
 }: {
   title?: string
   hint?: string
   onPass: () => void
   onCancel?: () => void
+  /** 第一次设密码前先答一道加法（见 `PinFlow` 那段注释） */
+  adultCheck?: boolean
 }) {
   const settings = useApp((s) => s.settings)
   const hasPin = !!settings.parentPin
@@ -241,7 +334,9 @@ export function ParentPinPanel({
   const headTitle = hasPin ? title : '先设一个家长密码'
   const headHint = hasPin
     ? hint
-    : '第一次进家长区，设一个 4 位数字。以后每次进来都要输它。'
+    : adultCheck
+      ? '第一次进家长区：先答一道小题确认是家长，再设一个 4 位数字。'
+      : '第一次进家长区，设一个 4 位数字。以后每次进来都要输它。'
 
   return (
     <div className="space-y-5">
@@ -250,7 +345,7 @@ export function ParentPinPanel({
         <h3 className="mt-2 font-display text-xl font-extrabold text-ink-900">{headTitle}</h3>
         {headHint && <p className="mt-1 text-sm text-ink-500">{headHint}</p>}
       </div>
-      <PinFlow onPass={onPass} onCancel={onCancel} />
+      <PinFlow onPass={onPass} onCancel={onCancel} adultCheck={adultCheck} />
     </div>
   )
 }
@@ -270,11 +365,14 @@ export function ParentGate({
   hint,
   children,
   onCancel,
+  adultCheck = true,
 }: {
   title?: string
   hint?: string
   children: React.ReactNode
   onCancel?: () => void
+  /** 第一次设密码前先答一道加法（见 `PinFlow` 那段注释） */
+  adultCheck?: boolean
 }) {
   const { needsPin, passed, unlock } = useParentGate()
 
@@ -289,6 +387,7 @@ export function ParentGate({
          表现就是「设了密码却进不去」。 */
       onPass={unlock}
       onCancel={onCancel}
+      adultCheck={adultCheck}
     />
   )
 }
