@@ -472,7 +472,8 @@ interface AppState {
    * 取消 / 撤回。
    *
    * * `wished` → 直接撤，**不碰账本**（还没扣过）
-   * * `committed` / `confirmed` → **退券**（写一笔 `wish_refund`）
+   * * `committed` / `confirmed` → **退钱**：券和积分各退各的
+   *   （`vouchersHeld` / `pointsHeld`，各写一笔 `wish_refund`）
    *
    * ⚠️ 退券前必须在**事务内**重读状态。靠按钮 disabled 挡不住两个标签页同时点，
    * 那样会退两次 —— 而账本只看 delta 之和，多退一次不会报错。
@@ -3162,7 +3163,9 @@ export const useApp = create<AppState>((set, get) => ({
    * ## 顺序是有讲究的
    *
    * 1. **先算能不能开**（盲盒池子空了就到此为止，不能先扣券）
-   * 2. **再在一个事务里扣券 + 建单**（只扣券不建单 = 孩子的东西凭空没了）
+   * 2. **再在一个事务里扣钱 + 建单**（只扣钱不建单 = 孩子的东西凭空没了）。
+   *    2026-10-29 起「扣钱」是两笔：兑换券（`wish_redeem`）+ 积分，
+   *    分账规则见 `planWishRedeem`。
    * 3. **最后装包**（网络 IO 不能放进事务）。装失败就退券 —— 见下。
    *
    * ## 为什么装包失败要退券
@@ -3180,9 +3183,9 @@ export const useApp = create<AppState>((set, get) => ({
       return { ok: false, message: '爸妈还没给它定价' }
     }
 
-    const preview = planWishRedeem(offer.voucherPrice, get().harvestBalance)
+    const preview = planWishRedeem(offer.voucherPrice, get().harvestBalance, get().balance)
     if (!preview.affordable) {
-      return { ok: false, message: `还差 ${preview.shortfall} 张兑换券` }
+      return { ok: false, message: `兑换券和积分加起来还差 ${preview.shortfall}` }
     }
 
     // 已拥有 = 账本买过的 + 装上的插件 + **心愿单里兑换到手过的**。
@@ -3212,25 +3215,43 @@ export const useApp = create<AppState>((set, get) => ({
     const freshId = uid('wo')
     const box: { ok: boolean; id: string } = { ok: true, id: freshId }
 
-    await db.transaction('rw', [db.harvestLedger, db.wishOrders], async () => {
-      const tip = await harvestTip()
+    await db.transaction('rw', [db.ledger, db.harvestLedger, db.wishOrders], async () => {
+      const hTip = await harvestTip()
+      const pTip = await ledgerTip()
       // 事务内**重新算一次**：外面那份只是给 UI 看的预览。
       // 两个标签页同时点「兑换」时，用旧余额算会把已经花掉的券再花一次。
-      const live = planWishRedeem(offer.voucherPrice, tip.balance)
+      const live = planWishRedeem(offer.voucherPrice, hTip.balance, pTip.balance)
       if (!live.affordable) {
         box.ok = false
         return
       }
 
-      await db.harvestLedger.put({
-        id: `hv_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
-        delta: -live.price,
-        balanceAfter: tip.balance - live.price,
-        source: 'wish_redeem',
-        refId: item.id,
-        memo: `心愿商城：${item.name}`,
-        createdAt: tip.createdAt,
-      })
+      // 兑换券那笔。`voucherPaid === 0` 时**不写** —— 写一笔 delta 0 的账，
+      // 流水里会凭空多出一条「心愿商城 0 券」。
+      if (live.voucherPaid > 0) {
+        await db.harvestLedger.put({
+          id: `hv_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+          delta: -live.voucherPaid,
+          balanceAfter: hTip.balance - live.voucherPaid,
+          source: 'wish_redeem',
+          refId: item.id,
+          memo: `心愿商城：${item.name}`,
+          createdAt: hTip.createdAt,
+        })
+      }
+
+      // 积分那笔（2026-10-29 起可以混付）。理由同上：0 分不写账。
+      if (live.pointsPaid > 0) {
+        await db.ledger.put({
+          id: `lg_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+          delta: -live.pointsPaid,
+          balanceAfter: pTip.balance - live.pointsPaid,
+          source: 'wish_redeem',
+          refId: item.id,
+          memo: `心愿商城：${item.name}`,
+          createdAt: pTip.createdAt,
+        })
+      }
 
       // 同一件商品如果之前只是「想要」，**复用那一行** ——
       // 一条记录走完全程，历史里不会出现「想要一条、兑换一条」两行。
@@ -3250,7 +3271,10 @@ export const useApp = create<AppState>((set, get) => ({
         partnerName: item.partnerName,
         voucherPrice: live.price,
         status: 'committed',
-        vouchersHeld: live.price,
+        // 押的是**实际扣掉的两种币**，不是标价 —— 退款按这两个数原样退，
+        // 所以 `vouchersHeld` 从「等于券价」变成了「等于券那部分」。
+        vouchersHeld: live.voucherPaid,
+        pointsHeld: live.pointsPaid,
         openedGameId: gameId,
         createdAt: existed?.createdAt ?? now,
         committedAt: now,
@@ -3318,9 +3342,13 @@ export const useApp = create<AppState>((set, get) => ({
 
   wishCancel: async (orderId, reason) => {
     const now = Date.now()
-    const box = { refunded: 0, deliveredGame: undefined as string | undefined }
+    const box = {
+      refunded: 0,
+      refundedPoints: 0,
+      deliveredGame: undefined as string | undefined,
+    }
 
-    await db.transaction('rw', [db.harvestLedger, db.wishOrders], async () => {
+    await db.transaction('rw', [db.ledger, db.harvestLedger, db.wishOrders], async () => {
       const row = await db.wishOrders.get(orderId)
       if (!row) return
 
@@ -3336,17 +3364,44 @@ export const useApp = create<AppState>((set, get) => ({
       box.deliveredGame = row.openedGameId
 
       if (row.status !== 'wished') {
-        const tip = await harvestTip()
-        await db.harvestLedger.put({
-          id: `hv_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
-          delta: row.vouchersHeld,
-          balanceAfter: tip.balance + row.vouchersHeld,
-          source: 'wish_refund',
-          refId: row.itemId,
-          memo: `取消兑换退回：${row.itemName}`,
-          createdAt: tip.createdAt,
-        })
-        box.refunded = row.vouchersHeld
+        /*
+         * 两种币**各退各的**（2026-10-29）。
+         *
+         * 只退券不退积分 = 混付那部分积分凭空蒸发，而且不报错 ——
+         * 孩子只会觉得「取消了怎么钱少了」。所以这两笔必须写在同一个事务里。
+         *
+         * `pointsHeld` 缺省 0：老订单（纯券）走这条分支时一笔都不写。
+         */
+        const voucherBack = row.vouchersHeld
+        const pointsBack = row.pointsHeld ?? 0
+
+        if (voucherBack > 0) {
+          const hTip = await harvestTip()
+          await db.harvestLedger.put({
+            id: `hv_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+            delta: voucherBack,
+            balanceAfter: hTip.balance + voucherBack,
+            source: 'wish_refund',
+            refId: row.itemId,
+            memo: `取消兑换退回：${row.itemName}`,
+            createdAt: hTip.createdAt,
+          })
+          box.refunded = voucherBack
+        }
+
+        if (pointsBack > 0) {
+          const pTip = await ledgerTip()
+          await db.ledger.put({
+            id: `lg_${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+            delta: pointsBack,
+            balanceAfter: pTip.balance + pointsBack,
+            source: 'wish_refund',
+            refId: row.itemId,
+            memo: `取消兑换退回：${row.itemName}`,
+            createdAt: pTip.createdAt,
+          })
+          box.refundedPoints = pointsBack
+        }
       }
 
       await db.wishOrders.update(orderId, {
@@ -3377,10 +3432,15 @@ export const useApp = create<AppState>((set, get) => ({
       }
     }
 
-    if (box.refunded > 0) {
+    if (box.refunded > 0 || box.refundedPoints > 0) {
+      // 两种币都可能退，标题里只写实际退了的那些 —— 「已退回 0 张兑换券 + 30 积分」
+      // 看着像出错。
+      const parts: string[] = []
+      if (box.refunded > 0) parts.push(`${box.refunded} 张兑换券`)
+      if (box.refundedPoints > 0) parts.push(`${box.refundedPoints} 积分`)
       get().pushToast({
         kind: 'info',
-        title: `已退回 ${box.refunded} 张兑换券`,
+        title: `已退回 ${parts.join(' + ')}`,
         detail: box.deliveredGame ? '游戏已收回，进度还在' : undefined,
         emoji: '🎫',
       })

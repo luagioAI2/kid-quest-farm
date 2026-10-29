@@ -6,13 +6,16 @@
 
    设计口径见 `docs/wish-mall-spec.md`。三条最要紧的：
 
-   1. **心愿商城只收兑换券**，不混付积分（与「兑换」不同）。
+   1. **心愿商城收兑换券 + 积分，规则和「兑换」模块一字不差**：券先花、
+      不够用积分补、1 券 ≡ 1 积分（2026-10-29 家长要求改的）。
+      原来这里写的是「只收兑换券，不混付积分」，那条已经作废。
    2. **券必须真扣** —— 因为成交发生在 App 外面，不扣的话孩子能同时挂
       10 个「已兑换」，家长每个都得去淘宝买一遍。
    3. **盲盒先算池子再扣券** —— 池子空了要直接拒绝，不能先扣再发现没得开。
    ============================================================ */
 
 import type { WishKind } from './types'
+import { planRedeemPayment } from './redeem'
 
 /** 分类标签。顺序就是 chips 的顺序（盲盒在前 —— 用户要求优先显示） */
 export const WISH_KIND_META: Record<
@@ -30,19 +33,37 @@ export const WISH_KIND_META: Record<
 export type WishFilter = WishKind | null
 
 /**
- * 这次能不能换。
+ * 这次能不能换、两种币**各付多少**。
  *
- * 只有一个判断：券够不够。**不接受积分补足** —— 混付会让
- * 「积分能不能换实物」变成一个是非题，而它应该是「不能」。
+ * 规则与「兑换」模块完全一致（2026-10-29 家长要求）：
+ * **兑换券先花，不够再用积分补，1 券 ≡ 1 积分**。
+ *
+ * ⚠️ 这里**不要再写一遍分账公式**，直接委托 `planRedeemPayment`。
+ *    两处各写一遍的话，改一处忘另一处时界面预览和真正扣款会算出两个数，
+ *    差额通常只有几分 —— 孩子的余额看起来就是「莫名其妙少了 1」。
+ *
+ * ⚠️ `pointsBalance` **不给默认值**。默认 0 会让漏改的调用方静默退化成
+ *    「积分永远用不上」，而这正是这次要修掉的行为。
  */
 export function planWishRedeem(
   price: number,
   voucherBalance: number,
-): { affordable: boolean; shortfall: number; price: number } {
-  // 取整兜底：账本里存的本来就是整数，传进小数只可能是调用方算错了
-  const p = Math.max(0, Math.round(price))
-  const have = Math.max(0, Math.round(voucherBalance))
-  return { affordable: have >= p, shortfall: Math.max(0, p - have), price: p }
+  pointsBalance: number,
+): {
+  affordable: boolean
+  shortfall: number
+  price: number
+  voucherPaid: number
+  pointsPaid: number
+} {
+  const p = planRedeemPayment(price, voucherBalance, pointsBalance)
+  return {
+    affordable: p.affordable,
+    shortfall: p.shortfall,
+    price: p.total,
+    voucherPaid: p.harvestPaid,
+    pointsPaid: p.pointsPaid,
+  }
 }
 
 /**

@@ -200,6 +200,9 @@ const SOURCE: Record<LedgerSource, { emoji: string; label: string }> = {
   farm_purchase: { emoji: '🛒', label: '农场支出' },
   farm_market: { emoji: '🏪', label: '市场卖出' },
   redeem: { emoji: '🎁', label: '兑换' },
+  // 心愿商城（2026-10-29 起可以券 + 积分混付，所以积分流水里也会出现）
+  wish_redeem: { emoji: '🛍️', label: '心愿商城' },
+  wish_refund: { emoji: '↩️', label: '心愿退回' },
   streak_bonus: { emoji: '🔥', label: '连续奖励' },
   manual_adjust: { emoji: '🔧', label: '手动调整' },
   // 插件游戏的一次投入（`HostApi.spendPoints`）。`refId` 是游戏 id，

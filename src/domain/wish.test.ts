@@ -18,24 +18,70 @@ import {
    * `pickBlindBox` —— 池子空了还返回东西，就会「先扣券再发现没得开」
    ============================================================ */
 
-describe('planWishRedeem：够不够', () => {
-  it('刚好够', () => {
-    expect(planWishRedeem(30, 30)).toEqual({ affordable: true, shortfall: 0, price: 30 })
+describe('planWishRedeem：够不够、两种币各付多少', () => {
+  it('刚好够（纯券）', () => {
+    expect(planWishRedeem(30, 30, 0)).toEqual({
+      affordable: true,
+      shortfall: 0,
+      price: 30,
+      voucherPaid: 30,
+      pointsPaid: 0,
+    })
   })
 
   it('差一张就不够 —— 不能四舍五入成「够」', () => {
-    const r = planWishRedeem(30, 29)
+    const r = planWishRedeem(30, 29, 0)
     expect(r.affordable).toBe(false)
     expect(r.shortfall).toBe(1)
   })
 
   it('多出来的券不会被「花掉」—— price 只记标价', () => {
-    expect(planWishRedeem(30, 500).price).toBe(30)
+    expect(planWishRedeem(30, 500, 0).price).toBe(30)
   })
 
   it('负数 / 小数一律兜住，不让它们渗进账本', () => {
-    expect(planWishRedeem(-10, 5).price).toBe(0)
-    expect(planWishRedeem(30.4, 30.4)).toEqual({ affordable: true, shortfall: 0, price: 30 })
+    expect(planWishRedeem(-10, 5, 0).price).toBe(0)
+    expect(planWishRedeem(30.4, 30.4, 0)).toEqual({
+      affordable: true,
+      shortfall: 0,
+      price: 30,
+      voucherPaid: 30,
+      pointsPaid: 0,
+    })
+  })
+
+  /* ------------------------------------------------------------
+     2026-10-29：券不够可以用积分补（家长要求，规则同「兑换」）
+     ------------------------------------------------------------ */
+
+  it('券 0、积分够 → 全用积分', () => {
+    expect(planWishRedeem(80, 0, 300)).toEqual({
+      affordable: true,
+      shortfall: 0,
+      price: 80,
+      voucherPaid: 0,
+      pointsPaid: 80,
+    })
+  })
+
+  it('券不够 → 先花光券，剩下的用积分补（1 比 1）', () => {
+    expect(planWishRedeem(80, 30, 300)).toEqual({
+      affordable: true,
+      shortfall: 0,
+      price: 80,
+      voucherPaid: 30,
+      pointsPaid: 50,
+    })
+  })
+
+  it('券够就**不碰积分** —— 积分要留着换别的东西', () => {
+    expect(planWishRedeem(80, 100, 999).pointsPaid).toBe(0)
+  })
+
+  it('两种币加起来还差一分 → 不够，差额按合计算', () => {
+    const r = planWishRedeem(80, 30, 49)
+    expect(r.affordable).toBe(false)
+    expect(r.shortfall).toBe(1)
   })
 })
 

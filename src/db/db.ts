@@ -182,9 +182,11 @@ class KidQuestFarmDB extends Dexie {
     //     商品目录本身是常量（`games/wishCatalog.ts`），不入库。
     //   * `wishOrders` —— 心愿单/兑换单，一条记录走完全程。
     //
-    // ⚠️ 心愿商城**只收兑换券**，所以这里没有「积分余额」之类的字段。
-    //    扣券/退券都走 `harvestLedger`（`wish_redeem` / `wish_refund`），
+    // ⚠️ 心愿商城**不存余额**：券和积分各走自己的账本
+    //    （`harvestLedger` / `ledger`，source 都是 `wish_redeem` / `wish_refund`），
     //    余额永远是 delta 之和 —— 别在这两张表里再存一份余额。
+    //    2026-10-29 起可以券 + 积分混付，所以订单上多了 `pointsHeld`；
+    //    退款要**两张账本各退一笔**，只退一种就是静默吞钱。
     //
     // ⚠️ `wishOrders.ship` 是**儿童敏感个人信息**（收货人+手机+家庭地址）。
     //    备份导出必须 strip 掉，见 `exportBackup` 里那段注释。

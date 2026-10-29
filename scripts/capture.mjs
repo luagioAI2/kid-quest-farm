@@ -539,6 +539,22 @@ try {
     await st().updateSettings({ protectParentActions: false, parentPin: undefined })
   })
   await wait(400)
+
+  /* 把 10c 摆成**混付**那一档（2026-10-29）。
+     ------------------------------------------------------------
+     这次改动的全部内容就是「券不够时积分补」，券够的时候界面和以前一模一样。
+     不主动摆出这个状态，图集里永远是「付款：120 兑换券」，走查图上看不出
+     改了任何东西 —— 而那正是最容易漏掉的一种「图对、说明错」。
+
+     价格定在「券 + 50 分」上 ⇒ 券必然花光、必然出现两段分账。 */
+  await page.evaluate(async () => {
+    const st = () => window.__kqf__.getState()
+    const s = st()
+    if (s.balance < 50) await window.__kqf__.addPoints(50 - s.balance)
+    await st().wishSetOffer('wish-popmart', st().harvestBalance + 50)
+  })
+  await wait(400)
+
   if (await clickByText('泡泡玛特')) {
     await wait(700)
     await shot('10c-wish-detail')
@@ -577,7 +593,9 @@ try {
   })
   if (priced && (await clickByText('游戏盲盒'))) {
     await wait(700)
-    await clickByText('张兑换')
+    // 按钮文案 2026-10-29 起是「🎫 用 20 换」（去掉「张」—— 券 + 积分混付）。
+    // 还按老文案找会**静默点空**：开箱页不出现，只有一行 ⚠️，图集里少一张图。
+    await clickByText('用 20 换')
     await page
       .waitForFunction(() => document.body.innerText.includes('抽到了新游戏'), { timeout: 30000 })
       .catch(() => console.log('  ⚠️ 10e 开箱页没出现：盲盒没换成功（先看 10b 有没有定价）'))

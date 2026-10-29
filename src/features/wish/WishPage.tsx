@@ -12,6 +12,7 @@ import {
   type WishFilter,
 } from '@/domain/wish'
 import { humanizeAgo } from '@/domain/time'
+import { describeRedeemPayment } from '@/domain/redeem'
 import { formatPriceCents } from '@/domain/cash'
 import { WISH_BLINDBOX_ID, WISH_ITEMS, wishItemById } from '@/games/wishCatalog'
 import { STOREFRONT, type StorefrontEntry } from '@/games/storefront'
@@ -30,7 +31,9 @@ import { ParentPinPanel } from '../parent/ParentGate'
 
    完整口径见 `docs/wish-mall-spec.md`。三条最要紧的：
 
-   1. **只收兑换券**，不混付积分。
+   1. **收兑换券 + 积分，规则和「兑换」一字不差**（2026-10-29 家长要求）：
+      券先花、不够用积分补、1 券 ≡ 1 积分。原来写的是「只收兑换券，
+      不混付积分」—— 那条已作废。
    2. **孩子「确定兑换」就真扣券** —— 因为成交在 App 外面，不扣的话
       孩子能同时挂 10 个「已兑换」，家长每个都得去淘宝买一遍。
    3. **价格与券价不同行**，价格旁必须写「家长支付」。
@@ -41,6 +44,36 @@ import { ParentPinPanel } from '../parent/ParentGate'
    一个容器 + 五个视图，靠 `view` 状态切。**不做路由** ——
    底部导航只有一格，进来出去都是一次性的，加路由只会让返回键变复杂。
    ============================================================ */
+
+/**
+ * 这一单孩子**实际付了什么**，一句话。
+ *
+ * 2026-10-29 起可以券 + 积分混付，`vouchersHeld` 只是券那部分 ——
+ * 家长端那几处（「孩子已付」「已扣除」「会原样退回」）原来直接写
+ * `{vouchersHeld} 张`，混付的单子会**漏掉积分**，看着像少扣了钱。
+ *
+ * `pointsHeld` 缺省 0：老订单全是纯券单，走这条分支不会多出「+ 0 积分」。
+ */
+function paidText(o: { vouchersHeld: number; pointsHeld?: number }): string {
+  const parts: string[] = []
+  if (o.vouchersHeld > 0) parts.push(`🎫 ${o.vouchersHeld} 张`)
+  const points = o.pointsHeld ?? 0
+  if (points > 0) parts.push(`🪙 ${points} 积分`)
+  // 理论上不会发生（`wished` 阶段不扣钱），但空字符串会让句子变成
+  // 「孩子已付 」—— 少一个词比多一个错数更容易被当成排版问题放过。
+  return parts.length > 0 ? parts.join(' + ') : '0'
+}
+
+/**
+ * 券不够、但**加上积分就够**时，还要补多少积分；否则 0。
+ *
+ * 列表卡片和盲盒 hero 都用它。各写一遍的话，两处阈值迟早不一致 ——
+ * 一处说「🪙 补 20」，另一处什么都不显示。
+ */
+function topUpOf(price: number, vouchers: number, points: number): number {
+  if (vouchers >= price) return 0
+  return vouchers + points >= price ? price - vouchers : 0
+}
 
 const TINT_BG: Record<WishTint, string> = {
   sun: 'bg-sun-100',
@@ -121,6 +154,15 @@ export default function WishPage() {
   const wishOffers = useApp((s) => s.wishOffers)
   const wishOrders = useApp((s) => s.wishOrders)
   const harvestBalance = useApp((s) => s.harvestBalance)
+  /**
+   * 积分余额。2026-10-29 起心愿商城也能用积分补差额（家长要求，
+   * 规则和「兑换」模块一致：券先花、不够用积分、1 比 1）。
+   *
+   * ⚠️ 这两个数**必须一起传下去**。只传券的话，界面算出的「够不够」
+   *    会和 `wishRedeem` 里的真实判断不一致 —— 卡片写着差 10 张，
+   *    点下去却能换（或者反过来，按钮亮着但一点就被拒）。
+   */
+  const pointsBalance = useApp((s) => s.balance)
   const ownedGameIds = useApp((s) => s.ownedGameIds)
   const installedGames = useApp((s) => s.installedGames)
   const harvestLedger = useApp((s) => s.harvestLedger)
@@ -245,7 +287,8 @@ export default function WishPage() {
         offer={offerOf(item.id)}
         order={activeOrderOf(item.id)}
         lastCancelled={lastCancelledOf(item.id)}
-        balance={harvestBalance}
+        vouchers={harvestBalance}
+        points={pointsBalance}
         owned={owned}
         onBack={goList}
         onOffer={() => setView({ kind: 'offer', itemId: item.id })}
@@ -264,7 +307,8 @@ export default function WishPage() {
         activeOrderOf={activeOrderOf}
         pending={pendingOrders}
         wishes={wishes}
-        balance={harvestBalance}
+        vouchers={harvestBalance}
+        points={pointsBalance}
         owned={owned}
         onOpen={(itemId) => setView({ kind: 'detail', itemId })}
         onOrders={() => setView({ kind: 'orders' })}
@@ -314,7 +358,8 @@ function ListView({
   activeOrderOf,
   pending,
   wishes,
-  balance,
+  vouchers,
+  points,
   owned,
   onOpen,
   onOrders,
@@ -326,7 +371,10 @@ function ListView({
   pending: ReturnType<typeof useApp.getState>['wishOrders']
   /** 孩子点了「想要这个」、还没定价的单子。家长要先回应它们（见 `pendingOrders` 的注释） */
   wishes: ReturnType<typeof useApp.getState>['wishOrders']
-  balance: number
+  /** 兑换券余额 */
+  vouchers: number
+  /** 积分余额（可以补券不够的部分） */
+  points: number
   owned: Set<string>
   onOpen: (id: string) => void
   onOrders: () => void
@@ -493,6 +541,8 @@ function ListView({
             offer={offerOf(blindbox.id)}
             order={activeOrderOf(blindbox.id)}
             owned={owned}
+            vouchers={vouchers}
+            points={points}
             onOpen={() => onOpen(blindbox.id)}
           />
         )}
@@ -505,6 +555,8 @@ function ListView({
               offer={offerOf(item.id)}
               order={activeOrderOf(item.id)}
               owned={owned}
+              vouchers={vouchers}
+              points={points}
               onOpen={() => onOpen(item.id)}
             />
           ))}
@@ -524,7 +576,8 @@ function ListView({
       </div>
 
       <p className="mt-5 text-center text-xs text-ink-500">
-        想换的东西，先让爸爸妈妈知道 · 你现在有 {balance} 张兑换券
+        想换的东西，先让爸爸妈妈知道 · 你现在有 {vouchers} 张兑换券
+        {points > 0 ? ` + ${points} 积分` : ''}
       </p>
     </div>
   )
@@ -535,16 +588,22 @@ function BlindBoxHero({
   offer,
   order,
   owned,
+  vouchers,
+  points,
   onOpen,
 }: {
   item: WishItem
   offer: { voucherPrice: number } | undefined
   order: { status: string } | undefined
   owned: Set<string>
+  /** 兑换券余额。和 `points` 一起只用来判「券不够、但加上积分够」 */
+  vouchers: number
+  points: number
   onOpen: () => void
 }) {
   const remaining = blindBoxRemaining(item.pool ?? [], [...owned])
   const soldOut = remaining.length === 0
+  const topUp = offer ? topUpOf(offer.voucherPrice, vouchers, points) : 0
 
   return (
     <button
@@ -566,7 +625,10 @@ function BlindBoxHero({
           {soldOut ? (
             <Tag tone="gray">全都玩过了</Tag>
           ) : offer ? (
-            <Tag tone="green">🎫 {offer.voucherPrice}</Tag>
+            <>
+              <Tag tone="green">🎫 {offer.voucherPrice}</Tag>
+              {topUp > 0 && <Tag tone="green">🪙 补 {topUp}</Tag>}
+            </>
           ) : (
             <Tag tone="gray">等爸妈开放</Tag>
           )}
@@ -583,16 +645,30 @@ function ItemCard({
   offer,
   order,
   owned,
+  vouchers,
+  points,
   onOpen,
 }: {
   item: WishItem
   offer: { voucherPrice: number } | undefined
   order: { status: string } | undefined
   owned: Set<string>
+  /** 兑换券余额。和 `points` 一起只用来判「券不够、但加上积分够」 */
+  vouchers: number
+  points: number
   onOpen: () => void
 }) {
   const alreadyOwned = item.kind === 'gamebox' && !!item.gameId && owned.has(item.gameId)
   const entry = gameEntryOf(item)
+
+  /**
+   * 券不够、但**加上积分就够** —— 卡片上补一个小标。
+   *
+   * 不补的话，一个「券 0、积分 300」的孩子看到满屏 `🎫 80` 会以为
+   * 全都换不起，根本不会点进详情页 —— 而详情页里明明写着「付款：
+   * 🪙 80 积分」。这正是 2026-10-29 这次改动要解决的问题。
+   */
+  const topUp = offer ? topUpOf(offer.voucherPrice, vouchers, points) : 0
 
   return (
     <button
@@ -625,7 +701,10 @@ function ItemCard({
         ) : offer ? (
           // 定价优先于「已告诉爸妈」：家长开放之后，卡片上该显示价格，
           // 否则孩子永远看不到「现在可以换了」
-          <Tag tone="green">🎫 {offer.voucherPrice}</Tag>
+          <>
+            <Tag tone="green">🎫 {offer.voucherPrice}</Tag>
+            {topUp > 0 && <Tag tone="green">🪙 补 {topUp}</Tag>}
+          </>
         ) : order?.status === 'wished' ? (
           <Tag tone="blue">已告诉爸妈</Tag>
         ) : (
@@ -645,7 +724,8 @@ function DetailView({
   offer,
   order,
   lastCancelled,
-  balance,
+  vouchers,
+  points,
   owned,
   onBack,
   onOffer,
@@ -657,7 +737,10 @@ function DetailView({
   order: { id: string; status: string; openedGameId?: string } | undefined
   /** 最近一次被取消、且写了理由的单子。只用来在「想要这个」下面补一句「上次爸妈说：…」 */
   lastCancelled: { cancelReason?: string } | undefined
-  balance: number
+  /** 兑换券余额 */
+  vouchers: number
+  /** 积分余额（补券不够的部分，1 比 1） */
+  points: number
   owned: Set<string>
   onBack: () => void
   onOffer: () => void
@@ -676,7 +759,7 @@ function DetailView({
   const settings = useApp((s) => s.settings)
   const needsPin = !!settings.parentPin && settings.protectParentActions !== false
 
-  const plan = offer ? planWishRedeem(offer.voucherPrice, balance) : null
+  const plan = offer ? planWishRedeem(offer.voucherPrice, vouchers, points) : null
   const alreadyOwned = item.kind === 'gamebox' && !!item.gameId && owned.has(item.gameId)
   const boxRemaining = item.kind === 'blindbox' ? blindBoxRemaining(item.pool ?? [], [...owned]) : []
   const soldOut = item.kind === 'blindbox' && boxRemaining.length === 0
@@ -828,21 +911,29 @@ function DetailView({
       {offer && (
         <div className="mt-3 rounded-2xl bg-white px-3.5 py-3 shadow-flat">
           <div className="flex items-center justify-between text-xs font-bold text-ink-500">
-            <span>你的兑换券</span>
-            <span className="font-display text-sm text-ink-900">{balance} 张</span>
+            <span>你有</span>
+            <span className="font-display text-sm text-ink-900">
+              🎫 {vouchers} 张{points > 0 ? ` · 🪙 ${points} 积分` : ''}
+            </span>
           </div>
           <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-100">
             <i
               className="block h-full rounded-full bg-grass-500"
               style={{
-                width: `${Math.min(100, Math.round((balance / Math.max(1, offer.voucherPrice)) * 100))}%`,
+                // 进度条按**两种币合计**算：只按券算的话，一个「券 0、积分够」
+                // 的孩子会看到空条 + 一句「够啦」，自相矛盾。
+                width: `${Math.min(100, Math.round(((vouchers + points) / Math.max(1, offer.voucherPrice)) * 100))}%`,
               }}
             />
           </div>
           <p className="mt-1.5 text-[11px] font-bold text-ink-500">
             {plan?.affordable
-              ? `换这个要 ${offer.voucherPrice} 张，够啦`
-              : `换这个要 ${offer.voucherPrice} 张，还差 ${plan?.shortfall ?? 0} 张`}
+              ? `换这个要 ${offer.voucherPrice}，付款：${describeRedeemPayment({
+                  cost: offer.voucherPrice,
+                  harvestPaid: plan.voucherPaid,
+                  pointsPaid: plan.pointsPaid,
+                })}`
+              : `换这个要 ${offer.voucherPrice}，兑换券和积分加起来还差 ${plan?.shortfall ?? 0}`}
           </p>
         </div>
       )}
@@ -1012,8 +1103,10 @@ function DetailView({
             {busy
               ? '正在兑换…'
               : plan?.affordable
-                ? `🎫 用 ${offer.voucherPrice} 张兑换`
-                : `还差 ${plan?.shortfall ?? 0} 张`}
+                ? // 图标跟着**实际付款**走：纯积分单子（券 0、只靠积分）挂 🎫
+                  // 就是自相矛盾 —— 同一屏上面刚写着「付款：80 积分」。
+                  `${plan.voucherPaid > 0 ? '🎫' : '🪙'} 用 ${offer.voucherPrice} 换`
+                : `还差 ${plan?.shortfall ?? 0}`}
           </button>
         )}
       </div>
@@ -1233,6 +1326,11 @@ function OfferView({
             <>📊 还没有兑换券流水。等孩子玩几局游戏、或者去农场收成，这里就能算出「要攒几天」。</>
           )}
         </p>
+        {/* 家长定的是「券价」，但孩子付款时积分也能补差额 —— 不说清楚的话，
+            家长会以为「定 80 张 = 孩子必须有 80 张券」，从而把价压得比实际需要低。 */}
+        <p className="mt-1.5 text-[11px] font-bold leading-relaxed text-ink-500">
+          🪙 付款时先花兑换券，券不够的部分自动用积分补（1 张 = 1 积分），和「兑换」里一样。
+        </p>
       </div>
 
       <div className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
@@ -1358,7 +1456,7 @@ function ConfirmView({
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-extrabold">{order.itemName}</span>
           <span className="mt-0.5 block text-[11px] font-bold text-ink-500">
-            孩子已付 🎫 {order.vouchersHeld} 张
+            孩子已付 {paidText(order)}
           </span>
         </span>
         <span className="rounded-full bg-grass-100 px-2 py-0.5 text-[10px] font-extrabold text-grass-700">
@@ -1398,15 +1496,15 @@ function ConfirmView({
       </div>
 
       <div className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
-        <p className="text-sm font-extrabold">孩子的兑换券</p>
+        <p className="text-sm font-extrabold">孩子付了什么</p>
         <div className="mt-1 flex items-center justify-between py-1.5 text-sm">
           <span className="text-xs font-bold text-ink-500">已扣除</span>
           <span className="font-display font-extrabold text-berry-500">
-            − {order.vouchersHeld}
+            − {paidText(order)}
           </span>
         </div>
         <p className="mt-1 rounded-xl bg-sky-50 px-2.5 py-2 text-[11px] font-bold leading-relaxed text-sky-500">
-          ↩️ 如果最后没买成，点「取消兑换」，{order.vouchersHeld} 张会原样退回去。
+          ↩️ 如果最后没买成，点「取消兑换」，{paidText(order)} 会原样退回去。
         </p>
         {/* 数字商品：取消要连带收回游戏。**必须先说清楚** ——
             家长点这个按钮的动机通常是「价格定错了」，不会想到
@@ -1605,7 +1703,9 @@ function OrdersView({
                   </span>
                   <span className="mt-0.5 block truncate text-[11px] font-bold text-ink-500">
                     {humanizeAgo(o.createdAt)}
-                    {o.vouchersHeld > 0 ? ` · 🎫 ${o.vouchersHeld} 张` : ' · 只是想要'}
+                    {o.vouchersHeld > 0 || (o.pointsHeld ?? 0) > 0
+                      ? ` · ${paidText(o)}`
+                      : ' · 只是想要'}
                     {/* 未结束的数字单子，状态标签已经写了「已放进游戏柜」，
                         这里只在**结束之后**补一句（那时标签写的是「已经拿到」） */}
                     {o.openedGameId && o.status === 'done' ? ' · 已放进游戏柜' : ''}

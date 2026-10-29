@@ -240,6 +240,20 @@ export type LedgerSource =
   | 'farm_purchase'
   | 'farm_market' // 市场卖出产出
   | 'redeem' // 兑换消耗
+  /**
+   * 心愿商城兑换（负数，2026-10-29）。
+   *
+   * 和 `redeem` 分开：兑换（家里的事）与心愿商城（外面的事）在报表上是
+   * 两件事，混成一个来源就回答不了「孩子这个月的积分花在哪了」。
+   */
+  | 'wish_redeem'
+  /**
+   * 心愿商城取消/买不成退回（正数，2026-10-29）。
+   *
+   * 和 `wish_refund`（券那侧）**必须成对**：一笔成交扣两种币，
+   * 退款也只退一种的话，孩子的另一半就凭空蒸发了。
+   */
+  | 'wish_refund'
   | 'manual_adjust'
   | 'streak_bonus'
   /** 插件游戏的一次投入（负数）。宿主 `HostApi.spendPoints` 用这个 source。 */
@@ -919,6 +933,14 @@ export interface WishOrder {
    * **退款按这个数退，不重新读商品** —— 商品改价了也不能退错。
    */
   vouchersHeld: number
+  /**
+   * 这一单实际扣掉的**积分**（2026-10-29 起可以券 + 积分混付）。
+   *
+   * 缺省按 0 读（老订单全是纯券单），退款时和 `vouchersHeld` 一起退。
+   * ⚠️ 两个字段的缺省方向是**一致的**（都退 0 不影响），别照抄
+   *    `paidOf` 那对「缺省方向相反」的写法 —— 那里是历史包袱，这里不是。
+   */
+  pointsHeld?: number
 
   /** 盲盒开出的游戏 id（只有 `blindbox` 会有） */
   openedGameId?: string

@@ -2326,6 +2326,41 @@ describe('兑换券：不可逆约束 + 每轮闸门', () => {
     ).toBe(200)
   })
 
+  it('⑤ 券不够可以用积分补：先花光券、差额扣积分，取消时两种币都退回', async () => {
+    // 2026-10-29 家长要求「心愿商城跟兑换模块一样，能用积分或者兑换券」。
+    // 三种错法**全是静默的**，所以三层都要钉：
+    //   ① 只扣券不扣积分 → 券不够时提示「还差」，明明能换却换不了；
+    //   ② 扣了积分但订单不记 `pointsHeld` → 取消时积分退不回来（余额悄悄少 20）；
+    //   ③ 退款只退券 → 更隐蔽：券退回来了，看着像退款成功。
+    const voucherNow = useApp.getState().harvestBalance
+    await postHarvest({
+      delta: 30 - voucherNow,
+      source: 'manual_adjust',
+      memo: '测试校准兑换券',
+    })
+    const pointsNow = useApp.getState().balance
+    await postLedger({ delta: 300 - pointsNow, source: 'manual_adjust', memo: '测试校准积分' })
+    await useApp.getState().refresh()
+    expect(useApp.getState().harvestBalance, '前提：券只有 30').toBe(30)
+
+    await useApp.getState().wishSetOffer('wish-popmart', 50)
+    const res = await useApp.getState().wishRedeem('wish-popmart')
+    expect(res.ok, res.message).toBe(true)
+    await useApp.getState().refresh()
+
+    expect(useApp.getState().harvestBalance, '券先花光').toBe(0)
+    expect(useApp.getState().balance, '差额 20 从积分扣').toBe(280)
+
+    const order = useApp.getState().wishOrders.find((o) => o.itemId === 'wish-popmart')
+    expect(order?.vouchersHeld, '押券数 = 券那部分，不是标价').toBe(30)
+    expect(order?.pointsHeld, '押积分必须落盘，否则退不回来').toBe(20)
+
+    await useApp.getState().wishCancel(order!.id, '测试取消')
+    await useApp.getState().refresh()
+    expect(useApp.getState().harvestBalance, '券原样退回').toBe(30)
+    expect(useApp.getState().balance, '积分也要原样退回').toBe(300)
+  })
+
   it('④ 备份里不能出现收货人 / 手机 / 家庭地址（spec §9.1）', async () => {
     // `wishOrders` 进备份之后，这张表里就多了一样东西：`ship`
     // —— 收货人姓名 + 手机号 + 家庭详细地址，绑在**儿童**账号上。

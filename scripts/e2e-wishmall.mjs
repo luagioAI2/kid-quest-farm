@@ -278,12 +278,14 @@ await page.evaluate(() => {
   b?.click()
 })
 await wait(600)
-const priceShown = await page.evaluate(() => document.body.innerText.includes('用 30 张兑换'))
-check('定价后出现「用 30 张兑换」', priceShown)
+const priceShown = await page.evaluate(() => /用\s*30\s*换/.test(document.body.innerText))
+check('定价后出现「用 30 换」', priceShown)
 
 await page.evaluate(() => {
+  // ⚠️ 2026-10-29 起按钮文案是「🎫 用 30 换」（去掉「张」——
+  //    现在是券 + 积分混付，差额不是「张」）。别锚 `^用`，开头有 emoji。
   const b = [...document.querySelectorAll('button')].find((x) =>
-    x.textContent?.includes('张兑换'),
+    /用\s*\d+\s*换/.test((x.textContent ?? '').trim()),
   )
   b?.click()
 })
@@ -372,11 +374,12 @@ const openCard = async () => {
 // 再兑换一次（上一单已取消，价格还是 30、余额 100）
 await openCard()
 await page.evaluate(() => {
-  // ⚠️ 文案是「🎫 用 30 张兑换」——**开头有 emoji**，正则别锚 `^用`。
+  // ⚠️ 文案是「🎫 用 30 换」——**开头有 emoji**，正则别锚 `^用`。
   //    第一版锚了行首，一次都没匹配上，整段 ④b 变成空点击：没有兑换、
   //    没有 done 单子，而报错是「订单走到 done ✗」，看着像功能坏了。
+  //    （2026-10-29 起「张」也去掉了：现在是券 + 积分混付。）
   const b = [...document.querySelectorAll('button')].find((x) =>
-    /用\s*\d+\s*张兑换/.test((x.textContent ?? '').trim()),
+    /用\s*\d+\s*换/.test((x.textContent ?? '').trim()),
   )
   b?.click()
 })
@@ -417,7 +420,7 @@ check('完成后券不退（成交在 App 外面）', afterDone.balance === 70, 
 check('完成没有多写退款流水', afterDone.refunds === 1, `${afterDone.refunds} 笔（取消那 1 笔）`)
 check('扣券流水是 2 笔（两轮兑换）', afterDone.redeemRows === 2, `${afterDone.redeemRows} 笔`)
 
-/* ---------- ⑧ 券不够：按钮灰掉 + 说清还差多少 + 不混付 ----------
+/* ---------- ⑧ 券不够：按钮灰掉 + 说清还差多少（两种币合计） ----------
  *
  * 不去动余额，而是**把价格抬到 9999** —— 余额 100 就自然不够了。
  * 动余额会在 `harvestLedger` 里留一条假流水，后面再算「退款几笔」就不干净。
@@ -436,32 +439,166 @@ await page.evaluate(() => {
 await wait(700)
 
 const poor = await page.evaluate(() => {
+  const s = window.__kqf__.getState()
   const btns = [...document.querySelectorAll('button')]
-  // 底部那颗大按钮：文案只有两种形态 ——「🎫 用 N 张兑换」/「还差 N 张」。
+  // 底部那颗大按钮：文案只有两种形态 ——「🎫 用 N 换」/「还差 N」。
   // ⚠️ 够换的那一档**开头有 emoji**，所以不能锚 `^用`。
+  // ⚠️ 2026-10-29 起可以券 + 积分混付，「还差」后面**不再有「张」** ——
+  //    差额是两种币合起来算的，写「张」就成了谎话。
   const action = btns.find((x) =>
-    /^(?:🎫\s*)?(?:还差|用)\s*\d+\s*张/.test((x.textContent ?? '').trim()),
+    /^(?:🎫\s*)?(?:还差|用)\s*\d+/.test((x.textContent ?? '').trim()),
   )
   const note = [...document.querySelectorAll('*')].find(
-    (x) => x.children.length === 0 && /换这个要\s*\d+\s*张/.test(x.textContent ?? ''),
+    (x) => x.children.length === 0 && /换这个要\s*\d+/.test(x.textContent ?? ''),
   )
   return {
     text: (action?.textContent ?? '').trim() || '(没找到按钮)',
     disabled: !!action?.disabled,
     note: (note?.textContent ?? '').trim(),
-    // 混付判据只看**这颗按钮**：全局顶栏本来就有 🪙 积分，
-    // 拿 body.innerText 去 grep 会永远命中，是个假判据。
-    mixed: /积分|🪙/.test(action?.textContent ?? ''),
+    vouchers: s.harvestBalance,
+    points: s.balance,
   }
 })
 check('券不够时按钮是灰的（disabled）', poor.disabled, poor.text)
-check('券不够时按钮写「还差 N 张」', /^还差\s*\d+\s*张$/.test(poor.text), poor.text)
-check('券不够时只提兑换券，不提积分（不混付）', !poor.mixed, poor.text)
 check(
-  '进度条下方写清「换这个要 N 张，还差 M 张」',
-  /换这个要\s*9999\s*张，还差\s*\d+\s*张/.test(poor.note),
+  '券不够时按钮写「还差 N」（不带「张」）',
+  /^还差\s*\d+$/.test(poor.text),
+  poor.text,
+)
+check(
+  '进度条下方写清「换这个要 9999，兑换券和积分加起来还差 M」',
+  /换这个要\s*9999，兑换券和积分加起来还差\s*\d+/.test(poor.note),
   poor.note,
 )
+/* 差额必须是**两种币合计**算出来的。
+ * 只按券算的话，一个「券 100、积分 300」的孩子会被告知「还差 9899」，
+ * 而正确答案是 9599 —— 差的那 300 正是这次要修的东西，而且它不报错。 */
+const expectShort = 9999 - (poor.vouchers + poor.points)
+check(
+  `还差的数量按两种币合计（应 ${expectShort}）`,
+  new RegExp(`还差\\s*${expectShort}$`).test(poor.note),
+  poor.note,
+)
+
+/* ---------- ⑧b 券不够、但积分能补 → 真的能换（2026-10-29） ----------
+ *
+ * 这条是这次改动的**唯一正向判据**。只测「还差」那一档的话，一个
+ * 「把积分算进差额、但点下去仍然拒绝」的实现照样全绿 —— 界面写着够、
+ * 实际换不了，是最难发现的那种。
+ *
+ * 不动券余额：把价格定在 `(券, 券+积分]` 区间内，分账必然出现两段。
+ * 积分用调试句柄补到 300（`ledger` 表，和券那侧的退款流水计数互不干扰）。
+ */
+await page.evaluate(() => window.__kqf__.addPoints(300))
+await wait(200)
+const mix = await page.evaluate(async () => {
+  const s = window.__kqf__.getState()
+  // 券 + 50 分：券必然花光，剩下的必须从积分出
+  const price = s.harvestBalance + 50
+  await s.wishSetOffer('wish-popmart', price)
+  return { price, vouchers: s.harvestBalance, points: s.balance }
+})
+check(
+  '前提：孩子积分够补这 50（否则这条测不了混付）',
+  mix.points >= 50,
+  `积分 ${mix.points}`,
+)
+await wait(400)
+const mixUi = await page.evaluate(() => {
+  const btns = [...document.querySelectorAll('button')]
+  const action = btns.find((x) =>
+    /^(?:🎫\s*)?(?:还差|用)\s*\d+/.test((x.textContent ?? '').trim()),
+  )
+  const note = [...document.querySelectorAll('*')].find(
+    (x) => x.children.length === 0 && /换这个要\s*\d+/.test(x.textContent ?? ''),
+  )
+  return {
+    text: (action?.textContent ?? '').trim(),
+    disabled: !!action?.disabled,
+    note: (note?.textContent ?? '').trim(),
+  }
+})
+check('券不够但积分能补 → 按钮是亮的', !mixUi.disabled, mixUi.text)
+check(
+  '券不够但积分能补 → 进度条下方写出两种币各付多少',
+  /付款：.*兑换券.*积分/.test(mixUi.note),
+  mixUi.note,
+)
+await page.screenshot({ path: `${OUT}/06b-mixed-pay-detail.png` })
+
+/* 列表卡片也得能看出来。看不到的话，孩子连点进详情的机会都没有 ——
+ * 这是「能用积分」这件事在**入口**上的唯一线索。 */
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find(
+    (x) => x.getAttribute('aria-label') === '返回',
+  )
+  b?.click()
+})
+await wait(600)
+const listTag = await page.evaluate(() => {
+  const card = [...document.querySelectorAll('.grid > button')].find((x) =>
+    x.textContent?.includes('泡泡玛特'),
+  )
+  return (card?.textContent ?? '').trim()
+})
+check('列表卡片也标出「🪙 补 N」', /🪙\s*补\s*\d+/.test(listTag), listTag)
+await page.screenshot({ path: `${OUT}/06c-mixed-pay-list.png` })
+
+// 回到详情 —— 后面的 ⑨ 断言要求「停在泡泡玛特详情」。
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+    x.textContent?.includes('泡泡玛特'),
+  )
+  b?.click()
+})
+await wait(600)
+
+/* ---------- ⑧c 纯积分：券 0，全靠积分（最常见的那一类孩子） ----------
+ *
+ * 一个只做任务、不玩农场的孩子手里**一张券都没有**。这一档以前直接
+ * 「还差 N 张」、按钮灰着；现在必须能换，而且按钮上的图标不能还挂着 🎫
+ * —— 同一屏上面刚写着「付款：60 积分」，图标说券，就是自相矛盾。
+ *
+ * 用完把券原样还回去，后面几段的余额算术不受影响。
+ */
+const zeroed = await page.evaluate(async () => {
+  const st = () => window.__kqf__.getState()
+  const had = st().harvestBalance
+  await window.__kqf__.addVouchers(-had)
+  await st().wishSetOffer('wish-popmart', 60)
+  return { had, points: st().balance }
+})
+await wait(500)
+const purePoints = await page.evaluate(() => {
+  const btns = [...document.querySelectorAll('button')]
+  const action = btns.find((x) =>
+    /^(?:🎫|🪙)?\s*(?:还差|用)\s*\d+\s*换?/.test((x.textContent ?? '').trim()),
+  )
+  const note = [...document.querySelectorAll('*')].find(
+    (x) => x.children.length === 0 && /换这个要\s*\d+/.test(x.textContent ?? ''),
+  )
+  return {
+    text: (action?.textContent ?? '').trim(),
+    disabled: !!action?.disabled,
+    note: (note?.textContent ?? '').trim(),
+  }
+})
+check('前提：积分够 60（否则测不了纯积分）', zeroed.points >= 60, `积分 ${zeroed.points}`)
+check('券 0 也能换 —— 按钮是亮的', !purePoints.disabled, purePoints.text)
+check(
+  '纯积分时付款只写积分，不写「0 兑换券」',
+  /付款：\s*60\s*积分$/.test(purePoints.note),
+  purePoints.note,
+)
+check('纯积分时按钮图标是 🪙，不是 🎫', /^🪙/.test(purePoints.text), purePoints.text)
+await page.screenshot({ path: `${OUT}/06d-pure-points.png` })
+
+// 券原样还回去
+await page.evaluate(async (had) => {
+  if (had > 0) await window.__kqf__.addVouchers(had)
+  await window.__kqf__.getState().wishSetOffer('wish-popmart', had + 50)
+}, zeroed.had)
+await wait(400)
 
 /* 家长主动来定价（孩子没提过意向）时，页面不能替孩子说「想要这个」。
  *
@@ -547,7 +684,8 @@ const layering = await page.evaluate(() => {
   )
   const payCard = payLabel?.closest('div')
   const voucherNote = [...document.querySelectorAll('*')].find(
-    (x) => x.children.length === 0 && /换这个要\s*\d+\s*张/.test(x.textContent ?? ''),
+    // 2026-10-29 起这句不再带「张」（券 + 积分混付，差额按两种币合计）
+    (x) => x.children.length === 0 && /换这个要\s*\d+/.test(x.textContent ?? ''),
   )
   return {
     hasPayLabel: !!payLabel,
@@ -604,7 +742,7 @@ await page.evaluate(() => {
 await wait(700)
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find((x) =>
-    /用\s*\d+\s*张兑换/.test((x.textContent ?? '').trim()),
+    /用\s*\d+\s*换/.test((x.textContent ?? '').trim()),
   )
   b?.click()
 })
