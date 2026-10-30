@@ -30,6 +30,30 @@ import { Card } from './ui'
 
 type Tab = 'child' | 'rules' | 'game' | 'data'
 
+/**
+ * 「从备份恢复」那条 toast 的**第二行**。
+ *
+ * `importBackup` 返回的是**一整句**（「数据已恢复；游戏装回 2 款」），而 toast
+ * 自己有标题。整句塞进 detail 就成了
+ *
+ *     数据已恢复
+ *     数据已恢复
+ *
+ * —— 同一句话说两遍，真正有用的那半句反而被挤到第二行去读。
+ * 2026-10-30 换机探针里**看图**才发现的：所有断言都是绿的（文字确实在），
+ * 只是读起来像坏了。
+ *
+ * 规则：
+ *   · 成功 → 剥掉开头那句，只留「；」之后的部分；没有后半句就返回空串
+ *     （`App.tsx` 里是 `{t.detail && …}`，空串整行不渲染）
+ *   · 失败 → 原样返回。那时候 message 是**具体原因**，标题才是「恢复失败」，
+ *     剥掉反而把唯一的线索删了
+ */
+export function restoreToastDetail(ok: boolean, message: string): string {
+  if (!ok) return message
+  return message.replace(/^数据已恢复[；;]?\s*/, '').trim()
+}
+
 export default function SettingsPage({
   onBack,
   onReplayGuide,
@@ -131,7 +155,7 @@ export default function SettingsPage({
       pushToast({
         kind: res.ok ? 'success' : 'warn',
         title: res.ok ? '数据已恢复' : '恢复失败',
-        detail: res.message,
+        detail: restoreToastDetail(res.ok, res.message),
         emoji: res.ok ? '✅' : '⚠️',
       })
     },
