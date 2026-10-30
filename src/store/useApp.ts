@@ -844,6 +844,22 @@ const BACKUP_ARRAY_FIELDS = [
   'events',
 ] as const
 
+/**
+ * `data` 里**不是表**的那几个键。
+ *
+ * 加这个清单是为了让「导出写了哪些键」和「导入认得哪些键」有一处共同的账本 ——
+ * 单测里拿真实导出和它做差，加表时忘了登记会当场红。
+ */
+const BACKUP_SCALAR_FIELDS = ['market', 'settings', 'farm', 'quotaCarry', 'meta'] as const
+
+/**
+ * 一份备份的 `data` 里**允许出现**的全部键。
+ *
+ * 导出给单测用：拿真实导出和它做**双向**比对，加表时忘了登记会当场红
+ * （那时记得同时 bump `BACKUP_VERSION`，否则旧版 App 会静默丢掉新表）。
+ */
+export const KNOWN_BACKUP_KEYS = new Set<string>([...BACKUP_ARRAY_FIELDS, ...BACKUP_SCALAR_FIELDS])
+
 /** 数组字段允许缺失（老版本备份没有新字段），但若存在必须是对象数组且带 id */
 const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
   'tasks',
@@ -4052,8 +4068,11 @@ export const useApp = create<AppState>((set, get) => ({
     return {
       app: 'kid-quest-farm',
       /**
-       * 备份格式版本。**导入端不看它**（只认 `app` 和 `data`），
-       * 所以老文件照样能读；它只是给「人」和排障用的标记。
+       * 备份格式版本。
+       *
+       * **只往一个方向拦**：导入时「比当前新」的一律拒绝（见 `importBackup`
+       * 里那段注释），「比当前旧」的照样能读 —— 老文件永远读得回来，这条
+       * 不能破。所以加表时必须同步 bump 这个号，否则旧版 App 会把新表静默丢掉。
        *
        * v3（2026-10-28）：`data` 里新增 `wishOrders`，且其中的收货信息
        * 一律是脱敏快照（`shipSnapshot`），不会有 `ship`。见 spec §9.1。
@@ -4161,12 +4180,30 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const parsed = raw as {
         app?: string
+        version?: number
         data?: Record<string, unknown>
       }
       if (!parsed || parsed.app !== 'kid-quest-farm' || !parsed.data) {
         return { ok: false, message: '这不是小任务农场的备份文件' }
       }
       const d = parsed.data
+
+      /**
+       * 版本号：**比当前新的，一律不认**。
+       *
+       * 以前这里完全不读 `version`（老注释还写着「导入端不看它」）。那对
+       * 「老文件」是对的 —— 版本比当前小的照样能读，这是必须保住的。
+       * 但反方向会**静默丢数据**：新版加了 `data.wishCodes` 这类表之后，
+       * 旧版 App 拿到新备份会照单全收，不认识的那张表被悄悄丢掉，
+       * 提示还是「数据已恢复」；等它再导出一次，那份数据就永久没了。
+       *
+       * 所以：只拦「比我还新」的。拦下来让他先更新 App —— 更新是免费的，
+       * 丢的数据不是。
+       */
+      const fileVersion = typeof parsed.version === 'number' ? parsed.version : 0
+      if (fileVersion > BACKUP_VERSION) {
+        return { ok: false, message: '备份来自更新的版本，请先更新 App' }
+      }
 
       // ---- 先全量校验，再动数据 ----
       // 否则一个"app 字段正确但内容残缺"的文件会先清空旧数据、再写入失败，

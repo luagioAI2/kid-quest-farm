@@ -150,4 +150,28 @@ describe('从备份恢复 → 界面上的提示（走真界面）', () => {
     expect(toast!.detail).toMatch(/no-such-game/)
     expect(toast!.detail).toMatch(/去「游戏」页重装/)
   })
+
+  it('★ 比当前新的备份：提示要落到「恢复失败」并让人先更新', async () => {
+    const r = await openDataTab()
+
+    const snap = (await useApp.getState().exportBackup()) as {
+      version: number
+      data: Record<string, unknown>
+    }
+    const future = { ...snap, version: snap.version + 1 }
+
+    const input = r.container.querySelector('input[type=file]') as HTMLInputElement
+    fireEvent.change(input, {
+      target: { files: [new File([JSON.stringify(future)], 'b.json', { type: 'application/json' })] },
+    })
+
+    /* 被拒绝时 toast 的标题是「恢复失败」，detail 才是原因。
+       ⚠️ 这条同时守两件事：闸门真的接进了界面、原因真的显示出来了 ——
+          只测 store 的话，界面把 message 丢掉也不会红。 */
+    const toast = await waitToast((t) => t.title === '恢复失败')
+    expect(toast, '比当前新的备份被放行了（或者失败提示没弹出来）').toBeTruthy()
+    expect(toast!.detail).toContain('更新')
+    // 反面对照：不许说「数据已恢复」
+    expect(toast!.detail).not.toContain('数据已恢复')
+  })
 })

@@ -18,6 +18,7 @@ import {
   wipeAll,
 } from '../db/db'
 import {
+  KNOWN_BACKUP_KEYS,
   makeBackupSample,
   selectCheckInTasks,
   selectPendingCheckIns,
@@ -3829,3 +3830,64 @@ describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
     )
   })
 })
+
+/* ============================================================
+   备份版本号：只往一个方向拦
+   ------------------------------------------------------------
+   `version` 以前**只写不读**（导出侧的老注释就写着「导入端不看它」）。
+   对「老文件」那是对的 —— 版本比当前小的必须照样能读，这条不能破。
+   但反方向会**静默丢数据**：新版加了表，旧版 App 照单全收，不认识的那张
+   被悄悄丢掉，提示还是「数据已恢复」；它再导出一次，那份数据就永久没了。
+   ============================================================ */
+describe('备份版本号：新的不认，旧的要认', () => {
+  /** 拿一份**真实导出**当底稿再改版本号 —— 不手搓，免得跟导出结构走散 */
+  const withVersion = async (pick: (v: number) => number) => {
+    const snap = (await useApp.getState().exportBackup()) as {
+      version: number
+      data: Record<string, unknown>
+    }
+    return { ...snap, version: pick(snap.version) }
+  }
+
+  it('★ 比当前新的备份要拒绝，并说清「先更新 App」', async () => {
+    const res = await useApp.getState().importBackup(await withVersion((v) => v + 1))
+    expect(res.ok, '比当前新的备份不该被接受').toBe(false)
+    expect(res.message).toContain('更新')
+  })
+
+  it('★ 被拒绝时一个字节都不该动', async () => {
+    await postLedger({ delta: 30, source: 'manual_adjust', memo: '先有点东西' })
+    await useApp.getState().refresh()
+    const before = useApp.getState().balance
+    const res = await useApp.getState().importBackup(await withVersion((v) => v + 1))
+    expect(res.ok).toBe(false)
+    await useApp.getState().refresh()
+    expect(useApp.getState().balance, '拦下来就不能清库').toBe(before)
+  })
+
+  it('★ 比当前旧的备份照样能读（老文件永远读得回来）', async () => {
+    const res = await useApp.getState().importBackup(await withVersion((v) => Math.max(1, v - 1)))
+    expect(res.ok, res.message).toBe(true)
+  })
+
+  it('★ 没写版本号的老文件也能读', async () => {
+    const snap = (await useApp.getState().exportBackup()) as Record<string, unknown>
+    delete snap.version
+    const res = await useApp.getState().importBackup(snap)
+    expect(res.ok, res.message).toBe(true)
+  })
+
+  it('★ 加表必须同时登记：真实导出的键 == 已知键清单', async () => {
+    /* 加了一张表却忘了 bump `BACKUP_VERSION`，旧版 App 就会静默丢掉它。
+       这条把「导出写了哪些键」和「导入认得哪些键」钉在一起：改一边就得看另一边。 */
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const exported = Object.keys(snap.data)
+      .filter((k) => snap.data[k] !== undefined)
+      .sort()
+    expect(
+      exported,
+      '导出的键和 KNOWN_BACKUP_KEYS 对不上 —— 加表时记得同时 bump BACKUP_VERSION',
+    ).toEqual([...KNOWN_BACKUP_KEYS].sort())
+  })
+})
+
