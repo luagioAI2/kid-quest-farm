@@ -18,6 +18,7 @@ import {
   wipeAll,
 } from '../db/db'
 import {
+  makeBackupSample,
   selectCheckInTasks,
   selectPendingCheckIns,
   selectPeriodTasks,
@@ -3751,6 +3752,41 @@ describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
     // jsdom 里取不到包（fetch 打不开），所以它一定落在「装不回来」那一边
     expect(res.message, '要说名字，不是只说个数').toContain('蚂蚁搬家')
     expect(res.message).toContain('重新装')
+  })
+
+  /* ------------------------------------------------------------
+     「下载一个空模板看看」—— 它要回答「备份长什么样」
+     ------------------------------------------------------------
+     原来这份模板是 `data: {}`：家长打开只看到一个空对象，什么也没回答，
+     而且 `version` 还停在 1（真实导出早就是 4 了）。
+     ------------------------------------------------------------ */
+  it('★ 空模板要把表结构摊开，且不落后于真实导出', async () => {
+    const real = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const sample = makeBackupSample() as { data: Record<string, unknown> }
+
+    // 真实导出里每一个**数组表**，模板里都得有 —— 加表时忘了改模板会红
+    const realArrayKeys = Object.keys(real.data)
+      .filter((k) => Array.isArray(real.data[k]))
+      .sort()
+    expect(Object.keys(sample.data).sort(), '模板的表清单要和导出对齐').toEqual(realArrayKeys)
+    expect(realArrayKeys.length, '前提：导出里确实有数组表').toBeGreaterThan(5)
+
+    // 值是空数组 —— 让「至少要有一样实际内容」那条把它挡在门外
+    expect(Object.values(sample.data).every((v) => Array.isArray(v) && v.length === 0)).toBe(true)
+  })
+
+  it('★ 导入空模板会被拒绝（不能拿它把数据清空）', async () => {
+    // 模板是给人看的，**不能**被当成一份能恢复的备份 ——
+    // 否则家长（或孩子）拿它点一次恢复，真实数据就被一份空壳顶掉了。
+    await postLedger({ delta: 30, source: 'manual_adjust', memo: '先有点东西' })
+    await useApp.getState().refresh()
+    const before = useApp.getState().balance
+
+    const res = await useApp.getState().importBackup(makeBackupSample())
+    expect(res.ok, res.message).toBe(false)
+    expect(res.message).toContain('空')
+    await useApp.getState().refresh()
+    expect(useApp.getState().balance, '被拒绝就一个字节都不该动').toBe(before)
   })
 
   it('★★ 导入一份自带代码的备份，那段代码不许落库', async () => {

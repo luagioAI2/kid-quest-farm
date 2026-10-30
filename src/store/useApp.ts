@@ -860,6 +860,34 @@ const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
 ])
 
 /**
+ * 备份格式的版本号。**只在这里写一次** —— 导出和「空模板」都读它。
+ * 写在两处就会走散：模板停在 1、真实导出早就是 4（2026-10-30 之前就是这样）。
+ */
+const BACKUP_VERSION = 4
+
+/**
+ * 「下载一个空模板看看」那个按钮的内容。
+ *
+ * 它要回答的问题是「备份长什么样」，所以**必须把结构摊开**：一张表一个键，
+ * 值都是空数组。原来的写法是 `data: {}` —— 家长打开只看到一个空对象，
+ * 什么也没回答。
+ *
+ * ⚠️ 键名从 `BACKUP_ARRAY_FIELDS` 派生，**不手写**。手写一份就会在加表时走散。
+ * ⚠️ 值一律留空数组，让 `validateBackup` 里那条「至少要有一样实际内容，
+ *    避免导入一个空壳把数据清空」把它挡住 —— 空模板必须是**导不进去**的，
+ *    否则家长（或孩子）拿它点一次恢复，真实数据就被示例顶掉了。
+ */
+export function makeBackupSample(): unknown {
+  return {
+    app: 'kid-quest-farm',
+    version: BACKUP_VERSION,
+    exportedAt: Date.now(),
+    说明: '这是一份空模板，只展示备份的结构，不含任何真实数据。导入它会被拒绝（没有可恢复的内容）。',
+    data: Object.fromEntries(BACKUP_ARRAY_FIELDS.map((k) => [k, []])),
+  }
+}
+
+/**
  * 备份里的收货信息：**只留省市区 + 手机尾号**（`docs/wish-mall-spec.md` §9.1）。
  *
  * `wishOrders` 现在会进备份，而 `ship` 里是收货人姓名 + 手机号 + 家庭详细地址
@@ -3995,7 +4023,7 @@ export const useApp = create<AppState>((set, get) => ({
        * 一律是脱敏快照（`shipSnapshot`），不会有 `ship`。见 spec §9.1。
        * v4（2026-10-30）：`data` 里新增 `wishCodes`（已经用过的兑换码）。
        */
-      version: 4,
+      version: BACKUP_VERSION,
       exportedAt: Date.now(),
       data: {
         tasks,

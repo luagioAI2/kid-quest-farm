@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, BackupFile } from '../../domain/types'
-import { useApp } from '../../store/useApp'
+import { makeBackupSample, useApp } from '../../store/useApp'
 import { DEFAULT_PROFIT_RATIO } from '../../domain/catalog'
 import { QUALITY_META, QUALITY_ORDER, formatMultiplier } from '../../domain/settlement'
 import { clampPointsPerYuan, formatYuan, MAX_POINTS_PER_YUAN, MIN_POINTS_PER_YUAN } from '../../domain/cash'
@@ -138,11 +138,10 @@ export default function SettingsPage({
     [importBackup, pushToast],
   )
 
+  /* 空模板的内容由 store 那边拼（`makeBackupSample`）—— 表名从
+     `BACKUP_ARRAY_FIELDS` 派生，不在这里手写一份。见那个函数的注释。 */
   const downloadSample = useCallback(() => {
-    void saveBlob(
-      '小任务农场-备份示例.json',
-      JSON.stringify({ app: 'kid-quest-farm', version: 1, exportedAt: Date.now(), data: {} }, null, 2),
-    )
+    void saveBlob('小任务农场-备份示例.json', JSON.stringify(makeBackupSample(), null, 2))
   }, [])
 
   return (
