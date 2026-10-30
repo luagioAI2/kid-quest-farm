@@ -106,6 +106,31 @@ else
   echo "▸ API_BASE     = $API_BASE"
 fi
 
+# ---------------- https 闸门 ----------------
+# 上面那段注释一直写着「必须 https」，但**代码里从来没检查过**。
+# `allowMixedContent: false` 意味着 http 的接口会被 WebView 直接拦掉，
+# 症状和「地址没配」一模一样：界面只说「连不上服务器」，看不出是协议错了。
+# 也就是说 `http://` 少打一个 s，能一路绿灯打出包来，装到手机上才炸。
+#
+# ⚠️ 只在**真打 APK** 时拦：`--web-only` 是给本机 / 局域网调 Web 产物用的，
+#    那种场景下 http 是合法的，拦了反而挡路。
+if [ "$is_loopback" = "0" ] && [ "$WEB_ONLY" != "1" ]; then
+  case "$API_BASE" in
+    https://*) ;;
+    *)
+      echo ""
+      echo "✗ VITE_API_BASE 必须是 https，现在是：$API_BASE"
+      echo ""
+      echo "  capacitor.config.json 里 allowMixedContent=false，"
+      echo "  http 的接口会被 WebView 直接拦掉 —— 装上去只会说「连不上服务器」，"
+      echo "  和「地址没配」是同一个症状，很难查。"
+      echo ""
+      echo "  只是本机 / 局域网调试 Web 产物？用 --web-only（那条路不拦）。"
+      exit 1
+      ;;
+  esac
+fi
+
 # ---------------- 构建 Web ----------------
 echo ""
 echo "▸ [1/3] 构建 Web 产物…"
