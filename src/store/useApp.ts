@@ -4372,16 +4372,23 @@ export const useApp = create<AppState>((set, get) => ({
           }
         }
       }
-      const shown = pendingNames.slice(0, 3).join('、')
+      /* 一句话说清三件事：装回几款、哪几款没装上、去哪装。
+       * 三个分支都要写 —— 「装回 0 款，A 要去重装」这种话读起来别扭，
+       * 而且孩子会以为「0 款」是自己弄丢了什么。 */
+      const quoted = pendingNames
+        .slice(0, 3)
+        .map((n) => `「${n}」`)
+        .join('、')
       const more = pendingNames.length > 3 ? ` 等 ${pendingNames.length} 款` : ''
-      const tail =
-        putBack > 0 || pendingNames.length > 0
-          ? `；游戏装回 ${putBack} 款${
-              pendingNames.length > 0
-                ? `，${shown}${more} 要去「游戏」页重新装一次`
-                : ''
-            }`
-          : ''
+      const needReinstall = pendingNames.length > 0 ? `${quoted}${more}` : ''
+      let tail = ''
+      if (putBack > 0 && pendingNames.length > 0) {
+        tail = `；游戏装回 ${putBack} 款，但 ${needReinstall}要去「游戏」页重新装一次`
+      } else if (pendingNames.length > 0) {
+        tail = `；${needReinstall}要去「游戏」页重新装一次`
+      } else if (putBack > 0) {
+        tail = `；游戏装回 ${putBack} 款`
+      }
       return { ok: true, message: `数据已恢复${tail}` }
     } catch (e) {
       return { ok: false, message: `恢复失败：${(e as Error).message}` }
