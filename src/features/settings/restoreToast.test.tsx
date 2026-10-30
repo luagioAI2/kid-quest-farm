@@ -148,6 +148,6 @@ describe('从备份恢复 → 界面上的提示（走真界面）', () => {
     ).toBe(false)
     // 正向对照：后半句真的点出了那一款，而且说清了去哪装
     expect(toast!.detail).toMatch(/no-such-game/)
-    expect(toast!.detail).toMatch(/要去「游戏」页重新装一次/)
+    expect(toast!.detail).toMatch(/去「游戏」页重装/)
   })
 })

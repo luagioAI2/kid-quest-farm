@@ -866,6 +866,42 @@ const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
 const BACKUP_VERSION = 4
 
 /**
+ * 「数据已恢复」后面那半句。
+ *
+ * 抽成纯函数，是因为这句话是**拼出来的** —— 读代码读不出它到底长什么样。
+ * 2026-10-30 一天里栽了三次，每次都是真跑一次才看见：
+ *
+ *   ① 「但」后面多一个空格（`但 「X」`）
+ *   ② 「等」前面多一个空格（`「C」 等 5 款`）
+ *   ③ 整句要 367px，而 toast 那行只有 275px —— 被切掉的正好是
+ *      「要去「游戏」页重新装一次」，家长唯一能照着做的那半句
+ *
+ * 所以现在只有两种形态：
+ *
+ *   有装不回来的 → 「；「蚂蚁搬家」去「游戏」页重装」   ← 先说他要做的事
+ *   都装回来     → 「；游戏装回 2 款」
+ *
+ * ⚠️ 有失败时**不带款数**：塞不下。款数只是安慰，名字 + 去哪装才是动作。
+ * ⚠️ 别写「装回 0 款」：孩子会以为自己弄丢了什么。
+ * ⚠️ 中文里不留空格：`但${…}` 不是 `但 ${…}`，`${…}去` 不是 `${…} 去`。
+ */
+export function restoreTail(putBack: number, pendingNames: string[]): string {
+  const quoted = pendingNames
+    .slice(0, 3)
+    .map((n) => `「${n}」`)
+    .join('、')
+  const more = pendingNames.length > 3 ? `等 ${pendingNames.length} 款` : ''
+  /* 有装不回来的，**先说它、也不带款数**。
+     2026-10-30 量过：toast 的说明那行只有 275px，而
+     「游戏装回 1 款，但「抓奖乐园」要去「游戏」页重新装一次」要 367px ——
+     被切掉的正好是「要去「游戏」页重新装一次」，家长唯一能照着做的那半句。
+     塞不下就别塞：款数只是安慰，名字 + 去哪装才是他要做的事。 */
+  if (pendingNames.length > 0) return `；${quoted}${more}去「游戏」页重装`
+  if (putBack > 0) return `；游戏装回 ${putBack} 款`
+  return ''
+}
+
+/**
  * 「下载一个空模板看看」那个按钮的内容。
  *
  * 它要回答的问题是「备份长什么样」，所以**必须把结构摊开**：一张表一个键，
@@ -4403,21 +4439,7 @@ export const useApp = create<AppState>((set, get) => ({
       /* 一句话说清三件事：装回几款、哪几款没装上、去哪装。
        * 三个分支都要写 —— 「装回 0 款，A 要去重装」这种话读起来别扭，
        * 而且孩子会以为「0 款」是自己弄丢了什么。 */
-      const quoted = pendingNames
-        .slice(0, 3)
-        .map((n) => `「${n}」`)
-        .join('、')
-      const more = pendingNames.length > 3 ? ` 等 ${pendingNames.length} 款` : ''
-      const needReinstall = pendingNames.length > 0 ? `${quoted}${more}` : ''
-      let tail = ''
-      if (putBack > 0 && pendingNames.length > 0) {
-        tail = `；游戏装回 ${putBack} 款，但 ${needReinstall}要去「游戏」页重新装一次`
-      } else if (pendingNames.length > 0) {
-        tail = `；${needReinstall}要去「游戏」页重新装一次`
-      } else if (putBack > 0) {
-        tail = `；游戏装回 ${putBack} 款`
-      }
-      return { ok: true, message: `数据已恢复${tail}` }
+      return { ok: true, message: `数据已恢复${restoreTail(putBack, pendingNames)}` }
     } catch (e) {
       return { ok: false, message: `恢复失败：${(e as Error).message}` }
     }

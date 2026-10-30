@@ -3751,7 +3751,8 @@ describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
     expect(res.ok, res.message).toBe(true)
     // jsdom 里取不到包（fetch 打不开），所以它一定落在「装不回来」那一边
     expect(res.message, '要说名字，不是只说个数').toContain('蚂蚁搬家')
-    expect(res.message).toContain('重新装')
+    // 判据是「点名 + 说清去哪装」，不抄原话 —— 文案会改，这两件事不会
+    expect(res.message).toContain('去「游戏」页重装')
   })
 
   /* ------------------------------------------------------------
