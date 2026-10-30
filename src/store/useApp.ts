@@ -4357,19 +4357,29 @@ export const useApp = create<AppState>((set, get) => ({
        * 都不该让整次恢复失败 —— 数据已经恢复了，只是游戏要手动装一次。 */
       const wantGames = (d.meta as Record<string, unknown> | undefined)?.installedGameIds
       let putBack = 0
-      let pending = 0
+      const pendingNames: string[] = []
       if (Array.isArray(wantGames)) {
         for (const gid of wantGames) {
           if (typeof gid !== 'string') continue
           const r = await get().installLocalGame(gid)
           if (r.ok) putBack += 1
-          else pending += 1
+          else {
+            /* 说清是**哪几款**，别只给个数。
+             * 「还有 2 款要去游戏页重新装」等于让家长自己在列表里找哪一行
+             * 显示的是「安装」而不是「已安装」—— 装了五六款时根本找不过来。
+             * 名字优先用本地清单（家长看到的那个名字），退到注册表，最后才用 id。 */
+            pendingNames.push(localGameById(gid)?.name ?? gameById(gid)?.name ?? gid)
+          }
         }
       }
+      const shown = pendingNames.slice(0, 3).join('、')
+      const more = pendingNames.length > 3 ? ` 等 ${pendingNames.length} 款` : ''
       const tail =
-        putBack > 0 || pending > 0
+        putBack > 0 || pendingNames.length > 0
           ? `；游戏装回 ${putBack} 款${
-              pending > 0 ? `，还有 ${pending} 款要去「游戏」页重新装` : ''
+              pendingNames.length > 0
+                ? `，${shown}${more} 要去「游戏」页重新装一次`
+                : ''
             }`
           : ''
       return { ok: true, message: `数据已恢复${tail}` }

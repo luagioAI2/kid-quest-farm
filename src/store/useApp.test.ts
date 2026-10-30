@@ -3734,6 +3734,25 @@ describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
     expect([...(ids ?? [])].sort(), '名单从 __bundle 行派生').toEqual(['cloudfarm', 'corgi'])
   })
 
+  it('★ 恢复时装不回来的游戏，要说出是哪几款', async () => {
+    /* 备份只带存档，游戏本体恢复后从本地包重装。装不上的（离线 / 这个版本
+       没有它）**不该让整次恢复失败**，但也不能只说「还有 N 款」——
+       装了五六款时家长根本找不出是哪一行显示「安装」而不是「已安装」。 */
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const withGames = {
+      ...snap,
+      data: {
+        ...snap.data,
+        meta: { ...((snap.data.meta as Record<string, unknown>) ?? {}), installedGameIds: ['anthill'] },
+      },
+    }
+    const res = await useApp.getState().importBackup(withGames)
+    expect(res.ok, res.message).toBe(true)
+    // jsdom 里取不到包（fetch 打不开），所以它一定落在「装不回来」那一边
+    expect(res.message, '要说名字，不是只说个数').toContain('蚂蚁搬家')
+    expect(res.message).toContain('重新装')
+  })
+
   it('★★ 导入一份自带代码的备份，那段代码不许落库', async () => {
     const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
     const evil = {
