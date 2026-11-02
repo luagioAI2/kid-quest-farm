@@ -403,16 +403,22 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1185 条（含在线版纯函数 14 + 农场 15 + 兑换 29 + 心愿 19 + 游戏币 23）
+npm test                                       # 1247 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
-node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条）
+node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
 node scripts/_probe-login-gate.mjs             # 未登录闸门点得到（4 条，§7.8）
 node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（28 条，§7.9）
 node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（34 条，§7.11）
 node scripts/_probe-coin-online.mjs            # 浏览器真跑游戏币（44 条，§7.12；每跑一次花 13 积分）
+node scripts/_probe-kv-online.mjs              # 插件存档写穿（25 条，§7.13）
+node scripts/_probe-snapshot-online.mjs        # 存档还原点 / 回档（32 条，§7.14）
 ```
+
+> 上面 8 条探针 2026-11-02 晚全量跑过一遍，全绿。
+> 除 `_probe-write-through`（默认 4401）外都默认连 `127.0.0.1:4405`；
+> 换端口就把 URL 当第一个参数传（`node scripts/_probe-kv-online.mjs http://127.0.0.1:4406/`）。
 
 `_probe-write-through` 断言的是「**界面 == 服务端**」：
 建任务后本地 id 必须是 `srv_task_<服务端 id>`、提交后服务端 `status=submitted`、
@@ -1382,7 +1388,7 @@ save  第 1 版 · 22 字节
 #### 验收
 
 ```bash
-node scripts/_probe-snapshot-online.mjs   # 24 条断言，全绿
+node scripts/_probe-snapshot-online.mjs   # 32 条断言，全绿
 ```
 
 新增那条断的是**预览里的数字和服务端真的一样**：服务端现在是 `{level:99}`、
