@@ -100,7 +100,12 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       listTasks(false),
       walletInfo().catch(() => null), // 钱包挂了不该拖垮任务板
     ])
-    const ledger = await walletLedger(1, opts.pageSize ?? 200).catch(() => null)
+    /* 流水要**翻页拉全**，不能只要第一页。
+       ★ 服务端 `Paginator` 的每页上限 200，而「本地余额 = 流水求和」——
+         只拉第一页的话，老账号的余额会**凭空少一截**（少的是第一页之外那些
+         早期的大额入账），界面上看不出任何异常。2026-11-02 实测踩到：
+         账号攒到第 33 条流水后，本地余额比服务端少 124。 */
+    const ledger = await pullLedger(opts.pageSize).catch(() => null)
     /* 兑换商城：商品和记录各一次。
        ★ 两个都用 `catch(() => null)`：商城挂了不该让「今天的任务」也拉不下来 ——
          孩子打开 App 是要做任务的，不是来逛商城的。
@@ -110,23 +115,23 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
     const redeemRows = await listRedeemRows({ includeArchived: true, raw: true }).catch(
       () => null,
     )
-    const redeemRecs = await listRedeemRecords(1, 200).catch(() => null)
+    const redeemRecs = await pullRedeemRecords().catch(() => null)
 
     const taskRows = tasks.list.map(mapTask)
     const instRows = b.instances.map(mapInstance)
-    const ledgerRows = (ledger?.list ?? [])
+    const ledgerRows = (ledger ?? [])
       .map(mapLedger)
       .filter((r): r is NonNullable<typeof r> => r !== null)
     /* 兑换券：同一份 `/wallet/ledger` 里的 `coupon` 行。
        ★ 不拉的话「卖菜得的券」只在服务端，本地兑换券页永远是空的，
          而余额却对得上（余额是求和的，含 srv 行）—— 看着像「流水丢了」。 */
-    const harvestRows = (ledger?.list ?? [])
+    const harvestRows = (ledger ?? [])
       .map(mapHarvest)
       .filter((r): r is NonNullable<typeof r> => r !== null)
     const itemRows = (redeemRows?.list ?? [])
       .map(mapRedeemItem)
       .filter((r): r is NonNullable<typeof r> => r !== null)
-    const recRows = (redeemRecs?.list ?? [])
+    const recRows = (redeemRecs ?? [])
       .map(mapRedeemRecord)
       .filter((r): r is NonNullable<typeof r> => r !== null)
 
@@ -143,22 +148,36 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       async () => {
         await clearSrvRows('tasks', 'srv_task_')
         await clearSrvRows('taskInstances', 'srv_inst_')
-        await clearSrvRows('ledger', 'srv_ledger_')
-        await clearSrvRows('harvestLedger', 'srv_ledger_')
-        await clearSrvRows('redeemRecords', SRV_REDEEM_RECORD_PREFIX)
-        /* ★ 兑换商品这张表在在线版里**整张清掉**，不是只清 `srv_` 行。
-           理由和别的表不同：兑换品的 id 就是服务端给的那个字符串（没有前缀），
-           没法从 id 上分辨「这行是不是云端来的」。而在线版里这张表**只可能**
-           有云端数据 —— 播种（`seedIfEmpty`）在在线模式下一个字节都不写，
-           写接口又全是写穿（失败不落本地）。所以清空它不会删掉任何
-           「只在本机存在」的东西。 */
-        await db.redeemItems.clear()
         if (taskRows.length) await db.tasks.bulkPut(taskRows)
         if (instRows.length) await db.taskInstances.bulkPut(instRows)
-        if (ledgerRows.length) await db.ledger.bulkPut(ledgerRows)
-        if (harvestRows.length) await db.harvestLedger.bulkPut(harvestRows)
-        if (itemRows.length) await db.redeemItems.bulkPut(itemRows)
-        if (recRows.length) await db.redeemRecords.bulkPut(recRows)
+
+        /* ⚠️ 下面三块都是「先清后写」，所以**只在拉取成功时才动**。
+           拉失败了还照清不误的话，本地那张表会变成空的 —— 而这正是
+           「拉取失败不能动本地已有数据」那条规矩要防的事。
+           判据是「这次到底拉到没有」（`ledger !== null`），不是「数组空不空」：
+           空数组 = 拉到了、服务端确实没有；`null` = 没拉到、不知道。 */
+        if (ledger !== null) {
+          await clearSrvRows('ledger', 'srv_ledger_')
+          await clearSrvRows('harvestLedger', 'srv_ledger_')
+          if (ledgerRows.length) await db.ledger.bulkPut(ledgerRows)
+          if (harvestRows.length) await db.harvestLedger.bulkPut(harvestRows)
+        }
+
+        if (redeemRows !== null) {
+          /* ★ 兑换商品这张表在在线版里**整张清掉**，不是只清 `srv_` 行。
+             理由和别的表不同：兑换品的 id 就是服务端给的那个字符串（没有前缀），
+             没法从 id 上分辨「这行是不是云端来的」。而在线版里这张表**只可能**
+             有云端数据 —— 播种（`seedIfEmpty`）在在线模式下一个字节都不写，
+             写接口又全是写穿（失败不落本地）。所以清空它不会删掉任何
+             「只在本机存在」的东西。 */
+          await db.redeemItems.clear()
+          if (itemRows.length) await db.redeemItems.bulkPut(itemRows)
+        }
+
+        if (redeemRecs !== null) {
+          await clearSrvRows('redeemRecords', SRV_REDEEM_RECORD_PREFIX)
+          if (recRows.length) await db.redeemRecords.bulkPut(recRows)
+        }
       },
     )
 
@@ -166,14 +185,49 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       ok: true,
       tasks: taskRows.length,
       instances: instRows.length,
-      ledger: ledgerRows.length,
+      ledger: ledgerRows?.length ?? 0,
       coupons: harvestRows.length,
-      redeemItems: itemRows.length,
-      redeemRecords: recRows.length,
+      redeemItems: itemRows?.length ?? 0,
+      redeemRecords: recRows?.length ?? 0,
       balance: wallet?.points ?? b.balance,
     }
   } catch (e) {
     // 网络 / 401 / 服务端 5xx 都走这里：保留本地数据，不抛
     return { ok: false, reason: (e as { message?: string })?.message ?? 'pull-failed' }
   }
+}
+
+/** 服务端 `Paginator` 的每页上限（`constant.MAX_PAGE_SIZE`） */
+const PAGE = 200
+/** 翻页保险丝：2000 条流水够一个家庭用好几年，再多多半是接口坏了 */
+const MAX_PAGES = 10
+
+/**
+ * 把流水翻页拉全。
+ *
+ * ⚠️ 别「只要一页」—— 本地余额是**流水求和**（`currentBalance`），
+ * 少一页就是余额少一截，而且不报错。
+ * ⚠️ 停在 `list.length < PAGE` 上，不是停在 `out.length >= count`：
+ * `count` 是服务端算的，中途有别的设备记账时它会变；按页长判更稳。
+ */
+async function pullLedger(pageSize?: number) {
+  const size = Math.min(pageSize ?? PAGE, PAGE)
+  const out: Awaited<ReturnType<typeof walletLedger>>['list'] = []
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const r = await walletLedger(page, size)
+    out.push(...r.list)
+    if (r.list.length < size) break
+  }
+  return out
+}
+
+/** 兑换记录翻页拉全（同一个理由：家长管理页的「待兑现」不能漏） */
+async function pullRedeemRecords() {
+  const out: Awaited<ReturnType<typeof listRedeemRecords>>['list'] = []
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const r = await listRedeemRecords(page, PAGE)
+    out.push(...r.list)
+    if (r.list.length < PAGE) break
+  }
+  return out
 }

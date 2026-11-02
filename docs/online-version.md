@@ -372,7 +372,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1125 条（含在线版纯函数 14 + 农场 15 + 兑换 29）
+npm test                                       # 1128 条（含在线版纯函数 14 + 农场 15 + 兑换 29）
 npm run build                                  # 看退出码，别看 "built in"
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条）
@@ -644,3 +644,43 @@ node scripts/_probe-redeem-online.mjs      # 28 条，真连后端
 
 ⚠️ 它每跑一次**真的花掉 2 件商品的钱**（兑换是真扣款）。所以探针商品定价
 `COST = 1`，跑几十次才需要给测试账号补币。
+
+---
+
+## 7.10 顺手修掉的一个静默 bug：分页参数叫 `pageSize`（2026-11-02）
+
+做兑换这一期时被 `_probe-write-through.mjs` 抓住的，**不是**兑换引入的，
+而是它把账号流水推过了 30 条，把一个一直存在的坑照出来了。
+
+### 症状
+
+`本地余额 12 / 服务端 136`。界面上没有任何异常，只有那一条断言红。
+
+### 原因
+
+服务端**两种分页 DTO 并存**：
+
+| 出处 | json 标签 |
+| --- | --- |
+| `entities.Paginator`（钱包流水 / 兑换记录 / 心愿…） | **`pageSize`** |
+| 手写的那几个（`/task/pending-review`） | `page_size` |
+
+客户端三处全写成了 `page_size`。传错的不会报错 —— `ShouldBindJSON` 的返回值
+被 `_ =` 丢掉，`PageSize` 留在 0，服务端 `Normalize()` 兜底成 **30**。
+
+于是 `walletLedger(1, 200)` 永远只拿到 30 条。而本地 `balance` 是
+**流水求和**（`currentBalance`）⇒ 账号攒到第 31 条之后，余额就开始少，
+少掉的正好是最早那些大额入账（第一页之外的）。
+
+### 改法（两层，缺一不可）
+
+1. `api/wallet.ts` / `api/redeem.ts` 改发 `pageSize`；
+2. `sync/pull.ts` 里 `pullLedger()` / `pullRedeemRecords()` **翻页拉全**
+   （每页 200，`list.length < 200` 停，保险丝 10 页）。
+   只改参数名的话，流水超过 200 条的账号照样会少。
+
+### 顺带补上的一条规矩
+
+「先清后写」的表现在**只在拉取成功时才动**（判据是 `ledger !== null`，
+不是「数组空不空」）。原来流水接口一失败，本地账本照样被清空、再写 0 条 ——
+余额当场归零，而界面上只是「今天没加分」。

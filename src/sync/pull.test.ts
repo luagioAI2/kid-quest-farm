@@ -317,6 +317,46 @@ describe('pullOnce', () => {
     await pullOnce()
     expect(await db.redeemItems.count()).toBe(0)
   })
+
+  it('★ 流水要翻页拉全（本地余额 = 流水求和，少一页就少一截）', async () => {
+    /* 造 200 条第一页 + 5 条第二页。2026-11-02 实测踩到过：
+       服务端每页默认 30 条，客户端只要了「第一页」，账号攒到 33 条之后
+       本地余额比服务端少了 124 —— 界面上没有任何异常。 */
+    const mk = (id: number) => ({ ...LEDGER, id, delta: 1 })
+    const page1 = Array.from({ length: 200 }, (_, i) => mk(i + 1))
+    const page2 = Array.from({ length: 5 }, (_, i) => mk(i + 201))
+    walletLedgerMock.mockImplementation((page: number) =>
+      Promise.resolve({ count: 205, list: page === 1 ? page1 : page2 }),
+    )
+
+    const r = await pullOnce()
+    expect(r.ledger).toBe(205)
+    expect(await db.ledger.count()).toBe(205)
+    // 每页都要满 200 才翻下一页（服务端 `Paginator` 的上限就是 200）
+    expect(walletLedgerMock).toHaveBeenNthCalledWith(1, 1, 200)
+    expect(walletLedgerMock).toHaveBeenNthCalledWith(2, 2, 200)
+    expect(walletLedgerMock).toHaveBeenCalledTimes(2) // 第二页不满 200，停
+  })
+
+  it('★ 流水拉失败时**不许**清掉本地已有账本', async () => {
+    await pullOnce()
+    const before = await db.ledger.toArray()
+    expect(before.length).toBeGreaterThan(0)
+
+    walletLedgerMock.mockRejectedValue(new Error('ledger down'))
+    const r = await pullOnce()
+    expect(r.ok).toBe(true) // 任务板照常
+    expect(await db.ledger.toArray()).toEqual(before)
+  })
+
+  it('★ 商城拉失败时**不许**清掉本地已有的商品', async () => {
+    await pullOnce()
+    expect(await db.redeemItems.count()).toBe(1)
+
+    redeemRowsMock.mockRejectedValue(new Error('redeem down'))
+    await pullOnce()
+    expect(await db.redeemItems.count()).toBe(1) // 还在
+  })
 })
 
 describe('pullFromServer 的模式闸门', () => {

@@ -153,10 +153,18 @@ export const redeemItem = (itemId: string, quantity: number, clientRequestId: st
     client_request_id: clientRequestId,
   })
 
+/**
+ * 兑换记录。
+ *
+ * ⚠️ 分页参数是 `pageSize`（驼峰）—— 服务端的 `entities.Paginator` 就是这么
+ * 打标签的。写成 `page_size` 不会报错，只会**永远只返回 30 条**（详见
+ * `api/wallet.ts` 的 `walletLedger` 注释）。这里的后果更阴：家长管理页的
+ * 「待兑现」列表会漏掉较早的那些，而孩子那边确实还欠着。
+ */
 export const listRedeemRecords = (page = 1, pageSize = 200) =>
   api<{ count: number; list: ServerRedeemRecord[] }>('/redeem/records', {
     page,
-    page_size: pageSize,
+    pageSize,
   })
 
 export const fulfillRedeemRecord = (recordId: string, note = '') =>
