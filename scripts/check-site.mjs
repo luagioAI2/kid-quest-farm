@@ -213,6 +213,34 @@ try {
   check('JSON-LD 含 FAQPage', ldTypes.includes('FAQPage'))
   check('JSON-LD 含 WebSite', ldTypes.includes('WebSite'))
 
+  /* ---------- 版本号：官网说的版本 vs APK 真正打的版本 ----------
+     2026-10-03 栽过一次：build.gradle 写 "1.0"、JSON-LD 写 "1.0.0" ——
+     同一个版本号写两处，就一定会走散。
+
+     而发版时更常见的方向是**只改了 versionName、忘了改官网**：
+     结构化数据照样被搜索引擎抓走，页面上一句「版本 1.1.0」也没有，
+     所以肉眼也发现不了。这条一红，就是「马上要发版，别忘了改 site/index.html」。 */
+  let ldVersion = null
+  try {
+    for (const raw of meta.ld) {
+      const j = JSON.parse(raw)
+      for (const node of j['@graph'] ?? [j]) {
+        if (node.softwareVersion) ldVersion = String(node.softwareVersion)
+      }
+    }
+  } catch {
+    /* 上面那条「JSON-LD 可解析」已经会红，这里不重复报同一个根因 */
+  }
+  const gradlePath = resolve('android/app/build.gradle')
+  const gradleVersion = existsSync(gradlePath)
+    ? ((readFileSync(gradlePath, 'utf8').match(/versionName\s+"([^"]+)"/) ?? [])[1] ?? null)
+    : null
+  check(
+    `官网写的软件版本和 build.gradle 一致（${gradleVersion ?? '读不到'}）`,
+    !!gradleVersion && ldVersion === gradleVersion,
+    ldVersion === gradleVersion ? '' : `JSON-LD=${ldVersion} build.gradle=${gradleVersion}`,
+  )
+
   console.log('\n【B】结构完整性')
 
   // ⚠️「图片真的加载了」这条**不能放在这里**。图廊那几张是 loading="lazy"，
