@@ -12,7 +12,7 @@ import { clampPointsPerYuan, formatYuan, MAX_POINTS_PER_YUAN, MIN_POINTS_PER_YUA
      是 `tsc`（`noUnusedLocals`）唯一能替你抓的一类残留。 */
 import { AVATAR_CHOICES } from '../../domain/avatars'
 import { humanizeAgo } from '../../domain/time'
-import { saveBlob, shareOrDownload } from '../../platform/files'
+import { shareOrDownload } from '../../platform/files'
 // 复用家长端同一个 PinPad，不要在这里再抄一份 —— 之前抄出来的副本
 // 带着"第 4 位自动提交读不到最新值"的 bug，两边各修一次很容易漏。
 import { PinFlow, ParentPinPanel } from '../parent/ParentGate'
@@ -163,10 +163,22 @@ export default function SettingsPage({
   )
 
   /* 空模板的内容由 store 那边拼（`makeBackupSample`）—— 表名从
-     `BACKUP_ARRAY_FIELDS` 派生，不在这里手写一份。见那个函数的注释。 */
-  const downloadSample = useCallback(() => {
-    void saveBlob('小任务农场-备份示例.json', JSON.stringify(makeBackupSample(), null, 2))
-  }, [])
+     `BACKUP_ARRAY_FIELDS` 派生，不在这里手写一份。见那个函数的注释。
+
+     ⚠️ 必须走 `shareOrDownload`，不能直接 `saveBlob`。
+     `saveBlob` 是「浏览器下载」那条腿：在 APK 的 WebView 里
+     `<a download>` + `blob:` 不落盘（没有 DownloadListener），
+     点了**什么都不发生、也没有任何提示**。
+     同一个函数在导出备份时已经换成 `shareOrDownload` 了，这里漏了一处。 */
+  const downloadSample = useCallback(async () => {
+    const ok = await shareOrDownload(
+      '小任务农场-备份示例.json',
+      JSON.stringify(makeBackupSample(), null, 2),
+    )
+    if (!ok) {
+      pushToast({ kind: 'warn', title: '模板没能导出', detail: '请重试', emoji: '⚠️' })
+    }
+  }, [pushToast])
 
   return (
     <div className="pb-10">
@@ -693,7 +705,7 @@ export default function SettingsPage({
                     之后换手机或换浏览器都能导入回来。
                   </p>
                   <button
-                    onClick={downloadSample}
+                    onClick={() => void downloadSample()}
                     className="btn mt-3 w-full rounded-2xl bg-paper-2 py-3 font-bold text-ink-500 shadow-flat"
                   >
                     下载一个空模板看看
