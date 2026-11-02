@@ -306,8 +306,9 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
           <ul className="mt-1 space-y-0.5">
             {logs.map((l) => (
               <li key={l.id} className="text-[11.5px] leading-snug text-ink-500">
-                {momentLabel(l.created_at)} 把「{l.key}」退回了以前的版本
-                {l.reason ? `（${l.reason}）` : ''}
+                {momentLabel(l.created_at)} 退回到了
+                {l.target_at > 0 ? `${momentLabel(l.target_at)} 那份` : '以前的版本'}
+                {l.reason && !isAutoNote(l.reason) ? `（${l.reason}）` : ''}
               </li>
             ))}
           </ul>

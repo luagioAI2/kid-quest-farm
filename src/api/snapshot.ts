@@ -63,6 +63,13 @@ export interface RestoreLogRow {
   operator_id: number
   reason: string
   created_at: number
+  /**
+   * 被恢复的那份快照的创建时间（Unix 秒）。
+   *
+   * 0 = 查不到（那份快照已经被保留策略淘汰，或随卸载删了）——
+   * 这时界面退回旧说法「以前的版本」，**别显示成 1970**。
+   */
+  target_at: number
 }
 
 export interface RestoreLogList {
