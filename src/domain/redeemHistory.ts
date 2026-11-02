@@ -44,6 +44,16 @@ export interface HistoryRow {
   pending: boolean
   /** 游戏单：交付凭证（`openedGameId`），列表里可以标「已放进游戏柜」 */
   delivered: boolean
+  /**
+   * 外链成交后家长填的订单号（`WishOrder.buyOrderNo`，服务端叫 `tracking_no`）。
+   *
+   * 只有心愿单会有值：家里那几件（`redeemRecords`）是 App 内兑现的，
+   * 没有「外链订单」这回事。
+   *
+   * ★ 必须**带出来**：家长填它的唯一目的就是以后能查（对账 / 查物流），
+   *   记录页不显示的话，那个输入框等于白填 —— 而白填不报错。
+   */
+  orderNo?: string
 }
 
 /**
@@ -107,6 +117,8 @@ export function redeemHistory(
        */
       pending: childPending(o),
       delivered: !!o.openedGameId,
+      // 空串按「没填」处理：界面上不该出现一个空的「订单号」
+      ...(o.buyOrderNo ? { orderNo: o.buyOrderNo } : {}),
     })
   }
 

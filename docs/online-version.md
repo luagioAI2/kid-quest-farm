@@ -403,14 +403,14 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1280 条（2 skipped）
+npm test                                       # 1287 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
 node scripts/_probe-login-gate.mjs             # 未登录闸门点得到（4 条，§7.8）
 node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（32 条，§7.9）
-node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（45 条，§7.11）
+node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（50 条，§7.11）
 node scripts/_probe-coin-online.mjs            # 浏览器真跑游戏币（44 条，§7.12；每跑一次花 13 积分）
 node scripts/_probe-kv-online.mjs              # 插件存档写穿（29 条，§7.13）
 node scripts/_probe-snapshot-online.mjs        # 存档还原点 / 回档（41 条，§7.14）
@@ -421,8 +421,8 @@ node scripts/_probe-offline-banner.mjs         # 断网横幅（11 条，§7.16�
 
 > 上面 11 条探针 2026-11-02 深夜全量跑过一遍（改完「回档记录」「所有权口径」
 > 「断网横幅」「同一秒两份快照」之后），全绿：
-> 写穿 15 / 农场 25 / 闸门 4 / 兑换 32 / 心愿 45 / 币 44 / 存档 29 / 快照 41 /
-> 导入清空 20 / 所有权 11 / 断网横幅 11，**合计 277 条**，
+> 写穿 15 / 农场 25 / 闸门 4 / 兑换 32 / 心愿 50 / 币 44 / 存档 29 / 快照 41 /
+> 导入清空 20 / 所有权 11 / 断网横幅 11，**合计 282 条**，
 > 外加服务端契约 `_probe-farm-state` 12 条。
 >
 > ⚠️ 条数是**实测**的（数输出里 `^\s+✓` 的行），不是手写的：这一轮发现四个
@@ -888,8 +888,13 @@ installLocalGame(gameId)
 
 ```bash
 npm run lint && npx vitest run && npm run build
-node scripts/_probe-wish-online.mjs         # 45 条，真连后端
+node scripts/_probe-wish-online.mjs         # 50 条，真连后端
 ```
+
+> ⚠️ 这条探针**很重**（一次跑几百个请求）。连着跑第三遍会撞全局限流
+> （`POST /api/wish/done` → **429**），表现是「地址和订单号一个字都没写进去」，
+> 看着像产品 bug。实测三次里第三次红。➜ 两次之间隔一分钟，
+> 或者先 `df -h /e`（磁盘满也是同一个症状）。
 
 探针走完整条链路（定价 → 许愿 → 兑换 → 确认 → 收尾 → 关掉 → 再换失败 →
 回绝退款 → 断网），断言的是**界面状态 == 服务端状态**：
@@ -899,10 +904,12 @@ node scripts/_probe-wish-online.mjs         # 45 条，真连后端
 - 兑换后本地余额 == 服务端余额（没被扣两遍）、本地流水全是 `srv_ledger_`；
 - 押的是**实际扣掉的两种币**（`vouchers_held + points_held == 标价`）；
 - 实物商品**不填收货信息也能换**（§7.11.4 那条改动的回归）；
-- **家长在界面里补地址**（第 5.5 步，9 条）：实物确认页里有三个输入框；
+- **家长在界面里补地址 + 订单号**（第 5.5 步，13 条）：实物确认页里有四个框；
   填一半提交 ⇒ 留在原地、说清缺什么、服务端**一个字都没写**；
   填全 ⇒ 服务端存下地址并自己加 90 天过期，本地拉回来是完整版，
   而**孩子视角是脱敏的**（手机 `****1111`、详细地址为空）；
+- **订单号（选填）** 填了要一路到底：服务端 `tracking_no` → 本地 `buyOrderNo` →
+  「📜 兑换记录」那一行（`🧾 订单号 SF1234567890`）。填了看不见等于没填；
 - 回绝后钱**全额**退回来、本地那单留着且带着原因；
 - 断网时一个字都不落本地。
 
@@ -1368,7 +1375,7 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1280 单测（2 skipped）
+npm run lint && npx vitest run && npm run build   # 1287 单测（2 skipped）
 node scripts/_probe-snapshot-online.mjs           # 41 条断言，全绿
 ```
 
@@ -1923,3 +1930,56 @@ node scripts/_probe-offline-banner.mjs
 ⚠️ 横幅外层**不能**写 `px-4`：内层用了 `pl-safe pr-safe`（= `env(...) + 1rem`），
 两个一起写会叠成 2rem（`styles/theme.css` 里 `pl-safe` 那条注释说的就是这件事）。
 
+## 7.17 并发 refresh 会把「刚写进去的」折叠掉（2026-11-02 深夜）
+
+`refresh()` 一直有个并发闸门：并发的调用**折叠成一次**。理由写在注释里，
+是对的 —— 各自基于同一份快照推算「缺失的实例」再一起写，会出现同一天两条实例。
+
+但「折叠成一次」有个前提没写下来：**那一次读的是它发起时的服务端状态**。
+于是出现这么一条链：
+
+```
+家长点「已经买好了」
+  → wishConfirm  → 服务端 committed→confirmed，然后 refresh()（A 起飞）
+  → wishDone     → 服务端 confirmed→done，然后 refresh()（B 被折叠进 A）
+  → B 拿到的是 A 的 promise：A 读到的是 done **之前**的状态
+  ⇒ 服务端已经是 done，界面还写着「待确认」，而且不报错
+```
+
+它是探针抓到的：`本地那单也是 done — doneAt=undefined`。**三次里红一次** ——
+时序窗口很小（两次 refresh 挨得够近才折叠），但真人点「已经买好了」就是连着的。
+
+### 修法：折叠成一次，然后**再补一次**
+
+```ts
+if (refreshInFlight) {
+  refreshAgain = true          // 记一笔
+  return refreshInFlight
+}
+refreshInFlight = (async () => {
+  do {
+    refreshAgain = false
+    await doRefresh(set, get, opts)
+  } while (refreshAgain)       // 有人在这期间又来了 ⇒ 再跑一遍
+})()
+```
+
+所有并发调用等都等**同一个** promise，所以它们看到的都是补跑之后的结果；
+`runFarmCommit` 里那句 `if (refreshInFlight) await refreshInFlight` 也自然跟着变严。
+
+### 判据（单测，不靠时序）
+
+`doRefresh` 每跑一遍只读一次 `db.tasks.toArray()` ⇒ **数它调了几次 = 跑了几轮**：
+
+```ts
+const spy = vi.spyOn(db.tasks, 'toArray')
+const a = refresh(), b = refresh(), c = refresh()   // 三次并发
+await Promise.all([a, b, c])
+expect(spy.mock.calls.length).toBe(2)               // 一次 + 一次补跑
+```
+
+去掉补跑那两行就红在 `expected 1 to be 2`（实测过）。
+
+> 教训：**「合并并发请求」这类优化，一定要问一句「后来那次调用的写入谁负责读回来」。**
+> 只合并不补跑，等于把「更晚发生的事实」永久丢掉一次 —— 而丢掉的那一次
+> 恰好就是用户刚做的那一下。

@@ -1523,6 +1523,16 @@ function ConfirmView({
   })
   const [shipBusy, setShipBusy] = useState(false)
 
+  /*
+   * 订单号（对账用，**选填**）。
+   *
+   * 服务端叫 `tracking_no`，本地叫 `buyOrderNo` —— 同一件事：外链成交之后
+   * 家长手里那串号。没有它，「券少了 30」只能靠回忆；有了它，能翻回淘宝对单。
+   * 选填是刻意的：不填也能收尾（大多数人不会回来补），但填了必须查得回来
+   * （见「兑换记录」那一行），否则就是「填了看不见」。
+   */
+  const [orderNo, setOrderNo] = useState(order?.buyOrderNo ?? '')
+
   if (!order) return <EmptyState onBack={onBack} />
 
   /**
@@ -1665,6 +1675,19 @@ function ConfirmView({
               maxLength={120}
               className="rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
             />
+            {/*
+              订单号：**选填**，所以不参与 `shipFormIssue` 的校验 ——
+              不填也能点「已经买好了」。maxLength 和服务端的 `max=64` 对齐，
+              否则超长会被服务端按 400 拒掉，界面只弹一句「操作没成功」。
+            */}
+            <input
+              data-ship-order-no
+              value={orderNo}
+              onChange={(e) => setOrderNo(e.target.value)}
+              placeholder="订单号（选填，查物流 / 对账用）"
+              maxLength={64}
+              className="rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
+            />
           </div>
           {/* 地址只在**这一单**上留 90 天，之后服务端自己抹掉。
               不说清楚的话，家长会以为这里存的是「我的收货地址」，
@@ -1734,10 +1757,16 @@ function ConfirmView({
             setShipBusy(true)
             try {
               await wishConfirm(order.id)
-              await wishDone(
-                order.id,
-                digital ? undefined : { ship: { ...ship, region: order.ship?.region ?? '' } },
-              )
+              /*
+               * 数字商品没有「外链订单」这回事 ⇒ 不送 ship、也不送订单号。
+               * `region` 取已有那份（服务端没存过就是空），界面不问省份 ——
+               * 家长的地址里本来就写了。
+               */
+              const no = orderNo.trim()
+              await wishDone(order.id, {
+                ...(digital ? {} : { ship: { ...ship, region: order.ship?.region ?? '' } }),
+                ...(no ? { buyOrderNo: no } : {}),
+              })
               pushToast({ kind: 'reward', title: '已经完成啦', emoji: '🎉' })
               onDone()
             } finally {

@@ -904,6 +904,8 @@ async function backfillMissingRedeemItems(now: number): Promise<void> {
    出现两条实例 → 同一任务可被结算两次。这里把并发调用折叠成一次。
    ============================================================ */
 let refreshInFlight: Promise<void> | null = null
+/* 有调用在飞的时候又来了一个 ⇒ 记一笔，等它跑完**再补一次**（见 refresh 的注释） */
+let refreshAgain = false
 
 /* ============================================================
    设置的写入串行闸门
@@ -2661,9 +2663,26 @@ export const useApp = create<AppState>((set, get) => ({
     // 串行化：并发 refresh 会各自基于同一份快照计算"缺失实例"，
     // 然后同时写入，导致同一任务同一天出现两条实例（进而可重复计分）。
     // 这里用一个模块级 in-flight promise 把并发调用折叠成一次。
-    if (refreshInFlight) return refreshInFlight
+    /*
+     * ★★ 折叠成一次之后**必须再补一次**（2026-11-02 深夜修）。
+     *
+     * 那次在跑的刷新读的是**它发起时**的服务端状态 —— 调用方刚写下去的东西
+     * 不在里面。实测：家长点「已经买好了」= `wishConfirm` 紧跟 `wishDone`，
+     * 两次 refresh 被折叠成一次 ⇒ 服务端已经是 `done`，界面还写着「待确认」，
+     * 而且**不报错**，要等下一次刷新才对（探针里 `doneAt=undefined` 抓到的就是这个）。
+     *
+     * `refreshAgain` 就是「等它跑完再来一遍」的记号；所有并发调用等都等
+     * 同一个 promise，所以它们看到的都是补跑之后的结果。
+     */
+    if (refreshInFlight) {
+      refreshAgain = true
+      return refreshInFlight
+    }
     refreshInFlight = (async () => {
-      await doRefresh(set, get, opts)
+      do {
+        refreshAgain = false
+        await doRefresh(set, get, opts)
+      } while (refreshAgain)
     })().finally(() => {
       refreshInFlight = null
     })

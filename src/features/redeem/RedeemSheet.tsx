@@ -381,6 +381,16 @@ export function RedeemBody() {
                         `… + 50 积分 ·` / `刚刚` —— 分隔符孤零零挂在行尾。 */}
                     <span className="whitespace-nowrap"> · {humanizeAgo(r.createdAt)}</span>
                   </p>
+                  {/* 家长填的订单号要能查回来 —— 填了看不见等于没填。
+                      只对心愿单有值（App 内兑现的那几件没有外链订单）。 */}
+                  {r.orderNo && (
+                    <p
+                      data-history-order-no
+                      className="mt-0.5 truncate text-[10.5px] font-bold text-ink-400"
+                    >
+                      🧾 订单号 {r.orderNo}
+                    </p>
+                  )}
                 </div>
                 <span
                   className={clsx(

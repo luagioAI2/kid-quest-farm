@@ -55,6 +55,25 @@ describe('redeemHistory', () => {
     expect(rows[0].pending).toBe(false)
   })
 
+  it('★★ 家长填的订单号要带进记录（填了看不见等于没填）', () => {
+    const rows = redeemHistory(
+      [],
+      [order({ kind: 'collectible', status: 'done', buyOrderNo: 'SF1234567890' })],
+    )
+    expect(rows[0].orderNo).toBe('SF1234567890')
+  })
+
+  it('没填订单号 ⇒ 字段不出现（界面上不该有个空的「订单号」）', () => {
+    const rows = redeemHistory([], [order({ status: 'done', buyOrderNo: '' })])
+    expect(rows[0].orderNo).toBeUndefined()
+    expect('orderNo' in rows[0], '空串要按「没填」处理，别写成空字符串').toBe(false)
+  })
+
+  it('家里那几件（App 内兑现）没有外链订单号这回事', () => {
+    const rows = redeemHistory([rec({ fulfilled: true })], [])
+    expect(rows[0].orderNo).toBeUndefined()
+  })
+
   it('实物单还挂在 committed 时要算待兑现（爸妈得去买）', () => {
     const rows = redeemHistory([], [order({ kind: 'collectible', openedGameId: undefined })])
     expect(rows[0].pending).toBe(true)

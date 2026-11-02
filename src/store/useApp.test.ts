@@ -3891,3 +3891,29 @@ describe('备份版本号：新的不认，旧的要认', () => {
   })
 })
 
+describe('并发 refresh：折叠成一次 + 补跑一次', () => {
+  it('★★ 三次并发 refresh 会跑两轮（不补的话，刚写进去的读不回来）', async () => {
+    await boot()
+    const spy = vi.spyOn(db.tasks, 'toArray')
+    const a = useApp.getState().refresh()
+    const b = useApp.getState().refresh()
+    const c = useApp.getState().refresh()
+    await Promise.all([a, b, c])
+    const rounds = spy.mock.calls.length
+    spy.mockRestore()
+    /* 每次 doRefresh 只读一次 db.tasks.toArray() ⇒ 轮数 == 跑了几遍。
+       只跑一轮的话，第二个调用方刚写下去的东西读不回来 ——
+       服务端已经 done、界面还写着「待确认」，而且不报错。 */
+    expect(rounds, '三次并发只跑一轮 = 后来那次写入被丢掉了').toBe(2)
+  })
+
+  it('顺序调用各跑各的（补跑机制不会把两次刷新并成一次）', async () => {
+    await boot()
+    const spy = vi.spyOn(db.tasks, 'toArray')
+    await useApp.getState().refresh()
+    await useApp.getState().refresh()
+    const rounds = spy.mock.calls.length
+    spy.mockRestore()
+    expect(rounds).toBe(2)
+  })
+})
