@@ -559,6 +559,35 @@ export async function consumeItem(itemId: string, count = 1): Promise<boolean> {
   })
 }
 
+/* ---------------- 账本暂存（在线版农场动作） ---------------- */
+
+/**
+ * 账本暂存的钩子。
+ *
+ * 返回 `true` = 「这笔账我接管了，别写本地」。
+ *
+ * ## 为什么需要它
+ *
+ * 在线版的农场动作要把「状态 + 账本」**一起**提交给服务端（同一个事务，
+ * 见 `online/farm.ts`）。如果这里照常写本地，提交成功后本地会多出一笔，
+ * 服务端那份再拉下来又是一笔 —— **余额凭空翻倍**，而且两边都不报错。
+ *
+ * 所以动作期间这笔账**根本不写本地**，只攒成 claim 等着一并提交；
+ * 服务端那份由下一次拉取补进 `ledger` / `harvestLedger`。
+ *
+ * ★ 默认 `null`（本地版 / 单测 / 任何没开在线版农场的场景），一个字节都不改。
+ */
+export type LedgerSink = (
+  row: { delta: number; source: string; memo: string; refId?: string },
+  currency: 'points' | 'coupon',
+) => boolean
+
+let ledgerSink: LedgerSink | null = null
+
+export function setLedgerSink(fn: LedgerSink | null): void {
+  ledgerSink = fn
+}
+
 /* ---------------- 积分账本 ---------------- */
 
 /**
@@ -609,6 +638,24 @@ export async function postLedger(
   },
 ): Promise<LedgerEntry> {
   const delta = Math.round(entry.delta)
+  /* 在线版农场动作：这笔账交给服务端（见 `online/farm.ts`），本地不落。
+     `balanceAfter` 填 0 —— 农场那边只用它判断「发没发出去」，不读余额。 */
+  if (
+    ledgerSink?.(
+      { delta, source: entry.source, memo: entry.memo, refId: entry.refId },
+      'points',
+    )
+  ) {
+    return {
+      id: entry.id ?? `pending_${Date.now().toString(36)}`,
+      delta,
+      balanceAfter: 0,
+      source: entry.source,
+      refId: entry.refId,
+      memo: entry.memo,
+      createdAt: entry.createdAt ?? Date.now(),
+    }
+  }
   return db.transaction('rw', db.ledger, async () => {
     const tip = await ledgerTip()
     const row: LedgerEntry = {
@@ -940,6 +987,23 @@ export async function postHarvest(
   },
 ): Promise<HarvestEntry> {
   const delta = Math.round(entry.delta)
+  /* 同 `postLedger`：在线版农场动作的券由服务端记，本地不落 */
+  if (
+    ledgerSink?.(
+      { delta, source: entry.source, memo: entry.memo, refId: entry.refId },
+      'coupon',
+    )
+  ) {
+    return {
+      id: entry.id ?? `pending_${Date.now().toString(36)}`,
+      delta,
+      balanceAfter: 0,
+      source: entry.source,
+      refId: entry.refId,
+      memo: entry.memo,
+      createdAt: entry.createdAt ?? Date.now(),
+    }
+  }
   return db.transaction('rw', db.harvestLedger, async () => {
     const tip = await harvestTip()
     const row: HarvestEntry = {

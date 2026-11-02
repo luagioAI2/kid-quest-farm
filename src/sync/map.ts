@@ -1,4 +1,6 @@
 import type {
+  HarvestEntry,
+  HarvestSource,
   LedgerEntry,
   LedgerSource,
   QualityGrade,
@@ -161,6 +163,48 @@ const LEDGER_SOURCE_MAP: Record<string, LedgerSource> = {
   manual_adjust: 'manual_adjust',
   game_reward: 'game_spend',
   game_spend: 'game_spend',
+}
+
+/**
+ * 兑换券流水的来源映射。
+ *
+ * ⚠️ `animal_produce`（动物产出卖出）落到 `farm_harvest`：本地那个联合类型
+ *    只有「作物收获」这一档，而两者在流水里的语义一样（农场卖东西得的券）。
+ *    加一个新的 `HarvestSource` 会牵动 `ledgerTip`、兑换券页的分组图标和
+ *    十来条单测，收益只是标签更细 —— 等真要按来源出报表时再拆。
+ */
+const HARVEST_SOURCE_MAP: Record<string, HarvestSource> = {
+  farm_harvest: 'farm_harvest',
+  animal_produce: 'farm_harvest',
+  farm_market: 'farm_market',
+  claw_prize: 'claw_prize',
+  plugin_mint: 'claw_prize',
+  game_redeem: 'game_redeem',
+  harvest_redeem: 'harvest_redeem',
+  redeem_coupon: 'harvest_redeem',
+  wish_redeem: 'wish_redeem',
+  wish_refund: 'wish_refund',
+}
+
+/**
+ * 兑换券流水。**只收 `coupon` 币种**，与 `mapLedger` 对称。
+ *
+ * 不认识来源时落 `claw_prize` —— 它在本地就是「奖品 → 兑换券」的
+ * **统一标记**（历史名）。丢行会让兑换券余额对不上账，而界面上什么都看不出来。
+ */
+export function mapHarvest(s: ServerLedgerEntry): HarvestEntry | null {
+  if (s.currency !== 'coupon') return null
+  const source = HARVEST_SOURCE_MAP[s.source]
+  if (!source) console.warn(`[sync] 未知的兑换券来源「${s.source}」，已记为 claw_prize`)
+  return {
+    id: srvId('ledger', s.id),
+    delta: s.delta,
+    balanceAfter: s.balance_after,
+    source: source ?? 'claw_prize',
+    refId: s.ref_id || undefined,
+    memo: s.memo,
+    createdAt: secToMs(s.created_at) ?? Date.now(),
+  }
 }
 
 /**

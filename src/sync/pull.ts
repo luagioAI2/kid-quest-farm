@@ -2,7 +2,7 @@ import { db } from '../db/db'
 import { board, listTasks } from '../api/task'
 import { walletInfo, walletLedger } from '../api/wallet'
 import { getToken } from '../api/session'
-import { mapInstance, mapLedger, mapTask } from './map'
+import { mapHarvest, mapInstance, mapLedger, mapTask } from './map'
 
 /* ============================================================
    在线版 · 拉取（服务端 → 本地 Dexie）
@@ -44,12 +44,17 @@ export interface PullResult {
   tasks?: number
   instances?: number
   ledger?: number
+  /** 兑换券流水（服务端 `coupon` 币种的行） */
+  coupons?: number
   /** 服务端报的余额，用来和本地求和比对 */
   balance?: number
 }
 
 /** 删掉某一类 `srv_` 行（重拉时先清后写，保证服务端删掉的这里也跟着消失） */
-async function clearSrvRows(table: 'tasks' | 'taskInstances' | 'ledger', prefix: string) {
+async function clearSrvRows(
+  table: 'tasks' | 'taskInstances' | 'ledger' | 'harvestLedger',
+  prefix: string,
+) {
   const t = db[table]
   const keys = await t
     .filter((row: { id: string }) => row.id.startsWith(prefix))
@@ -89,21 +94,34 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
     const ledgerRows = (ledger?.list ?? [])
       .map(mapLedger)
       .filter((r): r is NonNullable<typeof r> => r !== null)
+    /* 兑换券：同一份 `/wallet/ledger` 里的 `coupon` 行。
+       ★ 不拉的话「卖菜得的券」只在服务端，本地兑换券页永远是空的，
+         而余额却对得上（余额是求和的，含 srv 行）—— 看着像「流水丢了」。 */
+    const harvestRows = (ledger?.list ?? [])
+      .map(mapHarvest)
+      .filter((r): r is NonNullable<typeof r> => r !== null)
 
-    await db.transaction('rw', [db.tasks, db.taskInstances, db.ledger], async () => {
-      await clearSrvRows('tasks', 'srv_task_')
-      await clearSrvRows('taskInstances', 'srv_inst_')
-      await clearSrvRows('ledger', 'srv_ledger_')
-      if (taskRows.length) await db.tasks.bulkPut(taskRows)
-      if (instRows.length) await db.taskInstances.bulkPut(instRows)
-      if (ledgerRows.length) await db.ledger.bulkPut(ledgerRows)
-    })
+    await db.transaction(
+      'rw',
+      [db.tasks, db.taskInstances, db.ledger, db.harvestLedger],
+      async () => {
+        await clearSrvRows('tasks', 'srv_task_')
+        await clearSrvRows('taskInstances', 'srv_inst_')
+        await clearSrvRows('ledger', 'srv_ledger_')
+        await clearSrvRows('harvestLedger', 'srv_ledger_')
+        if (taskRows.length) await db.tasks.bulkPut(taskRows)
+        if (instRows.length) await db.taskInstances.bulkPut(instRows)
+        if (ledgerRows.length) await db.ledger.bulkPut(ledgerRows)
+        if (harvestRows.length) await db.harvestLedger.bulkPut(harvestRows)
+      },
+    )
 
     return {
       ok: true,
       tasks: taskRows.length,
       instances: instRows.length,
       ledger: ledgerRows.length,
+      coupons: harvestRows.length,
       balance: wallet?.points ?? b.balance,
     }
   } catch (e) {

@@ -110,6 +110,16 @@ import {
   oUpdateTask,
 } from '../online/tasks'
 import {
+  beginFarmTx,
+  endFarmTx,
+  inFarmTx,
+  pullFarm,
+  pushFarmState,
+  readFarmPayload,
+  writeFarmPayload,
+  type FarmPayload,
+} from '../online/farm'
+import {
   appDayKey,
   appDayStart,
   formatClock,
@@ -290,7 +300,13 @@ interface AppState {
 
   /* ---- 生命周期 ---- */
   boot: () => Promise<void>
-  refresh: () => Promise<void>
+  /**
+   * 重算一遍内存快照。
+   *
+   * @param opts.skipPull 在线版里跳过「拉服务端」这一步 ——
+   *   农场动作刚提交完时用：本地已经是新的了，再拉一次纯属浪费一个往返。
+   */
+  refresh: (opts?: { skipPull?: boolean }) => Promise<void>
   /** 每分钟推进一次：动物产出、跨日检测 */
   tick: () => Promise<void>
 
@@ -1493,9 +1509,95 @@ async function onlineDoCheckIn(
   return { gained: r.data.points ?? 0, bonus: 0 }
 }
 
+/**
+ * 在线版农场动作的外壳。
+ *
+ * ```
+ * 动作体（本地算法，一行没改）
+ *      ↓ 算出新状态，写进 Dexie
+ * 整块 payload + 这次产生的账本变动 → /api/farm/state/save（一个事务）
+ *      ↓ 成功
+ *   refresh()（重拉）→ 界面拿到服务端的真相
+ *      ↓ 失败 / 版本冲突
+ *   把 Dexie 恢复成动作前那份 + 提示 + 重拉
+ * ```
+ *
+ * ★ 三条和任务那条链路一致，但多了一条农场特有的：
+ *
+ * ① **失败绝不落本地。** 恢复快照而不是「留着等下次补传」——
+ *    补传会造出「孩子看到券到账了、家长那边没有」。
+ * ② **不自己算余额。** 服务端在同一个事务里记账，本地读回它的结果。
+ * ③ **整块提交，不做增量。** 服务端不理解玩法，只认「这份 JSON 是最新的」。
+ * ④ 农场特有：**账本行在动作期间根本不写本地**（`beginFarmTx` 会把
+ *    `postLedger` / `postHarvest` 接管掉）。写完再删的话，删的那一下
+ *    出问题（断网 / 崩溃）就会留下服务端没有的一笔 —— 余额虚高，且永不恢复。
+ *
+ * @param action   动作名，只用于日志和排错
+ * @param body     本地实现（就是原来那个函数体，通过 `get().xxx()` 再进来一次）
+ * @param failValue 失败时返回什么（调用方拿它判断「没成」）
+ */
+/** 两份农场是不是同一份（`savedAt` 每次都不同，必须排除） */
+function sameFarm(a: FarmPayload, b: FarmPayload): boolean {
+  return JSON.stringify({ ...a, savedAt: 0 }) === JSON.stringify({ ...b, savedAt: 0 })
+}
+
+async function runFarmCommit<T>(
+  get: () => AppState,
+  action: string,
+  body: () => Promise<T>,
+  failValue: T,
+): Promise<T> {
+  /* 有别的 refresh 在飞就先等它：它会用服务端那份覆盖本地，
+     和这次动作抢同一批表 —— 谁后写谁赢，而我们不希望是它。 */
+  if (refreshInFlight) await refreshInFlight
+
+  const before = await readFarmPayload()
+  beginFarmTx()
+  let result: T
+  try {
+    result = await body()
+  } catch (e) {
+    // 本地算法自己抛了（脏数据 / 除零）：回滚，别留下半截状态
+    endFarmTx()
+    await writeFarmPayload(before)
+    console.warn(`[farm] ${action} 本地执行出错，已回滚：`, e)
+    return failValue
+  }
+  const claims = endFarmTx()
+
+  /* 什么都没变就别提交。
+     ★ 不判这一下的代价是：点一下还没熟的菜（`harvest` 直接 return 0）、
+       没肥料时点施肥，都会白白打一次 `save` —— 孩子的连点会变成一串写请求，
+       而且每次都推进 `rev`，把「另一台设备同时改」的窗口撑大。 */
+  const after = await readFarmPayload()
+  if (claims.length === 0 && sameFarm(before, after)) return result
+
+  const pushed = await pushFarmState(claims)
+  if (!pushed.ok) {
+    await writeFarmPayload(before)
+    if (pushed.reason === 'conflict') {
+      get().pushToast({
+        kind: 'warn',
+        title: '农场在别的设备上改过',
+        detail: '已经按云端那份重新同步了，再试一次就好。',
+        emoji: '🔄',
+      })
+    } else {
+      get().pushToast(writeFailToast(pushed.error, '刚才那一下'))
+    }
+    // 冲突要重拉（拿别人的 rev）；网络失败也重拉一次，尽量回到服务端那份
+    await get().refresh()
+    return failValue
+  }
+
+  await get().refresh()
+  return result
+}
+
 async function doRefresh(
   set: (partial: Partial<AppState>) => void,
   get: () => AppState,
+  opts: { skipPull?: boolean } = {},
 ): Promise<void> {
   const { settings } = get()
   const today = currentDayKey(settings.dayStartHour)
@@ -1506,9 +1608,15 @@ async function doRefresh(
      ★ 失败**不抛**：没网也要能进 App。拉不到就用本地已有的数据，
        孩子看到的可能不是最新的，但至少不是白屏。
      ★ 本地版（默认构建）这一句是 no-op，一个请求都不发。 */
-  if (isOnlineMode) {
+  /* ★ 农场动作期间（`inFarmTx()`）**一律不拉**：
+     动作刚算完的新状态还在本地，拉一次就会用服务端那份把它盖掉，
+     然后提交上去的是「什么都没变」—— 孩子点了收获，菜又回来了。 */
+  if (isOnlineMode && !inFarmTx() && !opts.skipPull) {
     const pulled = await pullFromServer()
     if (!pulled.ok) console.warn('[sync] 拉取失败，本次用本地数据：', pulled.reason)
+    /* 农场是整块 JSON，单独一个接口。失败不抛：没网就用本地这份 */
+    const farmPulled = await pullFarm()
+    if (farmPulled === 'failed') console.warn('[sync] 农场没拉到，本次用本地这份')
   }
 
   const tasks = sortTasks(await db.tasks.filter((t) => !t.archived).toArray())
@@ -1561,6 +1669,8 @@ async function doRefresh(
 
   // 3a) 动物产出累积 + 自然老去
   let advanced = advanceAnimals(farm.animals, now, timeScale)
+  /** 这一轮推进有没有真的改动农场（决定要不要往服务端推一次） */
+  let farmChanged = false
 
   // 3b) 动物随机事件（生病）—— 按「经过的农场天数」为概率基数
   const newEvents: FarmEvent[] = []
@@ -1587,6 +1697,7 @@ async function doRefresh(
   if (advanced !== farm.animals) {
     const changed = advanced.filter((a, idx) => a !== farm.animals[idx])
     await db.animals.bulkPut(changed)
+    farmChanged = true
   }
 
   // 3c) 农场世界日推进（用于「农场第 N 天」与事件节奏）
@@ -1595,21 +1706,33 @@ async function doRefresh(
   const farmDayAdvance = Math.max(prevFarmDay, farmDayNow)
   if (farmDayAdvance !== prevFarmDay) {
     await saveFarmDay(farmDayAdvance)
+    farmChanged = true
   }
 
   // 3d) 市场行情推进（跨日）
   // ⚠️ 要把家长设的 `r` 传进去 —— 现价硬顶 = `上限回收 ÷ 满产` 是跟着 `r` 变的
   // （见 `priceCeilingFor`）。不传的话家长调档之后，行情还是按默认 0.6 夹的。
   const marketDay = Math.floor(now / (1000 * 60 * 60 * 24))
+  const marketBefore = await loadMarket()
   const market = advanceMarket(
-    await loadMarket(),
+    marketBefore,
     marketDay,
     get().settings.profitRatio ?? DEFAULT_PROFIT_RATIO,
   )
+  // `advanceMarket` 跨日才换对象；同日返回同一个引用 —— 用这个判「变了没」
+  if (market !== marketBefore) farmChanged = true
   await saveMarket(market)
 
   if (newEvents.length > 0) {
     await logFarmEvents(newEvents)
+  }
+
+  /* 3e) 在线版：上面这几步推进（产出 / 生病 / 世界日 / 行情）也要落到服务端。
+     ★ 不推的话，下一次拉取会用服务端那份覆盖本地 ——
+       生病的鸡会「自己好起来」，因为服务端根本不知道它病过。 */
+  if (isOnlineMode && !inFarmTx() && farmChanged) {
+    const pushed = await pushFarmState()
+    if (!pushed.ok) console.warn('[sync] 农场推进没推上去：', pushed.reason)
   }
 
   const [
@@ -2135,13 +2258,13 @@ export const useApp = create<AppState>((set, get) => ({
     set({ ready: true, loading: false })
   },
 
-  refresh: async () => {
+  refresh: async (opts) => {
     // 串行化：并发 refresh 会各自基于同一份快照计算"缺失实例"，
     // 然后同时写入，导致同一任务同一天出现两条实例（进而可重复计分）。
     // 这里用一个模块级 in-flight promise 把并发调用折叠成一次。
     if (refreshInFlight) return refreshInFlight
     refreshInFlight = (async () => {
-      await doRefresh(set, get)
+      await doRefresh(set, get, opts)
     })().finally(() => {
       refreshInFlight = null
     })
@@ -2660,6 +2783,10 @@ export const useApp = create<AppState>((set, get) => ({
   /* ================= 农场 ================= */
 
   plant: async (plotIndex, cropId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'plant', () => get().plant(plotIndex, cropId), false)
+    }
     const def = CROP_BY_ID.get(cropId)
     if (!def) return false
     const { plots } = get()
@@ -2708,6 +2835,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   harvest: async (plotIndex, mode = 'store') => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'harvest', () => get().harvest(plotIndex, mode), 0)
+    }
     const { plots, settings } = get()
     const plot = plots.find((p) => p.index === plotIndex)
     if (!plot?.crop) return 0
@@ -2895,6 +3026,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   unlockPlot: async (plotIndex) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'unlockPlot', () => get().unlockPlot(plotIndex), false)
+    }
     const { plots, balance } = get()
     const plot = plots.find((p) => p.index === plotIndex)
     if (!plot || plot.unlocked) return false
@@ -2915,6 +3050,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   water: async (plotIndex) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'water', () => get().water(plotIndex), undefined)
+    }
     const { plots, settings } = get()
     const plot = plots.find((p) => p.index === plotIndex)
     if (!plot?.crop || plot.crop.diedAt) return
@@ -2948,6 +3087,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   buyAnimal: async (animalId, name) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'buyAnimal', () => get().buyAnimal(animalId, name), false)
+    }
     const def = ANIMAL_BY_ID.get(animalId)
     if (!def) return false
     if (get().balance < def.cost) {
@@ -2983,6 +3126,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   feedAnimal: async (animalId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'feedAnimal', () => get().feedAnimal(animalId), false)
+    }
     const { animals } = get()
     const a = animals.find((x) => x.id === animalId)
     if (!a) return false
@@ -3036,6 +3183,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   collectAnimal: async (animalId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'collectAnimal', () => get().collectAnimal(animalId), 0)
+    }
     const { animals, settings } = get()
     const a = animals.find((x) => x.id === animalId)
     if (!a || a.pendingProduce <= 0) return 0
@@ -3113,6 +3264,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   shearAnimal: async (animalId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'shearAnimal', () => get().shearAnimal(animalId), false)
+    }
     const { animals, settings } = get()
     const a = animals.find((x) => x.id === animalId)
     if (!a) return false
@@ -3143,6 +3298,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   removeAnimal: async (animalId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'removeAnimal', () => get().removeAnimal(animalId), undefined)
+    }
     await db.animals.delete(animalId)
     await get().refresh()
   },
@@ -3171,6 +3330,10 @@ export const useApp = create<AppState>((set, get) => ({
    * 要让「分批更划算」成立，得先改 `sellQuote`，见 `docs/farm-economy-design.md` §6.4。
    */
   sellProduce: async (itemId, count, opts) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'sellProduce', () => get().sellProduce(itemId, count, opts), 0)
+    }
     if (!MARKET_GOODS.includes(itemId) || count <= 0) return 0
 
     const { market, plots, animals, settings } = get()
