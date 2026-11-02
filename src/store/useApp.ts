@@ -120,6 +120,15 @@ import {
   type FarmPayload,
 } from '../online/farm'
 import {
+  createBody as redeemCreateBody,
+  oCreateRedeemItem,
+  oDeleteRedeemItem,
+  oFulfillRedeem,
+  oRedeemItem,
+  oUpdateRedeemItem,
+  redeemFailToast,
+} from '../online/redeem'
+import {
   appDayKey,
   appDayStart,
   formatClock,
@@ -1508,6 +1517,113 @@ async function onlineDoCheckIn(
   // 服务端给的 `points` 已经把阶梯奖励算进去了，所以 bonus 记 0，避免重复显示
   return { gained: r.data.points ?? 0, bonus: 0 }
 }
+
+/* ============================================================
+   在线版 · 兑换商城写穿
+   ------------------------------------------------------------
+   和任务那条链路同一个形状：**调接口 → 成功了才 refresh → 从本地表读回**。
+
+   ★ 兑换和别的动作有一个根本区别：**分账由服务端算**。
+     「券优先 + 积分补差」这条规则本地也有一份（`domain/redeem.ts`），
+     但那是给 UI 做预览用的；真正扣钱只有服务端那一份算数。
+     所以这里**不预先扣任何东西**，只把结果读回来。
+   ============================================================ */
+
+/**
+ * 新建兑换品。
+ *
+ * ★ `id` 由**客户端**生成并带上（服务端照用，见 `api/redeem.ts`）。
+ *   好处是：建完不用再查一次「服务端给我分配了什么 id」，
+ *   而且 id 在本地和服务端是**同一个字符串**，两边都对得上。
+ */
+async function onlineAddRedeemItem(
+  get: () => AppState,
+  input: NewRedeemInput,
+): Promise<RedeemItem> {
+  const now = Date.now()
+  const id = uid('rd')
+  /** 建失败时返回它：调用方（编辑器）不读返回值，但类型要求这里必须给一个 */
+  const shell: RedeemItem = { ...input, id, archived: false, createdAt: now, updatedAt: now }
+
+  const r = await onlineWrite(() => oCreateRedeemItem(redeemCreateBody(id, input)))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这个兑换品'))
+    return shell
+  }
+  await get().refresh()
+  return (await db.redeemItems.get(id)) ?? shell
+}
+
+/** 改兑换品 / 上架下架（`archived` 走同一个接口） */
+async function onlineUpdateRedeemItem(
+  get: () => AppState,
+  id: string,
+  patch: Partial<RedeemItem>,
+): Promise<void> {
+  const r = await onlineWrite(() => oUpdateRedeemItem(id, patch))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次修改'))
+    return
+  }
+  await get().refresh()
+}
+
+async function onlineDeleteRedeemItem(get: () => AppState, id: string): Promise<void> {
+  const r = await onlineWrite(() => oDeleteRedeemItem(id))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次删除'))
+    return
+  }
+  await get().refresh()
+}
+
+/**
+ * 兑换。
+ *
+ * 返回 `null` = 没换成；否则给出这次**服务端实际扣的**分账，
+ * 让调用方去点亮积分飘字和成功提示。
+ *
+ * ⚠️ 这里**不复算**「够不够 / 换过没 / 今天几次」。服务端在同一事务里
+ *    全查一遍，本地再判一遍只会多出一个真相 —— 而且那个真相是按
+ *    `settings.dayStartHour`（默认凌晨 4 点）算的，服务端按 0 点算，
+ *    凌晨那几个小时两边必然不一致。
+ */
+async function onlineRedeem(
+  get: () => AppState,
+  itemId: string,
+): Promise<{ name: string; emoji: string; pointsPaid: number; harvestPaid: number; how: string } | null> {
+  const r = await onlineWrite(() => oRedeemItem(itemId))
+  if (!r.ok) {
+    get().pushToast(redeemFailToast(r.error))
+    return null
+  }
+  const d = r.data
+  get().pushToast({
+    kind: 'reward',
+    title: `兑换成功：${d.name}`,
+    detail: `花了 ${d.description} · 记得找爸爸妈妈兑现哦`,
+    emoji: d.emoji || '🎁',
+  })
+  await get().refresh()
+  return {
+    name: d.name,
+    emoji: d.emoji || '🎁',
+    pointsPaid: d.plan?.points_paid ?? 0,
+    harvestPaid: d.plan?.harvest_paid ?? 0,
+    how: d.description,
+  }
+}
+
+/** 家长标记「已兑现」 */
+async function onlineFulfillRedeem(get: () => AppState, recordId: string): Promise<void> {
+  const r = await onlineWrite(() => oFulfillRedeem(recordId))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次确认'))
+    return
+  }
+  await get().refresh()
+}
+
 
 /**
  * 在线版农场动作的外壳。
@@ -3459,6 +3575,7 @@ export const useApp = create<AppState>((set, get) => ({
   /* ================= 兑换商城 ================= */
 
   addRedeemItem: async (input) => {
+    if (isOnlineMode) return onlineAddRedeemItem(get, input)
     const now = Date.now()
     const item: RedeemItem = {
       ...input,
@@ -3473,16 +3590,19 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   updateRedeemItem: async (id, patch) => {
+    if (isOnlineMode) return onlineUpdateRedeemItem(get, id, patch)
     await db.redeemItems.update(id, { ...patch, updatedAt: Date.now() })
     await get().refresh()
   },
 
   setRedeemItemArchived: async (id, archived) => {
+    if (isOnlineMode) return onlineUpdateRedeemItem(get, id, { archived })
     await db.redeemItems.update(id, { archived, updatedAt: Date.now() })
     await get().refresh()
   },
 
   deleteRedeemItem: async (id) => {
+    if (isOnlineMode) return onlineDeleteRedeemItem(get, id)
     // 只删兑换品本身。兑换记录（redeemRecords）是独立的表，且自带 name/emoji/cost
     // 快照 —— 所以已经换过的历史不会因为删掉商品而变成空白，待兑现的愿望也还在。
     await db.redeemItems.delete(id)
@@ -3527,6 +3647,21 @@ export const useApp = create<AppState>((set, get) => ({
    * 用旧余额算出的分账会把已经花掉的兑换券又花一次。
    */
   redeem: async (itemId) => {
+    /* 在线版：分账、扣钱、写记录全在服务端一个事务里（`RedeemService.Redeem`）。
+       本地这段**整条不走** —— 连「够不够」都不预判，理由见 `onlineRedeem`。 */
+    if (isOnlineMode) {
+      const done = await onlineRedeem(get, itemId)
+      if (!done) return false
+      set({
+        settleFlash: {
+          points: -done.pointsPaid,
+          reason: `兑换了「${done.name}」`,
+          emoji: done.emoji,
+        },
+      })
+      return true
+    }
+
     const { balance, harvestBalance, settings, allRedeemItems } = get()
     if (!settings.redeemEnabled) {
       get().pushToast({ kind: 'info', title: '兑换还没开放哦', emoji: '🔒' })
@@ -3695,6 +3830,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   fulfillRedeem: async (recordId) => {
+    if (isOnlineMode) return onlineFulfillRedeem(get, recordId)
     await db.redeemRecords.update(recordId, { fulfilled: true, fulfilledAt: Date.now() })
     await get().refresh()
   },

@@ -1,8 +1,17 @@
 import { db } from '../db/db'
 import { board, listTasks } from '../api/task'
 import { walletInfo, walletLedger } from '../api/wallet'
+import { listRedeemRecords, listRedeemRows } from '../api/redeem'
 import { getToken } from '../api/session'
-import { mapHarvest, mapInstance, mapLedger, mapTask } from './map'
+import {
+  mapHarvest,
+  mapInstance,
+  mapLedger,
+  mapRedeemItem,
+  mapRedeemRecord,
+  mapTask,
+  SRV_REDEEM_RECORD_PREFIX,
+} from './map'
 
 /* ============================================================
    在线版 · 拉取（服务端 → 本地 Dexie）
@@ -46,13 +55,17 @@ export interface PullResult {
   ledger?: number
   /** 兑换券流水（服务端 `coupon` 币种的行） */
   coupons?: number
+  /** 兑换商品（`source === 'redeem'` 的那些，心愿行不算） */
+  redeemItems?: number
+  /** 兑换记录（**不含已取消的**，见 `mapRedeemRecord`） */
+  redeemRecords?: number
   /** 服务端报的余额，用来和本地求和比对 */
   balance?: number
 }
 
 /** 删掉某一类 `srv_` 行（重拉时先清后写，保证服务端删掉的这里也跟着消失） */
 async function clearSrvRows(
-  table: 'tasks' | 'taskInstances' | 'ledger' | 'harvestLedger',
+  table: 'tasks' | 'taskInstances' | 'ledger' | 'harvestLedger' | 'redeemRecords',
   prefix: string,
 ) {
   const t = db[table]
@@ -88,6 +101,16 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       walletInfo().catch(() => null), // 钱包挂了不该拖垮任务板
     ])
     const ledger = await walletLedger(1, opts.pageSize ?? 200).catch(() => null)
+    /* 兑换商城：商品和记录各一次。
+       ★ 两个都用 `catch(() => null)`：商城挂了不该让「今天的任务」也拉不下来 ——
+         孩子打开 App 是要做任务的，不是来逛商城的。
+       ★ 商品用 `raw: true`：默认那套过滤是**给孩子看**的口径
+         （换过的一次性商品、缺货的都不返回），拿它当数据源，
+         家长管理页里那些商品会凭空消失 —— 见 `api/redeem.ts` 的注释。 */
+    const redeemRows = await listRedeemRows({ includeArchived: true, raw: true }).catch(
+      () => null,
+    )
+    const redeemRecs = await listRedeemRecords(1, 200).catch(() => null)
 
     const taskRows = tasks.list.map(mapTask)
     const instRows = b.instances.map(mapInstance)
@@ -100,19 +123,42 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
     const harvestRows = (ledger?.list ?? [])
       .map(mapHarvest)
       .filter((r): r is NonNullable<typeof r> => r !== null)
+    const itemRows = (redeemRows?.list ?? [])
+      .map(mapRedeemItem)
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+    const recRows = (redeemRecs?.list ?? [])
+      .map(mapRedeemRecord)
+      .filter((r): r is NonNullable<typeof r> => r !== null)
 
     await db.transaction(
       'rw',
-      [db.tasks, db.taskInstances, db.ledger, db.harvestLedger],
+      [
+        db.tasks,
+        db.taskInstances,
+        db.ledger,
+        db.harvestLedger,
+        db.redeemItems,
+        db.redeemRecords,
+      ],
       async () => {
         await clearSrvRows('tasks', 'srv_task_')
         await clearSrvRows('taskInstances', 'srv_inst_')
         await clearSrvRows('ledger', 'srv_ledger_')
         await clearSrvRows('harvestLedger', 'srv_ledger_')
+        await clearSrvRows('redeemRecords', SRV_REDEEM_RECORD_PREFIX)
+        /* ★ 兑换商品这张表在在线版里**整张清掉**，不是只清 `srv_` 行。
+           理由和别的表不同：兑换品的 id 就是服务端给的那个字符串（没有前缀），
+           没法从 id 上分辨「这行是不是云端来的」。而在线版里这张表**只可能**
+           有云端数据 —— 播种（`seedIfEmpty`）在在线模式下一个字节都不写，
+           写接口又全是写穿（失败不落本地）。所以清空它不会删掉任何
+           「只在本机存在」的东西。 */
+        await db.redeemItems.clear()
         if (taskRows.length) await db.tasks.bulkPut(taskRows)
         if (instRows.length) await db.taskInstances.bulkPut(instRows)
         if (ledgerRows.length) await db.ledger.bulkPut(ledgerRows)
         if (harvestRows.length) await db.harvestLedger.bulkPut(harvestRows)
+        if (itemRows.length) await db.redeemItems.bulkPut(itemRows)
+        if (recRows.length) await db.redeemRecords.bulkPut(recRows)
       },
     )
 
@@ -122,6 +168,8 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       instances: instRows.length,
       ledger: ledgerRows.length,
       coupons: harvestRows.length,
+      redeemItems: itemRows.length,
+      redeemRecords: recRows.length,
       balance: wallet?.points ?? b.balance,
     }
   } catch (e) {

@@ -1,7 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mapInstance, mapLedger, mapTask, secToMs, srvId } from './map'
+import {
+  mapInstance,
+  mapLedger,
+  mapRedeemItem,
+  mapRedeemRecord,
+  mapTask,
+  secToMs,
+  srvId,
+} from './map'
 import type { ServerInstance, ServerTask } from '../api/task'
 import type { ServerLedgerEntry } from '../api/wallet'
+import type { ServerRedeemRecord, ServerRedeemRow } from '../api/redeem'
 
 /* 一条**真的**服务端返回（2026-11-02 从 /api/task/board 抓下来的），
    别自己编字段名 —— 编出来的字段名永远是对的，接口永远不认。 */
@@ -159,5 +168,104 @@ describe('mapLedger', () => {
     const e = mapLedger({ ...LEDGER, source: 'brand_new_source' })
     expect(e).not.toBeNull()
     expect(e!.source).toBe('manual_adjust')
+  })
+})
+
+describe('mapRedeemItem', () => {
+  /* 一条真的 `/api/redeem/list`（raw）返回行 */
+  const ROW: ServerRedeemRow = {
+    source: 'redeem',
+    id: 'rd-abc',
+    name: '玩 30 分钟平板',
+    emoji: '📱',
+    category: 'screen',
+    note: '周末才能用',
+    price: 50,
+    plan: { harvest_paid: 30, points_paid: 20, total: 50, affordable: true, shortfall: 0 },
+    can_redeem: true,
+    description: '30 兑换券 + 20 积分',
+    blocked_by_limit: false,
+    today_count: 0,
+    remaining_today: 2,
+    once: false,
+    stock: -1,
+    archived: false,
+    limit_per_day: 2,
+    created_by_parent: true,
+    created_at: 1793590000,
+    updated_at: 1793590100,
+    visible: true,
+  }
+
+  it('price → cost，limit_per_day → limitPerDay，秒 → 毫秒', () => {
+    const it = mapRedeemItem(ROW)
+    expect(it).not.toBeNull()
+    expect(it!.id).toBe('rd-abc') // 不加 srv_ 前缀：服务端用的就是这个 id
+    expect(it!.cost).toBe(50)
+    expect(it!.limitPerDay).toBe(2)
+    expect(it!.createdAt).toBe(1793590000000)
+    expect(it!.updatedAt).toBe(1793590100000)
+    expect(it!.archived).toBe(false)
+  })
+
+  it('limit_per_day = 0（不限）翻成本地的 undefined', () => {
+    // 写成 0 的话，`limitPerDay != null` 恒真 ⇒ 孩子看到「每天最多 0 次」
+    expect(mapRedeemItem({ ...ROW, limit_per_day: 0 })!.limitPerDay).toBeUndefined()
+  })
+
+  it('★ 心愿来源的行必须丢掉（否则兑换页会出现两遍）', () => {
+    expect(mapRedeemItem({ ...ROW, source: 'wish', id: 'wi-xyz' })).toBeNull()
+  })
+
+  it('visible 原样带下来（服务端算的可见性，客户端不自己推）', () => {
+    expect(mapRedeemItem({ ...ROW, visible: false })!.visible).toBe(false)
+  })
+
+  it('不认识的分类落 custom，而不是变成空白格子', () => {
+    expect(mapRedeemItem({ ...ROW, category: 'music' })!.category).toBe('custom')
+  })
+})
+
+describe('mapRedeemRecord', () => {
+  const REC: ServerRedeemRecord = {
+    id: 'RR1700000000123',
+    item_id: 'rd-abc',
+    name: '玩 30 分钟平板',
+    emoji: '📱',
+    quantity: 1,
+    cost: 50,
+    harvest_paid: 30,
+    points_paid: 20,
+    balance_after: 80,
+    harvest_balance_after: 5,
+    fulfilled: false,
+    fulfilled_at: null,
+    cancelled: false,
+    cancel_reason: '',
+    created_at: 1793590100,
+  }
+
+  it('加 srv_rr_ 前缀，两种币分别映射', () => {
+    const r = mapRedeemRecord(REC)
+    expect(r).not.toBeNull()
+    expect(r!.id).toBe('srv_rr_RR1700000000123')
+    expect(r!.itemId).toBe('rd-abc')
+    expect(r!.harvestPaid).toBe(30)
+    expect(r!.pointsPaid).toBe(20)
+    expect(r!.balanceAfter).toBe(80)
+    expect(r!.harvestBalanceAfter).toBe(5)
+    expect(r!.fulfilled).toBe(false)
+    expect(r!.createdAt).toBe(1793590100000)
+  })
+
+  it('兑现时间：null 保持 undefined（不是 0，0 会显示成 1970 年）', () => {
+    expect(mapRedeemRecord(REC)!.fulfilledAt).toBeUndefined()
+    expect(mapRedeemRecord({ ...REC, fulfilled_at: 1793590200 })!.fulfilledAt).toBe(
+      1793590200000,
+    )
+  })
+
+  it('★ 已取消的记录直接丢掉（退款了，那笔兑换等于没发生）', () => {
+    expect(mapRedeemRecord({ ...REC, cancelled: true })).toBeNull()
   })
 })

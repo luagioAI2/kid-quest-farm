@@ -491,7 +491,12 @@ export async function loadFarmEvents(limit = 30): Promise<FarmEvent[]> {
 
 export async function loadRedeemItems(): Promise<RedeemItem[]> {
   const rows = await db.redeemItems.toArray()
-  return rows.filter((r) => !r.archived).sort((a, b) => a.cost - b.cost)
+  /* `visible !== false`：在线版由服务端判定（一次性换过 / 缺货 / 已下架），
+     本地版不写这个字段 ⇒ `undefined !== false` 恒真，行为不变。
+     ⚠️ 写 `!r.visible` 会把本地版的整张表清空 —— 本地版从来没写过它。 */
+  return rows
+    .filter((r) => !r.archived && r.visible !== false)
+    .sort((a, b) => a.cost - b.cost)
 }
 
 export async function loadAllRedeemItems(): Promise<RedeemItem[]> {

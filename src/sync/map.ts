@@ -4,6 +4,9 @@ import type {
   LedgerEntry,
   LedgerSource,
   QualityGrade,
+  RedeemCategory,
+  RedeemItem,
+  RedeemRecord,
   Task,
   TaskCategory,
   TaskCycle,
@@ -12,6 +15,7 @@ import type {
 } from '../domain/types'
 import type { ServerInstance, ServerTask } from '../api/task'
 import type { ServerLedgerEntry } from '../api/wallet'
+import type { ServerRedeemRecord, ServerRedeemRow } from '../api/redeem'
 
 /* ============================================================
    在线版 · 服务端 DTO → 本地类型
@@ -223,3 +227,98 @@ export function mapLedger(s: ServerLedgerEntry): LedgerEntry | null {
     createdAt: secToMs(s.created_at) ?? Date.now(),
   }
 }
+
+/* ============================================================
+   兑换商城
+   ------------------------------------------------------------
+   这里有个和任务/流水**不一样**的地方，值得单独说清楚：
+
+   ★ 兑换品的 id **不加 `srv_` 前缀**。
+     服务端建商品时用的是客户端给的 `id`（`/redeem/item/create` 的 `id` 字段
+     → `redeem_item.item_id`），所以两边本来就是同一个字符串。
+     加前缀的话，每个写接口都要再剥一次 —— 剥错了不报错，只会把
+     「这个商品不存在」显示成「商品没了」。
+
+   ★ 兑换**记录**的 id 要加（`srv_rr_`）。服务端生成 `RR…`，
+     本地生成 `rr…`，两种风格混在一张表里，不加前缀就分不清
+     「这行能不能直接拿 id 去调 `/redeem/fulfill`」。
+   ============================================================ */
+
+/** 服务端兑换记录 id 的本地前缀 */
+export const SRV_REDEEM_RECORD_PREFIX = 'srv_rr_'
+
+const REDEEM_CATEGORIES: readonly RedeemCategory[] = [
+  'snack',
+  'gift',
+  'screen',
+  'outing',
+  'privilege',
+  'custom',
+]
+
+/**
+ * `/redeem/list` 的一行 → 本地 `RedeemItem`。
+ *
+ * 返回 `null` 的两种情况，都是**必须**跳过的：
+ *
+ * ① `source === 'wish'` —— 那是家长定过价的心愿商品，不是兑换品。
+ *    写进兑换品表的话，孩子会在兑换页看到它**两次**（一次来自兑换品表、
+ *    一次来自心愿那条链路），而且家长在管理页删它只会删掉影子。
+ * ② 缺 `price`（服务端老版本没带 `raw` 字段时 `price` 仍在，但保险起见）。
+ */
+export function mapRedeemItem(s: ServerRedeemRow): RedeemItem | null {
+  if (s.source !== 'redeem') return null
+  return {
+    id: s.id,
+    name: s.name,
+    emoji: s.emoji || '🎁',
+    category: pick(REDEEM_CATEGORIES, s.category, 'custom', 'redeem.category'),
+    // 服务端叫 `price`（「分」），本地叫 `cost` —— 同一个数，别乘别除
+    cost: s.price,
+    note: s.note || undefined,
+    // 服务端的 0 = 不限，本地的 `undefined` = 不限
+    limitPerDay: s.limit_per_day ? s.limit_per_day : undefined,
+    once: s.once || undefined,
+    stock: s.stock,
+    archived: s.archived ?? false,
+    createdByParent: s.created_by_parent ?? true,
+    /* ★ 服务端算的「现在该不该给孩子看」。本地版的可见性是读取时算的
+       （`archived` + 一次性换过），在线版直接采信服务端 —— 否则
+       「换过的一次性商品」要靠本地 `redeemRecords` 反推，而那份记录
+       只拉了最近 200 条，老用户会看到换过的东西又冒出来。 */
+    visible: s.visible,
+    createdAt: secToMs(s.created_at) ?? Date.now(),
+    updatedAt: secToMs(s.updated_at) ?? Date.now(),
+  }
+}
+
+/**
+ * 服务端兑换记录 → 本地 `RedeemRecord`。
+ *
+ * ★ **已取消的记录直接丢**，返回 `null`。
+ *   取消 = 退券退分，那笔兑换在事实上没有发生。拉进来的话：
+ *     · 家长管理页会多出一条「待兑现」（`!fulfilled`）—— 东西早退了，
+ *       家长却以为还欠孩子一次；
+ *     · `redeemedToday` 会把它算进「今天换过几次」，孩子明明没换成却被限流。
+ *   服务端的 `HasRedeemedOnce` / `CountTodayByItem` / `CountRedeemedByItem`
+ *   三个判据全都带 `cancelled = false`，所以丢掉它们和「一次性换过」
+ *   这件事的判断是**一致**的。
+ */
+export function mapRedeemRecord(s: ServerRedeemRecord): RedeemRecord | null {
+  if (s.cancelled) return null
+  return {
+    id: `${SRV_REDEEM_RECORD_PREFIX}${s.id}`,
+    itemId: s.item_id,
+    name: s.name,
+    emoji: s.emoji || '🎁',
+    cost: s.cost,
+    harvestPaid: s.harvest_paid,
+    pointsPaid: s.points_paid,
+    balanceAfter: s.balance_after,
+    harvestBalanceAfter: s.harvest_balance_after,
+    fulfilled: s.fulfilled,
+    fulfilledAt: secToMs(s.fulfilled_at),
+    createdAt: secToMs(s.created_at) ?? Date.now(),
+  }
+}
+

@@ -766,6 +766,19 @@ export interface RedeemItem {
   stock?: number
   /** 是否下架 */
   archived?: boolean
+  /**
+   * 现在该不该出现在**孩子**的列表里。
+   *
+   * 只有**在线版**会写这个字段：服务端在一次查询里算好
+   * （已下架 / 一次性换过 / 缺货 三条，见 `RedeemService.ListItems`），
+   * 客户端直接采信，不自己再推一遍。
+   *
+   * 本地版**不写**它（`undefined`），可见性在读取时算
+   * （`loadRedeemItems` 滤 `archived`，store 再滤「一次性换过的」）。
+   * 两边都不写 `false` 之外的值，所以 `loadRedeemItems` 里
+   * `r.visible !== false` 这个判据对两个版本都成立。
+   */
+  visible?: boolean
   /** 是否由家长创建（孩子不能改） */
   createdByParent?: boolean
   createdAt: number
