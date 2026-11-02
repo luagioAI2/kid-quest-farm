@@ -82,6 +82,7 @@ import type { ApiWishCodeResult } from '../api/types'
 import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom, wishOwnedSet } from '../domain/wish'
 import { makeHostApi } from '../games/hostApi'
 import { deleteGameKvOnServer } from '../online/kv'
+import { onlineDataOpRefusal } from '../online/backup'
 import { importBundle, mountBundle } from '../games/loader'
 import { catalogPublicKeyRaw } from '../games/catalogKey'
 import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
@@ -623,7 +624,13 @@ interface AppState {
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>
   exportBackup: () => Promise<unknown>
   importBackup: (raw: unknown) => Promise<{ ok: boolean; message: string }>
-  resetAll: () => Promise<void>
+  /**
+   * 清空本机全部数据并重新开始。
+   *
+   * `false` = **没清**（在线版：数据在账号里，清了也会被下一次拉取带回来）。
+   * 调用方要据此不弹「已重新开始」。
+   */
+  resetAll: () => Promise<boolean>
 
   /* ---- UI ---- */
   pushToast: (t: Omit<Toast, 'id'>) => void
@@ -4948,6 +4955,17 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   importBackup: async (raw) => {
+    /*
+     * ★ 在线版直接拒绝（2026-11-02 晚）。
+     *
+     * 备份里的行 id 没有 `srv_` 前缀，而拉取只清 `srv_` 行 ⇒ 导入的那些
+     * **会留下来和服务端那份叠加**：余额显示成两份之和、任务重复出现，
+     * 而服务端根本不认它们（孩子看到大余额，一花就说不够）。
+     * 界面那边也不再画「选择备份文件」，但闸门必须在这儿 ——
+     * 调试桥和以后的脚本都绕得过按钮。
+     */
+    const refusal = onlineDataOpRefusal(isOnlineMode, 'import')
+    if (refusal) return { ok: false, message: refusal }
     try {
       const parsed = raw as {
         app?: string
@@ -5254,8 +5272,15 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   resetAll: async () => {
+    /*
+     * ★ 在线版拒绝（2026-11-02 晚）。清完 Dexie，下一次 `refresh` 就把服务端
+     * 那份拉回来 —— 提示「已重新开始」，几秒后记录全回来了。
+     * 返回 boolean 而不是静默做完：调用方要能据此**不弹**「已重新开始」。
+     */
+    if (onlineDataOpRefusal(isOnlineMode, 'reset')) return false
     await wipeAll()
     await get().boot()
+    return true
   },
 
   /* ================= UI ================= */

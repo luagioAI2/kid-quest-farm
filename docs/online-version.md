@@ -403,7 +403,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1252 条（2 skipped）
+npm test                                       # 1256 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
@@ -414,9 +414,11 @@ node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（3
 node scripts/_probe-coin-online.mjs            # 浏览器真跑游戏币（44 条，§7.12；每跑一次花 13 积分）
 node scripts/_probe-kv-online.mjs              # 插件存档写穿（25 条，§7.13）
 node scripts/_probe-snapshot-online.mjs        # 存档还原点 / 回档（32 条，§7.14）
+node scripts/_probe-data-ops-online.mjs        # 在线版不提供导入 / 清空（18 条，§7.15）
 ```
 
-> 上面 8 条探针 2026-11-02 晚全量跑过一遍，全绿。
+> 上面 8 条探针 2026-11-02 晚全量跑过一遍，全绿；
+> `_probe-data-ops-online` 是同一晚加的（§7.15），单独跑过一次全绿。
 > 除 `_probe-write-through`（默认 4401）外都默认连 `127.0.0.1:4405`；
 > 换端口就把 URL 当第一个参数传（`node scripts/_probe-kv-online.mjs http://127.0.0.1:4406/`）。
 
@@ -1299,7 +1301,7 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1247 单测（2 skipped）
+npm run lint && npx vitest run && npm run build   # 1256 单测（2 skipped）
 node scripts/_probe-snapshot-online.mjs           # 32 条断言，全绿
 ```
 
@@ -1529,3 +1531,105 @@ C.on((e) => { if (e.type === 'change') { N(); ... } })   // N() → backend.set(
    探针加了 `sameJson()`（递归按键排序后比），三处比较都换掉。
    ⚠️ 以前能过是因为 `{level, tag}` 本来就有序 —— 换一个字段顺序就会红。
 
+
+## 7.15 在线版：两张「会当场打脸」的卡（2026-11-02 晚）
+
+「从备份恢复」和「清空全部数据」在本地版是正当能力 —— 数据就在这台设备的
+Dexie 里，导入 = 覆盖它，清空 = 删掉它。搬到在线版，两个都坏了，而且坏法是
+同一种：**先承诺、再当场否认**。
+
+### 7.15.1 坏在哪
+
+| 卡 | 本地版为什么成立 | 在线版为什么坏 |
+| --- | --- | --- |
+| 从备份恢复 | 导入 = 用文件覆盖 Dexie | 备份里的行 id **没有 `srv_` 前缀**，而 `pullFromServer` 只清 `srv_` 行 ⇒ 导入的那些**留下来和服务端那份叠加**：余额显示成两份之和、任务重复出现；而服务端根本不认这些行 —— 孩子看到一个很大的余额，一花就说不够 |
+| 清空全部数据 | 删掉就是删掉 | 清完 Dexie，下一次 `refresh` 又把账号里那份拉回来 ⇒ 提示「已重新开始」，几秒后记录全回来了 |
+
+第二种更糟：它不是「没反应」，是**界面自己打自己的脸**。用户对「说做完了却没做」
+的信任损失，比「这个功能没有」大得多。
+
+### 7.15.2 处理：不画按钮，把理由写在卡上
+
+- 新增 `src/online/backup.ts`，只装三样东西：`IMPORT_REFUSAL`、`RESET_REFUSAL`、
+  `onlineDataOpRefusal(online, op)`。
+- **文案只有一份**：卡片上的段落和 `importBackup` 的返回值用的是同一个常量。
+  探针第 6 步直接断言 `store 返回的 message === 卡上那段文字` —— 分两处写，
+  改一处忘一处，用户会在「点按钮看到的」和「调试桥看到的」之间读到两种说法。
+- **闸门在 store**（`importBackup` / `resetAll` 开头），不只是「界面不画按钮」：
+  调试桥、以后的批量脚本、自动化都绕得过按钮（同「门槛放 store，不放按钮」）。
+- `resetAll` 从 `void` 改成 `Promise<boolean>`：以前它不管清没清都返回 `undefined`，
+  界面照旧 toast「已重新开始」—— 那正是上面第二种坏法的代码形态。
+
+在线版这两张卡现在长这样（`data-backup-import-blocked` / `data-reset-blocked`）：
+
+> **从备份恢复**
+> 在线版不能从备份恢复：记录都在账号里，导入的旧账会和账号里那份叠在一起
+> （余额显示成两份、任务重复出现）。换设备直接登录同一个账号就行。
+>
+> **危险操作**
+> 在线版的记录在账号里，App 里清不掉 —— 清了下次打开又会回来。
+> 要让孩子重新开始，请先退出登录（记录还在账号里，登录就回来）。
+
+两段都**说出了「那怎么办」**（登录同一个账号 / 先退出登录）。只说「不支持」的提示，
+家长的下一个动作是「再点一次」或者「问客服」。
+
+### 7.15.3 为什么规则抽成纯函数
+
+`isOnlineMode` 是**构建期常量**（`src/sync/pull.ts`，`vitest.config.ts` 钉成 `local`）
+⇒ store 里根本造不出「在线版」来测。规则留在 `onlineDataOpRefusal(online, op)`
+就能单测（`src/online/backup.test.ts`，4 条）：
+
+1. 本地版一律放行（导入 / 清空都是本地版的正当能力）；
+2. 在线版两条都挡，而且**各有各的理由**（两句话不能是同一句）；
+3. 拒绝消息要说出「那怎么办」；
+4. 别把内部词漏给家长（`Dexie` / `srv_` / `缓存` / `服务端` / `服务器`）。
+
+第 4 条不是洁癖：第一版文案里写了「服务端」，家长读不懂这个词，只会读成
+「坏了，要找人修」。
+
+### 7.15.4 导出没跟着砍
+
+「导出到文件」是**只读**的（读 Dexie 生成 JSON），不参与恢复，也不会和服务端打架 ——
+在线版反而更该留一份底稿（换设备、账号出问题时的唯一凭据）。所以只把说明换成
+在线版口径（「记录本来就在账号里，换设备登录就有 —— 导出只是自己留一份纯文本底稿」），
+按钮留着。
+
+### 7.15.5 验收
+
+```bash
+node scripts/_probe-data-ops-online.mjs http://127.0.0.1:4406/    # 18 条断言
+```
+
+七步：记数据量 → 进「💾 数据」栏 → 查「从备份恢复」卡 → 查「危险操作」卡 →
+查文案没漏内部词 → 从调试桥调 `importBackup` / `resetAll` → 核对本地和服务端都没变。
+
+判据里有三条值得单说：
+
+- **连隐藏的 `input[type=file]` 都不许留**：留一个在 DOM 里，调试桥和自动化照样能
+  往里塞文件，绕开「不提供」这件事。所以断言的是 `input[type=file]` 个数为 0，
+  不只是「按钮文案不在」。
+- **「确认清空」也不许出现**：只删掉第一颗按钮、留下二次确认，等于让用户点进去
+  才发现不行 —— 比没有更糟。
+- **拒绝要真拒绝**：`resetAll()` 返回 `false` 还不够，还要核「伪造任务没进本地、
+  任务条数没少、服务端钱包没变」。返回值和副作用是两件事。
+
+⚠️ 探针进「数据」栏要 `protectParentActions: false`：这一栏压在家长密码后面
+（`dataGateOpen = !protectionOn || !dataLocked`），和快照探针同一口径。
+⚠️ 端口别用 4401 / 4405（常年被旧 preview 占着，`curl` 照样 200 ⇒ 探针跑在别人的构建上）。
+
+### 7.15.6 本地版一个字没变
+
+这两张卡在本地版还是原样（`📂 选择备份文件` / `🗑️ 清空全部数据` + 二次确认），
+`scripts/e2e-wipe.mjs` 和 `e2e-check.mjs` 第 9c 段照旧只对**本地版**有意义。
+在线版跑那两个脚本必然是红的（按钮不存在）—— 那不是回归，是模式不同。
+
+### 7.15.7 已知没做的
+
+- **真正的「换账号迁移」**（把旧账号的账搬到新账号）：要服务端有迁移接口，
+  这一期没做。现在能给的只有「登录同一个账号」。
+- **真正的「清空账号」**：同理。现在能给的只有「退出登录」（记录留着）。
+- 老设备上的兑换券余额还没迁移（和 §7.14.7 里那条同源）。
+
+真要动手时，接口大概长这样：`POST /api/account/import`（带幂等键 + 全量校验）与
+`POST /api/account/reset`（软删 + 留一份 `before_reset` 快照，可回滚）。
+两件事都必须**在服务端做**，客户端的 Dexie 只是缓存 —— 这是这一节的全部结论。

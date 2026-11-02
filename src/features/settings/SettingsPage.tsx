@@ -21,6 +21,10 @@ import { LoginSheet } from '../account/LoginSheet'
 import { useAccount } from '../../store/useAccount'
 import { GamesSection } from './GamesSection'
 import { Card } from './ui'
+/* 在线版：数据在账号里，「从备份恢复 / 清空数据」做不了什么 ——
+   理由和闸门都在 `online/backup.ts`（消息只有一份，卡片和 toast 共用）。 */
+import { isOnlineMode } from '../../sync/pull'
+import { IMPORT_REFUSAL, RESET_REFUSAL } from '../../online/backup'
 
 /* ============================================================
    家长设置 + 数据导出/导入
@@ -663,7 +667,9 @@ export default function SettingsPage({
               <>
                 <Card title="导出备份" emoji="💾">
                   <p className="mb-3 text-sm text-ink-500">
-                    把所有任务、积分、兑换券、农场和心愿单打包成一个 JSON 文件。建议每周导出一次。
+                    {isOnlineMode
+                      ? '记录本来就在账号里，换设备登录就有 —— 导出只是自己留一份纯文本底稿，看看里面存了什么。'
+                      : '把所有任务、积分、兑换券、农场和心愿单打包成一个 JSON 文件。建议每周导出一次。'}
                   </p>
                   <button
                     onClick={() => void handleExport()}
@@ -674,39 +680,56 @@ export default function SettingsPage({
                 </Card>
 
                 <Card title="从备份恢复" emoji="📥">
-                  <p className="mb-3 text-sm text-ink-500">
-                    ⚠️ 恢复会覆盖当前全部数据，请先导出一次现有数据。
-                    <br />
-                    家长密码和「今天玩了多久」都不在备份里 —— 这两样只属于这台设备。
-                    换机后要重新设一个密码，游戏时长也从零开始算。
-                    <br />
-                    装过的游戏会自动装回来：游戏本体不进备份（所以文件很小），
-                    恢复时从 App 自带的包重新装一次，存档原样还在。
-                  </p>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="application/json,.json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) void handleImportFile(f)
-                      e.target.value = ''
-                    }}
-                  />
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    className="btn w-full rounded-2xl bg-white py-4 text-lg font-extrabold text-ink-900 shadow-flat"
-                  >
-                    📂 选择备份文件
-                  </button>
+                  {isOnlineMode ? (
+                    /* ★ 在线版没有这个能力：导入的旧账没有 `srv_` 前缀，
+                       拉取时清不掉 ⇒ 和服务端那份**叠加**（余额显示成两份、
+                       任务重复）。不画按钮 = 家长不会去点；store 里还有一道
+                       闸门挡调试桥。理由见 `online/backup.ts`。 */
+                    <p
+                      data-backup-import-blocked
+                      className="text-sm leading-relaxed text-ink-500"
+                    >
+                      {IMPORT_REFUSAL}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mb-3 text-sm text-ink-500">
+                        ⚠️ 恢复会覆盖当前全部数据，请先导出一次现有数据。
+                        <br />
+                        家长密码和「今天玩了多久」都不在备份里 —— 这两样只属于这台设备。
+                        换机后要重新设一个密码，游戏时长也从零开始算。
+                        <br />
+                        装过的游戏会自动装回来：游戏本体不进备份（所以文件很小），
+                        恢复时从 App 自带的包重新装一次，存档原样还在。
+                      </p>
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (f) void handleImportFile(f)
+                          e.target.value = ''
+                        }}
+                      />
+                      <button
+                        onClick={() => fileRef.current?.click()}
+                        className="btn w-full rounded-2xl bg-white py-4 text-lg font-extrabold text-ink-900 shadow-flat"
+                      >
+                        📂 选择备份文件
+                      </button>
+                    </>
+                  )}
                 </Card>
 
                 <Card title="备份格式说明" emoji="📄">
                   <p className="text-sm text-ink-500">
                     导出的是纯文本 JSON，包含任务定义、每日实例、积分流水、兑换券流水、背包、农场、
-                    设置（家长密码和今天的游戏时长除外）、心愿单和兑换单。你可以自己保存到网盘，
-                    之后换手机或换浏览器都能导入回来。
+                    设置（家长密码和今天的游戏时长除外）、心愿单和兑换单。
+                    {isOnlineMode
+                      ? '你可以自己保存到网盘留个底；换手机或换浏览器，登录同一个账号就都在了。'
+                      : '你可以自己保存到网盘，之后换手机或换浏览器都能导入回来。'}
                   </p>
                   <button
                     onClick={() => void downloadSample()}
@@ -717,7 +740,13 @@ export default function SettingsPage({
                 </Card>
 
                 <Card title="危险操作" emoji="☠️">
-                  {!confirmReset ? (
+                  {isOnlineMode ? (
+                    /* ★ 在线版清不掉：清完 Dexie，下一次刷新又把账号里那份拉回来。
+                       「已重新开始」几秒后自己打脸，比没有这个按钮更糟。 */
+                    <p data-reset-blocked className="text-sm leading-relaxed text-ink-500">
+                      {RESET_REFUSAL}
+                    </p>
+                  ) : !confirmReset ? (
                     <>
                       <p className="mb-3 text-sm text-ink-500">
                         清空所有数据并重新开始。这个操作无法撤销。
@@ -743,9 +772,18 @@ export default function SettingsPage({
                         </button>
                         <button
                           onClick={() => {
-                            void resetAll()
-                            setConfirmReset(false)
-                            pushToast({ kind: 'info', title: '已重新开始', emoji: '🌱' })
+                            /* `resetAll` 返回 false = **没清**（在线版）。
+                               现在这个按钮只在本机版画出来，所以这条分支走不到 ——
+                               但提示不能凭「按钮画了」就假定「清成功了」。 */
+                            void (async () => {
+                              const done = await resetAll()
+                              setConfirmReset(false)
+                              pushToast(
+                                done
+                                  ? { kind: 'info', title: '已重新开始', emoji: '🌱' }
+                                  : { kind: 'warn', title: '没有清空', detail: RESET_REFUSAL, emoji: '⚠️' },
+                              )
+                            })()
                           }}
                           className="btn flex-1 rounded-2xl bg-berry-500 py-3 font-bold text-white shadow-flat"
                         >
