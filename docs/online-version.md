@@ -417,8 +417,9 @@ node scripts/_probe-snapshot-online.mjs        # 存档还原点 / 回档（32 �
 node scripts/_probe-data-ops-online.mjs        # 在线版不提供导入 / 清空（18 条，§7.15）
 ```
 
-> 上面 8 条探针 2026-11-02 晚全量跑过一遍，全绿；
-> `_probe-data-ops-online` 是同一晚加的（§7.15），单独跑过一次全绿。
+> 上面 9 条探针 2026-11-02 晚全量跑过一遍（补地址与导入/清空闸门做完之后又跑了一遍），全绿：
+> 写穿 15 / 农场 25 / 闸门 4 / 兑换 30 / 心愿 43 / 币 44 / 存档 25 / 快照 32 / 导入清空 18，
+> 外加服务端契约 `_probe-farm-state` 12 条。
 > 除 `_probe-write-through`（默认 4401）外都默认连 `127.0.0.1:4405`；
 > 换端口就把 URL 当第一个参数传（`node scripts/_probe-kv-online.mjs http://127.0.0.1:4406/`）。
 
