@@ -81,6 +81,8 @@ import { getToken } from '../api/session'
 import { ApiError } from '../api/client'
 import type { ApiWishCodeResult } from '../api/types'
 import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom, wishOwnedSet } from '../domain/wish'
+import { ownedIdsOnline } from '../domain/ownership'
+import { fetchOwnedGameIds } from '../online/ownership'
 import { makeHostApi } from '../games/hostApi'
 import { deleteGameKvOnServer } from '../online/kv'
 import { onlineDataOpRefusal } from '../online/backup'
@@ -286,11 +288,25 @@ interface AppState {
   /** 当前正在玩的游戏 id。底部导航的游戏 tab 跟着它走。 */
   activeGameId: string
   /**
-   * 已拥有的游戏 id。**派生值，不是存储值** ——
-   * = `defaultOwned` 的那款 + 账本里有过 `game_purchase` 支出的那些。
-   * 见 `games/registry.ts` 的 `purchasedIdsFrom`。
+   * 已拥有的游戏 id。**派生值，不是存储值** —— 但两种模式的算法不同：
+   *
+   *   · 本地版 = `defaultOwned` 的那款 + 账本里有过 `game_purchase` 的那些
+   *     （`games/registry.ts` 的 `purchasedIdsFrom`）；
+   *   · 在线版 = **服务端 `/game/my-games` 那份名单** + `defaultOwned` 的那款。
+   *
+   * ★★ 在线版为什么不能沿用账本：存档是写穿的，服务端 `checkGameExists`
+   *    要 `user_game` 有行。本地账本里有、服务端没有 ⇒ 界面显示「已拥有」、
+   *    游戏也玩得动，**但存档一个字节都存不上**（`10040401`），而且不报错。
+   *    详见 `domain/ownership.ts` 的文件头。
    */
   ownedGameIds: string[]
+  /**
+   * 服务端说「我拥有」的游戏 id。`null` = **还没拉到**（不是「一个都没有」）。
+   *
+   * 单独留一份是为了区分「拉到了空名单」和「没拉到」：后者要退回本地口径，
+   * 否则一次网络抖动就会让整页游戏变成未拥有。
+   */
+  serverOwnedGameIds: string[] | null
   /**
    * **已安装的插件游戏**（下载来的那些）：id → manifest（spec §12.5）。
    *
@@ -1193,6 +1209,21 @@ function ownedGameIdsFrom(mallLedger: readonly MallEntry[]): string[] {
  * 而这两个恰恰是正常用户最常走的路径。
  */
 async function ownedGameSetNow(): Promise<Set<string>> {
+  /* ★★ 在线版**问服务端**，不看本地账本。
+   *
+   * 这道闸用在「没拥有就不能装」上（`installLocalGame`）。本地账本说拥有、
+   * 服务端没有那行的话，装完能玩、存档存不上 —— 闸门形同虚设。
+   *
+   * 拉不到就退回上一次那份名单：让「网络抖一下」变成「装不上」，
+   * 比让「其实没拥有」蒙过去更糟。 */
+  if (isOnlineMode) {
+    try {
+      return new Set(ownedIdsOnline(await fetchOwnedGameIds()) ?? [])
+    } catch {
+      return new Set(useApp.getState().ownedGameIds)
+    }
+  }
+
   const [ledger, orders, bundles] = await Promise.all([
     db.mallLedger.toArray(),
     db.wishOrders.toArray(),
@@ -2103,9 +2134,20 @@ async function doRefresh(
     loadQuotaCarry(),
   ])
 
-  // 拥有关系从账本派生；「当前游戏」再按拥有关系解析一遍 ——
-  // 顺序不能反，否则会拿旧账本去判「买了没」。
-  const ownedGameIds = ownedGameIdsFrom(mallLedger)
+  /*
+   * 在线版：拥有关系**以服务端为准**（`/game/my-games`）。
+   *
+   * ⚠️ 失败时 `catch(() => null)` 而不是空数组 —— 空数组的意思是
+   *    「服务端说你一个都没有」，那会让整页游戏瞬间变成未拥有，
+   *    而真实原因只是这次没拉到。`null` 会退回上一次那份名单（见下）。
+   */
+  const serverOwned = isOnlineMode ? await fetchOwnedGameIds().catch(() => null) : null
+  const serverOwnedIds = serverOwned ?? get().serverOwnedGameIds
+
+  // 拥有关系：本地版从账本派生；在线版 = 服务端名单 + 注册表默认拥有。
+  // 「当前游戏」再按拥有关系解析一遍 —— 顺序不能反，否则会拿旧账本去判「买了没」。
+  const ownedGameIds =
+    (isOnlineMode ? ownedIdsOnline(serverOwnedIds) : null) ?? ownedGameIdsFrom(mallLedger)
   // 已安装的插件游戏：**从 `gameKv` 派生**（扫 `__bundle` 行），不另存清单。
   const installedGames = await loadInstalledGames()
 
@@ -2152,6 +2194,7 @@ async function doRefresh(
     harvestBalance,
     mallBalance,
     ownedGameIds,
+    serverOwnedGameIds: serverOwnedIds,
     activeGameId: resolveActiveGame(
       settings.activeGame,
       ownedGameIds,
@@ -2563,6 +2606,7 @@ export const useApp = create<AppState>((set, get) => ({
   mallBalance: 0,
   activeGameId: DEFAULT_GAME_ID,
   ownedGameIds: ownedGameIdsFrom([]),
+  serverOwnedGameIds: null,
   installedGames: {},
   todayKey: appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour),
   toasts: [],

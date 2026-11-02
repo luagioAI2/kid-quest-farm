@@ -7,9 +7,10 @@ import {
   compareWishItem,
   daysToSave,
   planWishRedeem,
-  wishOwnedSet,
   type WishFilter,
 } from '@/domain/wish'
+import { ownedSetFor } from '@/domain/ownership'
+import { isOnlineMode } from '@/sync/pull'
 import { describeRedeemPayment } from '@/domain/redeem'
 import { shipFormIssue } from '@/domain/wishShip'
 import { formatPriceCents } from '@/domain/cash'
@@ -227,7 +228,8 @@ export default function WishPage() {
    * 但券照扣。规则本体在 `wishOwnedSet`，兑换页那一块也用它。
    */
   const owned = useMemo(
-    () => wishOwnedSet(ownedGameIds, installedGames, wishOrders),
+    /* ★ 在线版只认服务端名单（`ownedSetFor` 里判）—— 见 `domain/ownership.ts` */
+    () => ownedSetFor(isOnlineMode, ownedGameIds, installedGames, wishOrders),
     [ownedGameIds, installedGames, wishOrders],
   )
 

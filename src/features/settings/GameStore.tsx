@@ -15,7 +15,7 @@ import {
 import { GAMES, gameById, type GameDef } from '../../games/registry'
 import { formatSize } from '../../games/size'
 import { checkPluginEconomy, vouchersPerPlay } from '../../domain/pluginEconomy'
-import { wishOwnedSet } from '../../domain/wish'
+import { ownedSetFor } from '../../domain/ownership'
 import { isOnlineMode } from '../../sync/pull'
 import { GameIconArt } from './GameIcon'
 import { SnapshotSection } from './SnapshotSection'
@@ -344,11 +344,15 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
   ]
 
   /*
-    「拥有」的三个来源收在 `wishOwnedSet` 里 —— **和 `installLocalGame` 的门槛同一口径**。
+    「拥有」的口径收在 `ownedSetFor` 里 —— **和 `installLocalGame` 的门槛同一口径**。
     两处各写一份的话，会出现「按钮亮着、点下去说没拥有」这种最难受的组合。
     这里读 store 快照是安全的：这是渲染，不是写入路径。
+
+    ★★ 在线版这里**只认服务端名单**：本地装了包、心愿单兑换过，都不算。
+      算上的话，界面会显示「已拥有」，而存档写穿会被 `10040401` 拒 ——
+      孩子玩一下午进度全丢，界面上全程正常。见 `domain/ownership.ts`。
   */
-  const ownedSet = wishOwnedSet(ownedGameIds, installedGames, wishOrders)
+  const ownedSet = ownedSetFor(isOnlineMode, ownedGameIds, installedGames, wishOrders)
 
   /*
     ⚠️ 这里原来有一个 `buy()` —— 点「💎 价格」调 `buyGame`。

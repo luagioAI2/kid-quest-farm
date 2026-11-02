@@ -5,7 +5,9 @@ import type { RedeemCategory, RedeemItem, WishItem } from '@/domain/types'
 import { humanizeAgo } from '@/domain/time'
 import { clampPointsPerYuan, formatYuan } from '@/domain/cash'
 import { describeRedeemPayment, planRedeemPayment, type RedeemPayment } from '@/domain/redeem'
-import { WISH_KIND_META, wishOwnedSet, wishShelf, type WishTone } from '@/domain/wish'
+import { WISH_KIND_META, wishShelf, type WishTone } from '@/domain/wish'
+import { ownedSetFor } from '@/domain/ownership'
+import { isOnlineMode } from '@/sync/pull'
 import { redeemHistory } from '@/domain/redeemHistory'
 import { WISH_ITEMS } from '@/games/wishCatalog'
 import { Portal } from '@/components/Portal'
@@ -199,7 +201,8 @@ export function RedeemBody() {
       wishShelf(
         WISH_ITEMS,
         wishOffers,
-        wishOwnedSet(ownedGameIds, installedGames, wishOrders),
+        /* ★ 在线版只认服务端名单（`ownedSetFor` 里判） */
+        ownedSetFor(isOnlineMode, ownedGameIds, installedGames, wishOrders),
         wishOrders,
       ),
     [wishOffers, ownedGameIds, installedGames, wishOrders],
