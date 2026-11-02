@@ -409,19 +409,24 @@ node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
 node scripts/_probe-login-gate.mjs             # 未登录闸门点得到（4 条，§7.8）
-node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（30 条，§7.9）
-node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（43 条，§7.11）
+node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（32 条，§7.9）
+node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（45 条，§7.11）
 node scripts/_probe-coin-online.mjs            # 浏览器真跑游戏币（44 条，§7.12；每跑一次花 13 积分）
 node scripts/_probe-kv-online.mjs              # 插件存档写穿（25 条，§7.13）
 node scripts/_probe-snapshot-online.mjs        # 存档还原点 / 回档（39 条，§7.14）
-node scripts/_probe-data-ops-online.mjs        # 在线版不提供导入 / 清空（18 条，§7.15）
+node scripts/_probe-data-ops-online.mjs        # 在线版不提供导入 / 清空（20 条，§7.15）
 ```
 
 > 上面 9 条探针 2026-11-02 晚全量跑过一遍（补地址与导入/清空闸门做完之后又跑了一遍），全绿：
-> 写穿 15 / 农场 25 / 闸门 4 / 兑换 30 / 心愿 43 / 币 44 / 存档 25 / 快照 39 / 导入清空 18，
-> 外加服务端契约 `_probe-farm-state` 12 条。
-> 快照那 39 条（§7.14.12 加完「回档记录说清退回到哪一份」之后）和存档 25 条
-> 在后端重编之后**又单独重跑过**；其余几条跑在加列之前，但那条路径只有快照探针走。
+> 写穿 15 / 农场 25 / 闸门 4 / 兑换 32 / 心愿 45 / 币 44 / 存档 25 / 快照 39 / 导入清空 20，
+> **合计 249 条**，外加服务端契约 `_probe-farm-state` 12 条。
+>
+> ⚠️ 条数是**实测**的（数输出里 `^\s+✓` 的行），不是手写的：这一轮发现三个
+> 探针的实际条数比文档里记的多 2 条（兑换 / 心愿 / 导入清空），说明以前是
+> **估的**。要报数就现数，别抄上一版。
+>
+> 快照 39 条（§7.14.12 加完「回档记录说清退回到哪一份」之后）在后端重编之后
+> **又单独重跑过**；其余 8 条跑在加列之前，但那条路径只有快照探针走。
 > 除 `_probe-write-through`（默认 4401）外都默认连 `127.0.0.1:4405`；
 > 换端口就把 URL 当第一个参数传（`node scripts/_probe-kv-online.mjs http://127.0.0.1:4406/`）。
 
@@ -698,7 +703,7 @@ node scripts/_probe-farm-online.mjs http://127.0.0.1:4405/   # 25 条
 
 ```bash
 npm run lint && npx vitest run && npm run build
-node scripts/_probe-redeem-online.mjs      # 30 条，真连后端
+node scripts/_probe-redeem-online.mjs      # 32 条，真连后端
 ```
 
 探针验的是**界面状态 == 服务端状态**，不写死「点完显示 X」：商品在不在服务端、
@@ -879,7 +884,7 @@ installLocalGame(gameId)
 
 ```bash
 npm run lint && npx vitest run && npm run build
-node scripts/_probe-wish-online.mjs         # 43 条，真连后端
+node scripts/_probe-wish-online.mjs         # 45 条，真连后端
 ```
 
 探针走完整条链路（定价 → 许愿 → 兑换 → 确认 → 收尾 → 关掉 → 再换失败 →
@@ -1700,7 +1705,7 @@ Dexie 里，导入 = 覆盖它，清空 = 删掉它。搬到在线版，两个�
 ### 7.15.5 验收
 
 ```bash
-node scripts/_probe-data-ops-online.mjs http://127.0.0.1:4406/    # 18 条断言
+node scripts/_probe-data-ops-online.mjs http://127.0.0.1:4406/    # 20 条断言
 ```
 
 七步：记数据量 → 进「💾 数据」栏 → 查「从备份恢复」卡 → 查「危险操作」卡 →
