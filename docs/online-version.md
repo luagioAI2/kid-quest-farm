@@ -405,6 +405,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 npm run lint                                   # tsc -b --noEmit
 npm test                                       # 1287 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
+                                               # ⚠️ 也别接管道：`| tail` 拿到的是 tail 的退出码，ENOSPC 也能显示 EXIT=0
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
