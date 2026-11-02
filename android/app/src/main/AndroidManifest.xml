@@ -1,8 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      ⚠️ allowBackup 必须是 false，这是产品承诺的一部分，不是随手关的。
+
+      官网写的是「无广告、无内购、数据只存本机」，而 allowBackup=true 会让
+      Android 自动把 /data/data/<包名>/ 整个上传到**用户自己的 Google Drive**，
+      里面就包含 app_webview/ 下的 IndexedDB —— 也就是 Dexie 里那套任务、积分、
+      农场、游戏存档。也就是说「只存本机」这句话在清单这一层是不成立的。
+
+      而且它和我们自己的备份/恢复**互相打架**：换机时 Android 可能自动灌一份
+      旧数据进来，家长再手动导入一份，两边都不知道对方存在。
+
+      换机走 App 里「设置 → 数据 → 导出/导入」那条链路（已验过：余额是替换不是
+      相加、家长密码不会被旧机的覆盖、游戏回装走商城）。
+
+      dataExtractionRules 是 Android 12+ 的补充：部分厂商（三星 Smart Switch 等）
+      在「设备间传输」时**不看 allowBackup**，只有这份规则能挡住。两边都写才干净。
+    -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
