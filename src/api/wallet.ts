@@ -52,3 +52,31 @@ export const walletLedger = (page = 1, pageSize = 50) =>
     page,
     pageSize,
   })
+
+/**
+ * 扣积分（插件游戏开局这类「游戏内消费」）。
+ *
+ * ## 为什么必须有这个接口
+ *
+ * 在线版的积分以服务端为准，而插件游戏扣分原本只写本地账本。那会**静默漂移**：
+ * 本地多一条 `lg_` 行、服务端没有，而拉取只清 `srv_` 行 —— 那条本地行永远留着，
+ * 余额就此对不上，界面上什么都看不出来。
+ *
+ * 服务端只认 `game_spend` 这一个来源（白名单），传别的会拿 `606 参数错误`。
+ *
+ * @param clientRequestId 幂等键。**必须每次都不同**（`newCoinRequestId()`），
+ *   传空串时服务端不写幂等键 —— 重试就会真的扣两次。
+ */
+export const walletSpend = (body: {
+  amount: number
+  refId: string
+  memo: string
+  clientRequestId: string
+}) =>
+  api<ServerWallet>('/wallet/spend', {
+    amount: body.amount,
+    source: 'game_spend',
+    ref_id: body.refId,
+    memo: body.memo,
+    client_request_id: body.clientRequestId,
+  })

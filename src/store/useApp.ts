@@ -1235,7 +1235,7 @@ function resolveActiveGame(
 function pluginHostApi(gameId: string): HostApi {
   return makeHostApi({
     getBalance: () => useApp.getState().balance,
-    refresh: () => useApp.getState().refresh(),
+    refresh: (o) => useApp.getState().refresh(o),
     pushToast: (t) => useApp.getState().pushToast(t),
     soundEnabled: () => useApp.getState().settings.soundEnabled,
     hapticsEnabled: () => useApp.getState().settings.hapticsEnabled,
@@ -5574,6 +5574,11 @@ declare global {
          * ★ 这是「命名空间隔离」的判据：正常只该有已安装游戏自己的 id。
          * 出现别的 id = 有东西往别人的命名空间里写了（前缀拼错、或者插件
          * 拿到了不该拿的 gameId）—— 而那**不会报错**，只会静默串味。
+         *
+         * ⚠️ 在线版会多出一类**正常**的 id：服务端有币钱包、但本机没装的那些
+         * （拉取会把 `__coin` 镜像写进来，见 `mirrorGameCoinBalance`）。
+         * 所以「这个 id 在列表里」**不等于**「它装着」—— 判「装没装」看
+         * `kv(id)` 里有没有 `__bundle`，别看这个列表。
          */
         kvOwnerIds: () => Promise<string[]>
         /**

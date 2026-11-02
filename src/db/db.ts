@@ -762,6 +762,61 @@ export async function gameCoinBalanceOf(gameId: string): Promise<number> {
 }
 
 /**
+ * **在线版专用**：把服务端的币余额镜像进 `__coin`（写成**单行**账本，
+ * `delta` 就是余额）。
+ *
+ * ## 为什么用「镜像」而不是「在线时直接问服务端」
+ *
+ * `gameCoinBalance()` 是插件**每帧都可能调**的方法（画「还剩几个币」）。
+ * 改成每次发一个 HTTP 请求的话，一个 60fps 的小游戏能把接口打成筛子，
+ * 而且没网时每帧都要等一次超时。
+ *
+ * 所以余额仍然从 Dexie 读（一次 IndexedDB 读，微秒级），
+ * 由三处保证它是**服务端那份**：
+ *   ① 拉取（`sync/pull.ts`）把 `/game/coin/list` 整个镜像过来；
+ *   ② 每次写穿成功，用**服务端返回的 `balance`** 覆盖（不是本地加减）；
+ *   ③ 本地版（`VITE_APP_MODE=local`）永远不调这两个函数，
+ *      账本仍然是逐笔 delta。
+ *
+ * ## 为什么敢写成「单行」
+ *
+ * 本地读币的地方只有 `gameCoinBalanceOf`（求和）和 `gameCoins` 调试桥
+ * （也是求和），**没有任何界面显示币的流水**。所以单行不丢信息：
+ * 求和结果就是余额，而明细在服务端的 `game_coin_ledger` 里
+ * （要看流水就去 `/game/coin/ledger`，别在本地重建一份）。
+ *
+ * ⚠️ 千万别在在线模式下再往这个数组里 push —— 那会让镜像变成
+ * 「服务端余额 + 本地增量」，两边各自演进，且**不报错**。
+ */
+export async function mirrorGameCoinBalance(gameId: string, balance: number): Promise<void> {
+  const n = Math.round(balance)
+  await setGameKv(gameId, GAME_COIN_KEY, [{ delta: n, memo: '服务端余额', at: Date.now() }])
+}
+
+/**
+ * **在线版专用**：清掉所有游戏的币镜像（拉取时「先清后写」）。
+ *
+ * 为什么必须清：`/game/coin/list` **只返回开过钱包的游戏**（服务端不写空行）。
+ * 不清的话，某款游戏在服务端被清零 / 钱包行没了，本地镜像还留着旧数字 ——
+ * 孩子看到的币比服务端多，而**没有任何地方会报错**。
+ *
+ * 为什么是「整表扫 `:__coin`」而不是按 gameId 逐个清：要清的正是那些
+ * 「服务端这次没返回」的游戏，而它们的 id 恰恰是我们不知道的。
+ *
+ * ⚠️ 只在**在线模式**、且 `/game/coin/list` **拉成功**时调。
+ * 拉失败还照清不误 = 把孩子的币清零（本地版更是灾难：那数组是真账本）。
+ */
+export async function clearGameCoinMirrors(): Promise<number> {
+  const suffix = `:${GAME_COIN_KEY}`
+  const keys = await db.gameKv
+    .filter((r) => typeof r.key === 'string' && r.key.endsWith(suffix))
+    .primaryKeys()
+  if (!keys.length) return 0
+  await db.gameKv.bulkDelete(keys as string[])
+  return keys.length
+}
+
+/**
  * 往某款游戏的币账本里追加一笔（`delta > 0`）。
  *
  * ## 「只进不出」这句话要说得准一点

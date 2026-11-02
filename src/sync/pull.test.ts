@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { db } from '../db/db'
+import { db, gameCoinBalanceOf, getGameKv, readGameCoinLedger, setGameKv } from '../db/db'
 import { pullFromServer, pullOnce } from './pull'
 import type { ServerBoard, ServerInstance, ServerTask } from '../api/task'
 import type { ServerLedgerEntry } from '../api/wallet'
@@ -16,6 +16,7 @@ const redeemRowsMock = vi.fn()
 const redeemRecsMock = vi.fn()
 const wishListMock = vi.fn()
 const wishOrdersMock = vi.fn()
+const coinListMock = vi.fn()
 
 vi.mock('../api/task', () => ({
   board: () => boardMock(),
@@ -24,6 +25,19 @@ vi.mock('../api/task', () => ({
 vi.mock('../api/wallet', () => ({
   walletInfo: () => walletInfoMock(),
   walletLedger: (p: number, s: number) => walletLedgerMock(p, s),
+  /* `online/coin.ts` 也从这个模块拿 `walletSpend`（插件扣积分）。
+     不导出的话它是个 undefined，等到真调用时才炸 —— 而这一层不测那条路。 */
+  walletSpend: () => Promise.resolve({ uid: 3, points: 0, coupon: 0, diamond: 0 }),
+}))
+vi.mock('../api/coin', () => ({
+  listCoinInfo: () => coinListMock(),
+  coinInfo: () => coinListMock(),
+  coinLedger: () => Promise.resolve({ count: 0, list: [] }),
+  buyCoins: () => Promise.reject(new Error('不该被调用')),
+  spendCoins: () => Promise.reject(new Error('不该被调用')),
+  mintCoins: () => Promise.reject(new Error('不该被调用')),
+  redeemCoins: () => Promise.reject(new Error('不该被调用')),
+  mintVouchers: () => Promise.reject(new Error('不该被调用')),
 }))
 vi.mock('../api/redeem', () => ({
   listRedeemRows: (o: unknown) => redeemRowsMock(o),
@@ -235,6 +249,7 @@ beforeEach(async () => {
     db.redeemRecords.clear(),
     db.wishOffers.clear(),
     db.wishOrders.clear(),
+    db.gameKv.clear(),
   ])
   boardMock.mockReset()
   listTasksMock.mockReset()
@@ -244,6 +259,7 @@ beforeEach(async () => {
   redeemRecsMock.mockReset()
   wishListMock.mockReset()
   wishOrdersMock.mockReset()
+  coinListMock.mockReset()
   boardMock.mockResolvedValue(BOARD)
   listTasksMock.mockResolvedValue({ count: 1, list: [TASK] })
   walletInfoMock.mockResolvedValue({ uid: 3, points: 112, coupon: 0, diamond: 0 })
@@ -252,6 +268,7 @@ beforeEach(async () => {
   redeemRecsMock.mockResolvedValue({ count: 1, list: [REC] })
   wishListMock.mockResolvedValue({ count: 2, list: [WISH_OPEN, WISH_CLOSED] })
   wishOrdersMock.mockResolvedValue({ page: 1, pageSize: 200, count: 1, list: [WISH_ORDER] })
+  coinListMock.mockResolvedValue({ count: 0, list: [] })
 })
 
 describe('pullOnce', () => {
@@ -518,5 +535,72 @@ describe('pullOnce · 心愿商城', () => {
     await pullOnce()
     const ids = (await db.wishOrders.toArray()).map((o) => o.id).sort()
     expect(ids).toEqual(['srv_wo_WO1700000000456', 'woabc'])
+  })
+})
+
+describe('pullOnce · 游戏币镜像', () => {
+  it('把服务端余额写成 `__coin` 的单行镜像（求和 == 服务端那个数）', async () => {
+    coinListMock.mockResolvedValue({
+      count: 2,
+      list: [
+        { game_id: 'cloudfarm', balance: 7, total_earned: 9, total_spent: 2 },
+        { game_id: 'screamchick', balance: 3, total_earned: 3, total_spent: 0 },
+      ],
+    })
+    const r = await pullOnce()
+    expect(r.coins).toBe(2)
+
+    const a = await readGameCoinLedger('cloudfarm')
+    expect(a).toHaveLength(1)
+    expect(a[0].delta).toBe(7)
+    expect(await gameCoinBalanceOf('cloudfarm')).toBe(7)
+    expect(await gameCoinBalanceOf('screamchick')).toBe(3)
+  })
+
+  it('★ 服务端这次没返回的游戏，镜像要被**清掉**（否则本地币比服务端多）', async () => {
+    coinListMock.mockResolvedValue({
+      count: 2,
+      list: [
+        { game_id: 'cloudfarm', balance: 7, total_earned: 9, total_spent: 2 },
+        { game_id: 'screamchick', balance: 3, total_earned: 3, total_spent: 0 },
+      ],
+    })
+    await pullOnce()
+    expect(await gameCoinBalanceOf('screamchick')).toBe(3)
+
+    // 服务端把 screamchick 的钱包清了 / 没开过 —— 只回 cloudfarm
+    coinListMock.mockResolvedValue({
+      count: 1,
+      list: [{ game_id: 'cloudfarm', balance: 7, total_earned: 9, total_spent: 2 }],
+    })
+    await pullOnce()
+    expect(await gameCoinBalanceOf('cloudfarm')).toBe(7)
+    expect(await gameCoinBalanceOf('screamchick')).toBe(0)
+  })
+
+  it('★ 币接口挂了时**不许**把镜像清零（那等于把孩子兜里的币拿走）', async () => {
+    coinListMock.mockResolvedValue({
+      count: 1,
+      list: [{ game_id: 'cloudfarm', balance: 7, total_earned: 9, total_spent: 2 }],
+    })
+    await pullOnce()
+    expect(await gameCoinBalanceOf('cloudfarm')).toBe(7)
+
+    coinListMock.mockRejectedValue(new Error('coin down'))
+    const r = await pullOnce()
+    expect(r.ok).toBe(true)
+    expect(r.coins).toBeUndefined()
+    expect(await gameCoinBalanceOf('cloudfarm')).toBe(7)
+  })
+
+  it('只动 `__coin`，插件自己的键一个不碰', async () => {
+    await setGameKv('cloudfarm', 'draws', 12)
+    coinListMock.mockResolvedValue({
+      count: 1,
+      list: [{ game_id: 'cloudfarm', balance: 7, total_earned: 9, total_spent: 2 }],
+    })
+    await pullOnce()
+    expect(await getGameKv('cloudfarm', 'draws')).toBe(12)
+    expect(await gameCoinBalanceOf('cloudfarm')).toBe(7)
   })
 })

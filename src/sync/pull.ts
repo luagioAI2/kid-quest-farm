@@ -1,4 +1,5 @@
-import { db } from '../db/db'
+import { clearGameCoinMirrors, db, mirrorGameCoinBalance } from '../db/db'
+import { pullCoinBalances } from '../online/coin'
 import { board, listTasks } from '../api/task'
 import { walletInfo, walletLedger } from '../api/wallet'
 import { listRedeemRecords, listRedeemRows } from '../api/redeem'
@@ -67,6 +68,8 @@ export interface PullResult {
   wishOffers?: number
   /** 心愿单（**含已取消的**，见 `mapWishOrder`） */
   wishOrders?: number
+  /** 游戏币钱包（**只含开过钱包的游戏**，见 `pullCoinBalances`） */
+  coins?: number
   /** 服务端报的余额，用来和本地求和比对 */
   balance?: number
 }
@@ -133,6 +136,10 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
        ★ 两个都 `catch(() => null)`：心愿挂了不该让今天的任务也拉不下来。 */
     const wishList = await listWishItems({ includeArchived: true }).catch(() => null)
     const wishOrders = await pullWishOrders().catch(() => null)
+    /* 游戏币余额：只为一件事 —— 把服务端那个数镜像进 `gameKv['__coin']`，
+       因为 `host.gameCoinBalance()` 读的是 Dexie（插件每帧都可能调）。
+       ★ 它自己已经把异常收成 `null`（`pullCoinBalances`），失败不影响别的。 */
+    const coinBals = await pullCoinBalances()
 
     const taskRows = tasks.list.map(mapTask)
     const instRows = b.instances.map(mapInstance)
@@ -167,6 +174,7 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
         db.redeemRecords,
         db.wishOffers,
         db.wishOrders,
+        db.gameKv,
       ],
       async () => {
         await clearSrvRows('tasks', 'srv_task_')
@@ -216,6 +224,17 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
           await clearSrvRows('wishOrders', SRV_WISH_ORDER_PREFIX)
           if (wishRows.length) await db.wishOrders.bulkPut(wishRows)
         }
+
+        /* 游戏币镜像：**整表清掉再写**。
+           `/game/coin/list` 只返回**开过钱包**的游戏 —— 不清的话，某款游戏
+           在服务端被清零 / 钱包行没了，本地镜像还留着旧数字，孩子看到的币
+           比服务端多，而且**没有任何地方会报错**。
+           为什么敢整表清：在线版里 `__coin` 只可能是镜像（写接口全是写穿，
+           播种在在线模式下一个字节都不写）。 */
+        if (coinBals !== null) {
+          await clearGameCoinMirrors()
+          for (const c of coinBals) await mirrorGameCoinBalance(c.game_id, c.balance)
+        }
       },
     )
 
@@ -229,6 +248,7 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       redeemRecords: recRows?.length ?? 0,
       wishOffers: offerRows?.length ?? 0,
       wishOrders: wishRows?.length ?? 0,
+      coins: coinBals === null ? undefined : coinBals.length,
       balance: wallet?.points ?? b.balance,
     }
   } catch (e) {
