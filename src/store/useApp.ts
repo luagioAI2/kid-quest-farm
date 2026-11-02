@@ -94,6 +94,7 @@ import { HOST_API } from '../games/plugin'
 import type { GameBundle, GameManifestV2, HostApi, MountContext } from '../games/plugin'
 import { hapticLight, playTone, type ToneKind } from '../platform/files'
 import { settleInstance, type SettleParams } from '../domain/settlement'
+import { isOnlineMode, pullFromServer } from '../sync/pull'
 import {
   appDayKey,
   appDayStart,
@@ -635,6 +636,17 @@ let seedInFlight: Promise<void> | null = null
 
 /** 首次启动时注入的示例任务，让孩子立刻能玩起来 */
 async function seedIfEmpty(): Promise<void> {
+  /* 在线版：**一个字节都不播** —— 数据以账号为准。
+
+     本地播一遍的后果不是「多几条示例任务」，而是：
+       · 每台新设备白送 50 积分 + 500 钻石，服务端并不知道这 50 分；
+       · 孩子把它花掉之后，两台设备的余额再也对不上，
+         而且**没有任何报错** —— 只会在某天发现「妈妈的手机比孩子多 50 分」。
+     新账号该看到什么，由服务端决定（现在是一个空任务板，家长自己建）。
+
+     ★ 判据别写「库是空的就播」：在线版的库在拉取之前**本来就是空的**。 */
+  if (isOnlineMode) return
+
   // 串行化：见上面「播种的并发闸门」
   if (seedInFlight) return seedInFlight
   seedInFlight = doSeedIfEmpty().finally(() => {
@@ -1303,6 +1315,17 @@ async function doRefresh(
   const { settings } = get()
   const today = currentDayKey(settings.dayStartHour)
 
+  /* 在线版（`VITE_APP_MODE=online`）：先把服务端的真相拉进本地表，再走下面的
+     本地水合 —— UI 一行都不用改，它照旧读 Dexie。
+
+     ★ 失败**不抛**：没网也要能进 App。拉不到就用本地已有的数据，
+       孩子看到的可能不是最新的，但至少不是白屏。
+     ★ 本地版（默认构建）这一句是 no-op，一个请求都不发。 */
+  if (isOnlineMode) {
+    const pulled = await pullFromServer()
+    if (!pulled.ok) console.warn('[sync] 拉取失败，本次用本地数据：', pulled.reason)
+  }
+
   const tasks = sortTasks(await db.tasks.filter((t) => !t.archived).toArray())
   const allTasks = sortTasks(await db.tasks.toArray())
   const existing = await db.taskInstances.toArray()
@@ -1312,7 +1335,10 @@ async function doRefresh(
     (acc, i) => (acc === null || i.date < acc ? i.date : acc),
     null,
   )
-  const from = earliest ?? today
+  /* 在线版不做本地历史补齐：实例由服务端懒生成（`/api/task/board` 一调就补），
+     本地再补一遍会造出一批「只有本机有」的实例 —— 它们没有对应的服务端积分，
+     换设备就凭空消失，而且会把「今天还剩几个任务」算重。 */
+  const from = isOnlineMode ? today : (earliest ?? today)
   // 补齐失败不能阻断 App 启动：最坏情况是今天少几张每日任务卡，
   // 也比整个界面白屏强。异常交给上层日志，下次刷新会重试。
   try {

@@ -6,6 +6,8 @@ node_modules.partial/
 # 构建产物
 dist/
 dist-ssr/
+# 在线版产物（`VITE_APP_MODE=online npx vite build --outDir dist-online`）
+dist-online/
 *.local
 
 # 游戏包产物（`npm run build:games` → games-src/ 的独立构建）。
