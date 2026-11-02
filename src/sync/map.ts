@@ -58,6 +58,32 @@ function pick<T extends string>(list: readonly T[], v: string, fallback: T, fiel
   return fallback
 }
 
+/**
+ * 解析 `task.extra_json`。
+ *
+ * 坏数据（手改过库 / 以后换了结构）**不能让整个任务拉不下来** ——
+ * 解析失败就当没有，任务照常显示，只是那三个玩法参数回落到默认值。
+ */
+export function parseTaskExtra(raw: string | undefined): {
+  checkInTierRatio?: number
+  streakPerDay?: number
+  streakCap?: number
+} {
+  if (!raw) return {}
+  try {
+    const v = JSON.parse(raw) as Record<string, unknown>
+    const out: { checkInTierRatio?: number; streakPerDay?: number; streakCap?: number } = {}
+    for (const k of ['checkInTierRatio', 'streakPerDay', 'streakCap'] as const) {
+      const n = v[k]
+      if (typeof n === 'number' && Number.isFinite(n)) out[k] = n
+    }
+    return out
+  } catch {
+    console.warn('[sync] task.extra 解析失败，已忽略：', raw.slice(0, 80))
+    return {}
+  }
+}
+
 export function mapTask(s: ServerTask): Task {
   return {
     id: srvId('task', s.id),
@@ -79,6 +105,7 @@ export function mapTask(s: ServerTask): Task {
     archived: s.archived,
     createdAt: secToMs(s.created_at) ?? Date.now(),
     updatedAt: secToMs(s.updated_at) ?? Date.now(),
+    ...parseTaskExtra(s.extra),
   }
 }
 

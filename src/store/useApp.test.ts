@@ -1575,7 +1575,7 @@ describe('道具掉落总开关', () => {
     })
     const inst = useApp
       .getState()
-      .instances.find((i) => i.taskId === task.id && i.status === 'pending')
+      .instances.find((i) => i.taskId === task!.id && i.status === 'pending')
     if (!inst) throw new Error('没生成实例')
     await useApp.getState().submitInstance(inst.id, 10, undefined)
     await useApp.getState().reviewInstance(inst.id, undefined, 10)
@@ -1759,7 +1759,7 @@ describe('首次启动：今日任务', () => {
     expect(selectCheckInTasks(useApp.getState()).map((x) => x.title)).toContain('每周喝水打卡')
     expect(todayTitles()).not.toContain('每周喝水打卡')
     expect(selectPeriodTasks(useApp.getState()).map((x) => x.title)).not.toContain('每周喝水打卡')
-    expect(t.cycle).toBe('weekly')
+    expect(t!.cycle).toBe('weekly')
   })
 
   it('五个签到任务都能在「坚持签到」里找到', () => {

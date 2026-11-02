@@ -35,6 +35,15 @@ export interface ServerTask {
   remind_at: string
   archived: boolean
   sort: number
+  /**
+   * 客户端自定义字段（JSON 字符串）。
+   *
+   * 服务端**不解释**它，只原样存回。目前装的是签到阶梯倍率 / 连击加成 /
+   * 连击封顶（`checkInTierRatio` / `streakPerDay` / `streakCap`）——
+   * 这些是玩法参数，服务端结算不用，但客户端必须拿得回来，
+   * 否则家长改了设置会静默失效。
+   */
+  extra?: string
 }
 
 /** 服务端任务实例（`/api/task/board` 的 `instances[]`） */
@@ -105,6 +114,8 @@ export interface CreateTaskBody {
   check_in_target_count?: number
   remind_at?: string
   sort?: number
+  /** 见 `ServerTask.extra` */
+  extra?: string
 }
 
 /** 建任务。**副作用**：立即生成当前周期的实例。 */

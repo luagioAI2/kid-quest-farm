@@ -95,6 +95,20 @@ import type { GameBundle, GameManifestV2, HostApi, MountContext } from '../games
 import { hapticLight, playTone, type ToneKind } from '../platform/files'
 import { settleInstance, type SettleParams } from '../domain/settlement'
 import { isOnlineMode, pullFromServer } from '../sync/pull'
+import { srvId } from '../sync/map'
+import { onlineWrite, writeFailToast } from '../online/write'
+import {
+  oCheckIn,
+  oCreateTask,
+  oDeleteTask,
+  oPauseTimer,
+  oResumeTimer,
+  oReviewTask,
+  oSkipTask,
+  oStartTimer,
+  oSubmitTask,
+  oUpdateTask,
+} from '../online/tasks'
 import {
   appDayKey,
   appDayStart,
@@ -322,7 +336,8 @@ interface AppState {
   mountGame: (gameId: string, container: HTMLElement) => Promise<() => void>
 
   /* ---- 任务 ---- */
-  addTask: (input: NewTaskInput) => Promise<Task>
+  /** 在线版失败时返回 `null`（并弹提示）；本地版永远返回新任务 */
+  addTask: (input: NewTaskInput) => Promise<Task | null>
   updateTask: (id: string, patch: Partial<Task>) => Promise<void>
   /** 隐藏 / 恢复一个任务。和 `setRedeemItemArchived` 同名同形 —— 两边别走散 */
   setTaskArchived: (id: string, archived: boolean) => Promise<void>
@@ -1308,6 +1323,176 @@ async function loadInstalledGames(): Promise<Record<string, GameManifestV2>> {
   return out
 }
 
+/* ============================================================
+   在线版 · 任务写穿（服务端为准，本地表只是读缓存）
+   ------------------------------------------------------------
+   每个函数的形状都一样：**调接口 → 成功了才 refresh → 从本地表读回**。
+
+   ★ 失败时**一个字都不写本地**。这是写穿和「先存本地再补传」最根本的区别：
+     先存本地的话孩子看到「交上去啦」，家长那边永远收不到，
+     而两边都不报错 —— 只有用户来问才发现。
+
+   ★ 为什么写完之后要 `refresh()` 而不是自己改本地：
+     积分、余额、结算结果都是服务端算的（`task_settlement.go`）。
+     本地再算一遍 = 两份规则、两个真相，迟早对不上。
+   ============================================================ */
+
+/** 建任务 */
+async function onlineAddTask(get: () => AppState, input: NewTaskInput): Promise<Task | null> {
+  const r = await onlineWrite(() => oCreateTask(input))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这条任务'))
+    return null
+  }
+  await get().refresh()
+  return (await db.tasks.get(srvId('task', r.data.id))) ?? null
+}
+
+/** 改任务 / 隐藏任务（`archived` 走同一个接口） */
+async function onlineUpdateTask(
+  get: () => AppState,
+  id: string,
+  patch: Partial<Task>,
+): Promise<void> {
+  // `extra` 是整块存的，必须把「当前这条」一起带上，否则只改一个参数会把别的抹掉
+  const full = get().allTasks.find((t) => t.id === id) ?? (await db.tasks.get(id))
+  if (!full) {
+    get().pushToast({
+      kind: 'warn',
+      title: '这条任务在服务端已经没有了',
+      detail: '下拉刷新一下再看',
+      emoji: '🧐',
+    })
+    return
+  }
+  const r = await onlineWrite(() => oUpdateTask(id, patch, full))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次修改'))
+    return
+  }
+  await get().refresh()
+}
+
+/** 删任务（服务端是归档，不是真删） */
+async function onlineDeleteTask(get: () => AppState, id: string): Promise<void> {
+  const r = await onlineWrite(() => oDeleteTask(id))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次删除'))
+    return
+  }
+  await get().refresh()
+}
+
+/** 计时三兄弟：开始 / 暂停 / 继续，只有一个请求的差别 */
+async function onlineTimer(
+  get: () => AppState,
+  call: (id: string) => Promise<unknown>,
+  instanceId: string,
+): Promise<void> {
+  const r = await onlineWrite(() => call(instanceId))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次计时'))
+    return
+  }
+  await get().refresh()
+}
+
+/**
+ * 提交。
+ *
+ * 服务端的 `/task/submit` **一律进 `submitted`（等家长审核）** ——
+ * 它不知道家长关掉了「需要审核」。所以家长关掉审核时，这里紧接着
+ * 自己调一次 `/task/review` 通过，把本地那套语义补回来。
+ * 不补的话：家长明明关了审核，孩子交完却永远卡在「等爸爸妈妈看一眼」。
+ */
+async function onlineSubmitInstance(
+  get: () => AppState,
+  instanceId: string,
+  quality: QualityGrade | undefined,
+  opts?: { skipReview?: boolean; backfilled?: boolean },
+): Promise<number> {
+  const { settings } = get()
+  const sub = await onlineWrite(() => oSubmitTask(instanceId, { backfilled: opts?.backfilled }))
+  if (!sub.ok) {
+    get().pushToast(writeFailToast(sub.error, '这次提交'))
+    return 0
+  }
+
+  const needsReview = settings.parentReviewEnabled && !opts?.skipReview
+  if (needsReview) {
+    get().pushToast({
+      kind: 'success',
+      title: '交上去啦！等爸爸妈妈看一眼',
+      detail: '他们确认后积分就到账咯',
+      emoji: '📮',
+    })
+    await get().refresh()
+    return 0
+  }
+
+  const rev = await onlineWrite(() => oReviewTask(instanceId, true, { quality }))
+  if (!rev.ok) {
+    // 已经交上去了，别让家长以为要重交 —— 说清楚「等着审核」这个出口
+    get().pushToast({
+      kind: 'warn',
+      title: '交上去了，但自动确认没成功',
+      detail: '让爸爸妈妈在「待确认」里点一下就好',
+      emoji: '📮',
+    })
+    await get().refresh()
+    return 0
+  }
+  await get().refresh()
+  return rev.data.earned_points ?? 0
+}
+
+/** 家长确认 / 打回 */
+async function onlineReviewInstance(
+  get: () => AppState,
+  instanceId: string,
+  approve: boolean,
+  opts: { quality?: QualityGrade; note?: string } = {},
+): Promise<number> {
+  const r = await onlineWrite(() => oReviewTask(instanceId, approve, opts))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, approve ? '这次确认' : '这次打回'))
+    return 0
+  }
+  await get().refresh()
+  return r.data.earned_points ?? 0
+}
+
+/** 放弃这个任务 */
+async function onlineSkipInstance(get: () => AppState, instanceId: string): Promise<void> {
+  const r = await onlineWrite(() => oSkipTask(instanceId))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次放弃'))
+    return
+  }
+  await get().refresh()
+}
+
+/**
+ * 签到。
+ *
+ * 服务端一步做完（发分 + 连签 + 阶梯奖励），没有「待家长确认」这一档。
+ * 所以在线版 `approveCheckIn` / `rejectCheckIn` / `claimCheckInTier` 三个动作
+ * 保持本地实现不动也不会被点到 —— 界面上不会有待审条目。
+ */
+async function onlineDoCheckIn(
+  get: () => AppState,
+  taskId: string,
+): Promise<{ gained: number; bonus: number }> {
+  const r = await onlineWrite(() => oCheckIn(taskId))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次签到'))
+    return { gained: 0, bonus: 0 }
+  }
+  await get().refresh()
+  // 服务端给的 `points` 已经把阶梯奖励算进去了，所以 bonus 记 0，避免重复显示
+  return { gained: r.data.points ?? 0, bonus: 0 }
+}
+
 async function doRefresh(
   set: (partial: Partial<AppState>) => void,
   get: () => AppState,
@@ -2007,6 +2192,7 @@ export const useApp = create<AppState>((set, get) => ({
   /* ================= 任务 ================= */
 
   addTask: async (input) => {
+    if (isOnlineMode) return onlineAddTask(get, input)
     const now = Date.now()
     const task: Task = {
       ...input,
@@ -2026,6 +2212,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   updateTask: async (id, patch) => {
+    if (isOnlineMode) return onlineUpdateTask(get, id, patch)
     const now = Date.now()
     await db.tasks.update(id, { ...patch, updatedAt: now })
 
@@ -2039,6 +2226,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setTaskArchived: async (id, archived) => {
+    if (isOnlineMode) return onlineUpdateTask(get, id, { archived })
     // 软隐藏：只翻一个标志位。任务底下的实例、签到记录、账本**一律不动** ——
     // 硬删会把这些连坐带走，而家长想要的通常只是「别让孩子看见」。
     await db.tasks.update(id, { archived, updatedAt: Date.now() })
@@ -2046,6 +2234,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   deleteTask: async (id) => {
+    if (isOnlineMode) return onlineDeleteTask(get, id)
     await db.transaction('rw', [db.tasks, db.taskInstances, db.checkIns, db.checkInProgress], async () => {
       await db.tasks.delete(id)
       await db.taskInstances.where('taskId').equals(id).delete()
@@ -2058,6 +2247,7 @@ export const useApp = create<AppState>((set, get) => ({
   /* ================= 任务实例 ================= */
 
   startTimer: async (instanceId) => {
+    if (isOnlineMode) return onlineTimer(get, oStartTimer, instanceId)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst || inst.status !== 'pending') return
     await db.taskInstances.update(instanceId, { startedAt: Date.now(), updatedAt: Date.now() })
@@ -2074,6 +2264,7 @@ export const useApp = create<AppState>((set, get) => ({
    * `pausedAt` 刷成新的时间戳 —— 那会把第一次暂停的时长**吃掉**。
    */
   pauseTimer: async (instanceId) => {
+    if (isOnlineMode) return onlineTimer(get, oPauseTimer, instanceId)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst || inst.status !== 'pending' || !inst.startedAt) return
     if (inst.pausedAt) return
@@ -2094,6 +2285,7 @@ export const useApp = create<AppState>((set, get) => ({
    * 任何在这间隙跑的 `runningMs()`（tick / 渲染）都会把暂停时长算成用时。
    */
   resumeTimer: async (instanceId) => {
+    if (isOnlineMode) return onlineTimer(get, oResumeTimer, instanceId)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst || inst.status !== 'pending' || !inst.pausedAt) return
     const now = Date.now()
@@ -2118,6 +2310,8 @@ export const useApp = create<AppState>((set, get) => ({
    * 「自己点一下就给自己加分」的问题。
    */
   submitInstance: async (instanceId, actualMinutes, quality, opts) => {
+    // 在线版：用时由服务端按计时器算，孩子端传分钟数等于让它可以改时钟刷分
+    if (isOnlineMode) return onlineSubmitInstance(get, instanceId, quality, opts)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst) return 0
 
@@ -2179,6 +2373,7 @@ export const useApp = create<AppState>((set, get) => ({
    * 所以评分规则完全一致，家长只是「最后一公里」的确认人。
    */
   reviewInstance: async (instanceId, quality, actualMinutes) => {
+    if (isOnlineMode) return onlineReviewInstance(get, instanceId, true, { quality })
     const inst = await db.taskInstances.get(instanceId)
     if (!inst) return 0
     if (inst.settledAt != null) {
@@ -2192,6 +2387,10 @@ export const useApp = create<AppState>((set, get) => ({
 
   /** 家长打回：不影响积分，孩子可以再做一次 */
   rejectInstance: async (instanceId, note) => {
+    if (isOnlineMode) {
+      await onlineReviewInstance(get, instanceId, false, { note })
+      return
+    }
     const inst = await db.taskInstances.get(instanceId)
     if (!inst) return
     if (inst.settledAt != null) {
@@ -2215,6 +2414,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   giveUpInstance: async (instanceId) => {
+    if (isOnlineMode) return onlineSkipInstance(get, instanceId)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst) return
     // 已结算的实例不允许再翻成"放弃"，否则界面显示 0 分而账本里还留着那笔收入
@@ -2256,6 +2456,7 @@ export const useApp = create<AppState>((set, get) => ({
    *  * 家长关掉审核 → 直接发放（老行为，方便家长自己试玩）。
    */
   doCheckIn: async (taskId) => {
+    if (isOnlineMode) return onlineDoCheckIn(get, taskId)
     const task = get().tasks.find((t) => t.id === taskId)
     if (!task) return { gained: 0, bonus: 0 }
     const { settings } = get()

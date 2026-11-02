@@ -13,13 +13,19 @@
 | 注册 / 登录 / 退出 | ✅ 接通 |
 | 招商申请（家长 / 商家两路） | ✅ 接通（客户端只发 `role`） |
 | 后台审核 + 回填后台链接 | ✅ 服务端有，`/api/admin/merchant/*`（`X-Api-Token`） |
-| 任务 / 积分 / 心愿 / 兑换上云 | ❌ 服务端有接口，客户端还没接 |
-| 存档（`game/kv`、`game/snapshot`）上云 | ❌ 同上 |
-| tf-admin 的招商审核页面 | ❌ 后台服务端模块也还没有 |
+| **任务 / 任务实例 / 计时 / 提交 / 审核 / 签到** | ✅ **写穿**（2026-11-02，见 §7） |
+| **积分（余额 + 流水）** | ✅ **服务端为准**（同 §7） |
+| 农场状态（地块 / 动物 / 背包 / 行情） | 🟡 服务端接口已就绪（`/api/farm/state/*`），客户端**还没接** |
+| 兑换 / 心愿 / 游戏币 / 插件存档 | ❌ 服务端有接口，客户端还没接 |
+| tf-admin 的招商审核页面 | ✅ 已做（`/mall/merchant`） |
 
-> 「本地数据」和「云端数据」现在是**两套互不同步的东西**：
-> 孩子的任务、积分、心愿单仍然只在本机 Dexie 里。
-> 只有账号和招商申请走服务端。
+> **这个 worktree（`kid-quest-farm-online`）默认就是服务器版**
+> （`sync/pull.ts` 里 `VITE_APP_MODE` 缺省即 online）。
+> 本地 Dexie 从「唯一真相」降级成**读缓存**：
+> 读 = 先把服务端拉进本地表再渲染，写 = 先打服务端，成功才 refresh。
+>
+> 还没上云的那几块（农场本体、兑换、心愿、游戏币、插件存档）**仍然只在本机**，
+> 而且**不会**和服务端混算 —— 边界见 §7.4。
 
 ---
 
@@ -277,3 +283,97 @@ e2e 里点安装前要先 `await grantGame(page, GAME_ID)`（`scripts/lib/own.mj
   共享库的 `sys_*` 表用 `tf-admin/server/cmd/tfinitdb` 补建（幂等，跑第二遍什么都不做）。
 - **游戏激活码**（§5）。
 
+---
+
+## 7. 第二期：写穿（2026-11-02）
+
+第一期只做了「读」（登录后把服务端拉进 Dexie）。写还在本地，
+于是 `VITE_APP_MODE=online` 的包其实是「看得见云端、改的是本机」——
+换台设备就发现白改了。这一期把**任务这一整条**改成写穿。
+
+### 7.1 形状
+
+```
+界面 → store 动作 → if (isOnlineMode) → online/*.ts → src/api/* → tf-platform-api
+                                      ↓ 成功
+                                   refresh()（重拉）→ Dexie → 界面
+                                      ↓ 失败
+                            toast「没发出去，刚才那一步没有生效」+ **什么都不写**
+```
+
+`src/online/` 三个文件：
+
+| 文件 | 职责 |
+| --- | --- |
+| `ids.ts` | 本地 id ↔ 服务端数字 id（`srv_task_12` ↔ `12`） |
+| `write.ts` | `onlineWrite()` 把「调接口」收成 `{ok, data} / {ok, error}`；`writeFailToast()` 翻成人话 |
+| `tasks.ts` | 一对一映射 store 动作；`camelCase → snake_case` 只有一张表 |
+
+### 7.2 三条铁律
+
+1. **失败绝不落本地。** 先存本地再补传的话，孩子看到「交上去啦」、
+   家长永远收不到，而两边都不报错。写穿的整个价值就在这一条上。
+2. **写完不自己算，`refresh()` 重拉。** 结算规则在服务端
+   （`task_settlement.go`），本地再算一遍 = 两份真相。
+3. **单测跑本地模式。** `vitest.config.ts` 里 `define` 把 `VITE_APP_MODE`
+   钉成 `local` —— 否则 1067 条用例全都会去发 HTTP，失败信息还是
+   `fetch is not defined`，看起来像环境问题。
+
+### 7.3 三个「服务端没这个语义」的地方
+
+| 客户端动作 | 服务端的现实 | 在线版怎么办 |
+| --- | --- | --- |
+| 提交后**立即结算**（家长关掉了审核） | `/task/submit` 一律进 `submitted` | 紧接着自己调一次 `/task/review` 通过，把语义补回来 |
+| **签到审核**（`approveCheckIn` / `rejectCheckIn`） | 服务端签到**一步做完**，`NeedReview` 恒 false | 在线版不会有待审条目，这三个动作自然没被点到 |
+| 连签**阶梯领奖**（`claimCheckInTier`） | 服务端自动发（`claimed_tiers`） | 同上，界面不会出现「领取」按钮 |
+
+### 7.4 还没上云的，边界在哪
+
+农场本体、兑换券、兑换单、心愿单、游戏币、插件存档 —— **仍然只在本机**。
+这一期**故意不混算**：积分由服务端算，兑换券仍由本地账本算，
+两边各管一摊，互不覆盖。所以换设备后：
+
+- 任务、今日任务板、积分、流水 → 一致 ✅
+- 农场、兑换券、心愿单、游戏存档 → **还是各设备各一份** ❌
+
+> ⚠️ 下一期接农场时**必须先解决「谁是兑换券的真相」**：
+> 卖菜得券是本地算的（行情 / 额度 / 品质都在 `src/domain/`），
+> 服务端现在只能收「结果」。`/api/farm/state/save` 已经支持
+> 「随状态一起提交账本变动」（幂等键 `op_id`，同一个事务入账），
+> 但客户端**还没用**。用之前要先把本地 `harvestLedger` / `mallLedger`
+> 从「账本」降级成「服务端流水的镜像」，否则一拉就双算。
+
+### 7.5 农场接口（服务端已就绪，客户端待接）
+
+```
+POST /api/farm/state/get   → { empty, rev, payload, updated_at }
+POST /api/farm/state/save  → { conflict, rev, applied, balances }
+       body: { payload, rev, ledger?: [{currency, delta, source, memo, op_id}], force? }
+```
+
+- `payload` 是**整块 JSON**（地块 / 动物 / 背包 / 行情 / 世界日 / 额度结转 / 事件）。
+  服务端不理解玩法，只负责「谁的那一份」。
+- `rev` 是乐观锁：两台设备同时改，后到的拿 `conflict=true`，**什么都没写**。
+- `ledger` 是随状态一起提交的币变动，**同一个事务**入账 ——
+  拆成两次请求的话，中间断网就是「菜没了、券没到」。
+- `op_id` 是幂等键（服务端拼 `farm:<uid>:<op_id>`），重试 / 连点不会多给一次。
+- `source` 有白名单（`farm_harvest` / `animal_produce` / `seed_purchase` /
+  `animal_purchase` / `plugin_mint`）：账本来源是给家长看流水的，
+  客户端不能把自己的消费记成 `task_reward`。
+
+验收：`node scripts/_probe-farm-state.mjs`（12 条，可反复跑）。
+
+### 7.6 验收命令
+
+```bash
+npm run lint                                   # tsc -b --noEmit
+npm test                                       # 1067 + 14 条（在线版纯函数）
+npm run build                                  # 看退出码，别看 "built in"
+node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
+node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条）
+```
+
+`_probe-write-through` 断言的是「**界面 == 服务端**」：
+建任务后本地 id 必须是 `srv_task_<服务端 id>`、提交后服务端 `status=submitted`、
+家长确认后 `界面拿到的分 == 服务端加的分 == 本地余额`，
+以及**断网时一个字都不落本地**。

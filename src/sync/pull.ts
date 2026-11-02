@@ -19,9 +19,21 @@ import { mapInstance, mapLedger, mapTask } from './map'
      否则一进 App 就白屏，而孩子只是没网。
    ============================================================ */
 
-/** 构建期开关：`VITE_APP_MODE=online` 才是在线版；不写 = 本地版（默认，行为完全不变） */
+/**
+ * 构建期开关。
+ *
+ * ★ 这个 worktree（`kid-quest-farm-online`）**默认就是服务器版**：
+ *   数据以 `tf-platform-api` 为准，本地 Dexie 只是读缓存。
+ *   要打一个「只在本机跑」的包，显式 `VITE_APP_MODE=local`。
+ *
+ * ★ 这是**分支级**的默认值，不是全局约定：
+ *   `kid-quest-farm-2d`（本地版）那个分支上这一行写的是「默认 local」。
+ *   两个分支各自演进、各自默认，**不靠人记得加环境变量**；
+ *   但代价是合并回主分支时这一行会冲突 —— 那是有意为之，
+ *   因为「默认用哪份数据」正是两个版本最根本的区别。
+ */
 export const APP_MODE: 'local' | 'online' =
-  import.meta.env.VITE_APP_MODE === 'online' ? 'online' : 'local'
+  import.meta.env.VITE_APP_MODE === 'local' ? 'local' : 'online'
 
 export const isOnlineMode = APP_MODE === 'online'
 
