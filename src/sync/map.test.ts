@@ -5,12 +5,15 @@ import {
   mapRedeemItem,
   mapRedeemRecord,
   mapTask,
+  mapWishOffer,
+  mapWishOrder,
   secToMs,
   srvId,
 } from './map'
 import type { ServerInstance, ServerTask } from '../api/task'
 import type { ServerLedgerEntry } from '../api/wallet'
 import type { ServerRedeemRecord, ServerRedeemRow } from '../api/redeem'
+import type { ServerWishItemView, ServerWishOrder } from '../api/wish'
 
 /* 一条**真的**服务端返回（2026-11-02 从 /api/task/board 抓下来的），
    别自己编字段名 —— 编出来的字段名永远是对的，接口永远不认。 */
@@ -267,5 +270,161 @@ describe('mapRedeemRecord', () => {
 
   it('★ 已取消的记录直接丢掉（退款了，那笔兑换等于没发生）', () => {
     expect(mapRedeemRecord({ ...REC, cancelled: true })).toBeNull()
+  })
+})
+
+/* ============================================================
+   心愿商城
+   ------------------------------------------------------------
+   两个「静默出错」的点各钉一条：
+     · 定价行写错 → 家长关掉的东西孩子还能换
+     · 订单时间写成 0 → 界面显示「1970 年确认的」
+   ============================================================ */
+
+const VIEW: ServerWishItemView = {
+  id: 'wish-popmart',
+  kind: 'collectible',
+  name: '泡泡玛特盲盒',
+  emoji: '🧸',
+  tint: 'grape',
+  partner_name: '泡泡玛特',
+  pool: null,
+  game_id: '',
+  price_cents: 6900,
+  age_range: [6, 99],
+  note: '随机款，不指定款式',
+  notice: '',
+  archived: false,
+  sort_order: 20,
+  open: true,
+  voucher_price: 30,
+  affordable: true,
+  shortfall: 0,
+  has_order: false,
+  owned: false,
+  my_wish: false,
+  days_to_save: 3,
+  blind_box_remaining: 0,
+}
+
+describe('mapWishOffer', () => {
+  it('开放且有价 → 一行，且**不带 closedAt**（本地就是靠它判「能换」）', () => {
+    const o = mapWishOffer(VIEW)
+    expect(o).not.toBeNull()
+    expect(o!.itemId).toBe('wish-popmart')
+    expect(o!.voucherPrice).toBe(30)
+    expect(o!.closedAt).toBeUndefined()
+  })
+
+  it('★ 家长关掉（open=false）→ **不写行**', () => {
+    // 写成「有行但 closedAt: 0」的话，孩子还能换一件家长刚关掉的东西
+    expect(mapWishOffer({ ...VIEW, open: false })).toBeNull()
+  })
+
+  it('★ 价 0 也算没开放（服务端的「0 = 关闭」约定）', () => {
+    expect(mapWishOffer({ ...VIEW, open: true, voucher_price: 0 })).toBeNull()
+  })
+
+  it('openedAt 填 0：本地没有任何地方读它，填 now 只会每次拉取都造 diff', () => {
+    expect(mapWishOffer(VIEW)!.openedAt).toBe(0)
+  })
+})
+
+const ORDER: ServerWishOrder = {
+  id: 'WO1700000000456',
+  item_id: 'wish-popmart',
+  kind: 'collectible',
+  item_name: '泡泡玛特盲盒',
+  item_emoji: '🧸',
+  partner_name: '泡泡玛特',
+  voucher_price: 30,
+  status: 'committed',
+  vouchers_held: 20,
+  points_held: 10,
+  opened_game_id: '',
+  code_tail: '',
+  ship: null,
+  tracking_no: '',
+  committed_at: 1793590300,
+  confirmed_at: null,
+  done_at: null,
+  cancelled_at: null,
+  cancel_reason: '',
+  created_at: 1793590000,
+  updated_at: 1793590300,
+  status_text: '等爸妈确认',
+  digital: false,
+}
+
+describe('mapWishOrder', () => {
+  it('加 srv_wo_ 前缀；两种币各按实际扣的映射（退款凭据）', () => {
+    const o = mapWishOrder(ORDER)
+    expect(o.id).toBe('srv_wo_WO1700000000456')
+    expect(o.itemId).toBe('wish-popmart')
+    expect(o.vouchersHeld).toBe(20)
+    expect(o.pointsHeld).toBe(10)
+    expect(o.voucherPrice).toBe(30)
+    expect(o.status).toBe('committed')
+  })
+
+  it('秒 → 毫秒；没发生的阶段保持 undefined（不是 0）', () => {
+    const o = mapWishOrder(ORDER)
+    expect(o.createdAt).toBe(1793590000000)
+    expect(o.committedAt).toBe(1793590300000)
+    expect(o.confirmedAt).toBeUndefined()
+    expect(o.doneAt).toBeUndefined()
+    expect(o.cancelledAt).toBeUndefined()
+  })
+
+  it('空字符串不写成空串（本地用 undefined 表示「没有」）', () => {
+    const o = mapWishOrder(ORDER)
+    expect(o.partnerName).toBe('泡泡玛特')
+    expect(o.openedGameId).toBeUndefined()
+    expect(o.buyOrderNo).toBeUndefined()
+    expect(o.cancelReason).toBeUndefined()
+  })
+
+  it('快递单号落到 buyOrderNo（同一个「对账号」）', () => {
+    expect(mapWishOrder({ ...ORDER, tracking_no: 'SF123456' }).buyOrderNo).toBe('SF123456')
+  })
+
+  it('pointsHeld 为 0 时不写字段（老订单全是纯券单）', () => {
+    expect(mapWishOrder({ ...ORDER, points_held: 0 }).pointsHeld).toBeUndefined()
+  })
+
+  it('★ 已取消的**要留下来** —— 孩子要看到「爸妈这次先不换」和原因', () => {
+    const o = mapWishOrder({
+      ...ORDER,
+      status: 'cancelled',
+      cancelled_at: 1793590400,
+      cancel_reason: '爸妈这次先不换',
+    })
+    expect(o.status).toBe('cancelled')
+    expect(o.cancelledAt).toBe(1793590400000)
+    expect(o.cancelReason).toBe('爸妈这次先不换')
+  })
+
+  it('收货信息：purge_after 也是秒', () => {
+    const o = mapWishOrder({
+      ...ORDER,
+      ship: {
+        receiver: '王小朵',
+        phone: '****1234',
+        region: '浙江省杭州市西湖区',
+        address: '',
+        purge_after: 1801366400,
+      },
+    })
+    expect(o.ship?.receiver).toBe('王小朵')
+    expect(o.ship?.purgeAfter).toBe(1801366400000)
+    expect(o.ship?.note).toBeUndefined()
+  })
+
+  it('未知分类 / 状态回落，不把整行丢掉', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const o = mapWishOrder({ ...ORDER, kind: 'spaceship' as never, status: 'flying' as never })
+    expect(o.kind).toBe('collectible')
+    expect(o.status).toBe('wished')
+    warn.mockRestore()
   })
 })

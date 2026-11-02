@@ -4,6 +4,7 @@ import { pullFromServer, pullOnce } from './pull'
 import type { ServerBoard, ServerInstance, ServerTask } from '../api/task'
 import type { ServerLedgerEntry } from '../api/wallet'
 import type { ServerRedeemRecord, ServerRedeemRow } from '../api/redeem'
+import type { ServerWishItemView, ServerWishOrder } from '../api/wish'
 
 /* 接口全部 mock 掉 —— 这一层要验的是「搬进本地表」的行为，
    真连服务端是 `scripts/_probe-task-chain.mjs` 的活。 */
@@ -13,6 +14,8 @@ const walletInfoMock = vi.fn()
 const walletLedgerMock = vi.fn()
 const redeemRowsMock = vi.fn()
 const redeemRecsMock = vi.fn()
+const wishListMock = vi.fn()
+const wishOrdersMock = vi.fn()
 
 vi.mock('../api/task', () => ({
   board: () => boardMock(),
@@ -25,6 +28,10 @@ vi.mock('../api/wallet', () => ({
 vi.mock('../api/redeem', () => ({
   listRedeemRows: (o: unknown) => redeemRowsMock(o),
   listRedeemRecords: (p: number, s: number) => redeemRecsMock(p, s),
+}))
+vi.mock('../api/wish', () => ({
+  listWishItems: (o: unknown) => wishListMock(o),
+  listWishOrders: (o: unknown) => wishOrdersMock(o),
 }))
 
 const TASK: ServerTask = {
@@ -158,6 +165,67 @@ const REC: ServerRedeemRecord = {
   created_at: 1793590100,
 }
 
+const WISH_OPEN: ServerWishItemView = {
+  id: 'wish-popmart',
+  kind: 'collectible',
+  name: '泡泡玛特盲盒',
+  emoji: '🧸',
+  tint: 'grape',
+  partner_name: '泡泡玛特',
+  pool: null,
+  game_id: '',
+  price_cents: 6900,
+  age_range: [6, 99],
+  note: '',
+  notice: '',
+  archived: false,
+  sort_order: 20,
+  open: true,
+  voucher_price: 30,
+  affordable: true,
+  shortfall: 0,
+  has_order: false,
+  owned: false,
+  my_wish: false,
+  days_to_save: 3,
+  blind_box_remaining: 0,
+}
+
+/** 家长定过价、后来**关掉**的那件 —— 不能落成 `WishOffer` 行 */
+const WISH_CLOSED: ServerWishItemView = {
+  ...WISH_OPEN,
+  id: 'wish-dino',
+  name: '恐龙模型套装',
+  open: false,
+  voucher_price: 0,
+}
+
+const WISH_ORDER: ServerWishOrder = {
+  id: 'WO1700000000456',
+  item_id: 'wish-popmart',
+  kind: 'collectible',
+  item_name: '泡泡玛特盲盒',
+  item_emoji: '🧸',
+  partner_name: '泡泡玛特',
+  voucher_price: 30,
+  status: 'committed',
+  vouchers_held: 30,
+  points_held: 0,
+  opened_game_id: '',
+  code_tail: '',
+  ship: null,
+  tracking_no: '',
+  committed_at: 1793590300,
+  confirmed_at: null,
+  done_at: null,
+  cancelled_at: null,
+  cancel_reason: '',
+  created_at: 1793590000,
+  updated_at: 1793590300,
+  status_text: '等爸妈确认',
+  digital: false,
+}
+
 beforeEach(async () => {
   await Promise.all([
     db.tasks.clear(),
@@ -165,6 +233,8 @@ beforeEach(async () => {
     db.ledger.clear(),
     db.redeemItems.clear(),
     db.redeemRecords.clear(),
+    db.wishOffers.clear(),
+    db.wishOrders.clear(),
   ])
   boardMock.mockReset()
   listTasksMock.mockReset()
@@ -172,12 +242,16 @@ beforeEach(async () => {
   walletLedgerMock.mockReset()
   redeemRowsMock.mockReset()
   redeemRecsMock.mockReset()
+  wishListMock.mockReset()
+  wishOrdersMock.mockReset()
   boardMock.mockResolvedValue(BOARD)
   listTasksMock.mockResolvedValue({ count: 1, list: [TASK] })
   walletInfoMock.mockResolvedValue({ uid: 3, points: 112, coupon: 0, diamond: 0 })
   walletLedgerMock.mockResolvedValue({ count: 1, list: [LEDGER] })
   redeemRowsMock.mockResolvedValue({ count: 2, list: [ROW, WISH_ROW] })
   redeemRecsMock.mockResolvedValue({ count: 1, list: [REC] })
+  wishListMock.mockResolvedValue({ count: 2, list: [WISH_OPEN, WISH_CLOSED] })
+  wishOrdersMock.mockResolvedValue({ page: 1, pageSize: 200, count: 1, list: [WISH_ORDER] })
 })
 
 describe('pullOnce', () => {
@@ -364,5 +438,85 @@ describe('pullFromServer 的模式闸门', () => {
     const r = await pullFromServer()
     expect(r).toEqual({ ok: true, reason: 'local' })
     expect(boardMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('pullOnce · 心愿商城', () => {
+  it('只把「现在开放」的定价搬进来（关掉的不落行）', async () => {
+    const r = await pullOnce()
+    expect(r.wishOffers).toBe(1)
+
+    const offers = await db.wishOffers.toArray()
+    expect(offers).toHaveLength(1)
+    expect(offers[0].itemId).toBe('wish-popmart')
+    expect(offers[0].voucherPrice).toBe(30)
+    expect(offers[0].closedAt).toBeUndefined()
+  })
+
+  it('★ 商品列表要连**下架**的一起拉（否则家长定过价的东西变回「没定价」）', async () => {
+    await pullOnce()
+    expect(wishListMock).toHaveBeenCalledWith({ includeArchived: true })
+  })
+
+  it('★ 心愿单必须用 pageSize（驼峰）+ 家长视角', async () => {
+    await pullOnce()
+    // 写成 page_size 不会报错，只会永远只回 30 条 —— 这条断言就是防它
+    expect(wishOrdersMock).toHaveBeenCalledWith({ page: 1, pageSize: 200, asParent: true })
+  })
+
+  it('订单加 srv_wo_ 前缀；已取消的也留着', async () => {
+    await pullOnce()
+    const rows = await db.wishOrders.toArray()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].id).toBe('srv_wo_WO1700000000456')
+    expect(rows[0].status).toBe('committed')
+    expect(rows[0].vouchersHeld).toBe(30)
+  })
+
+  it('重拉幂等：不会出现两份', async () => {
+    await pullOnce()
+    await pullOnce()
+    expect(await db.wishOffers.count()).toBe(1)
+    expect(await db.wishOrders.count()).toBe(1)
+  })
+
+  it('★ 服务端关掉定价后，重拉要把本地那行删掉', async () => {
+    await pullOnce()
+    expect(await db.wishOffers.count()).toBe(1)
+
+    wishListMock.mockResolvedValue({ count: 1, list: [WISH_CLOSED] })
+    await pullOnce()
+    expect(await db.wishOffers.count()).toBe(0)
+  })
+
+  it('★ 心愿接口挂了时**不许**清掉本地已有的定价和订单', async () => {
+    await pullOnce()
+    expect(await db.wishOffers.count()).toBe(1)
+    expect(await db.wishOrders.count()).toBe(1)
+
+    wishListMock.mockRejectedValue(new Error('wish down'))
+    wishOrdersMock.mockRejectedValue(new Error('wish down'))
+    const r = await pullOnce()
+
+    expect(r.ok).toBe(true) // 任务那些照旧拉到了
+    expect(await db.wishOffers.count()).toBe(1)
+    expect(await db.wishOrders.count()).toBe(1)
+  })
+
+  it('本地那两条 `wo…` 行不会被服务端数据挤掉（前缀不同，清不到它们）', async () => {
+    await db.wishOrders.put({
+      id: 'woabc',
+      itemId: 'wish-dino',
+      itemName: '恐龙模型套装',
+      itemEmoji: '🦖',
+      kind: 'toy',
+      voucherPrice: 0,
+      status: 'wished',
+      vouchersHeld: 0,
+      createdAt: 1793580000000,
+    })
+    await pullOnce()
+    const ids = (await db.wishOrders.toArray()).map((o) => o.id).sort()
+    expect(ids).toEqual(['srv_wo_WO1700000000456', 'woabc'])
   })
 })

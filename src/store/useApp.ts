@@ -129,6 +129,16 @@ import {
   redeemFailToast,
 } from '../online/redeem'
 import {
+  localWishOrderId,
+  oWishCancel,
+  oWishConfirm,
+  oWishDone,
+  oWishExpress,
+  oWishRedeem,
+  oWishSetOffer,
+  wishFailToast,
+} from '../online/wish'
+import {
   appDayKey,
   appDayStart,
   formatClock,
@@ -1621,6 +1631,192 @@ async function onlineFulfillRedeem(get: () => AppState, recordId: string): Promi
     get().pushToast(writeFailToast(r.error, '这次确认'))
     return
   }
+  await get().refresh()
+}
+
+/* ============================================================
+   在线版 · 心愿商城写穿
+   ------------------------------------------------------------
+   形状和兑换那条一样：**调接口 → 成功了才 refresh → 从本地表读回**。
+
+   ★ 六个动作里只有「装包」是客户端的活。服务端只会授予游戏
+     （写 `user_game`），插件包在本机 `gameKv` 里 —— 它管不到。
+     所以 `onlineWishRedeem` 是唯一一个「服务端成功之后还要再做一步」的动作，
+     而那一步失败必须**回头调服务端的取消**把券退回来（见那里的注释）。
+
+   ★ 这里**不预判**「券够不够 / 爸妈定没定价 / 盲盒还有没有」。
+     服务端在同一个事务里全查一遍，本地再判一遍只会多出一个真相。
+     本地版那几行 `return { ok: false, message: '爸妈还没给它定价' }`
+     在在线模式下走不到 —— 文案改由 `wishFailToast` 按业务码给。
+   ============================================================ */
+
+/** 孩子「想要这个」（不扣钱）。服务端对「已有进行中订单」是幂等的 */
+async function onlineWishExpress(get: () => AppState, itemId: string): Promise<void> {
+  const r = await onlineWrite(() => oWishExpress(itemId))
+  if (!r.ok) {
+    get().pushToast(wishFailToast(r.error))
+    return
+  }
+  /* 服务端幂等返回「已有的那一单」—— 如果它已经不在 `wished`（孩子已经
+     兑换过了），再弹一句「已经告诉爸妈」就是假话。本地版是靠「先查有没有
+     进行中的单子，有就直接 return」挡住的，这里用服务端返回的状态挡。 */
+  if (r.data.status !== 'wished') {
+    await get().refresh()
+    return
+  }
+  const name = r.data.item_name || wishItemById(itemId)?.name || '这件东西'
+  get().pushToast({
+    kind: 'info',
+    title: `已经告诉爸妈：想要「${name}」`,
+    detail: '他们看到之后会给它定一个兑换券的价格',
+    emoji: '💌',
+  })
+  await get().refresh()
+}
+
+/**
+ * 孩子「确定兑换」。
+ *
+ * 返回 `null` = 没换成（提示已经弹过）；否则给出这次**服务端实际开出的**游戏。
+ *
+ * ## 装包失败为什么要回头取消
+ *
+ * 服务端那一步已经把券扣了、也把 `user_game` 授了。但游戏类商品的「交付」
+ * 在客户端是**装包** —— 装不上等于没给东西，券留着没有任何理由。
+ * 所以走 `oWishCancel`（服务端的取消）：它会把两种币各退一笔、
+ * 同时 `RevokeGame`。**不要在客户端自己造一笔退款账** ——
+ * 那就成了「本地退一次、服务端那单还挂着」，两边永远对不上。
+ */
+async function onlineWishRedeem(
+  get: () => AppState,
+  itemId: string,
+): Promise<{ ok: boolean; message: string; gameId?: string }> {
+  const r = await onlineWrite(() => oWishRedeem(itemId))
+  if (!r.ok) {
+    const t = wishFailToast(r.error)
+    return { ok: false, message: t.detail ?? t.title }
+  }
+
+  const view = r.data
+  const gameId = view.opened_game_id || undefined
+  const item = wishItemById(itemId)
+
+  if (gameId) {
+    const res = await get().installLocalGame(gameId)
+    if (!res.ok) {
+      const c = await onlineWrite(() =>
+        oWishCancel(localWishOrderId(view.id), '游戏没装好'),
+      )
+      if (!c.ok) {
+        // 退不回来就得说清楚 —— 券扣了、游戏没装上，这是最需要人管的一种
+        get().pushToast(writeFailToast(c.error, '退回兑换券'))
+      }
+      await get().refresh()
+      return { ok: false, message: `游戏没装好，券已经退回来了：${res.message}` }
+    }
+  }
+
+  get().pushToast({
+    kind: 'reward',
+    title: `兑换成功：${view.item_name || item?.name || '心愿'}`,
+    detail: gameId ? '已经放进你的游戏柜啦' : '等爸爸妈妈去买',
+    emoji: view.item_emoji || item?.emoji || '🎁',
+  })
+  await get().refresh()
+  return { ok: true, message: '兑换成功', gameId }
+}
+
+/** 家长定价 / 关闭（`price <= 0` = 关闭） */
+async function onlineWishSetOffer(
+  get: () => AppState,
+  itemId: string,
+  voucherPrice: number,
+): Promise<void> {
+  const r = await onlineWrite(() => oWishSetOffer(itemId, voucherPrice))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次定价'))
+    return
+  }
+  await get().refresh()
+}
+
+async function onlineWishConfirm(get: () => AppState, orderId: string): Promise<void> {
+  const r = await onlineWrite(() => oWishConfirm(orderId))
+  if (!r.ok) {
+    get().pushToast(wishFailToast(r.error))
+    return
+  }
+  await get().refresh()
+}
+
+/**
+ * 家长收尾。
+ *
+ * ⚠️ `patch.ship` **上传不了** —— 服务端的 `/wish/done` 只认
+ * `order_id` / `reason` / `tracking_no`，没有收货信息这个字段
+ * （地址是在兑换那一刻存的，见 `wish_srv.go` 的 `Redeem`）。
+ * 目前没有任何界面会传 `ship`，所以这条限制现在不生效；
+ * 将来真做「家长补地址」时，得先给服务端加字段，别指望客户端能塞进去。
+ */
+async function onlineWishDone(
+  get: () => AppState,
+  orderId: string,
+  patch?: { ship?: unknown; buyOrderNo?: string },
+): Promise<void> {
+  const r = await onlineWrite(() => oWishDone(orderId, patch?.buyOrderNo ?? ''))
+  if (!r.ok) {
+    get().pushToast(wishFailToast(r.error))
+    return
+  }
+  await get().refresh()
+}
+
+/**
+ * 取消（服务端退两种币 + 收回游戏）。
+ *
+ * 客户端还要做一件服务端做不到的事：**摘掉本机的安装**。
+ * 用 `detachGameKv` 而不是 `clearGameKv` —— 只摘安装（包 + 资源根），
+ * **保留存档**：撤销的是这笔交易，不是孩子玩出来的进度。
+ */
+async function onlineWishCancel(
+  get: () => AppState,
+  orderId: string,
+  reason?: string,
+): Promise<void> {
+  // 交付过哪款游戏要看**取消前**那一行（取消后 `opened_game_id` 仍然在，
+  // 但顺序上先读更稳：本地这份可能还没被 refresh 覆盖）
+  const before = await db.wishOrders.get(orderId)
+
+  const r = await onlineWrite(() => oWishCancel(orderId, reason ?? ''))
+  if (!r.ok) {
+    get().pushToast(wishFailToast(r.error))
+    return
+  }
+
+  const delivered = before?.openedGameId
+  if (delivered) {
+    await detachGameKv(delivered)
+    if (get().activeGameId === delivered) {
+      await get().updateSettings({ activeGame: DEFAULT_GAME_ID })
+    }
+  }
+
+  /* 退了多少从**服务端返回的那一单**读。服务端取消时不清 `vouchers_held` /
+     `points_held`（它们是退款凭据），所以这里拿到的是真实退回的数。
+     读本地那份不行：本地可能还没刷新，读到的是刷新前的值（通常一样，
+     但「通常」在这种地方等于「偶尔会显示 0」）。 */
+  const parts: string[] = []
+  if (r.data.vouchers_held > 0) parts.push(`${r.data.vouchers_held} 张兑换券`)
+  if (r.data.points_held > 0) parts.push(`${r.data.points_held} 积分`)
+  if (parts.length > 0) {
+    get().pushToast({
+      kind: 'info',
+      title: `已退回 ${parts.join(' + ')}`,
+      detail: delivered ? '游戏已收回，进度还在' : undefined,
+      emoji: '🎫',
+    })
+  }
+
   await get().refresh()
 }
 
@@ -3844,6 +4040,9 @@ export const useApp = create<AppState>((set, get) => ({
    * 而且「想要」这件事重复表达一次也没有意义。
    */
   wishExpress: async (itemId) => {
+    // 在线版：意向也是**服务端的一行**（家长那一侧要靠它才看得见）
+    if (isOnlineMode) return onlineWishExpress(get, itemId)
+
     const item = wishItemById(itemId)
     if (!item) return
 
@@ -3895,6 +4094,11 @@ export const useApp = create<AppState>((set, get) => ({
    * 迟早有一处漏了 `status` 判断，然后就会退两次。
    */
   wishRedeem: async (itemId) => {
+    /* 在线版：**整条本地事务不走** —— 扣券、扣积分、开盲盒、授予游戏
+       全在服务端一个事务里（见 `onlineWishRedeem`）。
+       本地这段只在「本地版」那棵树上执行。 */
+    if (isOnlineMode) return onlineWishRedeem(get, itemId)
+
     const item = wishItemById(itemId)
     if (!item) return { ok: false, message: '没有这件商品' }
 
@@ -4023,6 +4227,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   wishSetOffer: async (itemId, voucherPrice) => {
+    if (isOnlineMode) return onlineWishSetOffer(get, itemId, voucherPrice)
+
     const price = Math.round(voucherPrice)
     const now = Date.now()
     if (price > 0) {
@@ -4037,6 +4243,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   wishConfirm: async (orderId) => {
+    if (isOnlineMode) return onlineWishConfirm(get, orderId)
+
     const row = await db.wishOrders.get(orderId)
     // 只有「已兑换」能往前走。已取消的单子不能被一次误点复活。
     if (!row || row.status !== 'committed') return
@@ -4045,6 +4253,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   wishDone: async (orderId, patch) => {
+    if (isOnlineMode) return onlineWishDone(get, orderId, patch)
+
     const row = await db.wishOrders.get(orderId)
     if (!row || (row.status !== 'committed' && row.status !== 'confirmed')) return
 
@@ -4061,6 +4271,11 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   wishCancel: async (orderId, reason) => {
+    /* 在线版：退款由服务端做（两种币各退一笔 + 收回 `user_game`），
+       客户端只负责「摘掉本机的安装」（见 `onlineWishCancel`）。
+       ⚠️ 下面这段本地事务**一个字都不能跑**：两边都退一次 = 钱翻倍。 */
+    if (isOnlineMode) return onlineWishCancel(get, orderId, reason)
+
     const now = Date.now()
     const box = {
       refunded: 0,

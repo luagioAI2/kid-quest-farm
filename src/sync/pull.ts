@@ -2,6 +2,7 @@ import { db } from '../db/db'
 import { board, listTasks } from '../api/task'
 import { walletInfo, walletLedger } from '../api/wallet'
 import { listRedeemRecords, listRedeemRows } from '../api/redeem'
+import { listWishItems, listWishOrders } from '../api/wish'
 import { getToken } from '../api/session'
 import {
   mapHarvest,
@@ -10,7 +11,10 @@ import {
   mapRedeemItem,
   mapRedeemRecord,
   mapTask,
+  mapWishOffer,
+  mapWishOrder,
   SRV_REDEEM_RECORD_PREFIX,
+  SRV_WISH_ORDER_PREFIX,
 } from './map'
 
 /* ============================================================
@@ -59,13 +63,17 @@ export interface PullResult {
   redeemItems?: number
   /** 兑换记录（**不含已取消的**，见 `mapRedeemRecord`） */
   redeemRecords?: number
+  /** 心愿商城里「现在开放」的定价（**不含已关闭的**，见 `mapWishOffer`） */
+  wishOffers?: number
+  /** 心愿单（**含已取消的**，见 `mapWishOrder`） */
+  wishOrders?: number
   /** 服务端报的余额，用来和本地求和比对 */
   balance?: number
 }
 
 /** 删掉某一类 `srv_` 行（重拉时先清后写，保证服务端删掉的这里也跟着消失） */
 async function clearSrvRows(
-  table: 'tasks' | 'taskInstances' | 'ledger' | 'harvestLedger' | 'redeemRecords',
+  table: 'tasks' | 'taskInstances' | 'ledger' | 'harvestLedger' | 'redeemRecords' | 'wishOrders',
   prefix: string,
 ) {
   const t = db[table]
@@ -116,6 +124,15 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       () => null,
     )
     const redeemRecs = await pullRedeemRecords().catch(() => null)
+    /* 心愿商城：商品列表（只为拿「本家庭开不开放 + 券价」）+ 心愿单。
+       ★ 商品列表用 `include_archived: true`：家长可能给一件后来下架的商品
+         定过价，只拉在架的话那条定价就没了，孩子那单会退回「爸妈还没定价」。
+       ★ 心愿单用 `asParent: true`：收货信息在孩子视角是脱敏的
+         （手机 `****1234`、详细地址为空），家长那一屏要能发货。
+         同一台设备、同一个账号，不为此多开一个接口。
+       ★ 两个都 `catch(() => null)`：心愿挂了不该让今天的任务也拉不下来。 */
+    const wishList = await listWishItems({ includeArchived: true }).catch(() => null)
+    const wishOrders = await pullWishOrders().catch(() => null)
 
     const taskRows = tasks.list.map(mapTask)
     const instRows = b.instances.map(mapInstance)
@@ -134,6 +151,10 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
     const recRows = (redeemRecs ?? [])
       .map(mapRedeemRecord)
       .filter((r): r is NonNullable<typeof r> => r !== null)
+    const offerRows = (wishList?.list ?? [])
+      .map(mapWishOffer)
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+    const wishRows = (wishOrders ?? []).map(mapWishOrder)
 
     await db.transaction(
       'rw',
@@ -144,6 +165,8 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
         db.harvestLedger,
         db.redeemItems,
         db.redeemRecords,
+        db.wishOffers,
+        db.wishOrders,
       ],
       async () => {
         await clearSrvRows('tasks', 'srv_task_')
@@ -178,6 +201,21 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
           await clearSrvRows('redeemRecords', SRV_REDEEM_RECORD_PREFIX)
           if (recRows.length) await db.redeemRecords.bulkPut(recRows)
         }
+
+        if (wishList !== null) {
+          /* ★ 定价表**整张清掉**，理由和兑换品表一样：主键 `itemId` 是
+             服务端给的字符串（没有前缀），分不出「这行是不是云端来的」。
+             而在线版里这张表**只可能**有云端数据 —— 播种在在线模式下
+             一个字节都不写，写接口又全是写穿（失败不落本地）。
+             切回本地版时这张表会被 `wipeAll` / 导入覆盖，不会留下幽灵行。 */
+          await db.wishOffers.clear()
+          if (offerRows.length) await db.wishOffers.bulkPut(offerRows)
+        }
+
+        if (wishOrders !== null) {
+          await clearSrvRows('wishOrders', SRV_WISH_ORDER_PREFIX)
+          if (wishRows.length) await db.wishOrders.bulkPut(wishRows)
+        }
       },
     )
 
@@ -189,6 +227,8 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       coupons: harvestRows.length,
       redeemItems: itemRows?.length ?? 0,
       redeemRecords: recRows?.length ?? 0,
+      wishOffers: offerRows?.length ?? 0,
+      wishOrders: wishRows?.length ?? 0,
       balance: wallet?.points ?? b.balance,
     }
   } catch (e) {
@@ -226,6 +266,23 @@ async function pullRedeemRecords() {
   const out: Awaited<ReturnType<typeof listRedeemRecords>>['list'] = []
   for (let page = 1; page <= MAX_PAGES; page++) {
     const r = await listRedeemRecords(page, PAGE)
+    out.push(...r.list)
+    if (r.list.length < PAGE) break
+  }
+  return out
+}
+
+/**
+ * 心愿单翻页拉全。
+ *
+ * ⚠️ 分页参数是 `pageSize`（驼峰）—— 写成 `page_size` 只会永远返回 30 条，
+ * 而且**不报错**（见 `api/wish.ts` 的 `listWishOrders` 注释）。
+ * 症状是「家长心愿页的待办少了几条，孩子那边确实还欠着」。
+ */
+async function pullWishOrders() {
+  const out: Awaited<ReturnType<typeof listWishOrders>>['list'] = []
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const r = await listWishOrders({ page, pageSize: PAGE, asParent: true })
     out.push(...r.list)
     if (r.list.length < PAGE) break
   }

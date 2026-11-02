@@ -12,10 +12,16 @@ import type {
   TaskCycle,
   TaskInstance,
   TaskStatus,
+  WishKind,
+  WishOffer,
+  WishOrder,
+  WishShipInfo,
+  WishStatus,
 } from '../domain/types'
 import type { ServerInstance, ServerTask } from '../api/task'
 import type { ServerLedgerEntry } from '../api/wallet'
 import type { ServerRedeemRecord, ServerRedeemRow } from '../api/redeem'
+import type { ServerWishItemView, ServerWishOrder } from '../api/wish'
 
 /* ============================================================
    在线版 · 服务端 DTO → 本地类型
@@ -322,3 +328,126 @@ export function mapRedeemRecord(s: ServerRedeemRecord): RedeemRecord | null {
   }
 }
 
+
+/* ============================================================
+   心愿商城
+   ------------------------------------------------------------
+   和兑换商城**几乎相反**的两件事，别照抄：
+
+   ★ 商品目录**不在这里**。心愿商品是随版本发布的常量
+     （`games/wishCatalog.ts`），服务端只是存了同一份目录的副本用于
+     「定价 / 兑换时查得到这件商品」。所以拉取时**只搬 `WishOffer`**，
+     不搬商品本身 —— 搬了就有两份目录，改一处忘另一处时
+     界面上的商品和能兑换的商品会对不上。
+
+   ★ 订单 id 要加前缀（`srv_wo_`）。服务端生成 `WO…`，本地生成 `wo…`，
+     只差大小写 —— 不加前缀的话 `wishCancel('woabc')` 这种本地行会被
+     当成服务端订单发给 `/wish/cancel`，回来的「订单不存在」在界面上
+     显示成「这单没了」，而本地那条其实好好的。
+   ============================================================ */
+
+/** 服务端心愿订单 id 的本地前缀 */
+export const SRV_WISH_ORDER_PREFIX = 'srv_wo_'
+
+const WISH_KINDS: readonly WishKind[] = [
+  'blindbox',
+  'gamebox',
+  'toy',
+  'study',
+  'food',
+  'outing',
+  'collectible',
+]
+
+const WISH_STATUSES: readonly WishStatus[] = [
+  'wished',
+  'committed',
+  'confirmed',
+  'done',
+  'cancelled',
+]
+
+/**
+ * `/wish/list` 的一行 → 本地 `WishOffer`。
+ *
+ * ## 只有「现在开放」的商品才落行
+ *
+ * 服务端**不返回** `opened_at` / `closed_at`，只给一个算好的 `open`。
+ * 而本地读 `WishOffer` 的每一处（`wishesAwaitingReply` / `wishShelf` /
+ * `wishExpress` / `wishRedeem`）判的都是「**没有 `closedAt`** 且价 > 0」。
+ *
+ * 所以：
+ *   · `open && voucher_price > 0` → 写一行，**不带 `closedAt`**；
+ *   · 其余（没定过价 / 定过又关了）→ **不写行**。
+ *
+ * 两种「不写」在界面上是同一个结果：这件东西现在不能换，心愿单里那条
+ * 重新变回「等爸妈回应」。**不能**写成「有行但 `closedAt: 0`」——
+ * 那样家长关掉的东西孩子还能换。
+ *
+ * `openedAt` 填 0：本地没有任何地方读它（只有 `closedAt` 被当布尔用），
+ * 填 `Date.now()` 只会让每次拉取都写一份新值，白白制造 diff。
+ */
+export function mapWishOffer(s: ServerWishItemView): WishOffer | null {
+  if (!s.open || s.voucher_price <= 0) return null
+  return {
+    itemId: s.id,
+    voucherPrice: s.voucher_price,
+    openedAt: 0,
+  }
+}
+
+/**
+ * 服务端心愿订单 → 本地 `WishOrder`。
+ *
+ * ★ **已取消的也留下来**（不像兑换记录那样丢掉）。理由：
+ *   取消是孩子能看见的一段历史（「爸妈这次先不换」+ 原因），
+ *   而且 `lastRejectReason` 就是从最近一条取消单里读的 ——
+ *   丢掉的话，孩子刚被回绝，那件商品的卡片上却没有一句解释。
+ *   `redeemedGameIdsFrom` 已经显式排除了 `cancelled`，不会把退掉的游戏
+ *   当成「已拥有」。
+ */
+export function mapWishOrder(s: ServerWishOrder): WishOrder {
+  const out: WishOrder = {
+    id: `${SRV_WISH_ORDER_PREFIX}${s.id}`,
+    itemId: s.item_id,
+    itemName: s.item_name,
+    itemEmoji: s.item_emoji,
+    kind: pick(WISH_KINDS, s.kind, 'collectible', 'wish.kind'),
+    status: pick(WISH_STATUSES, s.status, 'wished', 'wish.status'),
+    voucherPrice: s.voucher_price,
+    vouchersHeld: s.vouchers_held,
+    createdAt: secToMs(s.created_at) ?? Date.now(),
+  }
+
+  // 下面这些是「可能没有」的：服务端用 `*int64` / 空字符串表示，本地用 `undefined`。
+  // 一律别写 `?? 0` —— 0 会被渲染成「1970 年确认的」。
+  if (s.partner_name) out.partnerName = s.partner_name
+  if (s.points_held > 0) out.pointsHeld = s.points_held
+  if (s.opened_game_id) out.openedGameId = s.opened_game_id
+  if (s.tracking_no) out.buyOrderNo = s.tracking_no
+  if (s.cancel_reason) out.cancelReason = s.cancel_reason
+
+  const committed = secToMs(s.committed_at)
+  if (committed !== undefined) out.committedAt = committed
+  const confirmed = secToMs(s.confirmed_at)
+  if (confirmed !== undefined) out.confirmedAt = confirmed
+  const done = secToMs(s.done_at)
+  if (done !== undefined) out.doneAt = done
+  const cancelled = secToMs(s.cancelled_at)
+  if (cancelled !== undefined) out.cancelledAt = cancelled
+
+  /* 收货信息：只在 `as_parent: true` 拉取时才是完整的（孩子视角是脱敏版）。
+     拉取统一用家长视角，见 `sync/pull.ts` 的 `pullWish`。 */
+  if (s.ship) {
+    const ship: WishShipInfo = {
+      receiver: s.ship.receiver,
+      phone: s.ship.phone,
+      region: s.ship.region,
+      address: s.ship.address,
+      purgeAfter: (s.ship.purge_after ?? 0) * 1000,
+    }
+    if (s.ship.note) ship.note = s.ship.note
+    out.ship = ship
+  }
+  return out
+}
