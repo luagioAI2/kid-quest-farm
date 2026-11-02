@@ -12,6 +12,7 @@ import { SetupWizard } from './features/onboarding/SetupWizard'
 import { OnlineLoginGate } from './features/account/OnlineLoginGate'
 import { ChildTour } from './features/onboarding/ChildTour'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { SyncBanner } from './components/SyncBanner'
 import { isNative, playTone } from './platform/files'
 import { gameById } from './games/registry'
 import { CURRENCY } from './domain/currency'
@@ -413,6 +414,13 @@ export default function App() {
               </button>
             </div>
           </header>
+
+          {/*
+            「现在连不上服务器」的横幅。**放在 header 和 main 之间**：
+            它是全局状态，不属于任何一个 tab —— 挂在某个页面里的话，
+            孩子切到别的页面就看不到，正好在那一刻误以为数据是新的。
+          */}
+          <SyncBanner />
 
           <main key={tab} className="flex flex-1 flex-col anim-fade-in">
             <ErrorBoundary resetKey={tab}>

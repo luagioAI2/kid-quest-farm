@@ -82,6 +82,7 @@ import { ApiError } from '../api/client'
 import type { ApiWishCodeResult } from '../api/types'
 import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom, wishOwnedSet } from '../domain/wish'
 import { ownedIdsOnline } from '../domain/ownership'
+import { SYNC_LAST_OK_KEY, SYNC_OK, type SyncState } from '../domain/syncState'
 import { fetchOwnedGameIds } from '../online/ownership'
 import { makeHostApi } from '../games/hostApi'
 import { deleteGameKvOnServer } from '../online/kv'
@@ -300,6 +301,14 @@ interface AppState {
    *    详见 `domain/ownership.ts` 的文件头。
    */
   ownedGameIds: string[]
+  /**
+   * 最近一次「从服务端拉取」的结果。在线版靠它在界面上说清「现在连不上」
+   * （`components/SyncBanner.tsx`）。
+   *
+   * ⚠️ 拉取失败是**静默**的（没网也要能进 App），不记这件事的话，界面会
+   *    安静地显示旧数据 —— 老设备上是昨天的任务，新设备上是一片空白。
+   */
+  syncState: SyncState
   /**
    * 服务端说「我拥有」的游戏 id。`null` = **还没拉到**（不是「一个都没有」）。
    *
@@ -1965,12 +1974,33 @@ async function doRefresh(
   /* ★ 农场动作期间（`inFarmTx()`）**一律不拉**：
      动作刚算完的新状态还在本地，拉一次就会用服务端那份把它盖掉，
      然后提交上去的是「什么都没变」—— 孩子点了收获，菜又回来了。 */
+  /* 这次拉到了没有 —— 末尾和别的字段一起 `set`，界面上就是「现在连不上」。 */
+  let syncNext: SyncState = get().syncState
   if (isOnlineMode && !inFarmTx() && !opts.skipPull) {
+    /* ★ 跨重启要知道「上次同步是几点的」—— 只在内存里的话，断网重开 App
+       会退化成「这台设备还没有同步过内容」，而 Dexie 里明明有昨天的数据。
+       只在还没拿到过的时候读一次库，之后的刷新都用手上这份。 */
+    if (syncNext.lastOkAt === 0) {
+      const saved = (await db.meta.get(SYNC_LAST_OK_KEY))?.value
+      if (typeof saved === 'number' && saved > 0) {
+        syncNext = { lastOkAt: saved, failure: syncNext.failure }
+      }
+    }
+
     const pulled = await pullFromServer()
     if (!pulled.ok) console.warn('[sync] 拉取失败，本次用本地数据：', pulled.reason)
     /* 农场是整块 JSON，单独一个接口。失败不抛：没网就用本地这份 */
     const farmPulled = await pullFarm()
     if (farmPulled === 'failed') console.warn('[sync] 农场没拉到，本次用本地这份')
+
+    if (pulled.ok) {
+      const at = Date.now()
+      syncNext = { lastOkAt: at, failure: null }
+      await db.meta.put({ key: SYNC_LAST_OK_KEY, value: at })
+    } else if (pulled.reason !== 'no-session') {
+      /* 没登录不是「连不上」—— 那种情况有登录闸门在前面，说「连不上」会指错方向 */
+      syncNext = { lastOkAt: syncNext.lastOkAt, failure: pulled.reason ?? 'pull-failed' }
+    }
   }
 
   const tasks = sortTasks(await db.tasks.filter((t) => !t.archived).toArray())
@@ -2194,6 +2224,7 @@ async function doRefresh(
     harvestBalance,
     mallBalance,
     ownedGameIds,
+    syncState: syncNext,
     serverOwnedGameIds: serverOwnedIds,
     activeGameId: resolveActiveGame(
       settings.activeGame,
@@ -2606,6 +2637,7 @@ export const useApp = create<AppState>((set, get) => ({
   mallBalance: 0,
   activeGameId: DEFAULT_GAME_ID,
   ownedGameIds: ownedGameIdsFrom([]),
+  syncState: SYNC_OK,
   serverOwnedGameIds: null,
   installedGames: {},
   todayKey: appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour),
@@ -4987,12 +5019,16 @@ export const useApp = create<AppState>((set, get) => ({
          * 就是这么红的：PIN 换了个门又出去了。所以这里也要剥。
          */
         meta: Object.fromEntries([
-          ...meta.map(
-            (m): [string, unknown] =>
-              m.key === 'settings'
-                ? [m.key, stripDeviceLocal(m.value as AppSettings)]
-                : [m.key, m.value],
-          ),
+          ...meta
+            /* ⚠️ 设备本地状态：`sync.lastOkAt` 是「这台机器上次连上服务器的时间」。
+               跟着备份跑到另一台设备上，那边会显示一个它从来没发生过的同步时间。 */
+            .filter((m) => m.key !== SYNC_LAST_OK_KEY)
+            .map(
+              (m): [string, unknown] =>
+                m.key === 'settings'
+                  ? [m.key, stripDeviceLocal(m.value as AppSettings)]
+                  : [m.key, m.value],
+            ),
           /* 装过哪些游戏。不是「孩子挣到的东西」，是「这份备份描述的是
              哪台设备上装了什么」—— 恢复时拿它把本地游戏装回来。 */
           ['installedGameIds', installedGameIds],
