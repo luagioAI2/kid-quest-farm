@@ -1292,3 +1292,27 @@ node scripts/_probe-snapshot-online.mjs           # 22 条断言，全绿
   `from_version` / `to_version` 在接口里，但家长看不懂「第 3 版」是什么意思。
 - **没有「删掉某个还原点」**：服务端按「最近 20 个 + 日切基线」自动淘汰，
   客户端不提供手动删。
+
+### 7.14.8 后端顺手修掉：「保留策略」一直在假删
+
+接界面的时候查了一次库，发现 `game_kv_snapshot` 的行数只增不减 ——
+`/game/snapshot/list` 却一切正常（`cloudfarm` 的 58 行**全是软删的尸体**）。
+
+原因：快照实体内嵌 `BaseModel`（有 `gorm.DeletedAt`），仓储里两处删除写的是
+裸 `Delete` ⇒ GORM 翻译成 `UPDATE ... SET deleted_at = now()`，
+`value`（整份存档，KB 级）原封不动留在表里。读取侧被 GORM 自动加了
+`deleted_at IS NULL`，所以**行为完全正确、一条断言都不红**：
+
+- 「每 key 保留 20 个」确实只返回 20 个 —— 只是**一个字节都没省**；
+- 卸载后 `list` 是空的 —— 但行还在，`Unscoped()` 一查就全回来了。
+
+两处都改成 `Unscoped().Delete(...)`（硬删）。快照是可再生的历史数据，
+保留策略的意义就是释放空间 ⇒ 和 §7.13 对 `game_kv` 的结论一致。
+
+回归断言断的是**物理行数**（`TestSnapshotRetentionFreesDisk` /
+`TestUninstallDropsSnapshotRows`），去掉修复分别红在「还剩 30 行」「还有 2 行」。
+探针也加了一条：卸载后 `/game/snapshot/list` 必须是 0（顺带证明 `Uninstall`
+里那个 `SnapSrv != nil` 没走空分支 —— 走空分支只打一行 warning，接口照样 200）。
+
+> 教训：**「删了」要看两种计数** —— 逻辑行数（读得出来吗）和物理行数（还占着吗）。
+> 软删让这两者分叉，而所有基于「读」的断言只看得到前者。
