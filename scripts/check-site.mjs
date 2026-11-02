@@ -257,9 +257,24 @@ try {
      ⚠️ 不用解压、不用引 zip 库：ZIP 的中央目录把文件名**原样存**，
        直接在大字节串里搜那个文件名就行（实测：当前包命中、
        09-30 的旧 debug 包不命中）。 */
-  const appHtml = readFileSync(resolve(SITE_DIR, 'app/index.html'), 'utf8')
-  const bundleName = (appHtml.match(/assets\/(index-[\w-]+\.js)/) ?? [])[1] ?? null
-  check('读得到网页版的 bundle 名（staleness 检查的前提）', !!bundleName, bundleName ?? '没匹配到 assets/index-*.js')
+  /* ⚠️ `site/app/` 是 `build-site.mjs` 的产物，没构建过就没有这个文件。
+     这里原来直接 `readFileSync` ⇒ **整个检查脚本 ENOENT 崩掉**，
+     上面刚报出来的「缺 app/、缺 APK」全被这一下打断，
+     后面「法务页 / 备案号 / 截图版次」一条都没跑。
+
+     检查脚本最不能有的行为就是「遇到第一个问题就崩」—— 它存在的意义
+     是**一次把所有问题列全**，否则修一个跑一次。 */
+  const appHtmlPath = resolve(SITE_DIR, 'app/index.html')
+  let bundleName = null
+  if (existsSync(appHtmlPath)) {
+    bundleName =
+      (readFileSync(appHtmlPath, 'utf8').match(/assets\/(index-[\w-]+\.js)/) ?? [])[1] ?? null
+    check('读得到网页版的 bundle 名（staleness 检查的前提）', !!bundleName,
+      bundleName ?? '没匹配到 assets/index-*.js')
+  } else {
+    check('网页版试玩（site/app/）已构建', false,
+      '没构建过官网产物 —— 先跑 npm run site（或 node scripts/build-site.mjs）')
+  }
   const apkPath = resolve(SITE_DIR, 'download/kid-quest-farm.apk')
   if (bundleName && existsSync(apkPath)) {
     const apkBytes = readFileSync(apkPath)
@@ -277,7 +292,7 @@ try {
      `build-site.mjs --no-build` 正是会跳过重建的那个开关（改了 App 却没重跑构建）。
      钉住整条链：源码 → dist → site/app → APK。 */
   const distIndex = resolve('dist/index.html')
-  if (existsSync(distIndex)) {
+  if (bundleName && existsSync(distIndex)) {
     const distBundle = (readFileSync(distIndex, 'utf8').match(/assets\/(index-[\w-]+\.js)/) ?? [])[1]
     check(
       '网页版试玩和 dist（当前源码构建产物）是同一版',
