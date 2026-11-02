@@ -273,6 +273,18 @@ export async function listGameKv(gameId: string): Promise<Record<string, unknown
   return out
 }
 
+/**
+ * 删一款游戏的**一个**键（没存过就是空操作）。
+ *
+ * 在线版拉取存档时用它「先清后写」：服务端已经删掉的键，本地也要跟着消失，
+ * 否则插件 `list()` 会看到一个服务端根本没有的键。
+ *
+ * ⚠️ 和 `clearGameKv`（删整款）/ `detachGameKv`（只摘安装）是三件事，别混。
+ */
+export async function deleteGameKv(gameId: string, key: string): Promise<void> {
+  await db.gameKv.delete(gameKvKey(gameId, key))
+}
+
 /** 卸载一款游戏：只删**它自己的**状态，返回删掉的行数。 */
 export async function clearGameKv(gameId: string): Promise<number> {
   return db.gameKv.where('gameId').equals(gameId).delete()

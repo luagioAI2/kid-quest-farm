@@ -81,6 +81,7 @@ import { ApiError } from '../api/client'
 import type { ApiWishCodeResult } from '../api/types'
 import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom, wishOwnedSet } from '../domain/wish'
 import { makeHostApi } from '../games/hostApi'
+import { deleteGameKvOnServer } from '../online/kv'
 import { importBundle, mountBundle } from '../games/loader'
 import { catalogPublicKeyRaw } from '../games/catalogKey'
 import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
@@ -4683,6 +4684,23 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   uninstallGame: async (gameId) => {
+    /* 在线版：**先删服务端的存档，删掉了才清本地**。
+       ⚠️ 反过来（先清本地、云端删失败）就是「本地说卸载了、云端还在」——
+          重装会捡到旧存档，而界面上什么都看不出来。
+       ⚠️ `no-game` 当作删掉了：服务端不认识 / 没拥有这款游戏，本来就没有云端存档
+          （走查用的合成包、本地预置的拥有都属于这类）。 */
+    if (isOnlineMode) {
+      const r = await deleteGameKvOnServer(gameId)
+      if (r === 'failed') {
+        get().pushToast({
+          kind: 'warn',
+          title: '没卸载成功',
+          detail: '云端存档删不掉，先连上网再试一次',
+          emoji: '📡',
+        })
+        return
+      }
+    }
     // 连包带状态一起删。只删包不删状态的话，重装会**捡到上一次的存档**，
     // 看起来像「卸载没生效」。
     await clearGameKv(gameId)

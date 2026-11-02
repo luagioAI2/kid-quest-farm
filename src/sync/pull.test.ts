@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/client'
 import { db, gameCoinBalanceOf, getGameKv, readGameCoinLedger, setGameKv } from '../db/db'
+import { kvVersionOf, resetKvState } from '../online/kv'
 import { pullFromServer, pullOnce } from './pull'
 import type { ServerBoard, ServerInstance, ServerTask } from '../api/task'
 import type { ServerLedgerEntry } from '../api/wallet'
@@ -17,6 +19,7 @@ const redeemRecsMock = vi.fn()
 const wishListMock = vi.fn()
 const wishOrdersMock = vi.fn()
 const coinListMock = vi.fn()
+const kvListMock = vi.fn()
 
 vi.mock('../api/task', () => ({
   board: () => boardMock(),
@@ -28,6 +31,13 @@ vi.mock('../api/wallet', () => ({
   /* `online/coin.ts` 也从这个模块拿 `walletSpend`（插件扣积分）。
      不导出的话它是个 undefined，等到真调用时才炸 —— 而这一层不测那条路。 */
   walletSpend: () => Promise.resolve({ uid: 3, points: 0, coupon: 0, diamond: 0 }),
+}))
+vi.mock('../api/gameKv', () => ({
+  gameKvList: (g: string) => kvListMock(g),
+  gameKvGet: () => Promise.resolve({ key: '', value: null, version: 0, exists: false }),
+  gameKvSet: () => Promise.reject(new Error('不该被调用')),
+  gameKvDelete: () => Promise.reject(new Error('不该被调用')),
+  gameKvUsage: () => Promise.resolve({ total_bytes: 0, max_bytes: 1 }),
 }))
 vi.mock('../api/coin', () => ({
   listCoinInfo: () => coinListMock(),
@@ -260,6 +270,7 @@ beforeEach(async () => {
   wishListMock.mockReset()
   wishOrdersMock.mockReset()
   coinListMock.mockReset()
+  kvListMock.mockReset()
   boardMock.mockResolvedValue(BOARD)
   listTasksMock.mockResolvedValue({ count: 1, list: [TASK] })
   walletInfoMock.mockResolvedValue({ uid: 3, points: 112, coupon: 0, diamond: 0 })
@@ -269,6 +280,8 @@ beforeEach(async () => {
   wishListMock.mockResolvedValue({ count: 2, list: [WISH_OPEN, WISH_CLOSED] })
   wishOrdersMock.mockResolvedValue({ page: 1, pageSize: 200, count: 1, list: [WISH_ORDER] })
   coinListMock.mockResolvedValue({ count: 0, list: [] })
+  kvListMock.mockResolvedValue({ game_id: '', data: {}, versions: {}, count: 0 })
+  resetKvState()
 })
 
 describe('pullOnce', () => {
@@ -602,5 +615,58 @@ describe('pullOnce · 游戏币镜像', () => {
     await pullOnce()
     expect(await getGameKv('cloudfarm', 'draws')).toBe(12)
     expect(await gameCoinBalanceOf('cloudfarm')).toBe(7)
+  })
+})
+
+describe('pullOnce · 插件存档', () => {
+  /** 造一个「已安装」的标记行（`__bundle` 是唯一判据） */
+  const markInstalled = (id: string) => setGameKv(id, '__bundle', 'export default {}')
+
+  it('★ 只拉**已安装**的游戏（没装的连请求都不发）', async () => {
+    await markInstalled('cloudfarm')
+    kvListMock.mockResolvedValue({
+      game_id: 'cloudfarm',
+      data: { save: { level: 5 } },
+      versions: { save: 3 },
+      count: 1,
+    })
+    const r = await pullOnce()
+    expect(kvListMock).toHaveBeenCalledTimes(1)
+    expect(kvListMock).toHaveBeenCalledWith('cloudfarm')
+    expect(r.kvKeys).toBe(1)
+    expect(await getGameKv('cloudfarm', 'save')).toEqual({ level: 5 })
+    expect(kvVersionOf('cloudfarm', 'save')).toBe(3)
+  })
+
+  it('★ 一款游戏没拥有（`10040401`）不许拖垮整个拉取', async () => {
+    await markInstalled('cloudfarm')
+    await markInstalled('ropeland')
+    kvListMock.mockImplementation((g: string) =>
+      g === 'ropeland'
+        ? Promise.reject(new ApiError(10040401, '未拥有'))
+        : Promise.resolve({
+            game_id: 'cloudfarm',
+            data: { save: 1 },
+            versions: { save: 1 },
+            count: 1,
+          }),
+    )
+    const r = await pullOnce()
+    expect(r.ok).toBe(true)
+    expect(r.kvFailed).toBe(1)
+    expect(r.kvKeys).toBe(1)
+    // 任务那几样照旧
+    expect(r.tasks).toBe(1)
+    expect(await getGameKv('cloudfarm', 'save')).toBe(1)
+  })
+
+  it('★ 存档接口挂了不影响任务 / 流水（它在大事务外面）', async () => {
+    await markInstalled('cloudfarm')
+    kvListMock.mockRejectedValue(new Error('kv down'))
+    const r = await pullOnce()
+    expect(r.ok).toBe(true)
+    expect(r.ledger).toBe(1)
+    expect(r.balance).toBe(112)
+    expect(r.kvFailed).toBe(1)
   })
 })

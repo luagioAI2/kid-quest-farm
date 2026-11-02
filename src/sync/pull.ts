@@ -1,5 +1,11 @@
-import { clearGameCoinMirrors, db, mirrorGameCoinBalance } from '../db/db'
+import {
+  clearGameCoinMirrors,
+  db,
+  listInstalledBundles,
+  mirrorGameCoinBalance,
+} from '../db/db'
 import { pullCoinBalances } from '../online/coin'
+import { pullGameKv } from '../online/kv'
 import { board, listTasks } from '../api/task'
 import { walletInfo, walletLedger } from '../api/wallet'
 import { listRedeemRecords, listRedeemRows } from '../api/redeem'
@@ -70,6 +76,10 @@ export interface PullResult {
   wishOrders?: number
   /** 游戏币钱包（**只含开过钱包的游戏**，见 `pullCoinBalances`） */
   coins?: number
+  /** 插件存档：写进本地的键数（**只拉已安装的游戏**） */
+  kvKeys?: number
+  /** 插件存档：拉失败的游戏数（没拥有 / 下架 / 网络） */
+  kvFailed?: number
   /** 服务端报的余额，用来和本地求和比对 */
   balance?: number
 }
@@ -238,8 +248,28 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       },
     )
 
+    /* 插件存档：**只拉已安装的游戏**。
+       ★ 为什么要 `catch` 每个游戏：一款游戏没拥有（`10040401`）或下架了，
+         不该让别的游戏的存档也拉不下来 —— 那会让「今天玩的那个游戏读不到档」，
+         而真正的原因在另一个游戏身上。
+       ★ 为什么放在大事务**外面**：`pullGameKv` 是逐键写的，中途失败会把整个
+         事务连累掉 —— 那样连任务和积分都回滚，代价完全不成比例。 */
+    const kv = { keys: 0, failed: 0 }
+    const installed = await listInstalledBundles()
+    for (const g of installed) {
+      try {
+        const r = await pullGameKv(g.gameId)
+        kv.keys += r.written
+      } catch (e) {
+        kv.failed++
+        console.warn(`[sync] ${g.gameId} 的存档没拉到：`, (e as { message?: string })?.message)
+      }
+    }
+
     return {
       ok: true,
+      kvKeys: kv.keys,
+      kvFailed: kv.failed,
       tasks: taskRows.length,
       instances: instRows.length,
       ledger: ledgerRows?.length ?? 0,

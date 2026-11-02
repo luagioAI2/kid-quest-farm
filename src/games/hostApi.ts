@@ -52,6 +52,7 @@ import {
   oSpendCoins,
   oSpendPoints,
 } from '../online/coin'
+import { oKvGet, oKvList, oKvSet, warnKvFailure } from '../online/kv'
 import { isOnlineMode } from '../sync/pull'
 import { hapticLight, playTone } from '../platform/files'
 import type { HostApi } from './plugin'
@@ -286,13 +287,30 @@ export function makeHostApi(deps: {
        */
       get: async <T,>(key: string): Promise<T | undefined> => {
         assertNotReserved(key)
+        /* 在线版读 Dexie —— 拉取刚把服务端那份搬进来（`kv/list` 一次拿全）。
+           不现问服务端：插件启动时会连着 get 好几个键，慢网下就是好几秒白屏。 */
+        if (isOnlineMode) return oKvGet<T>(gameId, key)
         return getGameKv<T>(gameId, key)
       },
       set: async (key: string, value: unknown): Promise<void> => {
         assertNotReserved(key)
+        if (isOnlineMode) {
+          /* ⚠️ 这里**抛**，不像游戏币那几扇门那样返回 false。
+             `storage.set` 的契约本来就是 `Promise<void>`（本地版也会 reject），
+             而「存档没存上却装作存上了」是这个 App 最不能接受的失败方式。
+             抛之前先弹一条，否则插件没写 catch 时症状就是「点了没反应」。 */
+          try {
+            await oKvSet(gameId, key, value)
+          } catch (e) {
+            warnKvFailure(gameId, e, deps.pushToast)
+            throw e
+          }
+          return
+        }
         await setGameKv(gameId, key, value)
       },
       list: async () => {
+        if (isOnlineMode) return oKvList(gameId)
         const all = await listGameKv(gameId)
         const out: Record<string, unknown> = {}
         for (const [k, v] of Object.entries(all)) {
