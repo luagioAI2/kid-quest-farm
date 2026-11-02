@@ -61,11 +61,25 @@ export async function openExternal(url: string): Promise<boolean> {
 
   if (Capacitor.isNativePlatform()) {
     try {
-      await AppLauncher.openUrl({ url: target })
-      return true
+      const res = await AppLauncher.openUrl({ url: target })
+      // ⚠️ 必须看 `completed`，不能只看「没抛异常」。
+      //
+      // Android 侧的 `AppLauncherPlugin.openUrl` **永远 resolve**：
+      // 没有任何应用认领这个地址时，它不报错，而是 `put("completed", false)`
+      // 再 resolve（见插件里 canLaunchIntent 那段）。只判「没抛」就会把
+      // 「没装淘宝 / `taobao://` 没人认领」当成打开成功 —— 界面说「已打开」，
+      // 屏幕一动不动，而且下面那条 `window.open` 兜底**永远不会被执行**
+      // （它是靠 catch 触发的）。
+      //
+      // 这和导出备份那条是同一类问题：**返回值说成功，实际什么都没发生**。
+      if (res?.completed !== false) return true
+      // 系统明确说「没有任何应用认领」时**不再往 `window.open` 里丢**：
+      // Capacitor 的 WebView 里它要么什么都不做（家长以为按钮坏了），
+      // 要么把页面整块换掉（App 界面没了）。直接返回 false，
+      // 让调用方弹那条已经写好的「这个链接打不开 / 复制商品名去淘宝搜」。
+      return false
     } catch {
-      // 没装那个 App、或者没有任何应用认领这个协议。
-      // 落到下面的 `window.open` 再试一次 —— 某些定制 WebView 反而能处理。
+      // 真抛了（插件没注册、参数非法）才往下走，再试一次 `window.open`
     }
   }
 
