@@ -1264,20 +1264,23 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1237 单测（2 skipped）
-node scripts/_probe-snapshot-online.mjs           # 22 条断言，全绿
+npm run lint && npx vitest run && npm run build   # 1250 单测（2 skipped）
+node scripts/_probe-snapshot-online.mjs           # 28 条断言，全绿
 ```
 
 `_probe-snapshot-online.mjs` 走真链路（真装包、真挂载、真写存档、真点界面），
 断言的是「界面 == 服务端」：
 
 - 第一笔存档之后**自动**出现还原点（服务端策略：没有历史 ⇒ 存）；
+- **两个键（`save` + `settings`，KB 级）合成一个还原点**：界面上「2 个存档 · 2 KB」
+  —— 裂成两行就是「同一时间存了两次」，大小按字节报就是「1734 字节」这种没人读得懂的数；
 - 手动存点：界面说「存好了」+ **服务端真的多了一份**（不信界面自述）+ 原因记成 `manual`；
 - 从界面退回：先要二次确认 ⇒ 服务端那份变成还原点的内容 ⇒
   **版本号往前走**（回档是一次真实写入，不是把旧行翻出来）⇒ 留了回档记录；
 - **回档本身也可回档**：`before_restore` 那份存的是**回档前**的内容（v99，不是 v1）；
 - **本地 Dexie 也退了**：插件 `storage.get` 读到的是退回去那份（说明拉过一次）；
 - 界面把「回档前 / 回档后」显示出来了、**不露内部快照编号**；
+- 点开预览能看到「现在 → 退回后」（`level：99 → 1`），且**按 key 分块**；
 - 收尾：卸载后云端清空、没有未捕获的页面错误。
 
 ⚠️ 探针会**真的删掉这个账号在 `cloudfarm` 上的全部云端存档**（含快照），
@@ -1377,3 +1380,47 @@ node scripts/_probe-snapshot-online.mjs   # 24 条断言，全绿
 还原点里是 `{level:1}` ⇒ 预览必须出现 `level：99 → 1`（不是只报字节数）。
 
 ---
+
+---
+
+### 7.14.10 真包验到哪一步为止（以及为什么探针还是合成包）
+
+试过用**真正的云边小农场**跑这条链路，结论分两半：
+
+**能做的**（真包在无头 Chrome 里跑得起来）：
+
+- `installLocalGame('cloudfarm')` → v1.1.4 装上；
+- `mountInto` → 真渲染出来了（WebGL 用 `--use-angle=swiftshader`），
+  `canvas: 1`，0 个页面错误；
+- 能点：`进入农场` → 教学卡（**吃首按**，要点「知道了」）→ 点地块 → 种子商店。
+
+**做不了的**：**它不会自动存档。**
+真包的存档只挂在它自己的状态变化事件上：
+
+```js
+C.on((e) => { if (e.type === 'change') { N(); ... } })   // N() → backend.set('save', ...)
+```
+
+脚本点「进入农场 / 知道了 / 选种子」都不触发 `save`，`/game/kv/list` 一直是空的，
+控制台也**没有** `autosave rejected` —— 说明不是存档失败，是根本没存。
+要真触发得走完整种地流程（选种 → 种下 → 等成熟 → 收），而无头环境里时钟慢，
+一步要等十几秒，还不稳定。
+
+所以探针取了个折中：**真键名 + 真体量，合成值**。
+
+- 键名 `save` / `settings` 是从 `public/games/cloudfarm/cloudfarm.plugin.mjs`
+  里读出来的（`backend.set("save", ...)` / `backend.set("settings", ...)`），不是编的；
+- `settings` 写到 **1734 字节**，带 12 块地的 `plots` 数组 —— 真存档就是这个量级；
+- 走的是**真宿主链路**（`host.storage.set` → `/game/kv/set` → 快照 → 界面）。
+
+这样至少覆盖了三件真形状才会暴露的事：
+
+| 覆盖点 | 断言 |
+| --- | --- |
+| 两个键并成**一个**还原点 | 界面上「2 个存档」（裂成两行就是「同一时间存了两次」） |
+| 大小按 KB 显示 | `2 个存档 · 2 KB`（不是「1734 字节」） |
+| 预览按 key 分块 | `settings …` 和 `save …` 各一段 |
+
+顺带修掉两处**探针自己的**按下标取值：多键之后 `list` 是 id 倒序，
+`safety[0]` / `manual[0]` 不一定是 `save` ⇒ 全部改成按 `key` 找。
+（这类断言在单键时永远绿，加第二个键的当天就红了 —— 和「多了一行」那个坑同源。）
