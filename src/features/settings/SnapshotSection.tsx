@@ -8,7 +8,6 @@ import {
   previewMoment,
   reasonLabel,
   restoreToMoment,
-  saveSnapshotNow,
   snapshotFailText,
   type KeyPreview,
   type Moment,
@@ -44,7 +43,14 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
   const [logs, setLogs] = useState<RestoreLogRow[]>([])
   const [err, setErr] = useState('')
   const [flash, setFlash] = useState('')
-  const [busy, setBusy] = useState<'' | 'save' | 'restore'>('')
+  /**
+   * 只有一个忙态：回档。
+   *
+   * ★ 这里原来还有一个 `'save'`（「现在存一个还原点」）。
+   *   2026-11-02 按家长的意思去掉了 —— **存档由系统按版本自己留**，
+   *   不该让家长判断「什么时候该存一下」。他只剩一个动作：退回去。
+   */
+  const [busy, setBusy] = useState<'' | 'restore'>('')
   /** 正在二次确认的那一个还原点 */
   const [confirmAt, setConfirmAt] = useState<number | null>(null)
   /**
@@ -72,31 +78,6 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
   useEffect(() => {
     void reload()
   }, [reload])
-
-  const onSave = () => {
-    void (async () => {
-      setBusy('save')
-      setFlash('')
-      try {
-        /*
-         * 不传备注：`reason` 已经是 `manual`，界面上那颗「手动」标签就是它。
-         * 再写一条 `note: '手动'` 只会在同一行重复一次（实测截图里就是
-         * 「[手动][自动][当天起点] 手动」）。备注留给「家长真的自己写一句」。
-         */
-        const r = await saveSnapshotNow(gameId)
-        setFlash(
-          r.keys > 0
-            ? `存好了，一共 ${r.keys} 个存档。`
-            : '这个游戏还没有存档，先让孩子玩一局再来存。',
-        )
-        await reload()
-      } catch (e) {
-        setErr(snapshotFailText(e))
-      } finally {
-        setBusy('')
-      }
-    })()
-  }
 
   const onPreview = (m: Moment) => {
     /* 再点一次收起（家长点开发现看不懂，要能退出去） */
@@ -146,19 +127,17 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
   return (
     <section className="mt-5" data-snapshot-section={gameId}>
       <h4 className="font-display text-base font-extrabold text-ink-900">存档还原点</h4>
+      {/*
+        ★ 不提供「现在存一个」的按钮（2026-11-02）。
+          「什么时候该存一下」是系统该判断的事，不该变成家长的一道题：
+          他没点，孩子把存档玩坏了，责任就跑到他头上了。
+          所以这里只交代**系统怎么存的**（十分钟一份 / 变化大补一份 / 当天第一份永久留），
+          家长唯一的动作是「退回去」。
+      */}
       <p className="mt-1 text-sm leading-relaxed text-ink-700">
-        {gameName}玩的时候，系统会自己存还原点（大概十分钟一个，存档变化大的时候也会存）。
-        孩子要挑战难关之前，也可以现在手动存一个。
+        存档由系统自己按版本留，不用家长动手：大概十分钟一份，存档变化大的时候也会补一份，
+        每天的第一份会一直留着。{gameName}的进度要是玩坏了，从这里挑一份退回去就行。
       </p>
-
-      <button
-        data-snapshot-save={gameId}
-        disabled={busy !== ''}
-        onClick={onSave}
-        className="btn mt-2.5 h-10 w-full rounded-full bg-sky-300 text-sm font-extrabold text-ink-900 shadow-flat active:btn-press disabled:opacity-50"
-      >
-        {busy === 'save' ? '正在存…' : '现在存一个还原点'}
-      </button>
 
       {flash && (
         <p

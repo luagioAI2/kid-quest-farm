@@ -10,7 +10,6 @@ import {
   previewMoment,
   reasonLabel,
   restoreToMoment,
-  saveSnapshotNow,
   snapshotFailText,
 } from './snapshot'
 
@@ -30,7 +29,6 @@ import {
    ============================================================ */
 
 const listMock = vi.fn()
-const createMock = vi.fn()
 const restoreByTimeMock = vi.fn()
 const logsMock = vi.fn()
 const kvListMock = vi.fn()
@@ -39,7 +37,6 @@ const getMock = vi.fn()
 
 vi.mock('../api/snapshot', () => ({
   snapshotList: (g: string, k: string | undefined, limit: number) => listMock(g, k, limit),
-  snapshotCreate: (g: string, k: string, note: string) => createMock(g, k, note),
   snapshotRestoreByTime: (g: string, at: number, k?: string, r?: string) =>
     restoreByTimeMock(g, at, k, r),
   snapshotRestoreLogs: (g: string, limit: number) => logsMock(g, limit),
@@ -74,7 +71,6 @@ const row = (p: Partial<SnapshotRow> & { at: number }): SnapshotRow => ({
 
 beforeEach(() => {
   listMock.mockReset()
-  createMock.mockReset()
   restoreByTimeMock.mockReset()
   logsMock.mockReset()
   kvListMock.mockReset()
@@ -89,7 +85,7 @@ describe('groupMoments（把按 key 的快照合成还原点）', () => {
     expect(ms[0].at).toBe(1000)
   })
 
-  it('★ 跨一秒（循环 create 常见的形态）仍然合成一个 —— 否则界面上是两行', () => {
+  it('★ 跨一秒（一局结束先写 save 再写 settings）仍然合成一个 —— 否则界面上是两行', () => {
     const ms = groupMoments([row({ at: 1000, key: 'save' }), row({ at: 1002, key: 'bag' })])
     expect(ms).toHaveLength(1)
     expect(ms[0].at, '代表时间取**新**那条，回档要用它').toBe(1002)
@@ -201,27 +197,13 @@ describe('isAutoNote', () => {
   })
 })
 
-describe('saveSnapshotNow', () => {
-  it('给每个键各存一份（服务端 create 只接受单个 key）', async () => {
-    kvListMock.mockResolvedValue({ game_id: 'cloudfarm', data: { save: {}, bag: [] }, versions: {}, count: 2 })
-    createMock.mockResolvedValue(row({ at: 1 }))
-    const r = await saveSnapshotNow('cloudfarm', '手动')
-    expect(r.keys).toBe(2)
-    expect(createMock.mock.calls.map((c) => c[1]).sort()).toEqual(['bag', 'save'])
-  })
-
-  it('★ 一个键都没有时返回 0，且**不发请求**（别造出空快照）', async () => {
-    kvListMock.mockResolvedValue({ game_id: 'cloudfarm', data: {}, versions: {}, count: 0 })
-    const r = await saveSnapshotNow('cloudfarm')
-    expect(r.keys).toBe(0)
-    expect(createMock).not.toHaveBeenCalled()
-  })
-
-  it('服务端 data 为 null 时不炸', async () => {
-    kvListMock.mockResolvedValue({ game_id: 'cloudfarm', data: null, versions: null, count: 0 })
-    await expect(saveSnapshotNow('cloudfarm')).resolves.toEqual({ keys: 0 })
-  })
-})
+/*
+ * 这里**没有** `saveSnapshotNow` 的测试 —— 2026-11-02 起前端不再主动存点，
+ * 快照由服务端在每次 `storage.set` 之后按版本自己留。
+ * 「自动留的到底对不对」不归单测管（那是服务端策略），真连服务端的验证在
+ * `scripts/_probe-snapshot-online.mjs` 第 2 步：不点任何按钮，写一次存档，
+ * 界面上就该多出一个还原点。
+ */
 
 describe('restoreToMoment', () => {
   it('★ 按时间点回档（一次调用恢复整个游戏），**并且**拉一次本地', async () => {

@@ -2,7 +2,6 @@ import { ApiError } from '../api/client'
 import { gameKvList } from '../api/gameKv'
 import { toDateKey } from '../domain/time'
 import {
-  snapshotCreate,
   snapshotGet,
   snapshotList,
   snapshotRestoreByTime,
@@ -25,8 +24,15 @@ import { pullGameKv } from './kv'
      ② 回档时用 `restore-by-time`（一次调用恢复整个游戏），
         而不是逐个 key 调 `restore` —— 后者会变成 N 次请求 + N 个中间态。
 
+   ★ 快照是**服务端自己产生的**，前端从不主动「存一个」
+     每次 `storage.set` 之后服务端按策略决定留不留（没有历史 / 距上次 > 10 分钟 /
+     值变化 > 20%，每键留 20 份 + 当天第一份永久留），见
+     `tf-platform-api/internal/app/service/game_snapshot_srv.go` 的 `MaybeSnapshot`。
+     所以这一层**没有 save 入口**：家长唯一能做的动作是「退回去」。
+
    ★ 为什么分组不能只按 `created_at` 严格相等
-     手动存点时是**循环**给每个 key 调 `create`，几条跨了秒就会裂成两组，
+     快照按 key 存，而一个游戏常常在一两秒里连着写两个键（一局结束先写
+     `save` 再写 `settings`），两条跨了秒就会裂成两组，
      界面上看着像「存了两次」。所以用「相邻两条相差 ≤ 3 秒」合并。
 
    ★ 为什么回档用时间点、不用快照 id
@@ -190,24 +196,6 @@ export function reasonLabel(reason: string): string {
 export async function listMoments(gameId: string, limit = 60): Promise<Moment[]> {
   const r = await snapshotList(gameId, undefined, limit)
   return groupMoments(r.list ?? [])
-}
-
-/**
- * 现在存一个还原点：给这款游戏**现有的每个键**各存一份。
- *
- * 返回存了几个键。`0` = 这个游戏还没有任何存档（还没玩过），
- * 界面要说「还没有存档可存」，而不是显示「存好了」。
- *
- * 为什么循环而不是一次搞定：服务端的 `create` 只接受单个 key，
- * 它不知道「这一批属于同一个还原点」。分组由 `groupMoments` 在读取侧做。
- */
-export async function saveSnapshotNow(  gameId: string,
-  note = '',
-): Promise<{ keys: number }> {
-  const list = await gameKvList(gameId)
-  const keys = Object.keys(list.data ?? {})
-  for (const k of keys) await snapshotCreate(gameId, k, note)
-  return { keys: keys.length }
 }
 
 /**

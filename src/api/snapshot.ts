@@ -86,7 +86,14 @@ export const snapshotList = (gameId: string, key?: string, limit = 60) =>
 export const snapshotGet = (snapshotId: number) =>
   api<SnapshotDetail>('/game/snapshot/get', { snapshot_id: snapshotId })
 
-/** 手动存一份（家长在「孩子要挑战难关之前」主动存点） */
+/**
+ * 手动存一份（服务端接口，**界面不调**）。
+ *
+ * ★ 2026-11-02 起「什么时候存」归系统管：每次 `storage.set` 之后服务端自己
+ *   按版本决定留不留（见文件头）。家长端不再有「现在存一个还原点」这个按钮，
+ *   所以这个函数目前没有调用方 —— 留着是因为本文件是服务端接口的一比一映射，
+ *   后台 / 脚本 / 以后的「挑战难关前自动打点」还能用。
+ */
 export const snapshotCreate = (gameId: string, key: string, note = '') =>
   api<SnapshotRow>('/game/snapshot/create', {
     game_id: gameId,
