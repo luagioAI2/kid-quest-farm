@@ -37,8 +37,8 @@ const getMock = vi.fn()
 
 vi.mock('../api/snapshot', () => ({
   snapshotList: (g: string, k: string | undefined, limit: number) => listMock(g, k, limit),
-  snapshotRestoreByTime: (g: string, at: number, k?: string, r?: string) =>
-    restoreByTimeMock(g, at, k, r),
+  snapshotRestoreByTime: (g: string, at: number, maxId = 0, k?: string, r?: string) =>
+    restoreByTimeMock(g, at, maxId, k, r),
   snapshotRestoreLogs: (g: string, limit: number) => logsMock(g, limit),
   snapshotGet: (id: number) => getMock(id),
   snapshotRestore: vi.fn(),
@@ -139,6 +139,22 @@ describe('groupMoments（把按 key 的快照合成还原点）', () => {
     expect(ms[0].baseline).toBe(true)
   })
 
+  it('★★ maxId 取这一组里最大的 id（回档时钉住「界面看到的那批」）', () => {
+    const ms = groupMoments([
+      row({ at: 1000, id: 40, key: 'save' }),
+      row({ at: 1000, id: 41, key: 'bag' }),
+    ])
+    expect(ms[0].maxId).toBe(41)
+  })
+
+  it('★★ 每个还原点各带自己的 maxId（不能用「整屏最大的那个」）', () => {
+    const ms = groupMoments([
+      row({ at: 2000, id: 90, key: 'save' }),
+      row({ at: 1000, id: 40, key: 'save' }),
+    ])
+    expect(ms.map((m) => m.maxId)).toEqual([90, 40])
+  })
+
   it('空列表 ⇒ 空结果（不是 undefined）', () => {
     expect(groupMoments([])).toEqual([])
   })
@@ -209,22 +225,28 @@ describe('restoreToMoment', () => {
   it('★ 按时间点回档（一次调用恢复整个游戏），**并且**拉一次本地', async () => {
     restoreByTimeMock.mockResolvedValue({ restored_keys: 3 })
     pullKvMock.mockResolvedValue({ written: 3, skipped: 0, removed: 0 })
-    const r = await restoreToMoment('cloudfarm', 1793183000, '家长回档')
+    const r = await restoreToMoment('cloudfarm', 1793183000, 77, '家长回档')
     expect(r.restored).toBe(3)
-    expect(restoreByTimeMock).toHaveBeenCalledWith('cloudfarm', 1793183000, undefined, '家长回档')
+    expect(restoreByTimeMock).toHaveBeenCalledWith(
+      'cloudfarm',
+      1793183000,
+      77,
+      undefined,
+      '家长回档',
+    )
     expect(pullKvMock, '不拉这一下，界面会显示「没退回去」').toHaveBeenCalledWith('cloudfarm')
   })
 
   it('★ 回档成功但本地拉取失败 —— 也要把 restored 交出去（服务端已经退了）', async () => {
     restoreByTimeMock.mockResolvedValue({ restored_keys: 1 })
     pullKvMock.mockRejectedValue(new ApiError(NETWORK, '连不上'))
-    await expect(restoreToMoment('cloudfarm', 1)).rejects.toBeInstanceOf(ApiError)
+    await expect(restoreToMoment('cloudfarm', 1, 0)).rejects.toBeInstanceOf(ApiError)
   })
 
   it('restored_keys 缺失时按 0 处理（别把 undefined 当成功）', async () => {
     restoreByTimeMock.mockResolvedValue({})
     pullKvMock.mockResolvedValue({ written: 0, skipped: 0, removed: 0 })
-    await expect(restoreToMoment('cloudfarm', 1)).resolves.toEqual({ restored: 0 })
+    await expect(restoreToMoment('cloudfarm', 1, 0)).resolves.toEqual({ restored: 0 })
   })
 })
 

@@ -99,7 +99,7 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
     })()
   }
 
-  const onRestore = (at: number) => {
+  const onRestore = (m: Moment) => {
     void (async () => {
       setBusy('restore')
       setConfirmAt(null)
@@ -109,10 +109,12 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
       setPreviewAt(null)
       setPreview(null)
       try {
-        const r = await restoreToMoment(gameId, at, '家长回档')
+        /* maxId 一起传：同一秒里可能落了不止一份快照，不钉住的话
+           会退到界面没显示的那份（详见 `Moment.maxId`） */
+        const r = await restoreToMoment(gameId, m.at, m.maxId, '家长回档')
         setFlash(
           r.restored > 0
-            ? `已经退回到${momentLabel(at)}，重新打开游戏就是那时候的进度。`
+            ? `已经退回到${momentLabel(m.at)}，重新打开游戏就是那时候的进度。`
             : '那个时间点没有可用的还原点，换一个试试。',
         )
         await reload()
@@ -271,7 +273,7 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
                     <button
                       data-snapshot-confirm={m.at}
                       disabled={busy !== ''}
-                      onClick={() => onRestore(m.at)}
+                      onClick={() => onRestore(m)}
                       className="btn h-9 flex-1 rounded-full bg-berry-500 text-[13px] font-extrabold text-white active:btn-press disabled:opacity-50"
                     >
                       {busy === 'restore' ? '正在退回…' : '确认退回'}

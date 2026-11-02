@@ -119,13 +119,27 @@ export const snapshotRestore = (snapshotId: number, reason = '') =>
  * 按时间点回档。
  *
  * - `key` 不传 = **整个游戏**（每个有过快照的键各退回该时刻之前最近的一份）；
+ * - `maxId` = 界面当时看到的最大快照 id，用来**钉住那一屏**（0 = 不限制）；
  * - 返回 `restored_keys` = 实际恢复的键数，**不是**「成功了 true」。
  *   0 表示一个键都没有那个时刻之前的快照（界面要说清，别显示「已完成」）。
+ *
+ * ★ 为什么光有 `at` 不够：`at` 的粒度是**秒**。界面把还原点列表画出来之后，
+ *   孩子又玩了一下，服务端就在**同一秒**里补了一份更新的快照 —— 这时只按
+ *   `created_at <= at` 挑，服务端挑到的是那份新的（界面没显示、家长没点），
+ *   于是「预览说退回 21:30 那份，实际退回另一个状态」，两边都不报错。
+ *   带上 `maxId` 就只在「界面看到的那批」里挑（`created_at <= at AND id <= maxId`）。
  */
-export const snapshotRestoreByTime = (gameId: string, at: number, key?: string, reason = '') =>
+export const snapshotRestoreByTime = (
+  gameId: string,
+  at: number,
+  maxId = 0,
+  key?: string,
+  reason = '',
+) =>
   api<{ restored_keys: number }>('/game/snapshot/restore-by-time', {
     game_id: gameId,
     at,
+    ...(maxId > 0 ? { max_id: maxId } : {}),
     ...(key === undefined ? {} : { key }),
     ...(reason ? { reason } : {}),
   })

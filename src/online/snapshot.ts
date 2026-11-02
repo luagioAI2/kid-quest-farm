@@ -40,6 +40,11 @@ import { pullGameKv } from './kv'
      传还原点的 `at` 正好把这一组的快照都包含进去；
      而 `restore` 一次只恢复一个 key，整个游戏要调 N 次，
      中途失败就留下一半旧一半新 —— 那种状态没有任何人想要。
+
+     ★ 但「时间点」只到**秒**，同一秒里可能落了两份 ⇒ 光传 `at` 会退到
+       **界面没显示的那一份**。所以 `restore-by-time` 还收一个 `max_id`
+       （见 `Moment.maxId`）：判据变成 `created_at <= at AND id <= max_id`，
+       正好圈住「界面读列表时已经存在的那些行」。
    ============================================================ */
 
 /** 快照不存在（`restore` / `get` 时那条被保留策略淘汰了） */
@@ -68,6 +73,19 @@ export interface Moment {
    *    显示前要 ×1000，回档时不要换算。
    */
   at: number
+  /**
+   * 这一组里最大的快照 id —— 回档时一起传上去，钉住「界面当时看到的那批」。
+   *
+   * ★ 光有 `at` 不够：`at` 只到**秒**，同一秒里可能落了不止一份快照
+   *   （列表画出来之后孩子又玩了一下，服务端自己补了一份更新的）。
+   *   只按 `created_at <= at` 挑，服务端会挑到**那一秒里最新的一份** ——
+   *   界面没显示、家长没点的那份：预览说「退回到 21:30 那份」，
+   *   实际退回到另一个状态，两边都不报错。
+   *
+   *   快照 id 是自增的，所以 `id <= maxId` 正好等于
+   *   「界面读列表时已经存在的行」，不会误伤同一秒里更早写进去的那些。
+   */
+  maxId: number
   /** 这一组涉及哪些 key */
   keys: string[]
   /** 每个 key 最新那一份（顺序同 `keys`） */
@@ -109,6 +127,11 @@ export function groupMoments(rows: readonly SnapshotRow[], gapSec = SAME_MOMENT_
     let size = 0
     for (const r of newestPerKey.values()) size += r.size
 
+    /* 这一组里最大的 id（= 界面读列表那一刻，这批快照的上界）。
+       同一秒里后落进来的新行 id 一定更大 ⇒ 回档时会被 `max_id` 挡在外面。 */
+    let maxId = 0
+    for (const r of cur.rows) if (r.id > maxId) maxId = r.id
+
     const snapshots: MomentKey[] = [...newestPerKey.values()].map((r) => ({
       key: r.key,
       id: r.id,
@@ -118,6 +141,7 @@ export function groupMoments(rows: readonly SnapshotRow[], gapSec = SAME_MOMENT_
 
     out.push({
       at: cur.at,
+      maxId,
       keys: snapshots.map((s) => s.key),
       snapshots,
       size,
@@ -205,14 +229,17 @@ export async function listMoments(gameId: string, limit = 60): Promise<Moment[]>
  * 不拉一次，界面（和下一次打开游戏）看到的仍是「没退回去」的样子，
  * 而服务端其实已经退了。这种「两边不一样且不报错」正是本项目最怕的形态。
  *
+ * @param maxId `Moment.maxId` —— 钉住「界面当时看到的那批快照」。
+ *   **别省成 0**：同一秒里可能落了不止一份，不钉的话会退到界面没显示的那份。
  * @returns `restored` = 实际恢复的键数。`0` 表示那个时刻之前一份快照都没有。
  */
 export async function restoreToMoment(
   gameId: string,
   at: number,
+  maxId: number,
   reason = '',
 ): Promise<{ restored: number }> {
-  const r = await snapshotRestoreByTime(gameId, at, undefined, reason)
+  const r = await snapshotRestoreByTime(gameId, at, maxId, undefined, reason)
   await pullGameKv(gameId)
   return { restored: r.restored_keys ?? 0 }
 }

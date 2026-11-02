@@ -403,7 +403,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1264 条（2 skipped）
+npm test                                       # 1280 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
@@ -413,14 +413,17 @@ node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（3
 node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（45 条，§7.11）
 node scripts/_probe-coin-online.mjs            # 浏览器真跑游戏币（44 条，§7.12；每跑一次花 13 积分）
 node scripts/_probe-kv-online.mjs              # 插件存档写穿（29 条，§7.13）
-node scripts/_probe-snapshot-online.mjs        # 存档还原点 / 回档（39 条，§7.14）
+node scripts/_probe-snapshot-online.mjs        # 存档还原点 / 回档（41 条，§7.14）
 node scripts/_probe-data-ops-online.mjs        # 在线版不提供导入 / 清空（20 条，§7.15）
 node scripts/_probe-ownership-online.mjs       # 「已拥有」= 服务端名单（11 条，§7.13.6）
+node scripts/_probe-offline-banner.mjs         # 断网横幅（11 条，§7.16；拦 /api/ 模拟断网）
 ```
 
-> 上面 10 条探针 2026-11-02 深夜全量跑过一遍（改完「回档记录」和「所有权口径」之后），全绿：
-> 写穿 15 / 农场 25 / 闸门 4 / 兑换 32 / 心愿 45 / 币 44 / 存档 29 / 快照 39 / 导入清空 20 / 所有权 11，
-> **合计 264 条**，外加服务端契约 `_probe-farm-state` 12 条。
+> 上面 11 条探针 2026-11-02 深夜全量跑过一遍（改完「回档记录」「所有权口径」
+> 「断网横幅」「同一秒两份快照」之后），全绿：
+> 写穿 15 / 农场 25 / 闸门 4 / 兑换 32 / 心愿 45 / 币 44 / 存档 29 / 快照 41 /
+> 导入清空 20 / 所有权 11 / 断网横幅 11，**合计 277 条**，
+> 外加服务端契约 `_probe-farm-state` 12 条。
 >
 > ⚠️ 条数是**实测**的（数输出里 `^\s+✓` 的行），不是手写的：这一轮发现四个
 > 探针的实际条数比文档里记的多（兑换 +2 / 心愿 +2 / 导入清空 +2 / 存档 +4），
@@ -1365,8 +1368,8 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1264 单测（2 skipped）
-node scripts/_probe-snapshot-online.mjs           # 39 条断言，全绿
+npm run lint && npx vitest run && npm run build   # 1280 单测（2 skipped）
+node scripts/_probe-snapshot-online.mjs           # 41 条断言，全绿
 ```
 
 `_probe-snapshot-online.mjs` 走真链路（真装包、真挂载、真写存档、真点界面），
@@ -1477,7 +1480,7 @@ save  第 1 版 · 22 字节
 #### 验收
 
 ```bash
-node scripts/_probe-snapshot-online.mjs   # 39 条断言，全绿
+node scripts/_probe-snapshot-online.mjs   # 41 条断言，全绿
 ```
 
 新增那条断的是**预览里的数字和服务端真的一样**：服务端现在是 `{level:99}`、
@@ -1641,7 +1644,7 @@ C.on((e) => { if (e.type === 'change') { N(); ... } })   // N() → backend.set(
 第三种是这一带最典型的静默错误（`new Date(0)` / 秒当毫秒），
 所以探针里专门有一条 `!/1970/` 的断言，不是只断言「有字」。
 
-#### 验收（39 条断言，比原来多 7 条）
+#### 验收（当时 39 条，比原来多 7 条；§7.14.13 又加了 2 条 ⇒ 现在 41 条）
 
 ```bash
 node scripts/_probe-snapshot-online.mjs
@@ -1666,6 +1669,93 @@ node scripts/_probe-snapshot-online.mjs
 ➜ 断言要**按行**取（`$$eval('[data-snapshot-logs] li', …)`），
 「文案口径」这类判据看**最新那一行**；只有「不该出现内部备注 / 不该出现 1970」
 这种**整栏都成立**的判据才用全量。
+
+
+### 7.14.13 ★★ 同一秒里落了两份快照（2026-11-02 深夜）
+
+这条是**探针报出来的**，不是读代码想出来的，而且它的表现很有欺骗性：
+
+```
+✗ ★ 服务端那份退回成了还原点的内容（不是新那份） — {"level":99,"tag":"v99"}
+```
+
+界面预览明明写着「level：99 → 2」，点「确认退回」之后服务端是 **v99**。
+单独跑这条探针**绿**，11 条探针连着跑**红**。当时第一反应是「探针有时序问题」——
+错了一半：**探针确实撞上了一个时序窗口，但窗口里漏出来的是产品缺陷。**
+
+#### 坏在哪
+
+`restore-by-time` 的判据是 `created_at <= at`，而 `at` 的粒度是**秒**：
+
+```go
+Where("uid = ? AND game_id = ? AND kv_key = ? AND created_at <= ?", …).
+Order("id DESC").First(&s)
+```
+
+`id DESC` 的意思是「**那一秒里最新的一份**」。而还原点列表是**挂载时**读的：
+家长点开详情看了一会儿（孩子那头又存了一次，服务端按策略补了一份快照），
+这一份的 `created_at` 可能和列表里那份**同一秒**。于是：
+
+| 界面以为 | 服务端实际 |
+| --- | --- |
+| 退回到 21:30 那份（第 2 版） | 退回到 21:30:00 里**更晚**写进去的那份（第 99 版） |
+
+两边都不报错，回档记录里写的时间还是「今天 21:30」——**看着完全正确**。
+
+#### 为什么不是「探针等一秒再点」
+
+那样等于把缺陷留在产品里，只让探针不撞上它。真人不会等：
+「点开详情 → 犹豫 30 秒 → 点退回去」这个间隔里孩子写一次存档再正常不过，
+而 `at` 与写入落在同一秒的概率是 1/2 量级（详情页停留几秒就够）。
+
+#### 修法：`max_id` —— 钉住「界面看到的那批」
+
+`restore-by-time` 加一个可选 `max_id`（界面传 `Moment.maxId` = 这一组里最大的快照 id）：
+
+```
+created_at <= at  AND  id <= max_id
+```
+
+- **为什么不是传 `snapshot_id`**：一个还原点跨多个 key（`save` + `settings`），
+  而「一次调用恢复整个游戏」正是 §7.14.2 定下的入口；传单个 id 就退化成 N 次请求，
+  中途失败留一半旧一半新。`max_id` 是**一批行**的上界，正好对应「那一屏」。
+- **为什么 `id <= maxId` 等价于「界面看到的那批」**：快照 id 自增，
+  列表之后才写进来的行 id 一定更大。所以它不会误伤同一秒里**更早**写进去的行。
+- **不传（0）保持旧行为**，老客户端不受影响。
+
+`Moment.maxId` 在 `groupMoments` 里算：这一组 `rows` 的最大 `id`（不是整屏最大 ——
+每个还原点各带各的）。
+
+#### 验收：确定性的那条放单测，别放探针
+
+「同一秒两份」是**时序相关**的，探针里复现不了（撞上才有）。所以：
+
+- **Go 单测** `TestRestoreByTimePinsMaxID`：造两份快照，把 `created_at` **直接压成同一秒**
+  （`Update("created_at", at)`），断言不带 `max_id` 时退到新那份、
+  带 `max_id = old.ID` 时退到 old。去掉仓储里那两行 `if maxID > 0 { … }` 就红。
+- **浏览器探针**（41 条，+2）：不撞时序，验**契约**——
+  1. 回档请求带上了 `max_id`（`page.on('request')` 里读 body，界面上看不见它）；
+  2. 那个 `max_id` **小于**「孩子后写的那份快照」的 id（界面没看到的不在范围里）。
+
+第 2 条是关键：只断言「带了 `max_id`」抓不到 `restoreToMoment(…, 0, …)`
+这种「参数传了个 0 也不报错」的写法。
+
+#### 排查记录：这条红其实是**磁盘满**假扮的（别踩第二次）
+
+中间有三次「点了没反应」——`tap` 的 `elementFromPoint` 明明命中了按钮，
+点完预览不展开，死等 15 秒超时。真相是 E: 盘 0 字节可用：
+
+- 后端 `database or disk is full (13)`（登录直接 500）；
+- 前端表现是**某个 onClick 之后什么都不发生**（不报错、不弹提示）。
+
+探针每跑一次在 `.e2e-scratch/<probe>/profile-<ts>/` 留一个 ~19 MB 的 chrome 用户目录，
+跑十几轮就把盘吃满；而这台机器的删除被接管成「移到回收站」，
+`rm -rf` 之后 `df` 一点没变。所以红之前先看 `df -h /e`，
+清理走 `python _tools/purge_scratch.py --apply` + `python _tools/purge_scratch_bin.py --apply`
+（后者才是真正把空间还回来的那一步）。
+
+> ⚠️ 顺带记一个自己踩的坑：`purge_scratch.py` 曾经是 **0 字节**（写它的时候盘满了，
+> 工具报 ENOSPC，但脚本「运行成功、目标 0 条」看着像没东西可删）。**空脚本会伪装成成功。**
 
 
 ## 7.15 在线版：两张「会当场打脸」的卡（2026-11-02 晚）
