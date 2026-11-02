@@ -9,6 +9,7 @@ import SettingsPage from './features/settings/SettingsPage'
 import { ReviewSheetModal } from './features/parent/ReviewSheet'
 import { SplashPage } from './features/splash/SplashPage'
 import { SetupWizard } from './features/onboarding/SetupWizard'
+import { OnlineLoginGate } from './features/account/OnlineLoginGate'
 import { ChildTour } from './features/onboarding/ChildTour'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { isNative, playTone } from './platform/files'
@@ -500,6 +501,10 @@ export default function App() {
         <SetupWizard replay={wizardMode === 'replay'} onFinish={finishWizard} />
       )}
       {tourOpen && <ChildTour onFinish={finishTour} onStepChange={setTab} />}
+
+      {/* 在线版的登录闸门。盖在主界面之上（自己 Portal 到 body），
+          登录成功只是把覆盖层摘掉，底下这棵树不重建。 */}
+      <OnlineLoginGate />
 
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </div>
