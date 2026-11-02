@@ -190,7 +190,7 @@ import {
   priceCeilingFor,
   produceUnitOf,
 } from '../domain/catalog'
-import { describeRedeemPayment, planRedeemPayment } from '../domain/redeem'
+import { describeRedeemPayment, pickTodayCount, planRedeemPayment } from '../domain/redeem'
 import { streakCapFor, streakPaysOn, streakPerDayFor } from '../domain/streakBonus'
 import { tierRatioFor } from '../domain/tierRatio'
 import {
@@ -3807,7 +3807,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   redeemedToday: (itemId) => {
-    const { redeemRecords, todayKey, settings } = get()
+    const { redeemRecords, todayKey, settings, redeemItems } = get()
     /**
      * ⚠️ 用**逻辑日**（`appDayKey`）比，不能用日历日（`toDateKey`）。
      *
@@ -3819,9 +3819,21 @@ export const useApp = create<AppState>((set, get) => ({
      *
      * 2026-10-08 发现：这条断言本来只在白天跑得绿，凌晨跑必红。
      */
-    return redeemRecords.filter(
+    const local = redeemRecords.filter(
       (r) => r.itemId === itemId && appDayKey(r.createdAt, settings.dayStartHour) === todayKey,
     ).length
+    /**
+     * ★ 在线版**采信服务端**的 `today_count`（2026-11-02 晚修）。
+     *
+     * 上面那段「逻辑日」是**本地版**的口径。在线版真正拦人的是服务端，它按
+     * **自然日 0 点**数（`RedeemService.todayStart`）⇒ 00:00–04:00 这四小时里
+     * 本地会多算「昨晚那次」，界面把按钮禁掉而服务端会放行。
+     * 所以在线版用服务端给的数，只有拿不到时才退回本地这份。
+     * 规则本身在 `pickTodayCount`（纯函数，可单测；`isOnlineMode` 是构建期常量，
+     * 测试里改不动它）。
+     */
+    const it = redeemItems.find((i) => i.id === itemId)
+    return pickTodayCount(isOnlineMode, it?.todayCount, local)
   },
 
   /**

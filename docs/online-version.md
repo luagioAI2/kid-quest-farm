@@ -403,13 +403,13 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1247 条（2 skipped）
+npm test                                       # 1252 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
 node scripts/_probe-login-gate.mjs             # 未登录闸门点得到（4 条，§7.8）
-node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（28 条，§7.9）
+node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（30 条，§7.9）
 node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（34 条，§7.11）
 node scripts/_probe-coin-online.mjs            # 浏览器真跑游戏币（44 条，§7.12；每跑一次花 13 积分）
 node scripts/_probe-kv-online.mjs              # 插件存档写穿（25 条，§7.13）
@@ -660,27 +660,49 @@ node scripts/_probe-farm-online.mjs http://127.0.0.1:4405/   # 25 条
 而本地版写的是「兑换券和积分不够啦 · 再攒一攒吧」—— 同一件事两种说法，
 孩子会以为是两件事。
 
-### 7.9.6 一个已知的显示误差（不是 bug）
+### 7.9.6 「今天换过几次」两边日界不同 ⇒ 在线版采信服务端的数
 
-`redeemedToday` 用 `settings.dayStartHour`（默认凌晨 4 点）算「今天」，
-服务端按 **0 点**算。所以 00:00–04:00 这个窗口里，孩子看到的「还剩 N 次」
-可能比服务端的实际额度多。真正扣款时服务端会拒绝并给一句
-「今天换得太多了，明天再来吧」，**不会静默多换**。
+`redeemedToday` 在**本地版**用 `settings.dayStartHour`（默认凌晨 4 点）算「今天」，
+服务端 `RedeemService.todayStart` 按**自然日 0 点**算。两个日界在
+**00:00–04:00** 这四小时里差一天：
 
-要彻底对齐，得让服务端按家长设的日切点算 —— 那是「把家长设置也上云」之后的事
-（见 §7.4 的边界）。
+| 时间 | 服务端的「今天」 | 本地的「今天」（逻辑日） |
+| --- | --- | --- |
+| 11-03 01:00 | [11-03 00:00, …) | [11-02 04:00, 11-03 04:00) |
+
+于是 11-02 23:00 换的那一次：服务端算「昨天」，本地算「今天」。
+
+⚠️ **方向是「界面更严」，不是更松**（这一节原来写反了，2026-11-02 晚改）。
+本地会把「昨晚那次」多算进来 ⇒ `maxed` 为真 ⇒ **按钮被禁掉**，
+而服务端明明会放行。孩子看到的是「每天最多 1 次 · 今天用完了」，
+实际还能换 —— 按钮坏了和「被无故拒绝」对孩子是一回事。
+反方向（界面放行、服务端拒绝）不会发生：`limitPerDay` 的闸门在服务端，
+它不看界面说什么。
+
+⇒ 在线版**采信服务端给的 `today_count`**（`/redeem/list` 每行都带，
+和 `visible` 同一个口径：服务端算好，界面不自己再推一遍）。
+拿不到（没拉到 / 离线）才退回本地那份 —— 显示 0 会让限额在离线时形同不存在。
+规则本身抽成了纯函数 `pickTodayCount`（`src/domain/redeem.ts`），
+因为 `isOnlineMode` 是构建期常量、`vitest.config.ts` 钉成 `local`，
+在 store 里根本造不出「在线版」来测。
+
+要彻底对齐（连本地版也按 0 点算），得让服务端按家长设的日切点算 ——
+那是「把家长设置也上云」之后的事（见 §7.4 的边界）。
 
 ### 7.9.7 验收
 
 ```bash
 npm run lint && npx vitest run && npm run build
-node scripts/_probe-redeem-online.mjs      # 28 条，真连后端
+node scripts/_probe-redeem-online.mjs      # 30 条，真连后端
 ```
 
 探针验的是**界面状态 == 服务端状态**，不写死「点完显示 X」：商品在不在服务端、
 扣的钱是不是标价、本地流水是不是全是 `srv_ledger_`（没被记两遍）、
 一次性商品在孩子那一页消失但家长管理页还在、下架翻的是服务端的标志位、
-断网时一个字都不落本地。
+断网时一个字都不落本地、**「今天换过几次」界面 == 服务端 `today_count`**。
+
+⚠️ 探针复现不了 00:00–04:00 那个窗口（没有改时钟的口子，除非真在凌晨跑），
+所以那一步守的是**不变量**；窗口本身的判据在 `redeem.test.ts` 的 `pickTodayCount`。
 
 ⚠️ 它每跑一次**真的花掉 2 件商品的钱**（兑换是真扣款）。所以探针商品定价
 `COST = 1`，跑几十次才需要给测试账号补币。

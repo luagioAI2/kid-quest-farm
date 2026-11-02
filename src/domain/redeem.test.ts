@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeRedeemPayment, paidOf, planRedeemPayment } from './redeem'
+import { describeRedeemPayment, paidOf, pickTodayCount, planRedeemPayment } from './redeem'
 
 /* ============================================================
    兑换分账：兑换券优先 + 可混合
@@ -120,5 +120,37 @@ describe('兑换记录的分账读取：两个字段缺省方向是反的', () =
       pointsPaid: 0,
     })
     expect(describeRedeemPayment({ cost: 50, harvestPaid: 50, pointsPaid: 0 })).toBe('50 兑换券')
+  })
+})
+
+/* ============================================================
+   「今天换了几次」谁说了算（2026-11-02 晚）
+   ------------------------------------------------------------
+   服务端按**自然日 0 点**数（`RedeemService.todayStart`），本地按**逻辑日 4 点**
+   数（`appDayKey`）。00:00–04:00 这四小时里本地会多算「昨晚那次」⇒
+   界面把「每天最多 1 次」的按钮禁掉，而服务端明明会放行。
+
+   这条规则只能单测：`isOnlineMode` 是构建期常量，`vitest.config.ts` 钉成 local，
+   测试里造不出「在线版」的 store。
+   ============================================================ */
+
+describe('pickTodayCount（界面别自己数）', () => {
+  it('在线版 + 服务端有数 ⇒ 用服务端的', () => {
+    // 典型场景：凌晨 1 点，本地按逻辑日数出 1（含昨晚那次），服务端说是 0
+    expect(pickTodayCount(true, 0, 1)).toBe(0)
+  })
+
+  it('在线版但服务端没给（没拉到 / 离线）⇒ 退回本地数，别显示成 0', () => {
+    // 显示 0 会让「每天最多 1 次」的东西在离线时变成能无限换
+    expect(pickTodayCount(true, undefined, 1)).toBe(1)
+  })
+
+  it('本地版 ⇒ 一律本地数（服务端那个字段根本不会有）', () => {
+    expect(pickTodayCount(false, 5, 1)).toBe(1)
+    expect(pickTodayCount(false, undefined, 0)).toBe(0)
+  })
+
+  it('★ 服务端给的 0 是「今天还没换过」，不能被 `||` 或 `??` 当成没填', () => {
+    expect(pickTodayCount(true, 0, 3)).toBe(0)
   })
 })

@@ -216,6 +216,14 @@ describe('mapRedeemItem', () => {
     expect(mapRedeemItem({ ...ROW, limit_per_day: 0 })!.limitPerDay).toBeUndefined()
   })
 
+  it('★ today_count 要带过来：界面靠它显示「还剩几次」，自己数是另一个日界', () => {
+    // 服务端按自然日 0 点数，本地按逻辑日 4 点数 ⇒ 00:00–04:00 差一天
+    expect(mapRedeemItem(ROW)!.todayCount).toBe(0)
+    expect(mapRedeemItem({ ...ROW, today_count: 2 })!.todayCount).toBe(2)
+    // 服务端没给这个字段（老版本）⇒ undefined，`pickTodayCount` 会退回本地数
+    expect(mapRedeemItem({ ...ROW, today_count: undefined })!.todayCount).toBeUndefined()
+  })
+
   it('★ 心愿来源的行必须丢掉（否则兑换页会出现两遍）', () => {
     expect(mapRedeemItem({ ...ROW, source: 'wish', id: 'wi-xyz' })).toBeNull()
   })

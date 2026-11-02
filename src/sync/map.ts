@@ -293,6 +293,11 @@ export function mapRedeemItem(s: ServerRedeemRow): RedeemItem | null {
        「换过的一次性商品」要靠本地 `redeemRecords` 反推，而那份记录
        只拉了最近 200 条，老用户会看到换过的东西又冒出来。 */
     visible: s.visible,
+    /* 同 `visible`：服务端按**自然日 0 点**数出来的「今天换了几次」。
+       本地版的日界是**逻辑日 4 点**，两者在 00:00–04:00 差一天 ——
+       界面自己数会把「昨晚换的那次」算成今天，把按钮禁掉而服务端其实放行。
+       ⇒ 在线版采信这个数（见 `RedeemItem.todayCount` 的注释）。 */
+    todayCount: s.today_count,
     createdAt: secToMs(s.created_at) ?? Date.now(),
     updatedAt: secToMs(s.updated_at) ?? Date.now(),
   }
