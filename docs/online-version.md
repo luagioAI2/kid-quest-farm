@@ -369,11 +369,12 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1067 + 14 条（在线版纯函数）
+npm test                                       # 1096 条（含在线版纯函数 14 + 农场 15）
 npm run build                                  # 看退出码，别看 "built in"
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
+node scripts/_probe-login-gate.mjs             # 未登录闸门点得到（4 条，§7.8）
 ```
 
 `_probe-write-through` 断言的是「**界面 == 服务端**」：
