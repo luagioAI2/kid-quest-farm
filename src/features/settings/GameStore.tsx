@@ -16,7 +16,9 @@ import { GAMES, gameById, type GameDef } from '../../games/registry'
 import { formatSize } from '../../games/size'
 import { checkPluginEconomy, vouchersPerPlay } from '../../domain/pluginEconomy'
 import { wishOwnedSet } from '../../domain/wish'
+import { isOnlineMode } from '../../sync/pull'
 import { GameIconArt } from './GameIcon'
+import { SnapshotSection } from './SnapshotSection'
 
 /**
  * 我的游戏 —— 手机应用市场那种形态（2026-10-24 用户要求）。
@@ -902,6 +904,17 @@ function DetailView({
           这个游戏花的是 App 里的积分（每一局花多少、期望收回多少，就在上面「花多少积分」那一栏）。
           它不能自己发积分。
         </p>
+
+        {/*
+          存档还原点 —— **只有在线版有**。本地版的历史版本根本不存在
+          （Dexie 里就是一份当前存档），摆个空壳只会让人以为「功能坏了」。
+
+          放在卸载正上方是有意的：卸载那段写的是「会连存档一起删掉」，
+          紧挨着就是「想退回去用还原点」，两句读下来是一个完整的意思。
+        */}
+        {installed && isOnlineMode && (
+          <SnapshotSection gameId={g.id} gameName={g.name} />
+        )}
 
         {/*
           卸载放在**详情最下面**（2026-10-25）。

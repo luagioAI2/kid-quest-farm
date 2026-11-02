@@ -245,6 +245,10 @@ export default function SettingsPage({
           ).map(([k, label]) => (
             <button
               key={k}
+              /* `data-settings-tab` 给 e2e / 探针定位用。
+                 原来是按文案找（`🎮 游戏`）—— 文案一改，探针就静默点空、
+                 断言恒绿。属性不随文案变。 */
+              data-settings-tab={k}
               onClick={() => setTab(k)}
               className={
                 'btn rounded-full px-5 py-2.5 text-base font-bold ' +
