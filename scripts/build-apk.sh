@@ -28,18 +28,44 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 # ---------------- 环境准备 ----------------
-# JDK 17+ 是 AGP 8.x 的硬性要求（系统默认的 JDK 8 不能用）
-if [ -z "${JAVA_HOME:-}" ] || [[ "${JAVA_HOME}" == *"1.8"* ]]; then
+# 需要 JDK **21**，不是 17。
+#
+# AGP 8.x 只要 17，所以「gradle 起得来」不等于「编得过」：Capacitor 8 的每个
+# 插件模块（@capacitor/android、@capacitor/filesystem…）都把 sourceCompatibility
+# 写成了 VERSION_21。JDK 17 会一路跑到
+#     :capacitor-filesystem:compileReleaseJavaWithJavac
+# 才报 `Cannot find a Java installation ... languageVersion=21`，
+# 而这条错误夹在十几行 gradle 输出中间，看着更像网络 / 下载失败。
+# （2026-10-30 本机就是这个：JAVA_HOME 指着 jdk17，包根本打不出来。）
+java_major() {
+  local v
+  v=$("$1/bin/java" -version 2>&1 | sed -nE 's/.*version "([0-9]+).*/\1/p' | head -1) || v=""
+  echo "${v:-0}"
+}
+
+have_jdk21() { [ -x "$1/bin/java" ] && [ "$(java_major "$1")" -ge 21 ]; }
+
+if ! have_jdk21 "${JAVA_HOME:-/nonexistent}"; then
   for candidate in \
-    "C:/Program Files/Eclipse Adoptium/jdk-21.0.12.101-hotspot" \
+    "${ANDROID_SDK_ROOT:-}/jdk21" \
+    "E:/android-sdk/jdk21" \
     "C:/Program Files/Eclipse Adoptium/jdk-21"* \
-    "C:/Program Files/Eclipse Adoptium/jdk-17"* \
     "C:/Program Files/Microsoft/jdk-21"*; do
-    if [ -d "$candidate" ]; then
+    if have_jdk21 "$candidate"; then
       export JAVA_HOME="$candidate"
       break
     fi
   done
+fi
+
+if ! have_jdk21 "${JAVA_HOME:-/nonexistent}"; then
+  echo ""
+  echo "✗ 找不到 JDK 21（Capacitor 8 的插件模块写死了 VERSION_21，17 编不过）。"
+  echo "  当前 JAVA_HOME=${JAVA_HOME:-（未设置）}"
+  echo ""
+  echo "  装一个：winget install EclipseAdoptium.Temurin.21.JDK"
+  echo "  或下载 zip 解压到 E:/android-sdk/jdk21 —— 本脚本会自动找到它。"
+  exit 1
 fi
 
 if [ -z "${ANDROID_HOME:-}" ]; then
