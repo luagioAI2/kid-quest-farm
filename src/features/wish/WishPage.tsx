@@ -11,6 +11,7 @@ import {
   type WishFilter,
 } from '@/domain/wish'
 import { describeRedeemPayment } from '@/domain/redeem'
+import { shipFormIssue } from '@/domain/wishShip'
 import { formatPriceCents } from '@/domain/cash'
 import { WISH_BLINDBOX_ID, WISH_ITEMS, wishItemById } from '@/games/wishCatalog'
 import { STOREFRONT, type StorefrontEntry } from '@/games/storefront'
@@ -937,6 +938,7 @@ function DetailView({
             ) : (
               <button
                 onClick={() => onConfirm(order.id)}
+                data-wish-finish
                 className="btn h-11 w-full rounded-2xl bg-white text-sm font-extrabold text-ink-600 shadow-flat active:btn-press"
               >
                 完成这一单
@@ -955,6 +957,7 @@ function DetailView({
           ) : (
             <button
               onClick={() => onConfirm(order.id)}
+              data-wish-finish
               className="btn h-12 w-full bg-grass-500 text-base font-extrabold text-white active:btn-press"
             >
               确认兑换 · 去购买
@@ -1504,6 +1507,20 @@ function ConfirmView({
 
   const item = order ? wishItemById(order.itemId) : undefined
 
+  /*
+   * 收货地址（实物商品才有）。
+   *
+   * 初值取已有的那份：兑换那一刻可能填过，也可能是家长上次补的。
+   * 这是地址的**唯一入口** —— 孩子那头没有表单，服务端 `/wish/redeem`
+   * 收到的 `ship` 永远是空的。
+   */
+  const [ship, setShip] = useState({
+    receiver: order?.ship?.receiver ?? '',
+    phone: order?.ship?.phone ?? '',
+    address: order?.ship?.address ?? '',
+  })
+  const [shipBusy, setShipBusy] = useState(false)
+
   if (!order) return <EmptyState onBack={onBack} />
 
   /**
@@ -1612,6 +1629,50 @@ function ConfirmView({
         </p>
       </div>
 
+      {/* 收货地址：只有实物需要。数字商品已经进了游戏柜，问地址是多余的。 */}
+      {!digital && (
+        <div data-ship-form className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
+          <p className="text-sm font-extrabold">寄到哪儿</p>
+          <p className="mt-1 text-[11px] font-bold leading-relaxed text-ink-500">
+            填了才会记在这一单上 —— 发货和售后都靠它。
+            {order.ship ? '已经有一份了，要改直接改。' : ''}
+          </p>
+          <div className="mt-2.5 flex flex-col gap-2">
+            <input
+              data-ship-receiver
+              value={ship.receiver}
+              onChange={(e) => setShip((s) => ({ ...s, receiver: e.target.value }))}
+              placeholder="收件人（谁收这个快递）"
+              maxLength={20}
+              className="rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
+            />
+            <input
+              data-ship-phone
+              value={ship.phone}
+              onChange={(e) => setShip((s) => ({ ...s, phone: e.target.value }))}
+              placeholder="电话"
+              inputMode="tel"
+              maxLength={20}
+              className="rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
+            />
+            <input
+              data-ship-address
+              value={ship.address}
+              onChange={(e) => setShip((s) => ({ ...s, address: e.target.value }))}
+              placeholder="详细地址（省市区 + 小区门牌号）"
+              maxLength={120}
+              className="rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
+            />
+          </div>
+          {/* 地址只在**这一单**上留 90 天，之后服务端自己抹掉。
+              不说清楚的话，家长会以为这里存的是「我的收货地址」，
+              下次换商品发现要重填就会觉得是 bug。 */}
+          <p className="mt-2 text-[10px] font-bold leading-relaxed text-ink-400">
+            只记在这一单上，90 天后自动删掉。家里常用的地址不用存在这里。
+          </p>
+        </div>
+      )}
+
       <div className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
         <p className="text-sm font-extrabold">孩子付了什么</p>
         <div className="mt-1 flex items-center justify-between py-1.5 text-sm">
@@ -1651,13 +1712,37 @@ function ConfirmView({
           取消兑换
         </button>
         <button
+          data-ship-submit
+          disabled={shipBusy}
           onClick={async () => {
-            await wishConfirm(order.id)
-            await wishDone(order.id)
-            pushToast({ kind: 'reward', title: '已经完成啦', emoji: '🎉' })
-            onDone()
+            /*
+             * 实物商品：先把地址校验完再走。
+             *
+             * ⚠️ 这一步**不能省**。服务端的 `shipFields` 在地址为空时是
+             * 「一个字都不动」—— 静默不存、不报错。家长填了一半点完成，
+             * 界面上照样「已经完成啦」，地址其实没落库，等发货时才发现。
+             */
+            if (!digital) {
+              const issue = shipFormIssue(ship)
+              if (issue) {
+                pushToast({ kind: 'warn', title: issue, emoji: '📦' })
+                return
+              }
+            }
+            setShipBusy(true)
+            try {
+              await wishConfirm(order.id)
+              await wishDone(
+                order.id,
+                digital ? undefined : { ship: { ...ship, region: order.ship?.region ?? '' } },
+              )
+              pushToast({ kind: 'reward', title: '已经完成啦', emoji: '🎉' })
+              onDone()
+            } finally {
+              setShipBusy(false)
+            }
           }}
-          className="btn h-12 flex-1 bg-grass-500 text-base font-extrabold text-white active:btn-press"
+          className="btn h-12 flex-1 bg-grass-500 text-base font-extrabold text-white active:btn-press disabled:opacity-60"
         >
           {digital ? '完成这一单' : '已经买好了'}
         </button>

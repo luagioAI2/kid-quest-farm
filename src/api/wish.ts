@@ -1,5 +1,6 @@
 import { api } from './client'
 import type { ApiWishCodeResult } from './types'
+import { toServerShip, type ShipDraft } from '../domain/wishShip'
 
 /* ============================================================
    心愿商城（tf-platform-api `/api/wish/*`）
@@ -219,9 +220,21 @@ export const confirmWishOrder = (orderId: string) =>
  * `trackingNo` 服务端叫「快递单号」，本地 `WishOrder` 叫 `buyOrderNo`
  * （「外链成交后家长填的订单号」）—— 同一件事：**对账用的一串号**。
  * 映射在 `sync/map.ts` 里做，别在调用处各写一遍。
+ *
+ * `ship`：家长在这一步补的收货地址（实物商品才有）。
+ * ⚠️ 地址为空时**不发这个字段**（`toServerShip` 返回 undefined）——
+ *    服务端在地址为空时是「一个字都不动」，发一个空对象反而可能把
+ *    兑换时存过的地址覆盖掉。校验要在界面做（`shipFormIssue`），
+ *    因为服务端不报错。
  */
-export const doneWishOrder = (orderId: string, trackingNo = '') =>
-  api<ServerWishOrder>('/wish/done', { order_id: orderId, tracking_no: trackingNo })
+export const doneWishOrder = (orderId: string, trackingNo = '', ship?: ShipDraft) => {
+  const payload = toServerShip(ship)
+  return api<ServerWishOrder>('/wish/done', {
+    order_id: orderId,
+    tracking_no: trackingNo,
+    ...(payload ? { ship: payload } : {}),
+  })
+}
 
 /**
  * 取消（**退券 + 退积分**，数字商品同时收回游戏）。

@@ -403,14 +403,14 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1256 条（2 skipped）
+npm test                                       # 1264 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
 node scripts/_probe-login-gate.mjs             # 未登录闸门点得到（4 条，§7.8）
 node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（30 条，§7.9）
-node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（34 条，§7.11）
+node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（43 条，§7.11）
 node scripts/_probe-coin-online.mjs            # 浏览器真跑游戏币（44 条，§7.12；每跑一次花 13 积分）
 node scripts/_probe-kv-online.mjs              # 插件存档写穿（25 条，§7.13）
 node scripts/_probe-snapshot-online.mjs        # 存档还原点 / 回档（32 条，§7.14）
@@ -815,10 +815,34 @@ node scripts/_probe-redeem-online.mjs      # 30 条，真连后端
 **改法**（`wish_srv.go` 的 `Redeem`）：收到 `ship` 就存（`purge_after` 90 天），
 没收到就留空，只打一条 info 日志。「券真扣」这条底线不受影响。
 
-**留下的一个洞**：`/wish/done` 的 `WishHandleReq` **没有**收货信息字段，
-所以 `wishDone(orderId, { ship })` 在在线模式下**上传不了地址**。
-目前没有任何界面传它，所以这条限制现在不生效；将来真做「家长补地址」，
-得先给服务端加字段 —— 别指望客户端能塞进去。
+**那个洞已经补上了（2026-11-02 晚）**：`/wish/done` 的 `WishHandleReq` 现在认 `ship`，
+家长在「确认兑换」那一屏就能填地址 —— 这是地址的**唯一入口**，
+兑换那一刻孩子那头没有表单（spec §9 的家长表单还是 P3）。
+
+三个细节值得记：
+
+- **地址为空时一个字都不写**（`shipColumn` 返回 `false`）。家长只点「已经买好了」、
+  没填地址，不能把兑换时存过的地址覆盖成空。
+- **过期时间由服务端算**（90 天）。客户端的 `ShipDraft` 类型里**没有** `purgeAfter`，
+  想编也编不出来（编了也只会被覆盖，而且两边时钟不保证一致）。
+- **校验必须在客户端**（`domain/wishShip.ts` 的 `shipFormIssue`）：服务端对空地址
+  是静默不存、不报错。家长填了一半提交，界面照样「已经完成啦」，地址其实没落库 ——
+  等发货那天才发现，而那时候孩子已经以为买好了。
+
+#### 一个必须记的坑：`serializer:json` 对 **map 更新**不生效
+
+第一版把结构体直接塞进 `fields["ship"]`，`/wish/done` 直接 500：
+
+```
+sql: converting argument $2 type: unsupported type entities.WishShipInfo, a struct
+```
+
+`ship` 这一列在模型上写的是 `gorm:"column:ship;type:text;serializer:json"`，
+但 `UpdateOrderCAS` 是 **map 更新** —— serializer 只作用于**模型字段**，
+map 里的值被原样丢给数据库驱动。所以 map 更新这一列必须自己 `json.Marshal` 成字符串；
+读的时候 serializer 照样反序列化回来，两边是通的。
+（`Redeem` 里那段老代码有一模一样的毛病，只是从来没有客户端送过 `ship`，
+所以从 2026-11-01 写下来一直没暴露。）
 
 ### 7.11.5 装包失败要**回头调服务端的取消**
 
@@ -852,7 +876,7 @@ installLocalGame(gameId)
 
 ```bash
 npm run lint && npx vitest run && npm run build
-node scripts/_probe-wish-online.mjs         # 34 条，真连后端
+node scripts/_probe-wish-online.mjs         # 43 条，真连后端
 ```
 
 探针走完整条链路（定价 → 许愿 → 兑换 → 确认 → 收尾 → 关掉 → 再换失败 →
@@ -863,6 +887,10 @@ node scripts/_probe-wish-online.mjs         # 34 条，真连后端
 - 兑换后本地余额 == 服务端余额（没被扣两遍）、本地流水全是 `srv_ledger_`；
 - 押的是**实际扣掉的两种币**（`vouchers_held + points_held == 标价`）；
 - 实物商品**不填收货信息也能换**（§7.11.4 那条改动的回归）；
+- **家长在界面里补地址**（第 5.5 步，9 条）：实物确认页里有三个输入框；
+  填一半提交 ⇒ 留在原地、说清缺什么、服务端**一个字都没写**；
+  填全 ⇒ 服务端存下地址并自己加 90 天过期，本地拉回来是完整版，
+  而**孩子视角是脱敏的**（手机 `****1111`、详细地址为空）；
 - 回绝后钱**全额**退回来、本地那单留着且带着原因；
 - 断网时一个字都不落本地。
 
@@ -1301,7 +1329,7 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1256 单测（2 skipped）
+npm run lint && npx vitest run && npm run build   # 1264 单测（2 skipped）
 node scripts/_probe-snapshot-online.mjs           # 32 条断言，全绿
 ```
 

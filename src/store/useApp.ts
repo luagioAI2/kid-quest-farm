@@ -27,6 +27,7 @@ import type {
   WishShipInfo,
   WishShipSnapshot,
 } from '../domain/types'
+import type { ShipDraft } from '../domain/wishShip'
 import {
   addItem,
   ASSET_BASE_KEY,
@@ -524,7 +525,7 @@ interface AppState {
   /** 家长标记完成，可顺手存收货信息和成交单号（`confirmed` → `done`） */
   wishDone: (
     orderId: string,
-    patch?: { ship?: WishShipInfo; buyOrderNo?: string },
+    patch?: { ship?: ShipDraft; buyOrderNo?: string },
   ) => Promise<void>
   /**
    * 取消 / 撤回。
@@ -1760,18 +1761,20 @@ async function onlineWishConfirm(get: () => AppState, orderId: string): Promise<
 /**
  * 家长收尾。
  *
- * ⚠️ `patch.ship` **上传不了** —— 服务端的 `/wish/done` 只认
- * `order_id` / `reason` / `tracking_no`，没有收货信息这个字段
- * （地址是在兑换那一刻存的，见 `wish_srv.go` 的 `Redeem`）。
- * 目前没有任何界面会传 `ship`，所以这条限制现在不生效；
- * 将来真做「家长补地址」时，得先给服务端加字段，别指望客户端能塞进去。
+ * `patch.ship` 会**一起上传**（2026-11-02 晚起）：服务端 `/wish/done` 现在认
+ * `ship`，写库时带上 `purge_after`（90 天）。这是地址的唯一入口 ——
+ * 兑换那一刻客户端没有表单（spec §9 的家长表单还没做）。
+ *
+ * ⚠️ 地址为空时**不发这个字段**（`toServerShip` 返回 undefined）：服务端
+ * 在地址为空时是「一个字都不动」，发空对象反而可能覆盖掉已有的地址。
+ * ⚠️ 校验必须在界面做（`shipFormIssue`）—— 服务端静默不存、不报错。
  */
 async function onlineWishDone(
   get: () => AppState,
   orderId: string,
-  patch?: { ship?: unknown; buyOrderNo?: string },
+  patch?: { ship?: ShipDraft; buyOrderNo?: string },
 ): Promise<void> {
-  const r = await onlineWrite(() => oWishDone(orderId, patch?.buyOrderNo ?? ''))
+  const r = await onlineWrite(() => oWishDone(orderId, patch?.buyOrderNo ?? '', patch?.ship))
   if (!r.ok) {
     get().pushToast(wishFailToast(r.error))
     return

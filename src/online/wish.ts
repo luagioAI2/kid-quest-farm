@@ -8,6 +8,7 @@ import {
   type ServerWishOrder,
 } from '../api/wish'
 import { ApiError } from '../api/client'
+import type { ShipDraft } from '../domain/wishShip'
 import { writeFailToast, type FailToast } from './write'
 import { SRV_WISH_ORDER_PREFIX } from '../sync/map'
 
@@ -125,10 +126,16 @@ export const oWishConfirm = (localOrderId: string) => {
   return confirmWishOrder(id)
 }
 
-export const oWishDone = (localOrderId: string, buyOrderNo = '') => {
+/**
+ * 家长收尾。
+ *
+ * `ship`：实物商品在这一步补的收货地址（2026-11-02 晚起服务端认这个字段）。
+ * 传 `undefined` = 这次不动服务端那份，别传空对象。
+ */
+export const oWishDone = (localOrderId: string, buyOrderNo = '', ship?: ShipDraft) => {
   const id = serverWishOrderId(localOrderId)
   if (id === null) throw new Error(`不是服务端心愿单：${localOrderId}`)
-  return doneWishOrder(id, buyOrderNo)
+  return doneWishOrder(id, buyOrderNo, ship)
 }
 
 export const oWishCancel = (localOrderId: string, reason = '') => {
