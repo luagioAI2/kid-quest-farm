@@ -5,10 +5,12 @@ import {
   listMoments,
   listRestoreLogs,
   momentLabel,
+  previewMoment,
   reasonLabel,
   restoreToMoment,
   saveSnapshotNow,
   snapshotFailText,
+  type KeyPreview,
   type Moment,
 } from '../../online/snapshot'
 
@@ -45,6 +47,15 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
   const [busy, setBusy] = useState<'' | 'save' | 'restore'>('')
   /** 正在二次确认的那一个还原点 */
   const [confirmAt, setConfirmAt] = useState<number | null>(null)
+  /**
+   * 展开着的那一个还原点（「看看会变成什么」）。
+   *
+   * `null` = 没展开；`at` = 正在看哪一个。数据按需取 ——
+   * 列表一进来就把 60 份快照的内容全拉下来是不可接受的（每份几十 KB）。
+   */
+  const [previewAt, setPreviewAt] = useState<number | null>(null)
+  const [preview, setPreview] = useState<KeyPreview[] | null>(null)
+  const [previewErr, setPreviewErr] = useState('')
 
   const reload = useCallback(async () => {
     try {
@@ -67,7 +78,12 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
       setBusy('save')
       setFlash('')
       try {
-        const r = await saveSnapshotNow(gameId, '手动')
+        /*
+         * 不传备注：`reason` 已经是 `manual`，界面上那颗「手动」标签就是它。
+         * 再写一条 `note: '手动'` 只会在同一行重复一次（实测截图里就是
+         * 「[手动][自动][当天起点] 手动」）。备注留给「家长真的自己写一句」。
+         */
+        const r = await saveSnapshotNow(gameId)
         setFlash(
           r.keys > 0
             ? `存好了，一共 ${r.keys} 个存档。`
@@ -82,11 +98,35 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
     })()
   }
 
+  const onPreview = (m: Moment) => {
+    /* 再点一次收起（家长点开发现看不懂，要能退出去） */
+    if (previewAt === m.at) {
+      setPreviewAt(null)
+      setPreview(null)
+      setPreviewErr('')
+      return
+    }
+    setPreviewAt(m.at)
+    setPreview(null)
+    setPreviewErr('')
+    void (async () => {
+      try {
+        setPreview(await previewMoment(gameId, m))
+      } catch (e) {
+        setPreviewErr(snapshotFailText(e))
+      }
+    })()
+  }
+
   const onRestore = (at: number) => {
     void (async () => {
       setBusy('restore')
       setConfirmAt(null)
       setFlash('')
+      /* 展开着的预览必须收起来：里面的「现在」已经过时了
+         （退回去之后「现在」就是那份快照，再显示「99 → 1」会自相矛盾）。 */
+      setPreviewAt(null)
+      setPreview(null)
       try {
         const r = await restoreToMoment(gameId, at, '家长回档')
         setFlash(
@@ -179,6 +219,68 @@ export function SnapshotSection({ gameId, gameName }: { gameId: string; gameName
                   <span className="text-[11px] text-ink-500">{m.note}</span>
                 )}
               </div>
+
+              {/*
+                「看看会变成什么」—— 按需展开。
+                家长面对一排「今天 18:59 · 22 字节」其实没法判断该退哪一个，
+                所以先让他看一眼**差在哪**（只比顶层字段，见 diffPreview 的注释）。
+              */}
+              <button
+                data-snapshot-preview={m.at}
+                onClick={() => onPreview(m)}
+                className="btn mt-2 h-8 w-full rounded-full bg-ink-900/5 text-[12px] font-extrabold text-ink-600 active:btn-press"
+              >
+                {previewAt === m.at ? '收起' : '看看退回去会变成什么'}
+              </button>
+
+              {previewAt === m.at && (
+                <div
+                  data-snapshot-preview-body={m.at}
+                  className="mt-2 rounded-2xl bg-paper-2 px-3 py-2 text-[12px] leading-relaxed text-ink-700"
+                >
+                  {previewErr ? (
+                    <p data-snapshot-preview-error className="text-berry-500">
+                      {previewErr}
+                    </p>
+                  ) : preview === null ? (
+                    <p className="text-ink-500">正在看…</p>
+                  ) : preview.every((k) => k.error) ? (
+                    <p data-snapshot-preview-error className="text-berry-500">
+                      {preview[0].error}
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {preview.map((k) => (
+                        <li key={k.key}>
+                          <span className="font-extrabold text-ink-900">{k.key}</span>
+                          <span className="ml-1 text-[10.5px] text-ink-400">
+                            第 {k.version} 版 · {sizeText(k.size)}
+                          </span>
+                          {k.error ? (
+                            <p className="text-berry-500">{k.error}</p>
+                          ) : k.lines.length === 0 ? (
+                            <p className="text-ink-500">和现在一模一样</p>
+                          ) : (
+                            <ul data-snapshot-diff className="mt-0.5 space-y-0.5">
+                              {k.lines.map((l) => (
+                                <li key={l} className="tnum text-ink-700">
+                                  · {l}
+                                </li>
+                              ))}
+                              {k.more > 0 && (
+                                <li className="text-ink-400">还有 {k.more} 处不一样</li>
+                              )}
+                            </ul>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mt-1.5 text-[10.5px] leading-snug text-ink-400">
+                    左边是现在，右边是退回去之后。只比最上面那几项，存档里的明细没展开。
+                  </p>
+                </div>
+              )}
 
               {confirmAt === m.at ? (
                 <div className="mt-2 rounded-2xl bg-berry-100 px-3 py-2.5">

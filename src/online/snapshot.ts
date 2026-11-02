@@ -3,10 +3,12 @@ import { gameKvList } from '../api/gameKv'
 import { toDateKey } from '../domain/time'
 import {
   snapshotCreate,
+  snapshotGet,
   snapshotList,
   snapshotRestoreByTime,
   snapshotRestoreLogs,
   type RestoreLogRow,
+  type SnapshotDetail,
   type SnapshotRow,
 } from '../api/snapshot'
 import { pullGameKv } from './kv'
@@ -41,6 +43,16 @@ export const SNAPSHOT_QUOTA = 10041101
 /** 未拥有该游戏（`checkGameExists` 第三道闸） */
 export const SNAPSHOT_GAME_NOT_OWNED = 10040401
 
+/** 还原点里某一个 key 的那一份快照（「看看里面是什么」要用 id 去取内容） */
+export interface MomentKey {
+  key: string
+  /** 快照 id —— `snapshotGet` 用它取整份内容 */
+  id: number
+  size: number
+  /** 存快照时那条存档的版本号 */
+  version: number
+}
+
 /** 一个「还原点」：同一时刻的那批快照 */
 export interface Moment {
   /**
@@ -52,6 +64,8 @@ export interface Moment {
   at: number
   /** 这一组涉及哪些 key */
   keys: string[]
+  /** 每个 key 最新那一份（顺序同 `keys`） */
+  snapshots: MomentKey[]
   /** 各 key 最新那份的字节数之和 */
   size: number
   /** 出现过的原因（去重、保持顺序） */
@@ -89,9 +103,17 @@ export function groupMoments(rows: readonly SnapshotRow[], gapSec = SAME_MOMENT_
     let size = 0
     for (const r of newestPerKey.values()) size += r.size
 
+    const snapshots: MomentKey[] = [...newestPerKey.values()].map((r) => ({
+      key: r.key,
+      id: r.id,
+      size: r.size,
+      version: r.version,
+    }))
+
     out.push({
       at: cur.at,
-      keys: [...newestPerKey.keys()],
+      keys: snapshots.map((s) => s.key),
+      snapshots,
       size,
       reasons,
       note: cur.rows.find((r) => r.note)?.note ?? '',
@@ -179,8 +201,7 @@ export async function listMoments(gameId: string, limit = 60): Promise<Moment[]>
  * 为什么循环而不是一次搞定：服务端的 `create` 只接受单个 key，
  * 它不知道「这一批属于同一个还原点」。分组由 `groupMoments` 在读取侧做。
  */
-export async function saveSnapshotNow(
-  gameId: string,
+export async function saveSnapshotNow(  gameId: string,
   note = '',
 ): Promise<{ keys: number }> {
   const list = await gameKvList(gameId)
@@ -208,8 +229,153 @@ export async function restoreToMoment(
   return { restored: r.restored_keys ?? 0 }
 }
 
-/** 回档记录（谁在什么时候把哪个键从哪版退到哪版） */
-export async function listRestoreLogs(gameId: string, limit = 10): Promise<RestoreLogRow[]> {
+/** 一份「退回到这里会变成什么」的对比（按 key） */
+export interface KeyPreview {
+  key: string
+  version: number
+  size: number
+  /** 一行一条变化；空数组 = 这个 key 和现在一模一样 */
+  lines: string[]
+  /** 因为太长没显示出来的变化条数 */
+  more: number
+  /** 这一份取不出来时的说明（被保留策略淘汰了 / 网络） */
+  error?: string
+}
+
+const isPlainObj = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+const isScalar = (v: unknown) => v === null || typeof v !== 'object'
+
+/** 一个值怎么写给人看（存档里全是 JSON，直接 dump 家长读不了） */
+function fmtValue(v: unknown): string {
+  if (v === null || v === undefined) return '空'
+  if (typeof v === 'boolean') return v ? '是' : '否'
+  if (typeof v === 'number') return String(v)
+  if (typeof v === 'string') return `“${v.length > 18 ? `${v.slice(0, 18)}…` : v}”`
+  if (Array.isArray(v)) return `${v.length} 项`
+  return '一组数据'
+}
+
+/**
+ * 「退回到这份」和「现在」差在哪 —— 只比**顶层字段**，一行一条。
+ *
+ * 为什么不递归：存档里一个 `plots` 数组就有几十项，逐项 diff 出来是几百行，
+ * 家长一个字都不会看。顶层那几行（积分 / 天数 / 关卡）才是他要判断的东西。
+ *
+ * @param current  现在服务端上的那份
+ * @param snapshot 还原点里那份（退回去之后会变成它）
+ * @returns `lines` 里每行形如 `coins：120 → 60`（左=现在，右=退回后）
+ */
+export function diffPreview(
+  current: unknown,
+  snapshot: unknown,
+  maxLines = 4,
+): { lines: string[]; more: number } {
+  /*
+   * 整个值不是对象 ⇒ 没有「字段」可比。
+   *   · 两边都是数组：报项数（`12 项 → 9 项`）—— 家长能看懂的那一句；
+   *   · 其它（数字 / 字符串 / 一边是数组一边是对象）：只能说「都不一样」。
+   */
+  if (!isPlainObj(current) || !isPlainObj(snapshot)) {
+    if (JSON.stringify(current) === JSON.stringify(snapshot)) return { lines: [], more: 0 }
+    if (Array.isArray(current) && Array.isArray(snapshot)) {
+      return { lines: [`${current.length} 项 → ${snapshot.length} 项`], more: 0 }
+    }
+    return { lines: ['整份存档都不一样'], more: 0 }
+  }
+
+  /* 顺序：先按还原点里的字段顺序（那是存档本来的样子），再补「现在多出来的」 */
+  const keys = [...new Set([...Object.keys(snapshot), ...Object.keys(current)])]
+  const lines: string[] = []
+  let more = 0
+
+  for (const k of keys) {
+    const inSnap = k in snapshot
+    const inCur = k in current
+    const a = current[k]
+    const b = snapshot[k]
+
+    let line: string
+    if (!inCur) {
+      /* 现在没有、退回去会有 —— 这是**好事**，措辞别写成「会丢」 */
+      line = `${k}：会补回来（${fmtValue(b)}）`
+    } else if (!inSnap) {
+      line = `${k}：会被删掉（现在是 ${fmtValue(a)}）`
+    } else if (JSON.stringify(a) === JSON.stringify(b)) {
+      continue
+    } else if (isScalar(a) && isScalar(b)) {
+      line = `${k}：${fmtValue(a)} → ${fmtValue(b)}`
+    } else if (Array.isArray(a) && Array.isArray(b)) {
+      line =
+        a.length === b.length
+          ? `${k}：内容不一样（都是 ${a.length} 项）`
+          : `${k}：${a.length} 项 → ${b.length} 项`
+    } else {
+      line = `${k}：内容不一样`
+    }
+
+    if (lines.length < maxLines) lines.push(line)
+    else more++
+  }
+
+  return { lines, more }
+}
+
+/**
+ * 看一个还原点里到底是什么（点「看看会变成什么」时才调）。
+ *
+ * 每个 key 各取一次 `snapshotGet`（通常 1~3 个，不是 N 个）+
+ * 一次 `gameKvList` 拿「现在」。
+ *
+ * ⚠️ 单个 key 取失败（被保留策略淘汰了）**不能让整块炸掉** ——
+ *    那个 key 记一行说明，其余照常显示。家长点开是想看东西的，
+ *    不是想看一句「操作没成功」。
+ */
+export async function previewMoment(
+  gameId: string,
+  m: Moment,
+  maxLines = 4,
+): Promise<KeyPreview[]> {
+  const [list, ...details] = await Promise.all([
+    gameKvList(gameId),
+    ...m.snapshots.map((s) => snapshotGet(s.id).catch((e: unknown) => e)),
+  ])
+  const current = (list.data ?? {}) as Record<string, unknown>
+
+  return m.snapshots.map((s, i) => {
+    const got = details[i]
+    if (!(got && typeof got === 'object' && 'value' in got)) {
+      return {
+        key: s.key,
+        version: s.version,
+        size: s.size,
+        lines: [],
+        more: 0,
+        error: snapshotFailText(got),
+      }
+    }
+    const value = (got as SnapshotDetail).value
+    /*
+     * 这个键**现在服务端上没有**（卸载过 / 被删过）⇒ 每个字段都会「补回来」。
+     *
+     * ⚠️ 不能直接把 `undefined` 交给 `diffPreview`：它分不清「这个键不存在」
+     *    和「这个键的值是 undefined」，会退化成「整份存档都不一样」——
+     *    信息量最少的那句话。对象就按空对象比（逐字段说「会补回来」），
+     *    数组/标量没法逐字段，直接说一句。
+     */
+    if (!(s.key in current)) {
+      const lines = isPlainObj(value)
+        ? diffPreview({}, value, maxLines).lines
+        : [`会补回来（${fmtValue(value)}）`]
+      return { key: s.key, version: s.version, size: s.size, lines, more: 0 }
+    }
+    const { lines, more } = diffPreview(current[s.key], value, maxLines)
+    return { key: s.key, version: s.version, size: s.size, lines, more }
+  })
+}
+
+/** 回档记录（谁在什么时候把哪个键从哪版退到哪版） */export async function listRestoreLogs(gameId: string, limit = 10): Promise<RestoreLogRow[]> {
   const r = await snapshotRestoreLogs(gameId, limit)
   return r.list ?? []
 }

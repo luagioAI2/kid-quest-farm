@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, NETWORK } from '../api/client'
 import type { SnapshotRow } from '../api/snapshot'
 import {
+  diffPreview,
   groupMoments,
   isAutoNote,
   listMoments,
   momentLabel,
+  previewMoment,
   reasonLabel,
   restoreToMoment,
   saveSnapshotNow,
@@ -33,6 +35,7 @@ const restoreByTimeMock = vi.fn()
 const logsMock = vi.fn()
 const kvListMock = vi.fn()
 const pullKvMock = vi.fn()
+const getMock = vi.fn()
 
 vi.mock('../api/snapshot', () => ({
   snapshotList: (g: string, k: string | undefined, limit: number) => listMock(g, k, limit),
@@ -40,7 +43,7 @@ vi.mock('../api/snapshot', () => ({
   snapshotRestoreByTime: (g: string, at: number, k?: string, r?: string) =>
     restoreByTimeMock(g, at, k, r),
   snapshotRestoreLogs: (g: string, limit: number) => logsMock(g, limit),
-  snapshotGet: vi.fn(),
+  snapshotGet: (id: number) => getMock(id),
   snapshotRestore: vi.fn(),
 }))
 
@@ -275,5 +278,116 @@ describe('snapshotFailText', () => {
 
   it('不是 ApiError 也有话说', () => {
     expect(snapshotFailText(new Error('boom'))).toContain('再试一次')
+  })
+})
+
+describe('diffPreview（退回去会变成什么）', () => {
+  it('标量字段：左边现在、右边退回后', () => {
+    const r = diffPreview({ level: 99, tag: 'v99' }, { level: 1, tag: 'v1' })
+    expect(r.lines).toEqual(['level：99 → 1', 'tag：“v99” → “v1”'])
+    expect(r.more).toBe(0)
+  })
+
+  it('一模一样 ⇒ 一行都不给（界面说「和现在一模一样」）', () => {
+    expect(diffPreview({ a: 1, b: [1, 2] }, { a: 1, b: [1, 2] }).lines).toEqual([])
+  })
+
+  it('★ 现在没有、退回去有 ⇒ 说「会补回来」，不是「会丢」', () => {
+    const r = diffPreview({}, { coins: 20 })
+    expect(r.lines).toEqual(['coins：会补回来（20）'])
+  })
+
+  it('★ 现在有、退回去没有 ⇒ 说「会被删掉」', () => {
+    const r = diffPreview({ coins: 20 }, {})
+    expect(r.lines).toEqual(['coins：会被删掉（现在是 20）'])
+  })
+
+  it('数组：长度变了报项数，长度没变但内容不同别写成「3 项 → 3 项」', () => {
+    expect(diffPreview({ plots: [1, 2, 3] }, { plots: [1, 2] }).lines).toEqual(['plots：3 项 → 2 项'])
+    expect(diffPreview({ plots: [1, 2, 3] }, { plots: [4, 5, 6] }).lines).toEqual([
+      'plots：内容不一样（都是 3 项）',
+    ])
+  })
+
+  it('布尔写成人话（是 / 否），null 写「空」', () => {
+    const r = diffPreview({ paused: false, pet: null }, { paused: true, pet: null })
+    expect(r.lines).toEqual(['paused：否 → 是'])
+  })
+
+  it('★ 超过上限就截断，剩下的报个数（存档明细不能刷屏）', () => {
+    const cur = { a: 1, b: 2, c: 3, d: 4, e: 5 }
+    const snap = { a: 9, b: 9, c: 9, d: 9, e: 9 }
+    const r = diffPreview(cur, snap, 2)
+    expect(r.lines).toHaveLength(2)
+    expect(r.more).toBe(3)
+  })
+
+  it('长字符串截断，不把整段存档文本倒出来', () => {
+    const long = 'x'.repeat(50)
+    const r = diffPreview({ name: long }, { name: 'a' })
+    expect(r.lines[0]).toContain('…')
+    expect(r.lines[0].length).toBeLessThan(40)
+  })
+
+  it('整个值是个数组 ⇒ 报项数（家长能看懂的那一句）', () => {
+    expect(diffPreview([1, 2], [1, 3]).lines).toEqual(['2 项 → 2 项'])
+    expect(diffPreview([1, 2, 3], [1]).lines).toEqual(['3 项 → 1 项'])
+    expect(diffPreview([1, 2], [1, 2]).lines).toEqual([])
+  })
+
+  it('一边数组一边对象（形状都变了）⇒ 只能说「都不一样」', () => {
+    expect(diffPreview([1, 2], { a: 1 }).lines).toEqual(['整份存档都不一样'])
+    expect(diffPreview(5, { a: 1 }).lines).toEqual(['整份存档都不一样'])
+  })
+})
+
+describe('previewMoment（点开才取内容）', () => {
+  const m = groupMoments([
+    row({ at: 1000, key: 'save', id: 11, version: 2 }),
+    row({ at: 1000, key: 'bag', id: 12, version: 1 }),
+  ])[0]
+
+  it('★ 每个 key 各取一次 get，再取一次现在的值', async () => {
+    kvListMock.mockResolvedValue({
+      game_id: 'cloudfarm',
+      data: { save: { level: 99 }, bag: [1, 2, 3] },
+      versions: {},
+      count: 2,
+    })
+    getMock.mockImplementation(async (id: number) =>
+      id === 11 ? { id, value: { level: 1 } } : { id, value: [1] },
+    )
+
+    const out = await previewMoment('cloudfarm', m)
+    expect(getMock.mock.calls.map((c) => c[0]).sort()).toEqual([11, 12])
+    expect(kvListMock).toHaveBeenCalledTimes(1)
+    /* ⚠️ 别按下标断言：`snapshots` 的顺序是 id 倒序（最新写的那份在前），
+       不是「按 key 名字排」。按 key 查更稳。 */
+    const byKey = Object.fromEntries(out.map((k) => [k.key, k]))
+    expect(Object.keys(byKey).sort()).toEqual(['bag', 'save'])
+    expect(byKey.save.lines).toEqual(['level：99 → 1'])
+    expect(byKey.bag.lines).toEqual(['3 项 → 1 项'])
+  })
+
+  it('★ 单个 key 被保留策略淘汰 ⇒ 只有那一个报错，其余照常显示', async () => {
+    kvListMock.mockResolvedValue({ game_id: 'cloudfarm', data: { save: { level: 99 } }, versions: {}, count: 1 })
+    getMock.mockImplementation(async (id: number) => {
+      if (id === 11) throw new ApiError(10041001, '快照不存在')
+      return { id, value: [1] }
+    })
+
+    const out = await previewMoment('cloudfarm', m)
+    const byKey = Object.fromEntries(out.map((k) => [k.key, k]))
+    expect(byKey.save.error).toContain('已经被清理掉')
+    expect(byKey.save.lines).toEqual([])
+    expect(byKey.bag.error).toBeUndefined()
+    expect(byKey.bag.lines).toEqual(['会补回来（1 项）'])
+  })
+
+  it('现在服务端已经没有这个 key（刚卸载过）⇒ 「会补回来」', async () => {
+    kvListMock.mockResolvedValue({ game_id: 'cloudfarm', data: {}, versions: {}, count: 0 })
+    getMock.mockResolvedValue({ id: 11, value: { level: 1 } })
+    const out = await previewMoment('cloudfarm', groupMoments([row({ at: 1000, id: 11 })])[0])
+    expect(out[0].lines).toEqual(['level：会补回来（1）'])
   })
 })
