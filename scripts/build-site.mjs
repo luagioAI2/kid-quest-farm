@@ -19,7 +19,7 @@
  *    没跑过就只会跳过那一步，不会报错。
  */
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const ROOT = resolve(import.meta.dirname, '..')
@@ -68,6 +68,33 @@ if (existsSync(APP_OUT)) {
 mkdirSync(APP_OUT, { recursive: true })
 cpSync(DIST, APP_OUT, { recursive: true })
 console.log(`② dist/ → site/app/  ✓`)
+
+/* ---------- 2a. 网页版试玩连的是哪个后端 ----------
+   `site/app/` 是原样拷过去的 dist，**构建期常量 `VITE_API_BASE` 也一起带走了**。
+   dist 的默认值是 `http://127.0.0.1:8090`（开发用的本机地址），
+   发布到 kidquestfarm.cn 之后，访客点「登录 / 注册 / 兑换码」连的是
+   **他自己电脑上的 8090** —— 只会说「连不上服务器」。
+
+   这件事在本地走查时**完全看不出来**，因为本地 8090 真的是通的；
+   要等发到线上、访客点了才知道。和 build-apk.sh 那个 https 闸门是同一类：
+   构建期常量打错了，运行期的症状是「网络问题」。
+
+   不拦（打一个纯离线试玩版是合法需求），但必须说出来。 */
+try {
+  const assetsDir = resolve(APP_OUT, 'assets')
+  const bundles = readdirSync(assetsDir).filter((f) => /^index-.*\.js$/.test(f))
+  if (bundles.some((f) => readFileSync(resolve(assetsDir, f), 'utf8').includes('127.0.0.1:8090'))) {
+    console.warn(
+      '\n⚠️ 网页版试玩里烧的后端是 http://127.0.0.1:8090 —— 发布之后访客点「登录」只会看到「连不上服务器」。\n' +
+        '   （任务 / 积分 / 农场这些离线功能照常能玩，只有要联网的那几处会失败。）\n' +
+        '   要发一个能登录的在线试玩版：\n' +
+        '     VITE_API_BASE=https://api.你的域名 npm run build\n' +
+        '     node scripts/build-site.mjs --no-build\n',
+    )
+  }
+} catch {
+  /* 读不到就跳过：这一步是提醒，不该让整个构建失败 */
+}
 
 /* ---------- 2b. 安装包 → site/download ---------- */
 // site/download/ 在 .gitignore 里（安装包是产物，不该进版本库），
