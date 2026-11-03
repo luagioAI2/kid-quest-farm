@@ -11,8 +11,9 @@ import { board, listTasks } from '../api/task'
 import { walletInfo, walletLedger } from '../api/wallet'
 import { listRedeemRecords, listRedeemRows } from '../api/redeem'
 import { listWishItems, listWishOrders } from '../api/wish'
-import { getToken } from '../api/session'
+import { getSession, getToken } from '../api/session'
 import { pullSettings, type PullSettingsStatus } from '../online/settings'
+import { adoptAccount, type AdoptResult } from '../online/adopt'
 import {
   mapHarvest,
   mapInstance,
@@ -91,6 +92,11 @@ export interface PullResult {
    * `reset` 本地这份是上一个账号的，已重置成默认值（一个字都没推上去）。
    */
   settings?: PullSettingsStatus
+  /**
+   * 这台设备的本地缓存是不是换人了（见 `online/adopt.ts`）。
+   * `switched` = 拉取之前已经把上一个人的云端镜像清掉了。
+   */
+  adopt?: AdoptResult
 }
 
 /** 删掉某一类 `srv_` 行（重拉时先清后写，保证服务端删掉的这里也跟着消失） */
@@ -123,7 +129,15 @@ export async function pullFromServer(opts: { pageSize?: number } = {}): Promise<
  * 而「拉取会不会把本地数据弄丢」这件事必须被验证，不能只靠肉眼。
  */
 export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullResult> {
+  /* 在外面声明：失败那条路也要把它带回去（`switched` 已经生效了，
+     哪怕后面网络挂了，缓存也已经清干净）。 */
+  let adopt: AdoptResult | undefined
   try {
+    /* ★ 先认领缓存再发请求：换账号时「上一个人的任务 / 流水 / 心愿单」
+       必须在我们写新数据之前消失。放在请求之后的话，中间那段
+       （几百毫秒，断网时是**永久**）界面读到的还是上一个人的行。 */
+    adopt = await adoptAccount(getSession()?.user.uid ?? null)
+
     // 三个请求并发：任务板本身会**懒生成**今天的实例，所以它必须在读实例之前完成
     const [b, tasks, wallet] = await Promise.all([
       board(),
@@ -305,10 +319,15 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       coins: coinBals === null ? undefined : coinBals.length,
       balance: wallet?.points ?? b.balance,
       settings: settingsStatus,
+      adopt,
     }
   } catch (e) {
     // 网络 / 401 / 服务端 5xx 都走这里：保留本地数据，不抛
-    return { ok: false, reason: (e as { message?: string })?.message ?? 'pull-failed' }
+    return {
+      ok: false,
+      reason: (e as { message?: string })?.message ?? 'pull-failed',
+      adopt,
+    }
   }
 }
 

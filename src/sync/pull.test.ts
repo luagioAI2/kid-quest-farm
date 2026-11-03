@@ -1,12 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { db, gameCoinBalanceOf, getGameKv, readGameCoinLedger, setGameKv } from '../db/db'
 import { kvVersionOf, resetKvState } from '../online/kv'
 import { pullFromServer, pullOnce } from './pull'
+import { setSession } from '../api/session'
+import { DATA_OWNER_KEY } from '../online/adopt'
+import { getMeta, setMeta } from '../db/db'
 import type { ServerBoard, ServerInstance, ServerTask } from '../api/task'
 import type { ServerLedgerEntry } from '../api/wallet'
 import type { ServerRedeemRecord, ServerRedeemRow } from '../api/redeem'
 import type { ServerWishItemView, ServerWishOrder } from '../api/wish'
+import type { Task } from '../domain/types'
 
 /* 接口全部 mock 掉 —— 这一层要验的是「搬进本地表」的行为，
    真连服务端是 `scripts/_probe-task-chain.mjs` 的活。 */
@@ -668,5 +672,57 @@ describe('pullOnce · 插件存档', () => {
     expect(r.ledger).toBe(1)
     expect(r.balance).toBe(112)
     expect(r.kvFailed).toBe(1)
+  })
+})
+
+/* ============================================================
+   换账号：清理必须发生在**发请求之前**
+   ------------------------------------------------------------
+   单独测 `adoptAccount` 只证明「函数自己会清」。这里要证的是
+   `pullOnce` **调用它的时机** —— 顺序错了（放到请求之后）时，
+   断网就永远清不掉：界面会一直显示上一个人的任务和流水。
+
+   顺带卡住一个静默 bug：`ApiUser` 的字段是 `uid` 不是 `id`，
+   写成 `.user.id` 会恒为 undefined ⇒ 永远当成「没登录」⇒ 永不清。
+   ============================================================ */
+
+describe('pullOnce 换账号', () => {
+  const asUser = (uid: number) =>
+    setSession({
+      token: 't',
+      refreshToken: 'r',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      user: { uid, username: `u${uid}`, mobile: '', mobile_verified: false,
+        nickname: '', avatar: '', gender: 0, language: 'zh',
+        is_guest: false, has_password: true, has_wechat: false } as never,
+    })
+
+  afterEach(() => setSession(null))
+
+  it('换人 + 网络失败：上一个人的行仍然被清掉', async () => {
+    // 上一个人（uid=3）的缓存
+    await db.tasks.put({ id: 'srv_task_1' } as unknown as Task)
+    await setMeta(DATA_OWNER_KEY, 3)
+
+    // 这次是 uid=7，而且**网络挂了**
+    asUser(7)
+    boardMock.mockRejectedValue(new Error('offline'))
+
+    const r = await pullOnce()
+    expect(r.ok).toBe(false)
+    expect(r.adopt).toBe('switched')
+    expect(await db.tasks.count()).toBe(0)
+    expect(await getMeta(DATA_OWNER_KEY, 0)).toBe(7)
+  })
+
+  it('同一个账号重拉：不清（每次刷新都走这里）', async () => {
+    await db.tasks.put({ id: 'srv_task_1' } as unknown as Task)
+    await setMeta(DATA_OWNER_KEY, 7)
+    asUser(7)
+    boardMock.mockRejectedValue(new Error('offline'))
+
+    const r = await pullOnce()
+    expect(r.adopt).toBe('same')
+    expect(await db.tasks.count()).toBe(1)
   })
 })

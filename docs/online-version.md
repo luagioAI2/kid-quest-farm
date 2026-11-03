@@ -403,7 +403,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1298 条（2 skipped）
+npm test                                       # 1306 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
                                                # ⚠️ 也别接管道：`| tail` 拿到的是 tail 的退出码，ENOSPC 也能显示 EXIT=0
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
@@ -1377,7 +1377,7 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1298 单测（2 skipped）
+npm run lint && npx vitest run && npm run build   # 1306 单测（2 skipped）
 node scripts/_probe-snapshot-online.mjs           # 41 条断言，全绿
 ```
 
@@ -2261,7 +2261,7 @@ owner 是别人                             → 整份重置成默认值，一�
 ```bash
 npm run lint                                       # 0
 npx vitest run src/online/settings.test.ts         # 11 条
-npx vitest run                                     # 1298 条（2 skipped）
+npx vitest run                                     # 1306 条（2 skipped）
 npm run build
 npx vite preview --port 4407 --strictPort
 node scripts/_probe-settings-online.mjs http://127.0.0.1:4407/   # 11 条断言
@@ -2307,9 +2307,58 @@ node scripts/_probe-settings-online.mjs http://127.0.0.1:4407/   # 11 条断言
 
 ### 7.20.6 已知没做
 
-- **换账号后本地其它表没清**：这一版只保证设置不串号（不推 + 重置）。
-  任务 / 积分靠「拉取时只清 `srv_` 行」自然替换，但新账号第一次进来之前，
-  界面会短暂显示上一个人的数据。彻底的做法是登录时按 uid 清库，那是另一件事。
+- ~~**换账号后本地其它表没清**~~ —— 已做，见 §7.21。
 - **`gameClock` 不跨设备**：见 7.20.3 ④。
 - **另一台设备改了设置，这台不实时更新**：只在启动时拉。PIN 只在设它的
   那台设备上用来开门，所以实际影响很小；真要实时得加轮询或长连接。
+
+## 7.21 换账号：先清上一个人的缓存，再拉（2026-11-03）
+
+在线版的读路径是「服务端 → Dexie → UI」。换一个人登录时，**在他第一次拉取
+完成之前**，界面读到的还是上一个人的任务、积分流水、兑换记录、心愿单。
+这不是「闪一下」：拉取失败（没网）时它就一直是那个人的数据 —— 孩子会照着
+别人的任务去做，家长会看到别人的心愿单。
+
+### 7.21.1 清理放在「发请求之前」
+
+`src/online/adopt.ts` 的 `adoptAccount(uid)`，在 `pullOnce` 的**第一个 await**
+调用（不是请求之后）。顺序错了的话断网就永远清不掉 —— 这条有专门的用例卡住
+（`pull.test.ts` 里「换人 + 网络失败：上一个人的行仍然被清掉」）。
+
+三种结果，含义不同：
+
+| 结果 | 含义 | 做什么 |
+|---|---|---|
+| `first` | 这台设备第一次登录 | **不清** —— 从本地版升级上来的孩子，存档还在本地行里 |
+| `same` | 同一个账号 | 什么都不做（每次刷新都走这里） |
+| `switched` | 换人了 | 先清云端镜像，再记新 uid |
+
+### 7.21.2 ★★ 只清「云端镜像」，本地行一行不动
+
+本地版和在线版**共用同一套表、同一个包名**（`com.kidquestfarm.app`）。
+这里要是 `clear()` 整张表，切回本地版时孩子的数据就没了，而界面上看不出来。
+
+- 带 `srv_` 前缀的行 ⇒ 删（只可能来自服务端）
+- `redeemItems` / `wishOffers` ⇒ **整张清**（主键是服务端给的字符串，分不出前缀；
+  而在线版里这两张表只可能有云端数据 —— 播种在在线模式下不写）
+- `gameKv` 的 `__coin` 镜像 ⇒ 删（余额是上一个人的）
+- 其余（本地任务 / 本地积分 / 农场 / 设置）⇒ **一行不动**
+
+### 7.21.3 ★★ 不能复用 `settings.owner`
+
+那个 key 管的是设置（§7.20）：发现换人就整份重置。这里要是也写它，
+`pullSettings` 会以为「刚才是同一个账号」，于是把上一个人的 PIN / 昵称
+**推到新账号上**。所以另开一个 `data.owner` —— 两件事必须各用一个 key。
+
+### 7.21.4 验收
+
+- `src/online/adopt.test.ts` 6 条：没登录不动 / 同账号不重复清 /
+  首次登录不清 / 换人清干净 / **本地行留下** / 清两遍第二遍是 0
+- `src/sync/pull.test.ts` 追加 2 条：换人 + 断网仍然清掉；同账号重拉不清
+- 三个变异都变红：① `uid` 写成 `id`（`ApiUser` 的字段是 `uid`，
+  写错会恒为 undefined ⇒ 永远当成没登录 ⇒ 永不清）② 认领挪到请求之后
+  ③ `clearCloudMirrors` 变成空操作
+
+> 第 ① 个是真踩到的：`getSession()?.user.id` 编译得过、测试也可能全绿
+> （单独测 `adoptAccount` 时它不经过这一行），只有「换人 + 断网」那条
+> 集成用例能抓住它。
