@@ -20,15 +20,30 @@ import { useAccount } from '@/store/useAccount'
       首屏给的选择越多，越像出了大事。
    ============================================================ */
 
-export function BootRetryPage({ onRetry }: { onRetry: () => void }) {
+export function BootRetryPage({
+  onRetry,
+  title = '还没连上服务器',
+  detail,
+  hint = '网络好了点下面重试就行，不用重新填什么。'
+}: {
+  onRetry: () => void
+  /** 覆盖标题（默认是「还没连上服务器」） */
+  title?: string
+  /** 覆盖正文；**不传**就按 store 里的错误自己决定（见下面那段注释） */
+  detail?: string | null
+  /** 覆盖「接下来怎么办」那一句（启动出错时不是网络问题，别照抄） */
+  hint?: string
+}) {
   const error = useAccount((s) => s.error)
   const busy = useAccount((s) => s.busy)
 
   /* ★ 同一句话不显示两遍。默认的 `error` 就是「连不上服务器，请检查网络」，
      而标题已经说了「还没连上服务器」—— 两行一样的话看着像出了大事，
      也占掉了本来能放「接下来怎么办」的位置。只有**更有信息**的那句才显示
-     （比如「服务器没有响应，请稍后再试」）。 */
-  const detail = error && !error.includes('连不上服务器') ? error : null
+     （比如「服务器没有响应，请稍后再试」）。
+     `detail` 显式传进来时（启动阶段抛的错）按传的来。 */
+  const shown =
+    detail !== undefined ? detail : error && !error.includes('连不上服务器') ? error : null
 
   return (
     /* `fixed inset-0` 而不是 `min-h-screen`：这一屏出现时外壳还没挂载，
@@ -38,15 +53,11 @@ export function BootRetryPage({ onRetry }: { onRetry: () => void }) {
         <div className="text-5xl" aria-hidden>
           📡
         </div>
-        <h1 className="mt-5 font-display text-xl font-extrabold text-ink-800">
-          还没连上服务器
-        </h1>
-        {detail && (
-          <p className="mt-2 text-sm font-bold leading-relaxed text-ink-600">{detail}</p>
+        <h1 className="mt-5 font-display text-xl font-extrabold text-ink-800">{title}</h1>
+        {shown && (
+          <p className="mt-2 text-sm font-bold leading-relaxed text-ink-600">{shown}</p>
         )}
-        <p className="mt-2 text-xs leading-relaxed text-ink-500">
-          网络好了点下面重试就行，不用重新填什么。
-        </p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-500">{hint}</p>
         <button
           data-boot-retry-btn
           type="button"

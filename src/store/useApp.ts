@@ -239,6 +239,15 @@ export interface Toast {
 interface AppState {
   ready: boolean
   loading: boolean
+  /**
+   * 启动过程中抛出来的错（`boot()` 里任何一步）。
+   *
+   * 为什么要有：`boot()` 原来没有 try/catch，三个 await 里任何一处抛
+   * （Dexie 写不进去、服务端返回的形状不对导致的 TypeError…）都会让
+   * `set({ ready: true })` 永远执行不到 ⇒ **永远停在开场页转圈**：
+   * 没有报错、没有重试、没有出口，用户只能卸载重装（数据全丢）。
+   */
+  bootError: string | null
 
   settings: AppSettings
   /** 任务：在用的（不含已隐藏） */
@@ -2639,6 +2648,7 @@ async function syncLiveInstances(task: Task, todayKey: string, now: number): Pro
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
   loading: true,
+  bootError: null,
   settings: DEFAULT_SETTINGS,
   tasks: [],
   allTasks: [],
@@ -2676,18 +2686,28 @@ export const useApp = create<AppState>((set, get) => ({
   /* ================= 生命周期 ================= */
 
   boot: async () => {
-    set({ loading: true })
-    await seedIfEmpty()
-    /* 先落一份设置再 refresh：`refresh()` 一开头就读 `get().settings`
-       算「今天是哪天」（`dayStartHour`）、时间流速和事件开关。 */
-    set({ settings: await loadSettings() })
-    await get().refresh()
-    /* `refresh()` 会把云端设置写进本地 meta（见 `sync/pull.ts` 的
-       `pullSettings`），但**不碰 store** ⇒ 这里要重读一次，否则启动后
-       内存里还是拉取之前那份，「换台设备登录设置就还在」在界面上不成立。
-       比较后再 `set` 的那套在 `reloadSettings` 里。 */
-    await get().reloadSettings()
-    set({ ready: true, loading: false })
+    set({ loading: true, bootError: null })
+    try {
+      await seedIfEmpty()
+      /* 先落一份设置再 refresh：`refresh()` 一开头就读 `get().settings`
+         算「今天是哪天」（`dayStartHour`）、时间流速和事件开关。 */
+      set({ settings: await loadSettings() })
+      await get().refresh()
+      /* `refresh()` 会把云端设置写进本地 meta（见 `sync/pull.ts` 的
+         `pullSettings`），但**不碰 store** ⇒ 这里要重读一次，否则启动后
+         内存里还是拉取之前那份，「换台设备登录设置就还在」在界面上不成立。
+         比较后再 `set` 的那套在 `reloadSettings` 里。 */
+      await get().reloadSettings()
+      set({ ready: true })
+    } catch (e) {
+      /* ★★ **绝不能**让 `ready` 留在 false。
+         那等于永远停在开场页转圈：没有报错、没有重试、没有出口，
+         用户只能卸载重装（数据全丢）。这里把错交给界面，
+         由它说清发生了什么 + 给一个重试（`BootRetryPage`）。 */
+      set({ bootError: e instanceof Error ? e.message : String(e) })
+    } finally {
+      set({ loading: false })
+    }
   },
 
   refresh: async (opts) => {

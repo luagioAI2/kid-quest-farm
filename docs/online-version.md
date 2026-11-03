@@ -871,6 +871,31 @@ abort 掉造「连不上」，然后
 ⚠️ 判据只能看 DOM（`[data-boot-retry]`），不能看「转圈没了」：
 开场页和这一屏都是整屏替换，`innerText` 那种模糊判据分不出它们。
 
+#### 同一个坑的第二面：`boot()` 自己抛错
+
+`boot()` 原来**没有 try/catch**。三个 await（`seedIfEmpty` / `loadSettings` /
+`refresh`）里任何一处抛错，`set({ ready: true })` 就永远执行不到 ——
+**永远停在开场页转圈**：没有报错、没有重试、没有出口，用户只能卸载重装
+（数据全丢）。而 `refresh()` 自己也没有 try/catch，链路上任何一步
+（Dexie 写不进去、服务端返回的形状不对导致的 TypeError）都会一路冒上来。
+
+现在 `boot()` 收口成 `try / catch / finally`：
+
+| 步骤 | 结果 |
+| --- | --- |
+| 成功 | `ready: true`，`bootError: null` |
+| 抛错 | `bootError = e.message`，**`ready` 保持 false** |
+| 无论如何 | `loading: false`（否则骨架/按钮永远转） |
+
+界面用同一个 `BootRetryPage`（标题/正文/提示可覆盖）接住：
+「启动时出了点问题」+ 错误原文 + 「再试一次看看。要是还不行，把这一屏
+截图发给我们。」—— 提示语**不能**照抄网络那版（「网络好了点重试」），
+这时的原因多半和网络无关。
+
+⚠️ 两处的判据都是 `!ready`，靠 `bootAccount === 'failed'` 和 `bootError`
+区分是「没账号」还是「启动炸了」。别把这两条并成一个 `if`：账号那条要
+先跑（没账号时 `boot()` 压根不该跑，也就不会有 `bootError`）。
+
 ---
 
 ## 7.9 第四期：兑换商城上云（2026-11-02）

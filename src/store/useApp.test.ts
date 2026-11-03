@@ -3942,3 +3942,47 @@ describe('reloadSettings', () => {
     expect(useApp.getState().settings).toBe(before)
   })
 })
+
+/* ---- 启动失败不许把人卡在开场页（2026-11-03） ----
+ *
+ * `boot()` 原来没有 try/catch：三个 await 里任何一处抛错（Dexie 写不进去、
+ * 服务端返回的形状不对导致的 TypeError…）都会让 `set({ ready: true })`
+ * 永远执行不到 ⇒ **永远停在开场页转圈**。没有报错、没有重试、没有出口，
+ * 用户只能卸载重装（数据全丢）。
+ *
+ * 这条测试守的是：抛错之后 `bootError` 有值、`ready` 仍然是 false
+ * （让界面去拦）、`loading` 必须落回 false（否则按钮/骨架永远转）。
+ */
+describe('启动：抛错不能把 ready 留在 false 而没人知道', () => {
+  it('★ boot() 里抛错 ⇒ 记下 bootError，loading 落回 false', async () => {
+    const realRefresh = useApp.getState().refresh
+    /* 让 boot 的第三步炸掉 —— 比 mock Dexie 更贴近真实（refresh 内部
+       本来就是网络 + 写库 + 计算，任何一步都可能抛） */
+    useApp.setState({
+      ready: false,
+      loading: true,
+      bootError: null,
+      refresh: () => Promise.reject(new Error('refresh 炸了'))
+    })
+
+    await useApp.getState().boot()
+
+    const s = useApp.getState()
+    expect(s.ready, 'ready 不能是 true —— 数据没加载完就放人进去等于空界面').toBe(false)
+    expect(s.bootError).toContain('refresh 炸了')
+    expect(s.loading, 'loading 不落回 false，骨架/按钮会一直转').toBe(false)
+
+    /* 还原，别污染后面的用例 */
+    useApp.setState({ refresh: realRefresh, bootError: null })
+  })
+
+  it('★ 再 boot 一次成功就清掉 bootError（重试必须真的能救回来）', async () => {
+    useApp.setState({ ready: false, loading: true, bootError: '上一次炸了' })
+
+    await boot()
+
+    const s = useApp.getState()
+    expect(s.ready).toBe(true)
+    expect(s.bootError).toBeNull()
+  })
+})

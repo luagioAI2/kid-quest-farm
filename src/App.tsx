@@ -61,6 +61,7 @@ const SPLASH_MIN_MS = 1900
 
 export default function App() {
   const ready = useApp((s) => s.ready)
+  const bootError = useApp((s) => s.bootError)
   const balance = useApp((s) => s.balance)
   /** 兑换券：农场产出的结算币。和积分是两套账，见 store 里 postHarvest 的注释。 */
   const harvestBalance = useApp((s) => s.harvestBalance)
@@ -429,6 +430,19 @@ export default function App() {
      不拦就是一个永远转圈的开场页。 */
   if (isOnlineMode && bootAccount === 'failed' && !ready) {
     return <BootRetryPage onRetry={() => void retryBoot()} />
+  }
+  /* ★ 启动过程本身抛错（Dexie 写不进去 / 服务端形状不对导致的 TypeError…）
+     ⇒ 同样停住。`boot()` 里已经把错收进 `bootError` 并且**不置 ready**，
+     不接这一屏就是永远转圈 —— 没有报错、没有重试、没有出口。 */
+  if (bootError && !ready) {
+    return (
+      <BootRetryPage
+        title="启动时出了点问题"
+        detail={bootError}
+        hint="再试一次看看。要是还不行，把这一屏截图发给我们。"
+        onRetry={() => void retryBoot()}
+      />
+    )
   }
   if (!ready || !splashMinElapsed) return <SplashPage />
 

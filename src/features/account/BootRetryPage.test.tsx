@@ -68,6 +68,22 @@ describe('BootRetryPage：首启连不上时的那一屏', () => {
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
+  it('★ 启动过程抛错时换一套说法（不是网络问题，别照抄「网络好了」）', () => {
+    render(
+      <BootRetryPage
+        title="启动时出了点问题"
+        detail="Cannot read properties of undefined"
+        hint="再试一次看看。要是还不行，把这一屏截图发给我们。"
+        onRetry={() => {}}
+      />
+    )
+
+    expect(screen.getByText('启动时出了点问题')).toBeTruthy()
+    expect(screen.getByText('Cannot read properties of undefined')).toBeTruthy()
+    expect(document.body.textContent, '这句话只对网络问题成立').not.toContain('网络好了')
+    expect(document.body.textContent).toContain('截图')
+  })
+
   it('★ 正在重试时按钮禁用（连点会连发请求）', async () => {
     useAccount.setState({ busy: true })
     const onRetry = vi.fn()
