@@ -49,8 +49,6 @@ import { pullGameKv } from './kv'
 
 /** 快照不存在（`restore` / `get` 时那条被保留策略淘汰了） */
 export const SNAPSHOT_NOT_EXIST = 10041001
-/** 快照数量超配额 */
-export const SNAPSHOT_QUOTA = 10041101
 /** 未拥有该游戏（`checkGameExists` 第三道闸） */
 export const SNAPSHOT_GAME_NOT_OWNED = 10040401
 
@@ -408,8 +406,6 @@ export function snapshotFailText(e: unknown): string {
   switch (e.code) {
     case SNAPSHOT_NOT_EXIST:
       return '这个还原点已经被清理掉了（只保留最近 20 个），换一个试试。'
-    case SNAPSHOT_QUOTA:
-      return '还原点太多了，等系统清理掉旧的再存。'
     case SNAPSHOT_GAME_NOT_OWNED:
       return '这个游戏还没兑换过，存不了还原点。'
     default:

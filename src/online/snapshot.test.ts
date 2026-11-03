@@ -272,7 +272,6 @@ describe('snapshotFailText', () => {
     expect(snapshotFailText(new ApiError(NETWORK, ''))).toContain('连不上服务器')
     expect(snapshotFailText(new ApiError(401, ''))).toContain('重新登录')
     expect(snapshotFailText(new ApiError(10041001, ''))).toContain('已经被清理')
-    expect(snapshotFailText(new ApiError(10041101, ''))).toContain('太多')
     expect(snapshotFailText(new ApiError(10040401, ''))).toContain('还没兑换')
   })
 
