@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { useAccount, type BindReason } from '@/store/useAccount'
+import { useApp } from '@/store/useApp'
 import { MOBILE_ALREADY_REG } from '@/api/client'
 import { deviceIdPersisted } from '@/api/device'
 import { BottomSheet } from '../farm/farmUi'
@@ -63,6 +64,7 @@ export function BindSheet({
   const errorCode = useAccount((s) => s.errorCode)
   const bindMobile = useAccount((s) => s.bindMobile)
   const sendCode = useAccount((s) => s.sendCode)
+  const pushToast = useApp((s) => s.pushToast)
 
   const [mobile, setMobile] = useState('')
   const [code, setCode] = useState('')
@@ -122,12 +124,33 @@ export function BindSheet({
   const submit = async () => {
     if (!canSubmit) return
     setAttemptedMobile(mobile.trim())
+    /* 先记下来：`bindMobile` 成功之后会把 `bindSheet.reason` 清成 null，
+       而下面那句提示要按**当初为什么弹的**来选措辞。 */
+    const why = reason
     const ok = await bindMobile(mobile, code, password.trim())
     if (ok) {
       markNudged()
       setMobile('')
       setCode('')
       setPassword('')
+      /* ★ 绑完必须有个收尾 —— 面板上写着「绑完就能继续」（见上面那段说明），
+         不接一句的话，关掉面板后人看到的是原来那一屏，**什么都没发生**：
+         花券那一次本来就没生效，他不会知道该再点一次。 */
+      pushToast(
+        why === 'coupon'
+          ? {
+              kind: 'success',
+              title: '账号存好了',
+              detail: '刚才那一步没生效 —— 回到刚才那一屏，再点一次就行。',
+              emoji: '✅',
+            }
+          : {
+              kind: 'success',
+              title: '进度存到账号里了',
+              detail: '以后换手机、重装 App，用这个手机号和刚才设的密码就能登回来。',
+              emoji: '🔖',
+            },
+      )
     }
   }
 

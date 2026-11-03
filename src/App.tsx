@@ -708,6 +708,9 @@ function ToastHost({
         <button
           key={t.id}
           onClick={() => onDismiss(t.id)}
+          /* 探针靠它认「提示条真的画出来了」。store 里收到不算数 ——
+             提示条是 Portal 之外的另一棵树，写错位置就永远不显示。 */
+          data-toast={t.kind}
           className={
             'pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border-3 border-ink-900/10 px-4 py-3 text-left shadow-float anim-bounce-in ' +
             (tone[t.kind] ?? 'bg-white')

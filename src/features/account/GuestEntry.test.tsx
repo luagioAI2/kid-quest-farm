@@ -194,6 +194,75 @@ describe('保存进度面板', () => {
 })
 
 /* ============================================================
+   绑完之后必须有个收尾（2026-11-03）
+   ------------------------------------------------------------
+   面板上写着「绑完就能继续」。可花券那一次**本来就没生效**（服务端拒了），
+   绑完如果只把面板关掉，人看到的是原来那一屏 —— 什么都没发生，
+   他不会知道该再点一次。这是「一句承诺没人兑现」，不是小事。
+
+   两种原因措辞不同：
+     · coupon —— 告诉他刚才那一步没生效、回去再点一次
+     · 其余   —— 告诉他以后怎么回来（换手机用手机号 + 密码）
+   ============================================================ */
+describe('绑成功之后的收尾', () => {
+  beforeEach(() => {
+    __resetGuestPromptForTest()
+    bindApi.mockReset()
+    useApp.setState({ toasts: [] })
+    useAccount.setState({
+      session: session(true),
+      busy: false,
+      error: null,
+      errorCode: null,
+      bindSheet: { open: true, reason: 'manual' },
+    })
+  })
+
+  const fillAndSubmit = async () => {
+    await userEvent.type(document.querySelector('[data-bind-mobile]') as HTMLElement, '13800138000')
+    await userEvent.type(document.querySelector('[data-bind-password]') as HTMLElement, 'abc123456')
+    await userEvent.click(document.querySelector('[data-bind-submit]') as HTMLElement)
+  }
+
+  it('★ 花券被拦的那次：说清「刚才那一步没生效，回去再点一次」', async () => {
+    bindApi.mockResolvedValueOnce({ ...user(false), mobile: '138****8000' })
+    useAccount.setState({ bindSheet: { open: true, reason: 'coupon' } })
+    render(<BindSheet />)
+    await fillAndSubmit()
+
+    await vi.waitFor(() => expect(useApp.getState().toasts.length).toBe(1))
+    const t = useApp.getState().toasts[0]
+    expect(t.title).toContain('存好')
+    /* 「再点一次」是这句提示存在的全部理由：不说就等于没接上 */
+    expect(t.detail ?? '').toContain('再点一次')
+    /* 不能让人以为兑换已经成功了 */
+    expect(t.detail ?? '').not.toContain('兑换好了')
+  })
+
+  it('自己点「保存进度」的那次：改说「以后怎么回来」', async () => {
+    bindApi.mockResolvedValueOnce({ ...user(false), mobile: '138****8000' })
+    render(<BindSheet />)
+    await fillAndSubmit()
+
+    await vi.waitFor(() => expect(useApp.getState().toasts.length).toBe(1))
+    const t = useApp.getState().toasts[0]
+    expect(t.title).toContain('存到账号')
+    /* 换手机能登回来靠的是手机号 + 刚才那个密码，这句话必须出现 */
+    expect(t.detail ?? '').toContain('手机号')
+    expect(t.detail ?? '').toContain('密码')
+  })
+
+  it('绑失败时**不**发成功提示（不然人会以为存下来了）', async () => {
+    bindApi.mockRejectedValueOnce(new ApiError(MOBILE_ALREADY_REG, '该手机号已注册'))
+    render(<BindSheet />)
+    await fillAndSubmit()
+
+    await vi.waitFor(() => expect(useAccount.getState().error).not.toBeNull())
+    expect(useApp.getState().toasts).toEqual([])
+  })
+})
+
+/* ============================================================
    号码已经有账号了（2026-11-03）
    ------------------------------------------------------------
    这是游客绑定**最常见**的失败：家长以前在别的手机上玩过，同一个号码
