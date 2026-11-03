@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../store/useApp'
+import { useAccount } from '../store/useAccount'
 import { isOnlineMode } from '../sync/pull'
 import { syncBannerText } from '../domain/syncState'
 
@@ -17,6 +18,9 @@ import { syncBannerText } from '../domain/syncState'
 export function SyncBanner() {
   const syncState = useApp((s) => s.syncState)
   const refresh = useApp((s) => s.refresh)
+  const ensureGuest = useAccount((s) => s.ensureGuest)
+  /* 原始切片 + 布尔派生：selector 返回新对象会让 zustand 每轮都重渲染（React #185） */
+  const hasSession = useAccount((s) => s.session !== null)
   const [busy, setBusy] = useState(false)
 
   if (!isOnlineMode) return null
@@ -43,6 +47,13 @@ export function SyncBanner() {
           onClick={async () => {
             setBusy(true)
             try {
+              /* ★ 先确认「有没有账号」，再拉数据（2026-11-03）。
+                 启动那一刻如果连不上服务器，`ensureGuest` 建游客就失败了，
+                 于是整台设备**一个令牌都没有**。这时候只重拉数据是没用的：
+                 没有令牌，拉取照样失败，横条一直在，界面永远是空的 ——
+                 而人不会想到「要重启一次 App」。
+                 `ensureGuest` 是幂等的：已经有会话就立刻返回，不会多打一次请求。 */
+              if (!hasSession) await ensureGuest()
               await refresh()
             } finally {
               setBusy(false)
