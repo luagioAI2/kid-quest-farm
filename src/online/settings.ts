@@ -126,8 +126,38 @@ function uidNow(): number | null {
   return getSession()?.user?.uid ?? null
 }
 
-/** 已知的服务端最新 version（本进程内） */
+/** 已知的服务端最新 version（本进程内）—— 只用来给下一次写发一个更大的号 */
 let lastVersion = 0
+
+/**
+ * 拉取序号：**只有它**能判「两次读之间谁新」。
+ *
+ * 为什么不能用服务端的 `version` 判：那个号是**客户端自己传上去的**
+ * （`oSaveSettings` 发 `lastVersion + 1`），而 `lastVersion` 每个进程从 0 开始。
+ * 于是换台设备、或者刚重启过，号就退回 1 —— 拿它比大小会得出
+ * 「B 刚存的那份比 A 手上的旧」⇒ A 一直 `stale`，直到它自己重启才恢复。
+ * 实测：跑两轮探针，服务端 version 从 999 → 1 → 2。
+ *
+ * 本地序号没有这个问题：同一进程内 `++pullSeq` 单调，`appliedSeq` 记
+ * 「已经落地过的最新一次拉取」，后发先回的旧快照一眼就能认出来。
+ */
+let pullSeq = 0
+let appliedSeq = 0
+
+/**
+ * 本进程内**成功写上去过几次** —— 判「这份读结果是不是过期了」的真判据。
+ *
+ * ★ 为什么 `version` 不够用：服务端那个序号是**它自己那份**的（线上可能已经 999），
+ *   而 `lastVersion` 是本进程从 0 开始数的。两者不可比，于是
+ *   「响应里的序号更大」根本不能说明「这份数据比本地新」。线上撞到过：
+ *   登录触发的那次 `settings/get` 还在飞，家长已经写完新小名（客户端发的是 1），
+ *   读响应带着 999 回来 ⇒ 按序号判是「更新」，照用就把刚写的小名盖回去，
+ *   下次启动「变回旧名字」，**全程不报错**。
+ *
+ * 所以判据改成「这次拉取**开始之后**有没有写入成功过」：有 ⇒ 这份读结果作废。
+ * 而「读与读之间谁新」由 `pullSeq` 管；`version` 现在只用来给下一次写发号。
+ */
+let writeEpoch = 0
 
 /** 累计多这么多秒才推一次用量（60 秒一次会把请求打满） */
 export const USAGE_PUSH_EVERY_SEC = 300
@@ -140,6 +170,9 @@ let usageInFlight = false
 /** 单测用：把版本闸门和节流状态一起复位 */
 export function resetSettingsSyncState(): void {
   lastVersion = 0
+  writeEpoch = 0
+  pullSeq = 0
+  appliedSeq = 0
   lastPushedUsage = null
   usageInFlight = false
 }
@@ -196,6 +229,7 @@ export async function oSaveSettings(s: AppSettings): Promise<ServerSettings> {
   const r = await settingsSave(cloudPayload(s), next)
   // 服务端回显优先（并发写时它可能是更大的序号）
   lastVersion = Math.max(lastVersion, r.version)
+  writeEpoch += 1
   const uid = uidNow()
   if (uid !== null) await setMeta(OWNER_KEY, uid)
   return r
@@ -222,9 +256,18 @@ export type PullSettingsStatus =
  *    这时候必须把本机这份**推上去**，否则「所有数据在服务器」是句假话：
  *    家长在这台设备上的小名、PIN、限时永远上不去，换台设备就全丢。
  * ② **读结果可能比一次写更旧**。`refresh()` 并发跑，`get` 晚回来时
- *    本地 meta 已经被那次写更新过了 —— 用 `version` 闸门丢掉它。
+ *    本地 meta 已经被那次写更新过了 —— 丢掉它。两道闸，别混：
+ *      · `writeEpoch`：这次拉取开始之后**写入成功过** ⇒ 这份是旧快照；
+ *      · `pullSeq`：有**更晚发起**的拉取已经落地 ⇒ 这次作废。
+ *    ⚠️ 别用服务端的 `version` 当判据，理由见 `pullSeq` 的注释（跨进程不可比）。
  */
 export async function pullSettings(local: AppSettings): Promise<PullSettingsStatus> {
+  /* ★ 取样点必须在**函数入口**，不能紧贴 `settingsGet()`：
+     前面那句 `getMeta` 走的是 IndexedDB，比一次写请求慢得多，
+     把取样点放在后面，写入会先落地 —— 闸门等于没有（实测仍然 applied）。
+     口径：这次拉取的**全过程**里只要写入成功过，读结果就是旧快照，丢掉。 */
+  const epochAtRequest = writeEpoch
+  const seq = ++pullSeq
   const uid = uidNow()
   const owner = await getMeta<number | null>(OWNER_KEY, null)
   /* `null` = 从没记过（升级上来的老数据），当作自己的；否则必须同一个 uid */
@@ -232,7 +275,9 @@ export async function pullSettings(local: AppSettings): Promise<PullSettingsStat
 
   const r = await settingsGet()
 
-  if (r.version < lastVersion) return 'stale'
+  if (writeEpoch !== epochAtRequest) return 'stale'
+  if (seq < appliedSeq) return 'stale'
+  appliedSeq = seq
   lastVersion = Math.max(lastVersion, r.version)
 
   const remote = settingsFromCloud(r.payload, local)

@@ -212,26 +212,68 @@ describe('pullSettings：云端 → 本地 meta', () => {
     expect(await getMeta('settings.owner', null)).toBe(7)
   })
 
-  it('读结果比本地写入更旧 ⇒ stale，**不覆盖**本地', async () => {
-    /* 场景：家长刚改了名字（写成功，version=1），这时一个更早发出的
-       `settings/get` 才回来，带的是 version=0 的旧内容。
-       照用的话，刚改的名字会被盖回去 —— 而且不报错。 */
+  it('★ 读请求在写之前发出 ⇒ 回来时必须丢弃（哪怕它的序号更大）', async () => {
+    /* 服务端的 `version` 是**它自己那份**的序号（线上可能已经 999），
+       而客户端的计数器是**本进程从 0 开始**的 —— 两者不可比。
+       所以「序号更小」不能当「响应更旧」的判据：
+
+       引导流程里就是这样：登录触发的那次 `settings/get` 还在飞，
+       家长已经把新小名写成功了（客户端发的是 version=1），
+       读响应回来带着 999 ⇒ 按序号判是「更新」，照用就把刚写的小名盖回去，
+       下次启动「变回旧名字」，全程不报错。 */
     await saveSettings(LOCAL)
+    let releaseGet: (v: { payload: string; updated_at: number; version: number }) => void = () => {}
+    getMock.mockReturnValue(
+      new Promise((res) => {
+        releaseGet = res
+      }),
+    )
     saveMock.mockImplementation((payload: string, version: number) =>
       Promise.resolve({ payload, updated_at: 9, version }),
     )
-    await oSaveSettings({ ...LOCAL, childName: '刚改的名字' })
-    expect(saveMock).toHaveBeenCalledTimes(1)
 
-    getMock.mockResolvedValue({
-      payload: JSON.stringify({ childName: '很久以前的名字' }),
-      updated_at: 1,
-      version: 0,
-    })
+    const inflight = pullSettings(await loadSettings()) // 读先发出，卡在网络上
+    await oSaveSettings({ ...LOCAL, childName: '刚改的名字' }) // 写入成功
+    releaseGet({ payload: JSON.stringify({ childName: '很久以前的名字' }), updated_at: 1, version: 999 })
 
-    expect(await pullSettings(await loadSettings())).toBe('stale')
+    expect(await inflight).toBe('stale')
     expect((await loadSettings()).childName).toBe('小明')
   })
+
+  it('★ 两次拉取并发、后发的先回 ⇒ 先发的那份作废（别拿旧快照盖新的）', async () => {
+    /* `refresh()` 会被前台、登录、切页同时触发。两次读同时在路上时，
+       回来的顺序**不保证**是发出的顺序 —— 后发的先回、先发的后回很正常。
+       拿「服务端 version」判谁新是不行的（那个号是客户端自己传的，
+       每个进程从 0 开始，跨设备不可比，见 settings.ts 里 `pullSeq` 的注释），
+       所以用本进程的拉取序号。 */
+    await saveSettings(LOCAL)
+    const pending: Array<(v: { payload: string; updated_at: number; version: number }) => void> = []
+    getMock.mockImplementation(
+      () =>
+        new Promise((res) => {
+          pending.push(res)
+        }),
+    )
+    const waitPending = async (n: number) => {
+      for (let i = 0; i < 100 && pending.length < n; i++) await new Promise((r) => setTimeout(r, 5))
+      expect(pending.length).toBe(n)
+    }
+
+    const first = pullSettings(await loadSettings())
+    await waitPending(1)
+    const second = pullSettings(await loadSettings())
+    await waitPending(2)
+
+    // 后发的先回，带的是更新的一份
+    pending[1]({ payload: JSON.stringify({ childName: '新名字' }), updated_at: 2, version: 2 })
+    expect(await second).toBe('applied')
+
+    // 先发的后回，带的是旧快照 ⇒ 必须丢掉，否则「新名字」被盖回「旧名字」
+    pending[0]({ payload: JSON.stringify({ childName: '旧名字' }), updated_at: 1, version: 1 })
+    expect(await first).toBe('stale')
+    expect((await loadSettings()).childName).toBe('新名字')
+  })
+
 })
 
 describe('用量上云：节流 + 尽力而为', () => {

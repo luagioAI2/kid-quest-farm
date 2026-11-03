@@ -403,7 +403,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1333 条（2 skipped）
+npm test                                       # 1334 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
                                                # ⚠️ 也别接管道：`| tail` 拿到的是 tail 的退出码，ENOSPC 也能显示 EXIT=0
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
@@ -1377,7 +1377,7 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1333 单测（2 skipped）
+npm run lint && npx vitest run && npm run build   # 1334 单测（2 skipped）
 node scripts/_probe-snapshot-online.mjs           # 41 条断言，全绿
 ```
 
@@ -2322,7 +2322,27 @@ owner 是别人                             → 整份重置成默认值，一�
 `refresh()` 是并发跑的，`settings/get` 的响应可能比一次 `save` 晚回来。
 照用的话，刚存的设置会被上一份读结果盖回本地 meta —— 不报错。
 
-闸门：`version` 单调递增，`get` 回来的 `version < lastVersion` 就丢掉（`stale`）。
+闸门是**两道**。一开始只有 `version` 一道，**不够**（2026-11-03 修）：
+
+| 闸 | 管什么 | 为什么必须有 |
+|---|---|---|
+| `writeEpoch` | 这次拉取开始之后**写入成功过** ⇒ 旧快照，丢掉 | 真正的判据：这份读是在写之前发出的 |
+| `pullSeq` / `appliedSeq` | 有**更晚发起**的拉取已经落地 ⇒ 这次作废 | 两次读同时在路上，回来的顺序不保证是发出的顺序 |
+
+⚠️ **别用服务端的 `version` 当判据。** 那个号是客户端自己传上去的
+（`oSaveSettings` 发 `lastVersion + 1`），而 `lastVersion` 每个进程从 0 开始
+⇒ 跨进程、跨设备**不可比**。实测连跑两轮探针，服务端 version 从 `999 → 1 → 2`；
+真换台设备就会得出「B 刚存的那份比 A 手上的旧」⇒ A 一直 `stale`，
+直到它自己重启才恢复。
+
+⚠️ `writeEpoch` 的取样点必须在**函数入口**，不能紧贴 `settingsGet()`：
+前面那句 `getMeta` 走的是 IndexedDB，比一次写请求慢得多 —— 取样点放在后面，
+写入会先落地，闸门等于没有（实测仍然 `applied`）。
+
+★ 判据：`src/online/settings.test.ts` 的两条 —— 「读请求在写之前发出 ⇒ 丢弃」
+（服务端回 999，本地计数器是 1，旧代码判 `999 >= 1` 就照用了）与
+「两次拉取并发、后发的先回 ⇒ 先发的作废」。两条都做过变异测试
+（删掉闸门即红）。
 
 **③ 断网时「界面新值、重启旧值」。**
 
@@ -2362,7 +2382,7 @@ owner 是别人                             → 整份重置成默认值，一�
 npm run lint                                       # 0
 npx vitest run src/online/settings.test.ts         # 18 条
 npx vitest run src/domain/gameTime.test.ts         # 21 条
-npx vitest run                                     # 1333 条（2 skipped）
+npx vitest run                                     # 1334 条（2 skipped）
 npm run build
 npx vite preview --port 4407 --strictPort
 node scripts/_probe-settings-online.mjs http://127.0.0.1:4407/   # 11 条断言
@@ -2563,3 +2583,56 @@ effect 再跑一遍，那时候按 `onboardingDone` 决定。本地版没这个�
 ★ 判据：`_probe-login-gate.mjs` 那两条 `elementFromPoint` / 「点开是登录弹层」
 （修完即绿）。★ 顺带记一条：**12 个探针连着跑会撞服务端限流**
 （`_probe-wish-online` 报 `too many requests`），单跑就绿 —— 别把它当回归。
+
+### ★★ 同一个坑的第二层：闸门自己盖住了自己的弹层
+
+顺序修完，反向那条（`_probe-login-gate`：按钮点得到）绿了。但**正向没验**：
+登录之后引导还出不出现、保存能不能落到账号里 —— 这是最容易反向坏掉的地方
+（引导永远不出现，而且不报错）。写 `_probe-onboarding-order.mjs` 去验，
+第一次跑就红在一个新地方：登录按钮**填得出值、查得到位置、点了没反应**。
+
+原因还是「全屏层赢命中测试」，只不过这次是闸门**自己**：
+
+| 层 | 来源 | z-index |
+|---|---|---|
+| 登录闸门 | `OnlineLoginGate` | **60** |
+| 登录弹层 | `LoginSheet` → `BottomSheet`（**自己又 Portal 一次**） | 50 |
+
+`BottomSheet` 不能留在闸门里（页面外壳的 `anim-fade` 会把它关进小盒子，
+见 `Portal.tsx`），所以它和闸门成了 body 下**两个平级的 `fixed` 层**。
+父子关系在 DOM 里已经断了，谁在上面只看 z-index：60 > 50 ⇒ 弹层整片被闸门那张
+不透明 `bg-paper` 盖住。用户看到的是「点了登录什么也没发生」。
+
+⇒ 闸门改成 `z-[45]`：**高于底部导航(30)、低于弹层(50)**。
+闸门的职责只是「盖住 App 外壳」，不需要盖住弹层。
+
+★ 教训：写「全屏层里再弹一层」之前先看两层的 z-index，尤其是弹层**自己会
+Portal 出去**的时候 —— 那时候父子关系不作数。
+★ 判据：探针里加一条 `elementFromPoint`（按钮中心命中的必须是按钮自己）。
+它比「点完看结果」早一步，也直接说出「谁盖住了谁」。
+
+### 正向那一半：登录 → 引导 → 写穿
+
+`_probe-onboarding-order.mjs` 五步：
+
+| 步 | 断言 |
+|---|---|
+| ① | 未登录：闸门在、`[data-step]` **不在**（引导不能先出来） |
+| ② | 走**真界面**登录（不是注 session）：只有一个可见密码框、两个字段都填上、按钮不是 disabled、命中测试是它自己 |
+| ③ | 登录后引导**出现**，从 `welcome` 开始 |
+| ④ | 小名输入框换成新名字 → 进 `done` |
+| ⑤ | 服务端 `/user/settings/get` 的 `childName` **等于新名字**（写穿成功） |
+
+四个当场踩到的坑：
+
+1. **按钮 `disabled` 时点了等于没点。** 密码没填进去 ⇒ `canSubmit` 为假 ⇒
+   `clickByText('登录')` 命中的是那个 disabled 的按钮，什么都不会发生，
+   最后红在「闸门没摘掉」，看着像登录接口坏了。要先
+   `waitForFunction(() => !btn.disabled)` 再点。
+2. **`input[type=password]` 写在双引号里会被 bash 吃掉**（`command not found`），
+   补丁静默变成空操作 —— 改完立刻 `grep` 一遍。
+3. **小名输入框是预填的**（云端已有小名），`page.type` 会追加成
+   「宝贝引导30921」；三击选中在这台机器上没生效，改用 `Ctrl+A` 再打。
+4. **探针会临时把账号的 `onboardingDone` 改成 false**（模拟新账号），收尾写回。
+   写回时版本号要**读当前值再 +1**，别写死一个常数 —— 写死就看不出
+   「这次到底写进去没有」（而且会把服务端的号按回去）。

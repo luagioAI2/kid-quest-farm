@@ -40,8 +40,17 @@ export function OnlineLoginGate() {
 
   return (
     <Portal>
+      {/* ★ z-[45]，**不能**用全屏层惯用的 z-[60]。理由：
+          这一屏自己会弹出 `LoginSheet`，而 BottomSheet 内部**又 Portal 了一次**
+          （它不能留在闸门里，否则页面外壳的 anim-fade 会把它关进小盒子）。
+          于是闸门和弹层成了 body 下**两个平级的 fixed 层**，
+          谁在上面只看 z-index：闸门 60 > 弹层 50 ⇒ 弹层整个被闸门那张
+          不透明 bg-paper 盖住。孩子看到的是「点了登录什么也没发生」。
+
+          45 = 高于底部导航(30)、低于弹层(50)。反过来不行，
+          因为闸门的职责只是「盖住 App 外壳」，不需要盖住弹层。 */}
       <div
-        className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-5 bg-paper px-6 text-center"
+        className="fixed inset-0 z-[45] flex flex-col items-center justify-center gap-5 bg-paper px-6 text-center"
         data-online-gate
       >
         <div className="text-6xl">🌤️</div>
