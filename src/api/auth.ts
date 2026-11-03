@@ -55,7 +55,12 @@ export const login = (mobile: string, password: string) =>
 export const register = (mobile: string, password: string, code: string, nickname?: string) =>
   api<AuthResult>(
     '/auth/register',
-    { mobile, password, code, ...(nickname ? { nickname } : {}) },
+    {
+      mobile,
+      password,
+      ...(code ? { code } : {}),
+      ...(nickname ? { nickname } : {}),
+    },
     { auth: false },
   )
 

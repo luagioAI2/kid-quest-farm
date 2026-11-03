@@ -9,12 +9,17 @@ import { BottomSheet } from '../farm/farmUi'
    为什么要登录：招商、心愿、兑换这些要「审核 / 分账」的事，
    服务端得知道是谁。用户原话：「点申请即可…**因为会根据当前账号，申请**。」
 
-   ## 为什么注册要验证码，登录不要
+   ## 验证码：注册可以不填，重设密码必须填（2026-11-03 改）
 
-   服务端 `POST /auth/register` 要求 `code`（6 位，`binding:"required,len=6"`）。
-   本地跑服务时验证码**不打短信**，而是打在服务端日志里（`DEV SMS CODE`）——
-   所以这一屏不需要「开发态假通过」的分支，填日志里那 6 位就行。
+   原来注册要 `code`（服务端 `binding:"required,len=6"`），而生产环境**根本没有
+   短信通道**（`DevSmsSender` 在 `IsProduction()` 下直接返回错误）——
+   等于「永远注册不了」。现在服务端改成可选，这里跟着放宽：
+
+     · 注册：验证码可以不填，密码必填（它就是「以后怎么回来」那条路）；
+     · 重设密码：**必须填** —— 那条路唯一的凭证就是码，放开等于谁都能改密码。
+
    ⚠️ 别为了好测加「跳过验证码」的开关：那等于线上也能跳过。
+   ⚠️ 服务端**没填码时 `mobile_verified = false`**，后台能一眼挑出来补验。
 
    ## 为什么用 BottomSheet 而不是整页
 
@@ -75,11 +80,10 @@ export function LoginSheet({
   }, [open, defaultMode])
 
   const mobileOk = /^\d{6,}$/.test(mobile.trim())
-  const canSubmit =
-    mobileOk &&
-    password.length >= 6 &&
-    (mode === 'login' || /^\d{6}$/.test(code.trim())) &&
-    !busy
+  /* 验证码：登录用不上；注册**可以不填**（生产环境没有短信通道）；
+     重设密码必须填 —— 那条路唯一的凭证就是码。 */
+  const codeOk = code.trim() === '' ? mode !== 'reset' : /^\d{6}$/.test(code.trim())
+  const canSubmit = mobileOk && password.length >= 6 && codeOk && !busy
 
   const submit = async () => {
     if (!canSubmit) return
@@ -157,7 +161,9 @@ export function LoginSheet({
 
         {mode !== 'login' && (
           <label className="block">
-            <span className="text-[11px] font-extrabold text-ink-500">验证码</span>
+            <span className="text-[11px] font-extrabold text-ink-500">
+              {mode === 'register' ? '验证码（收不到也能注册）' : '验证码'}
+            </span>
             <div className="mt-1 flex gap-2">
               <input
                 data-account-code

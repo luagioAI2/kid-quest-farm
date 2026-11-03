@@ -144,3 +144,47 @@ describe('登录面板：登录', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 })
+
+describe('注册：验证码可以不填（2026-11-03）', () => {
+  /* 生产环境没有短信通道（`DevSmsSender` 在 `IsProduction()` 下直接报错），
+     原来「注册必须填验证码」等于「永远注册不了」。现在密码必填、码可选。 */
+
+  const openRegister = async () => {
+    const user = userEvent.setup()
+    render(<LoginSheet open onClose={onClose} />)
+    await user.click(document.querySelector('[data-account-switch]') as HTMLElement)
+    return user
+  }
+
+  it('★ 不填验证码也能提交，code 传空串', async () => {
+    registerApi.mockResolvedValueOnce({
+      access_token: 'a',
+      refresh_token: 'r',
+      expires_in: 7200,
+      user: { uid: 1, mobile: '138****8000', nickname: '宝贝8000' },
+    })
+    const user = await openRegister()
+    await user.type(document.querySelector('[data-account-mobile]') as HTMLElement, '13800138000')
+    await user.type(document.querySelector('[data-account-password]') as HTMLElement, 'abc123456')
+
+    const btn = document.querySelector('[data-account-submit]') as HTMLButtonElement
+    expect(btn.disabled, '密码够了就该能点，不必等验证码').toBe(false)
+
+    await user.click(btn)
+    await waitFor(() => expect(registerApi).toHaveBeenCalled())
+    expect(registerApi.mock.calls[0].slice(0, 3)).toEqual(['13800138000', 'abc123456', ''])
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  it('★ 但「重设密码」不填验证码还是点不了（那条路唯一的凭证就是码）', async () => {
+    const user = await openReset()
+    await user.type(document.querySelector('[data-account-mobile]') as HTMLElement, '13900001111')
+    await user.type(document.querySelector('[data-account-password]') as HTMLElement, 'pass1234')
+    expect((document.querySelector('[data-account-submit]') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('验证码标签写着「收不到也能注册」', async () => {
+    await openRegister()
+    expect(document.body.textContent).toContain('收不到也能注册')
+  })
+})
