@@ -403,7 +403,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1287 条（2 skipped）
+npm test                                       # 1297 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
                                                # ⚠️ 也别接管道：`| tail` 拿到的是 tail 的退出码，ENOSPC 也能显示 EXIT=0
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
@@ -1377,7 +1377,7 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1287 单测（2 skipped）
+npm run lint && npx vitest run && npm run build   # 1297 单测（2 skipped）
 node scripts/_probe-snapshot-online.mjs           # 41 条断言，全绿
 ```
 
@@ -2176,3 +2176,140 @@ go run ./cmd/seed -c configs/config.yaml games   # 21 款，按 manifest 标 0/1
 > 教训：**「没变化」的断言，先问一句「基线是不是本来就是空的」。**
 > 余额 0 → 0、流水 0 → 0、列表 0 → 0，全都是恒真。
 > 加一条「前提」断言（基线必须非空）比多写三条「没变化」有用得多。
+
+## 7.20 家长设置上云：整份 JSON、PIN 上去、用量留下（2026-11-03）
+
+在线版最后一块只在本机的数据是 `meta.settings` 那一行 —— 小名、头像、家长锁 PIN、
+音量、限时、农场规则、兑换口径…一共 20 多个字段。它原来只在这台设备上，
+换台设备登录就全丢，而**两台设备各自都「对」**（都显示自己的默认值）。
+
+服务端是整份存：`POST /api/user/settings/{get,save}`，表 `user_settings`
+（`uid` 唯一索引 + `payload TEXT` + `size` + `version`）。
+
+### 7.20.1 为什么整份存，而不是一列一个字段
+
+`AppSettings` 有 20 多个字段，而且还在加。拆列意味着每加一个字段要改三处：
+实体、仓储 upsert 的列清单、映射。漏一处的表现是「家长设了、服务端没存」——
+**不报错**，重启后回退。
+
+整份存之后，服务端只校验**形状**：非空、≤ 32 KiB、合法 JSON、顶层是对象
+（`user_settings_srv.go`）。客户端加字段不用动服务端，但发上来的必须是对象
+（`123` / `[...]` / `"str"` 都拒）。
+
+写是**覆盖**不是合并（`OnConflict(uid).Update(...)`）：本地删掉的键，
+写上去之后服务端也不会留着。这条有单测盯着（`覆盖而不是合并`），
+因为「合并」看起来更安全，实际上会让删掉的设置永远复活。
+
+### 7.20.2 ★★ 两张「不上云」的清单，**故意不一样**
+
+| 字段 | 备份（`stripDeviceLocal`） | 云端（`DEVICE_LOCAL_SETTING_KEYS`） | 为什么 |
+|---|---|---|---|
+| `parentPin` | **剥** | **传** | 备份会被发到微信 / 网盘，4 位数字肉眼就能用；而云端是家长自己的账号，换台设备要能用同一个 PIN 开门 |
+| `gameClock` | 剥 | 剥 | 它是**用量**不是配置，见 7.20.3 第 4 条 |
+
+⚠️ 这两张清单长得像，但**别「统一一下」**：统一成备份那份 ⇒ 换机后开不了家长门；
+统一成云端那份 ⇒ 明文 PIN 跟着备份文件出门。
+
+### 7.20.3 ★★ 四个静默错法，每个都有一道闸
+
+**① 换账号：把上一个人的家长锁推给新账号。**
+
+`signOut` 不清 Dexie（断网也要能退出去），所以同一台设备换账号登录时，
+`meta.settings` 里还是上一个人的。而「云端为空 ⇒ 把本机推上去」这条迁移逻辑，
+遇到「新账号云端也是空的」就会把**上一个人的小名和 PIN 写进新账号**。
+
+闸门：`meta['settings.owner']` 记住这份设置是谁的。
+
+```
+owner 为 null（从没记过，升级上来的老数据）→ 当作自己的，允许推
+owner == 当前 uid                        → 允许推
+owner 是别人                             → 整份重置成默认值，一个字都不推
+```
+
+重置必须连 `gameClock` 一起：留着 PIN ⇒ 新账号被上一个人的锁关在家长区外面；
+留着 `childName` ⇒ 新账号看到别人孩子的名字；留着 `gameClock` ⇒ 上一个人
+今天玩的时长吃掉这个人的额度。
+
+**② 旧读响应盖掉新写。**
+
+`refresh()` 是并发跑的，`settings/get` 的响应可能比一次 `save` 晚回来。
+照用的话，刚存的设置会被上一份读结果盖回本地 meta —— 不报错。
+
+闸门：`version` 单调递增，`get` 回来的 `version < lastVersion` 就丢掉（`stale`）。
+
+**③ 断网时「界面新值、重启旧值」。**
+
+写穿是「服务端成功了才落本地」。失败时**内存也得退回去**，否则家长看着是新值、
+下次打开变回旧的。但只能**在内存还是这次那份时**退（`get().settings === next`）——
+无条件回退会把家长刚接着打的下一个字吞掉（和 `updateSettings` 头注释里那个
+「同一 tick 两次调用」是同一个坑）。
+
+**④ `gameClock` 每 60 秒一个 POST，而且断网时时长不累计。**
+
+`GamePlayGate` 每 60 秒 `updateSettings({ gameClock })` 落一次盘。它是**限时**这道
+闸的执行依据：
+
+- 上云 ⇒ 一分钟一个请求；
+- 写穿 ⇒ 断网时本地也写不进去 ⇒ 时长不累计 ⇒ **孩子无限玩**。
+
+闸门：`isDeviceLocalOnly(patch)` —— 只碰设备本地字段的改动直接落盘、不发请求；
+`cloudPayload` 也会把它剥掉。真要跨设备共享额度，光传不够，拉取时还得按
+「同一天取 max(本地, 云端)」合并，否则杀掉 App 重开就能把额度刷回去。
+
+### 7.20.4 验收
+
+```bash
+npm run lint                                       # 0
+npx vitest run src/online/settings.test.ts         # 11 条
+npx vitest run                                     # 1297 条（2 skipped）
+npm run build
+npx vite preview --port 4407 --strictPort
+node scripts/_probe-settings-online.mjs http://127.0.0.1:4407/   # 11 条断言
+```
+
+单测覆盖的是「纯函数 + 闸门」：payload 剥什么留什么、PIN 必须上云、
+`isDeviceLocalOnly`、坏 payload 一律 `null`、覆盖不合并、云端空要推、
+推不上去要保留、换账号要重置、旧读要丢。
+
+探针（真浏览器 + 真服务端）实测：
+
+```
+① 拉取：启动后 store 里是云端那份
+  ✓ 云端 payload 里每个键都进了 store — 2 个键一致
+  ✓ 拉取后 gameClock 还是本机那份（云端没有这个概念）
+② 写穿：改小名之后服务端跟着变
+  ✓ 设 PIN 之后云端也有 parentPin
+  ✓ 服务端 payload 里是新小名 — v1001
+  ✓ 云端 payload 里没有 gameClock（用量只属于这台设备）
+  ✓ 云端 payload 里有 parentPin（换台设备要能用同一个 PIN） — 已上云
+⑤ 断网：写不上去就别装作存好了
+  ✓ （前提）断网前 store 里是刚写上去的名字
+  ✓ 弹了「这次设置没发出去」
+  ✓ 内存回退到断网前那个名字（不是「界面新值、重启旧值」）
+  ✓ 云端一个字节没变 — v1001 → v1001
+⑥ 重开页面：设置跟着账号走
+  ✓ 刷新后 store 里还是刚写上去的名字
+```
+
+### 7.20.5 探针自己的三个坑（都当场踩到了）
+
+1. **端口不在 CORS 白名单** ⇒ 预检 403，浏览器只说「连不上服务器」，
+   于是「写穿坏了」「断网提示坏了」全红。加 `http://127.0.0.1:4407` 到
+   `_goprobe/config.8090.yaml` 的 `AllowOrigins` 并重启后端才对。
+   **换端口就要同步这一处**（这条已经踩过三次了）。
+2. **`finally` 里的 `process.exit()` 会吞掉未捕获异常**：中途 `TypeError` 时，
+   输出看起来像「跑完了、还全绿」，只是断言少了几条。加了 `catch` 打一行
+   「探针中断」之后才看见真因（`__kqf__.setState is not a function` ——
+   调试句柄只暴露了 `getState`）。
+3. **「断网后回退」这条恒真**：如果写穿在 ② 就失败了，断网前后名字根本没变过，
+   断言当然过。加了「前提：断网前 store 里必须是刚写上去的名字」才有效。
+   同一条规矩见 §7.19.4 —— **「没变化」的断言先问基线是不是空的**。
+
+### 7.20.6 已知没做
+
+- **换账号后本地其它表没清**：这一版只保证设置不串号（不推 + 重置）。
+  任务 / 积分靠「拉取时只清 `srv_` 行」自然替换，但新账号第一次进来之前，
+  界面会短暂显示上一个人的数据。彻底的做法是登录时按 uid 清库，那是另一件事。
+- **`gameClock` 不跨设备**：见 7.20.3 ④。
+- **另一台设备改了设置，这台不实时更新**：只在启动时拉。PIN 只在设它的
+  那台设备上用来开门，所以实际影响很小；真要实时得加轮询或长连接。

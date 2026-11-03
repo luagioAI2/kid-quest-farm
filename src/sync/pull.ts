@@ -2,6 +2,7 @@ import {
   clearGameCoinMirrors,
   db,
   listInstalledBundles,
+  loadSettings,
   mirrorGameCoinBalance,
 } from '../db/db'
 import { pullCoinBalances } from '../online/coin'
@@ -11,6 +12,7 @@ import { walletInfo, walletLedger } from '../api/wallet'
 import { listRedeemRecords, listRedeemRows } from '../api/redeem'
 import { listWishItems, listWishOrders } from '../api/wish'
 import { getToken } from '../api/session'
+import { pullSettings, type PullSettingsStatus } from '../online/settings'
 import {
   mapHarvest,
   mapInstance,
@@ -82,6 +84,13 @@ export interface PullResult {
   kvFailed?: number
   /** 服务端报的余额，用来和本地求和比对 */
   balance?: number
+  /**
+   * 家长设置这一趟的结果：
+   * `applied` 云端有、已写进本地；`pushed` 云端没有、把本机这份推上去了；
+   * `kept` 没拉成也没推成；`stale` 读结果比本地写入旧，丢掉了；
+   * `reset` 本地这份是上一个账号的，已重置成默认值（一个字都没推上去）。
+   */
+  settings?: PullSettingsStatus
 }
 
 /** 删掉某一类 `srv_` 行（重拉时先清后写，保证服务端删掉的这里也跟着消失） */
@@ -254,6 +263,21 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
          而真正的原因在另一个游戏身上。
        ★ 为什么放在大事务**外面**：`pullGameKv` 是逐键写的，中途失败会把整个
          事务连累掉 —— 那样连任务和积分都回滚，代价完全不成比例。 */
+    /* 家长设置：整份 JSON 的一读一写。
+       ★ 放在大事务**外面**：它只写 `meta.settings` 这一行，和上面那些表无关；
+         失败了也只是「这次没拉到」，不该连累任务和积分。
+       ★ 用 `loadSettings()` 而不是直接读 meta：要拿「合并过默认值」的那份。
+         直接读 meta 的话，老账号第一次上云的 payload 会缺字段
+         （`undefined` 会被 `JSON.stringify` 直接丢掉），换台设备就少几项。
+       ★ 不 `catch` 到 `null` 就完事：`pullSettings` 自己把「云端为空」和
+         「读失败」分开了 —— 前者要把本机推上去，后者必须什么都不做。 */
+    let settingsStatus: PullSettingsStatus | undefined
+    try {
+      settingsStatus = await pullSettings(await loadSettings())
+    } catch (e) {
+      console.warn('[sync] 家长设置没拉到：', (e as { message?: string })?.message)
+    }
+
     const kv = { keys: 0, failed: 0 }
     const installed = await listInstalledBundles()
     for (const g of installed) {
@@ -280,6 +304,7 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       wishOrders: wishRows?.length ?? 0,
       coins: coinBals === null ? undefined : coinBals.length,
       balance: wallet?.points ?? b.balance,
+      settings: settingsStatus,
     }
   } catch (e) {
     // 网络 / 401 / 服务端 5xx 都走这里：保留本地数据，不抛

@@ -103,6 +103,7 @@ import { settleInstance, type SettleParams } from '../domain/settlement'
 import { isOnlineMode, pullFromServer } from '../sync/pull'
 import { srvId } from '../sync/map'
 import { onlineWrite, writeFailToast } from '../online/write'
+import { isDeviceLocalOnly, oSaveSettings } from '../online/settings'
 import {
   oCheckIn,
   oCreateTask,
@@ -2656,6 +2657,14 @@ export const useApp = create<AppState>((set, get) => ({
     const settings = await loadSettings()
     set({ settings })
     await get().refresh()
+    /* 在线版：`refresh()` 会把云端设置写进本地 meta（见 `sync/pull.ts` 的
+       `pullSettings`），所以这里要**重读一次** —— 否则启动后内存里还是
+       拉取之前那份，「换台设备登录设置就还在」这句话在界面上不成立。
+       比较后再 `set`：没变就别碰，一次 `set` 会触发一整轮订阅。 */
+    if (isOnlineMode) {
+      const pulled = await loadSettings()
+      if (JSON.stringify(pulled) !== JSON.stringify(settings)) set({ settings: pulled })
+    }
     set({ ready: true, loading: false })
   },
 
@@ -4880,10 +4889,27 @@ export const useApp = create<AppState>((set, get) => ({
    * （内存对了、DB 里却是旧值，重启后又变回去）。
    */
   updateSettings: async (patch) => {
-    const next = { ...get().settings, ...patch }
+    const prev = get().settings
+    const next = { ...prev, ...patch }
     // 先同步更新内存：受控输入框、以及同一 tick 里的后续调用，立刻看到新值
     set({ settings: next })
-    settingsWriteChain = settingsWriteChain.catch(() => {}).then(() => saveSettings(next))
+    settingsWriteChain = settingsWriteChain.catch(() => {}).then(async () => {
+      /* 在线版：**服务端成功了才落本地**（写穿的铁律，见 `online/write.ts`）。
+         `gameClock` 这类设备本地字段不进 payload（见 `online/settings.ts`），
+         只碰它们的改动直接落盘、不发请求 —— 那个计数器每 60 秒动一次。 */
+      if (isOnlineMode && !isDeviceLocalOnly(patch)) {
+        const r = await onlineWrite(() => oSaveSettings(next))
+        if (!r.ok) {
+          /* 失败要把内存退回去，否则「界面上是新值、重启变回旧值」。
+             ⚠️ 只在内存**还是这次那份**时才退：家长可能已经接着打了下一个字，
+                无条件回退会把新输入吞掉（和上面第 ② 条同一个坑）。 */
+          if (get().settings === next) set({ settings: prev })
+          get().pushToast(writeFailToast(r.error, '这次设置'))
+          return
+        }
+      }
+      await saveSettings(next)
+    })
     await settingsWriteChain
   },
 
