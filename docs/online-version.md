@@ -409,7 +409,7 @@ npm run build                                  # 看退出码，别看 "built in
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
-node scripts/_probe-guest-entry.mjs            # 进来就能玩：游客账号 + 横条 + 面板 + 第 3 次启动（18 条，§7.8）
+node scripts/_probe-guest-entry.mjs            # 进来就能玩：游客账号 + 横条 + 面板 + 第 3 次启动 + 真绑定（25 条，§7.8）
 node scripts/_probe-guest-tablet.mjs           # 同上两块界面在 1024×768 / 768×1024（18 条，§7.8.10）
 node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（32 条，§7.9）
 node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（50 条，§7.11）
@@ -766,9 +766,22 @@ await refresh()
 所以「回来的路」天然存在）。界面上注册那一栏写着「验证码（收不到也能注册）」，
 但**「重设密码」仍然必须填码** —— 那条路唯一的凭证就是验证码，放开等于谁都能改密码。
 
-**⚠️ 残留风险**：忘了密码就真找不回来 —— `ResetPassword` 也要验证码。
-短信通道接上之后要做两件事：① 给 `mobile_verified = false` 的账号补一次验证
-（重调一次 `/auth/bind-mobile` 带上码就翻成 `true`）；② 忘记密码这条路才真正可用。
+**忘了密码怎么办**：`/auth/reset-password` 仍然要验证码（那条路唯一的凭证就是码），
+所以 C 端自助重置走不通。兜底放在**后台**：`tf-admin` 的「App 用户」页里有一个
+「重置登录密码」—— 客服核实身份后点一下，服务端生成一次性密码（8 位，去掉了
+`0/O`、`1/l/I`），写 bcrypt 哈希，并把该用户所有 `user_token.revoked` 置 true
+（旧设备手里的刷新令牌立刻失效）。新密码只在弹窗里显示一次。
+
+⚠️ 两点必须跟客服说清楚：
+
+1. **旧 access token 最多还能用 2 小时** —— 平台端 JWT 无状态，没给单条 access
+   做黑名单。所以「号被别人拿走了」的场景，重置密码之后对方 2 小时内还能动数据。
+2. **游客（`is_guest`）重置不了**，后台会直接拒绝并提示原因：他连手机号都没有，
+   设了密码也没法登录。正确做法是让用户先在 App 里点「保存进度」绑手机号。
+
+短信通道接上之后还剩一件事：给 `mobile_verified = false` 的账号补一次验证
+（重调一次 `/auth/bind-mobile` 带上码就翻成 `true`），这样后台一眼能看出哪些号
+的号码是「用户自己填的、没验过」。
 
 ★ 为什么这条必须在 **HTTP 层**验：`code` 从 `required` 改成 `omitempty`
 是 gin 的 binding tag，服务层单测**绕过**了它 —— 只有打真接口才看得见。
