@@ -37,12 +37,17 @@ export const guest = (deviceId: string) =>
  * 积分、流水、农场、存档、家长设置全都不动 —— 所以绑完不用迁移任何东西。
  * 返回的是最新资料（含 `is_guest=false`），调用方直接拿它更新会话，
  * 不必再打一次 `/user/profile`（那中间会闪一帧「临时账号」）。
+ *
+ * ⚠️ `code` 可以是空串（2026-11-03）：生产环境还没有短信通道，
+ * 「必须填验证码」等于「永远绑不上」。空验证码时服务端要求**必须带密码**，
+ * 否则拒绝（`bind-need-password`）—— 那是换手机唯一的回来的路。
  */
-export const bindMobile = (mobile: string, code: string, password?: string) =>
-  api<ApiUser>(
-    '/auth/bind-mobile',
-    { mobile, code, ...(password ? { password } : {}) },
-  )
+export const bindMobile = (mobile: string, code: string, password: string) =>
+  api<ApiUser>('/auth/bind-mobile', {
+    mobile,
+    ...(code ? { code } : {}),
+    password,
+  })
 
 export const login = (mobile: string, password: string) =>
   api<AuthResult>('/auth/login', { mobile, password }, { auth: false })

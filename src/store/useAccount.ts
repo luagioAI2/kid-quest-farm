@@ -79,8 +79,13 @@ interface AccountState {
 
   login: (mobile: string, password: string) => Promise<boolean>
   register: (mobile: string, password: string, code: string, nickname?: string) => Promise<boolean>
-  /** 绑定手机号：游客转正。绑的是同一个 uid，进度不动。 */
-  bindMobile: (mobile: string, code: string, password?: string) => Promise<boolean>
+  /**
+   * 绑定手机号：游客转正。绑的是同一个 uid，进度不动。
+   *
+   * `code` 可以是空串（生产环境还没有短信通道），但 `password` **必填** ——
+   * 空验证码时它是唯一能换手机登回来的路，服务端也会拦（`bind-need-password`）。
+   */
+  bindMobile: (mobile: string, code: string, password: string) => Promise<boolean>
   sendCode: (mobile: string, scene: SmsScene) => Promise<boolean>
   /**
    * 忘记密码：验证码 + 新密码。

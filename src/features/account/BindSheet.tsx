@@ -23,11 +23,17 @@ import { markNudged } from './guestPrompt'
    为什么关掉按钮在 `coupon` 时不出现：那一步服务端**不会**放行，
    给个「以后再说」只会让人以为关掉就能兑换，然后反复试、反复失败。
 
-   ## 密码是可选的
+   ## 密码必填，验证码可选（2026-11-03 改）
 
-   绑手机号之后用「手机号 + 验证码」就能登回来（服务端 `SmsLogin` 支持
-   已有账号免密登录）。但验证码要等短信，家长更愿意用密码 —— 所以这里
-   留一个可选密码框，填了以后两种都能登。
+   原来反着：验证码必填、密码可选。但**生产环境还没有短信通道**
+   （`DevSmsSender` 在 `IsProduction()` 下直接返回错误），
+   验证码根本发不到手机上 ⇒ 「必须填验证码」等于「永远绑不上」，
+   游客攒的东西一辈子存不下来。
+
+   现在：验证码**有就填、没有也能存**；密码**必填**。
+   两者分工是清楚的 —— 验证码证明「这个号是你的」，密码是「以后怎么回来」。
+   两个都不给，这个账号换台手机就永久丢了，而且丢的时候不会有任何提示。
+   服务端同样拦这一条（`bind-need-password`），不只是界面上的约束。
    ============================================================ */
 
 const REASON_TITLE: Record<BindReason, string> = {
@@ -67,7 +73,10 @@ export function BindSheet() {
   }, [open])
 
   const mobileOk = /^\d{6,}$/.test(mobile.trim())
-  const canSubmit = mobileOk && /^\d{6}$/.test(code.trim()) && !busy
+  /* 验证码可以留空（生产环境还没有短信通道）；填了就必须是 6 位。 */
+  const codeOk = code.trim() === '' || /^\d{6}$/.test(code.trim())
+  const passwordOk = password.trim().length >= 6
+  const canSubmit = mobileOk && codeOk && passwordOk && !busy
 
   const dismiss = () => {
     /* ★ 关掉就算「提醒过了」，以后不再主动弹。
@@ -78,7 +87,7 @@ export function BindSheet() {
 
   const submit = async () => {
     if (!canSubmit) return
-    const ok = await bindMobile(mobile, code, password.trim() || undefined)
+    const ok = await bindMobile(mobile, code, password.trim())
     if (ok) {
       markNudged()
       setMobile('')
@@ -127,7 +136,7 @@ export function BindSheet() {
         </label>
 
         <label className="block">
-          <span className="text-[11px] font-extrabold text-ink-500">验证码</span>
+          <span className="text-[11px] font-extrabold text-ink-500">验证码（收不到也能存）</span>
           <div className="mt-1 flex gap-2">
             <input
               data-bind-code
@@ -152,7 +161,7 @@ export function BindSheet() {
 
         <label className="block">
           <span className="text-[11px] font-extrabold text-ink-500">
-            设个密码（可以不填）
+            设个密码（必填）
           </span>
           <input
             data-bind-password
@@ -160,12 +169,12 @@ export function BindSheet() {
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value.slice(0, 64))}
-            placeholder="填了以后换手机也能用密码登"
+            placeholder="换台手机靠它登回来"
             className="mt-1 w-full rounded-xl border border-ink-900/10 bg-white px-3 py-3 text-base font-bold text-ink-900 outline-none focus:border-grape-400"
           />
           {password.length > 0 && password.length < 6 && (
             <span className="mt-1 block text-[11px] font-bold text-berry-500">
-              密码至少 6 位，不够会绑不上
+              密码至少 6 位
             </span>
           )}
         </label>

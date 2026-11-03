@@ -141,11 +141,39 @@ describe('保存进度面板', () => {
 
     await userEvent.type(document.querySelector('[data-bind-mobile]') as HTMLElement, '13800138000')
     await userEvent.type(document.querySelector('[data-bind-code]') as HTMLElement, '123456')
+    await userEvent.type(document.querySelector('[data-bind-password]') as HTMLElement, 'abc123456')
     await userEvent.click(document.querySelector('[data-bind-submit]') as HTMLElement)
 
     await vi.waitFor(() => expect(useAccount.getState().bindSheet.open).toBe(false))
     expect(useAccount.getState().session?.user.is_guest).toBe(false)
-    expect(bindApi).toHaveBeenCalledWith('13800138000', '123456', undefined)
+    expect(bindApi).toHaveBeenCalledWith('13800138000', '123456', 'abc123456')
+  })
+
+  it('★ 不填验证码也能存（生产环境还没有短信通道）', async () => {
+    bindApi.mockResolvedValueOnce({ ...user(false), mobile: '138****8000' })
+    useAccount.setState({ bindSheet: { open: true, reason: 'manual' } })
+    render(<BindSheet />)
+
+    await userEvent.type(document.querySelector('[data-bind-mobile]') as HTMLElement, '13800138000')
+    await userEvent.type(document.querySelector('[data-bind-password]') as HTMLElement, 'abc123456')
+    await userEvent.click(document.querySelector('[data-bind-submit]') as HTMLElement)
+
+    await vi.waitFor(() => expect(useAccount.getState().bindSheet.open).toBe(false))
+    /* 空验证码传空串（不是 undefined）—— 服务端据此判断走「自助绑定」那条 */
+    expect(bindApi).toHaveBeenCalledWith('13800138000', '', 'abc123456')
+  })
+
+  it('★ 密码不够 6 位时提交按钮是灰的（它是换手机唯一的回来的路）', async () => {
+    useAccount.setState({ bindSheet: { open: true, reason: 'manual' } })
+    render(<BindSheet />)
+
+    await userEvent.type(document.querySelector('[data-bind-mobile]') as HTMLElement, '13800138000')
+    await userEvent.type(document.querySelector('[data-bind-password]') as HTMLElement, '123')
+    const btn = document.querySelector('[data-bind-submit]') as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+
+    await userEvent.type(document.querySelector('[data-bind-password]') as HTMLElement, '456')
+    expect((document.querySelector('[data-bind-submit]') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('绑失败留在原地，把原因显示出来', async () => {
@@ -155,6 +183,7 @@ describe('保存进度面板', () => {
 
     await userEvent.type(document.querySelector('[data-bind-mobile]') as HTMLElement, '13800138000')
     await userEvent.type(document.querySelector('[data-bind-code]') as HTMLElement, '123456')
+    await userEvent.type(document.querySelector('[data-bind-password]') as HTMLElement, 'abc123456')
     await userEvent.click(document.querySelector('[data-bind-submit]') as HTMLElement)
 
     await vi.waitFor(() => expect(document.querySelector('[data-bind-error]')).not.toBeNull())
