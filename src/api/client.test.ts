@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, NETWORK, UNAUTHORIZED, api, bindAuthLost } from './client'
+import { ApiError, GUEST_NEED_BIND, NETWORK, UNAUTHORIZED, api, bindAuthLost, bindGuestBlocked } from './client'
 import { getSession, setSession } from './session'
 import type { ApiUser } from './types'
 
@@ -26,6 +26,9 @@ afterEach(() => {
   vi.restoreAllMocks()
   setSession(null)
   bindAuthLost(null)
+  /* 游客闸门的回调也要清：它是**模块级**的，不清的话上一条测试注册的
+     spy 会活到下一条里，`toHaveBeenCalled` 就会红在一个和自己无关的地方。 */
+  bindGuestBlocked(null)
 })
 
 describe('client：统一响应', () => {
@@ -220,5 +223,59 @@ describe('client：网络问题', () => {
     const e = await api('/x').catch((err: unknown) => err)
     expect((e as ApiError).code).toBe(NETWORK)
     expect((e as ApiError).message).toContain('不是 JSON')
+  })
+})
+
+/* ---- 游客花券的闸门（2026-11-03） ----
+ *
+ * 「游客第一次花券就卡」这句承诺，服务端有单测、界面有弹层，
+ * 但**中间那一跳没人守**：服务端回 10010802 → 拦截器 → `onGuestBlocked`
+ * → store 打开「保存进度」面板。这一跳写错的表现是
+ * 「点了兑换，转一圈，什么都没发生」，界面上没有任何线索。
+ *
+ * 顺带把反向也钉住：**别的错误码不能弹它**。否则「余额不足」「库存不足」
+ * 都会弹出「保存进度」，家长会以为是自己账号的问题。
+ */
+describe('client：游客花券的闸门', () => {
+  it('★ 10010802 ⇒ 弹「保存进度」，并且照常抛错（调用方还要提示原因）', async () => {
+    const blocked = vi.fn()
+    bindGuestBlocked(blocked)
+    vi.stubGlobal('fetch', jsonOnce({ code: GUEST_NEED_BIND, error: 'guest-need-bind' }))
+
+    const e = await api('/mall/redeem/create').catch((err: unknown) => err)
+    expect(blocked, '拦截器必须通知上层弹面板').toHaveBeenCalledTimes(1)
+    /* 抛错不能省：调用方要靠它决定「这次兑换没生效」，不抛等于假装成功 */
+    expect(e).toBeInstanceOf(ApiError)
+    expect((e as ApiError).code).toBe(GUEST_NEED_BIND)
+  })
+
+  it('★ 别的业务错误不弹它（「余额不足」不该说成「先绑定手机号」）', async () => {
+    const blocked = vi.fn()
+    bindGuestBlocked(blocked)
+    vi.stubGlobal('fetch', jsonOnce({ code: 10020301, error: '余额不足' }))
+
+    const e = await api('/x').catch((err: unknown) => err)
+    expect(blocked).not.toHaveBeenCalled()
+    expect((e as ApiError).code).toBe(10020301)
+  })
+
+  it('★ 401 也不弹它（那是登录过期，走 `onAuthLost` 那条）', async () => {
+    const blocked = vi.fn()
+    bindGuestBlocked(blocked)
+    vi.stubGlobal('fetch', jsonOnce({}, 401))
+
+    const e = await api('/x').catch((err: unknown) => err)
+    expect(blocked).not.toHaveBeenCalled()
+    expect((e as ApiError).code).toBe(UNAUTHORIZED)
+  })
+
+  it('回调可以注销（否则测试之间互相串，App 卸载后还会弹）', async () => {
+    const blocked = vi.fn()
+    bindGuestBlocked(blocked)
+    bindGuestBlocked(null)
+    vi.stubGlobal('fetch', jsonOnce({ code: GUEST_NEED_BIND, error: 'guest-need-bind' }))
+
+    await api('/x').catch(() => {})
+    expect(blocked).not.toHaveBeenCalled()
   })
 })
