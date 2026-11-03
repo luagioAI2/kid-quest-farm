@@ -12,7 +12,10 @@ import { shouldRefreshOnForeground } from './sync/foreground'
 import { isOnlineMode } from './sync/pull'
 import { useAccount } from './store/useAccount'
 import { SetupWizard } from './features/onboarding/SetupWizard'
-import { OnlineLoginGate } from './features/account/OnlineLoginGate'
+import { BindSheet } from './features/account/BindSheet'
+import { GuestBar } from './features/account/GuestBar'
+import { LoginSheet } from './features/account/LoginSheet'
+import { shouldNudgeOnLaunch } from './features/account/guestPrompt'
 import { ChildTour } from './features/onboarding/ChildTour'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SyncBanner } from './components/SyncBanner'
@@ -99,6 +102,13 @@ export default function App() {
   const [wizardMode, setWizardMode] = useState<'first' | 'replay' | null>(null)
   /* 在线版：没登录就别开引导 —— 理由见下面那个 effect 的注释 */
   const session = useAccount((st) => st.session)
+  /** 启动时自动拿账号的结果（`needs-login` = 上一次是正式账号，得请他登回来） */
+  const bootAccount = useAccount((st) => st.bootAccount)
+  const ensureGuest = useAccount((st) => st.ensureGuest)
+  const openBind = useAccount((st) => st.openBind)
+  /** 「请用手机号登回来」面板。只在 `needs-login` 时自动开一次，关掉不再纠缠 */
+  const [loginOpen, setLoginOpen] = useState(false)
+  const loginPrompted = useRef(false)
   /** 给孩子的功能导览开着吗 */
   const [tourOpen, setTourOpen] = useState(false)
   /** 首次进入只自动决定一次，之后靠设置页的「重看」入口手动开 */
@@ -278,10 +288,54 @@ export default function App() {
    */
   const GamePage = pageFor(activeGame)
 
-  // 启动：加载数据 + 补齐今日任务
+  /**
+   * 启动：**先拿到账号**，再加载数据 + 补齐今日任务。
+   *
+   * ★ 顺序不能反。`boot()` 里的第一次 `refresh()` 负责把服务端数据拉进
+   *   Dexie，而没有会话时它直接返回 `no-session`，一条都不拉 ——
+   *   孩子看到的是一整套空界面，而屏幕上什么都不会说。
+   *
+   * 在线版这一步会自动建一个**游客账号**（`ensureGuest`），所以新用户
+   * 不用注册、不用等验证码，进来就能玩。上一次用的是正式账号时它不会
+   * 建游客，而是转成 `needs-login` 请人登回来（理由见 `useAccount`）。
+   *
+   * `alive` 是为了 StrictMode：它会挂载→卸载→挂载，两次都跑 `boot()`。
+   * 第一次的 `boot` 在卸载后被跳过，第二次照常跑 —— 正好一次。
+   */
   useEffect(() => {
-    void boot()
-  }, [boot])
+    let alive = true
+    void (async () => {
+      await ensureGuest()
+      if (!alive) return
+      await boot()
+    })()
+    return () => {
+      alive = false
+    }
+  }, [boot, ensureGuest])
+
+  /** 上一次是正式账号 ⇒ 请他登回来（自动开一次，关掉就不再开） */
+  useEffect(() => {
+    if (bootAccount !== 'needs-login' || loginPrompted.current) return
+    loginPrompted.current = true
+    setLoginOpen(true)
+  }, [bootAccount])
+
+  /**
+   * 第 3 次启动的温和提醒：一辈子只弹一次，关掉就不再提。
+   *
+   * 只对**游客**弹 —— 已经绑好的账号不该看到它。判定「第几次」在
+   * `guestPrompt.ts` 里，这里只管触发；`nudged` 保证一次运行只判一次
+   * （`session` 每次刷新资料都会换一个对象引用，不挡的话会反复判）。
+   */
+  const nudged = useRef(false)
+  useEffect(() => {
+    if (!isOnlineMode || nudged.current) return
+    if (!session?.user?.is_guest) return
+    nudged.current = true
+    if (!shouldNudgeOnLaunch()) return
+    openBind('launch')
+  }, [session, openBind])
 
   // 每分钟推进：跨日检测 + 动物产出
   useEffect(() => {
@@ -467,6 +521,10 @@ export default function App() {
           */}
           <SyncBanner />
 
+          {/* 临时账号横条：常驻、不挡任何东西。放顶栏**下面**而不是里面 ——
+              顶栏那一行已经挤满了（见上面那段注释）。 */}
+          <GuestBar />
+
           <main key={tab} className="flex flex-1 flex-col anim-fade-in">
             <ErrorBoundary resetKey={tab}>
               {tab === 'tasks' && <TaskPage />}
@@ -555,9 +613,14 @@ export default function App() {
       )}
       {tourOpen && <ChildTour onFinish={finishTour} onStepChange={setTab} />}
 
-      {/* 在线版的登录闸门。盖在主界面之上（自己 Portal 到 body），
-          登录成功只是把覆盖层摘掉，底下这棵树不重建。 */}
-      <OnlineLoginGate />
+      {/* 「保存进度」面板：游客花兑换券被拒、第 3 次启动、点横条，
+          三个入口共用这一个（自己 Portal 到 body，所以放在哪一层都行）。 */}
+      <BindSheet />
+
+      {/* 「用手机号登回来」：只有 `bootAccount === 'needs-login'` 会自动开一次。
+          以前这里是一整块全屏闸门（`OnlineLoginGate`），新用户一进来就被拦；
+          现在默认路径是自动游客账号，只有「上次是正式账号」才需要这一屏。 */}
+      <LoginSheet open={loginOpen} onClose={() => setLoginOpen(false)} />
 
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </div>

@@ -1,4 +1,4 @@
-import { ApiError, NETWORK } from '../api/client'
+import { ApiError, GUEST_NEED_BIND, NETWORK } from '../api/client'
 
 /* ============================================================
    在线版 · 写穿的统一出口
@@ -61,6 +61,16 @@ export function writeFailToast(e: ApiError, what: string): FailToast {
       title: '登录过期了，请重新登录',
       detail: `${what}没有生效。`,
       emoji: '🔒',
+    }
+  }
+  /* 游客被门槛拦住。这里**不要**写「失败」—— 服务端拒得有道理，
+     而且弹层已经在 `client` 里弹出来了，这句话只是补一句原因。 */
+  if (e.code === GUEST_NEED_BIND) {
+    return {
+      kind: 'warn',
+      title: '先绑定手机号再兑换',
+      detail: `${what}没有生效。绑定之后，这台手机上的进度也会存到账号里。`,
+      emoji: '🔖',
     }
   }
   return { kind: 'warn', title: `${what}没成功`, detail: e.message, emoji: '⚠️' }

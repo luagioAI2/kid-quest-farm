@@ -67,6 +67,27 @@ export function bindAuthLost(fn: (() => void) | null) {
   onAuthLost = fn
 }
 
+/**
+ * 游客要花兑换券 / 兑实物时服务端给的码（`apperrors.GuestNeedBind`）。
+ *
+ * 单独拎出来当一个常量：这个数字会同时出现在「拦截判断」「提示文案」
+ * 「探针断言」三处，写三遍迟早有一处写错，而写错的表现是
+ * **静默放行**（码对不上 ⇒ 不进那个分支 ⇒ 什么都不发生）。
+ */
+export const GUEST_NEED_BIND = 10010802
+
+/**
+ * 游客被门槛拦住时调它（由 `useAccount` 注册，弹出「保存进度」）。
+ *
+ * 为什么挂在这里、不挂在每个调用点：花券的地方有五处，以后还会加。
+ * 每个调用点各写一遍「如果 code 是 10010802 就弹窗」，漏一处就是
+ * 「点了兑换，转一圈，什么都没发生」—— 而界面上没有任何线索。
+ */
+let onGuestBlocked: (() => void) | null = null
+export function bindGuestBlocked(fn: (() => void) | null) {
+  onGuestBlocked = fn
+}
+
 interface Resp<T> {
   code: number
   error?: string
@@ -194,6 +215,10 @@ export async function api<T>(
   }
 
   if (payload.code !== 200) {
+    /* 游客被门槛拦住：先把弹层弹出来，再照常抛错。
+       顺序不能反 —— 调用方 catch 之后多半会 toast 一句「兑换没成功」，
+       弹层要是排在它后面，就会盖住那句 toast 的原因。 */
+    if (payload.code === GUEST_NEED_BIND) onGuestBlocked?.()
     throw new ApiError(payload.code, payload.error || `请求失败（${payload.code}）`)
   }
   return payload.data as T

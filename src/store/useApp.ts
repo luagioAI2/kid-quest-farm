@@ -2021,8 +2021,11 @@ async function doRefresh(
       const at = Date.now()
       syncNext = { lastOkAt: at, failure: null }
       await db.meta.put({ key: SYNC_LAST_OK_KEY, value: at })
-    } else if (pulled.reason !== 'no-session') {
-      /* 没登录不是「连不上」—— 那种情况有登录闸门在前面，说「连不上」会指错方向 */
+    } else {
+      /* 2026-11-03：`no-session` 以前**不算**失败（那时前面有登录闸门，
+         说「连不上」会指错方向）。现在没有闸门了 —— 在线版启动时会自动
+         建一个游客账号，拿不到账号只可能是**连不上服务器**。这时候必须
+         说出来，否则孩子看到的是一整套空界面，而屏幕上什么都不说。 */
       syncNext = { lastOkAt: syncNext.lastOkAt, failure: pulled.reason ?? 'pull-failed' }
     }
   }

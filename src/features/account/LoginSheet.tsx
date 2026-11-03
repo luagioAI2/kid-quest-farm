@@ -47,6 +47,8 @@ export function LoginSheet({
   const [countdown, setCountdown] = useState(0)
   const [hint, setHint] = useState<string | null>(null)
 
+  const session = useAccount((s) => s.session)
+  const ensureGuest = useAccount((s) => s.ensureGuest)
   const busy = useAccount((s) => s.busy)
   const error = useAccount((s) => s.error)
   const login = useAccount((s) => s.login)
@@ -119,8 +121,9 @@ export function LoginSheet({
     >
       <div className="space-y-3 pb-4">
         <p className="rounded-2xl bg-sun-50 px-3 py-2 text-[11.5px] font-bold leading-relaxed text-ink-700">
-          账号是<b>爸妈的</b>。孩子那边的任务、积分、心愿都存在这台设备上，
-          登录只为了让「招商 / 心愿」这些要审核的事能找到人。
+          {session?.user?.is_guest
+            ? '登录会切换到另一个账号。这台手机上的临时进度**不会**并过去 —— 想保留它，请用上面那个「保存进度」绑定手机号。'
+            : '用手机号登录之后，任务、积分、农场和存档都会存到账号里，换手机也还在。'}
         </p>
 
         <label className="block">
@@ -244,6 +247,23 @@ export function LoginSheet({
         >
           {mode === 'login' ? '还没有账号？去注册' : '已经有账号？去登录'}
         </button>
+
+        {/* 逃生口：上一次是正式账号、会话过期之后，这一屏会自动弹出来。
+            不给他这条退路的话，一个「只是想让孩子先玩玩」的家长会被卡死。
+            `force` 是必须的 —— 正常情况下 `ensureGuest` 会拒绝建游客。 */}
+        {!session && (
+          <button
+            type="button"
+            onClick={async () => {
+              if (await ensureGuest({ force: true })) onClose()
+            }}
+            disabled={busy}
+            data-account-skip
+            className="w-full py-1 text-center text-[12px] font-bold text-ink-500 underline decoration-dotted disabled:opacity-40"
+          >
+            先随便玩玩（不保存）
+          </button>
+        )}
       </div>
     </BottomSheet>
   )
