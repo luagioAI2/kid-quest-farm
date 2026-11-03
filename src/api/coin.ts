@@ -9,11 +9,11 @@ import { api } from './client'
    | --- | --- | --- |
    | 余额 | `gameKv['__coin']` 数组的 delta 之和 | `game_coin_wallet.balance` |
    | 账本 | 就在 `__coin` 里 | `game_coin_ledger` 一张表 |
-   | 汇率（币→券） | 插件 manifest 的 `voucherPerCoin` | **写死 1:1** |
+   | 汇率（币→券） | 插件 manifest 的 `voucherPerCoin` | `game.voucher_per_coin` |
 
-   ⚠️ 最后一行是个**已知的不一致**，见 `online/coin.ts` 的 `redeemCoins` 注释：
-   服务端不知道 manifest 里写了几倍。当前发布的插件全是 1（或 0 = 不开放），
-   所以现在对得上；哪天有插件写 2，客户端必须信服务端返回的 `vouchers`。
+   汇率**由服务端说了算**（0 = 不开放兑换），客户端算的那份只用来对账。
+   两边走散时 `online/coin.ts` 会 `console.warn` —— 那是「该去后台对齐配置」的信号，
+   不是「客户端算错了」。见 `online/coin.ts` 的 `oRedeemCoins` 注释。
    ============================================================ */
 
 export interface ServerCoinInfo {

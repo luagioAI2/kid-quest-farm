@@ -81,6 +81,19 @@ function isInsufficient(e: unknown): boolean {
   return e instanceof ApiError && (e.code === 10040901 || e.code === 10020301)
 }
 
+/**
+ * 这款游戏**没有开放**币换券（服务端 `voucher_per_coin = 0`）。
+ *
+ * 以前服务端对任何游戏都按 1:1 照换（`rate := int64(1)`），所以这条不会出现；
+ * 现在它跟插件 manifest 的 `economy.voucherPerCoin` 对齐了：
+ * 不写 / 写 0 = 不开放。和 `isInsufficient` 一样，这是**业务结果**不是故障 ——
+ * 插件里 `redeemGameCoin` 的契约是 `Promise<number>`，返回 0 就好，
+ * 抛异常会让「这局没换到」变成一个红叉。
+ */
+function isRedeemClosed(e: unknown): boolean {
+  return e instanceof ApiError && e.code === 10041201
+}
+
 /* ---------------- 一对一映射（hostApi 直接用） ---------------- */
 
 /**
@@ -157,19 +170,18 @@ export async function oMintCoins(gameId: string, amount: number, memo: string): 
 /**
  * 币 → 券。
  *
- * ## ⚠️ 汇率的不一致（已知，且有兜底）
+ * ## 汇率：服务端有一份，客户端算的那份只用来对账
  *
- * 本地版按插件 manifest 的 `economy.voucherPerCoin` 算（可以是 2、3…），
- * 服务端**写死 1:1**（`rate := int64(1)`）—— 它读不到 manifest，也不接受
- * 客户端传汇率（那等于把印钞机的旋钮交出去）。
+ * 服务端从 `game.voucher_per_coin` 读（0 = **不开放兑换**，与插件 manifest 的
+ * `economy.voucherPerCoin` 同一套语义）。**不接受客户端传汇率** —— 那等于把
+ * 印钞机的旋钮交出去，一个写错的插件传个 1000 就能印出无限券。
  *
- * 当前发布的插件全是 1（`cloudfarm` 是 0 = 不开放），所以现在对得上。
- * 一旦有插件写 2，这里必须**信服务端返回的 `vouchers`**，不能自己乘 ——
- * 否则界面说「换了 10 张」而实际只到 5 张。
- *
- * `rate` 参数有两个用途：`<= 0` 时**根本不该发请求**（manifest 说「不开放
- * 兑换」，而服务端不知道这件事，会照换不误 —— 等于绕开家长的开关），
- * 以及事后**发现不一致**时 `console.warn`，让下一个人一眼看到根因。
+ * 所以：
+ *   - 一律**信服务端返回的 `vouchers`**，不能自己乘（否则界面说「换了 10 张」
+ *     而实际只到 5 张）；
+ *   - `rate` 参数只做两件事：`<= 0` 时**根本不该发请求**（manifest 说不开放），
+ *     以及事后发现和 `vouchers` 对不上时 `console.warn` —— 那说明
+ *     「服务端那份配置」和「manifest」走散了，得有人去对齐。
  */
 export async function oRedeemCoins(
   gameId: string,
@@ -191,12 +203,14 @@ export async function oRedeemCoins(
     if (got !== expected) {
       console.warn(
         `[coin] 汇率不一致：manifest 说 1 币 = ${r0} 券（应发 ${expected}），` +
-          `服务端按 1:1 发了 ${got}。以服务端为准（见 online/coin.ts 的注释）。`,
+          `服务端按 game.voucher_per_coin 发了 ${got}。以服务端为准 —— ` +
+          `但这说明服务端那份配置和 manifest 走散了，去后台对齐一下。`,
       )
     }
     return got
   } catch (e) {
-    if (isInsufficient(e)) return 0
+    /* 没开放兑换 / 币不够：都是「这次换不了」，不是故障 ⇒ 返回 0 */
+    if (isInsufficient(e) || isRedeemClosed(e)) return 0
     throw e
   }
 }
