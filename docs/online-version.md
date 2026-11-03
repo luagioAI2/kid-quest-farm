@@ -409,7 +409,8 @@ npm run build                                  # 看退出码，别看 "built in
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
-node scripts/_probe-guest-entry.mjs            # 进来就能玩：游客账号 + 横条 + 面板（14 条，§7.8）
+node scripts/_probe-guest-entry.mjs            # 进来就能玩：游客账号 + 横条 + 面板 + 第 3 次启动（18 条，§7.8）
+node scripts/_probe-guest-tablet.mjs           # 同上两块界面在 1024×768 / 768×1024（18 条，§7.8.10）
 node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（32 条，§7.9）
 node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（50 条，§7.11）
 node scripts/_probe-coin-online.mjs            # 浏览器真跑游戏币（47 条，§7.12；每跑一次花 13 积分）
@@ -711,6 +712,31 @@ await refresh()
 同类还有一处：`useApp` 里 `no-session` 原来被当成「正常，别报警」，
 现在**算失败**。理由一样 —— 闸门没了之后，「没有会话」不可能再是
 「等用户登录」，只能是「服务器没连上」，那就不该安静。
+
+### 7.8.10 平板尺寸（`_probe-guest-tablet.mjs`）
+
+手机竖屏（390×844）过了不等于大屏过了。新加的两块界面里，横条在流里、
+面板是 Portal 到 body 的覆盖层，各有一种专属的翻车形态：
+
+| 尺寸 | 查什么 | 为什么 |
+| --- | --- | --- |
+| 1024×768 / 768×1024 | `scrollWidth > innerWidth` | 竖屏平板最容易被 `min-w` / `whitespace-nowrap` 撑出去，`overflow-x-clip` 把超出的部分**裁掉**（不报错，就是看不见） |
+| 同上 | 面板矩形是否整块在视口内 | Portal 的层没写 `max-h` 时会顶出屏幕，底部「绑定并保存进度」就点不到 |
+| 同上 | `elementFromPoint` 命中按钮 | `el.click()` 不走命中测试，被盖住也照样「成功」 |
+
+实测两种尺寸都是 18/18 通过：面板 640px 居中、按钮全在视口内、无横向溢出。
+**没有发现布局问题** —— 但这一轮排查本身抓到两个探针自己的坑：
+
+1. ★★ **同一次浏览器会话里连开两个页面 ≠ 两个新用户**。`localStorage` 是共享的
+   ⇒ 启动计数接着往上加 ⇒ 第二页刚好是**第 3 次启动**，`openBind('launch')`
+   自动把面板打开了；此时「点横条打开面板」当然等不到（面板已经开着，
+   点一下反而关掉）。第一版就是这么红的，看着像「横条点不到」。
+   ⇒ 每个尺寸用 `browser.createBrowserContext()` 单独一个上下文。
+2. **面板刚出现的那一两帧点不到**：`anim-sheet-up` 是从屏幕下方推上来的，
+   此时可点区域还在视口外，`page.click` 直接抛
+   `Node is either not clickable or not an Element` —— 像「按钮坏了」。
+   ⇒ 等 600ms 再点。★ 顺带说明 `page.click` **是**带命中测试的，
+   这一点比 `el.click()` 可信。
 
 ---
 
