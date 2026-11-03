@@ -55,7 +55,7 @@ const openReset = async () => {
 beforeEach(() => {
   vi.clearAllMocks()
   setSession(null)
-  useAccount.setState({ session: null, busy: false, error: null })
+  useAccount.setState({ session: null, busy: false, error: null, errorCode: null })
 })
 
 describe('登录面板：忘记密码', () => {
@@ -186,5 +186,27 @@ describe('注册：验证码可以不填（2026-11-03）', () => {
   it('验证码标签写着「收不到也能注册」', async () => {
     await openRegister()
     expect(document.body.textContent).toContain('收不到也能注册')
+  })
+})
+
+/* ============================================================
+   预填号码（2026-11-03）
+   ------------------------------------------------------------
+   「保存进度」面板发现号码已经有账号了，会带着号码跳到这里。
+   号码用户刚打过一遍，再让他重打一次毫无意义，而且手一抖就打错。
+   ============================================================ */
+describe('登录面板：从「保存进度」带着号码过来', () => {
+  it('★ 号码已经填好，而且落在「登录」态（不是注册）', () => {
+    render(<LoginSheet open onClose={onClose} prefillMobile="13800138000" />)
+    const box = document.querySelector('[data-account-mobile]') as HTMLInputElement
+    expect(box.value).toBe('13800138000')
+    expect(screen.getByRole('heading').textContent).toBe('登录')
+    /* 登录态才有「忘记密码？」—— 顺带证明 mode 真的切过去了 */
+    expect(document.querySelector('[data-account-forgot]')).not.toBeNull()
+  })
+
+  it('不传 prefillMobile 时输入框是空的（别把上一个人的号带进来）', () => {
+    render(<LoginSheet open onClose={onClose} />)
+    expect((document.querySelector('[data-account-mobile]') as HTMLInputElement).value).toBe('')
   })
 })

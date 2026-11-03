@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { useAccount, type BindReason } from '@/store/useAccount'
+import { MOBILE_ALREADY_REG } from '@/api/client'
 import { deviceIdPersisted } from '@/api/device'
 import { BottomSheet } from '../farm/farmUi'
 import { markNudged } from './guestPrompt'
@@ -42,12 +43,24 @@ const REASON_TITLE: Record<BindReason, string> = {
   manual: '保存这台手机的进度',
 }
 
-export function BindSheet() {
+export function BindSheet({
+  onGoLogin,
+}: {
+  /**
+   * 「这个号码已经有账号了」时，请 App 打开登录面板（并把号码带过去）。
+   *
+   * 为什么不在这个组件里自己开登录面板：`LoginSheet` 的开关是 App 的局部
+   * state（`loginOpen`），从这里再开一份就是**两个登录面板**，各有各的输入框，
+   * 用户点哪一个都对，但看起来像 bug。
+   */
+  onGoLogin?: (mobile: string) => void
+} = {}) {
   const open = useAccount((s) => s.bindSheet.open)
   const reason = useAccount((s) => s.bindSheet.reason)
   const close = useAccount((s) => s.closeBind)
   const busy = useAccount((s) => s.busy)
   const error = useAccount((s) => s.error)
+  const errorCode = useAccount((s) => s.errorCode)
   const bindMobile = useAccount((s) => s.bindMobile)
   const sendCode = useAccount((s) => s.sendCode)
 
@@ -56,6 +69,14 @@ export function BindSheet() {
   const [password, setPassword] = useState('')
   const [countdown, setCountdown] = useState(0)
   const [hint, setHint] = useState<string | null>(null)
+  /**
+   * 上一次提交时输入框里的号码。
+   *
+   * 为什么要单独记：失败之后用户可能**改号码**，而错误码还是上一次那个。
+   * 不记的话，按钮会跟着新号码变（「用 139… 登录」），可那个号根本没被占用 ——
+   * 一句看着很像真的假话。改成「按钮上的号 == 输入框里的号」时才显示。
+   */
+  const [attemptedMobile, setAttemptedMobile] = useState('')
 
   useEffect(() => {
     if (countdown <= 0) return
@@ -85,8 +106,22 @@ export function BindSheet() {
     close()
   }
 
+  /* ★ 号码被占用 = 死胡同，必须改口。
+     不处理的话，用户看到的是一行红字「该手机号已注册」：绑不上 ⇒ 攒的东西
+     存不下来；那个号码上原本的账号也进不去（界面上没有任何入口）。
+     这是游客绑定最常见的失败 —— 家长以前在别的手机上玩过。 */
+  const taken =
+    !!error && errorCode === MOBILE_ALREADY_REG && attemptedMobile === mobile.trim()
+
+  const goLogin = () => {
+    const m = attemptedMobile
+    close()
+    onGoLogin?.(m)
+  }
+
   const submit = async () => {
     if (!canSubmit) return
+    setAttemptedMobile(mobile.trim())
     const ok = await bindMobile(mobile, code, password.trim())
     if (ok) {
       markNudged()
@@ -179,7 +214,28 @@ export function BindSheet() {
           )}
         </label>
 
-        {(error || hint) && (
+        {taken && (
+          <div
+            data-bind-taken
+            className="rounded-xl bg-berry-50 px-3 py-2 text-[11.5px] font-bold leading-relaxed text-berry-500"
+          >
+            <p>这个号码上已经有一个账号了 —— 可能是你以前在别的手机上玩过。</p>
+            <p className="mt-1 text-ink-700">
+              用它可以登回来。但这台手机上刚攒的进度
+              <b>不会跟过去</b>（它还留在现在这个临时账号里）。
+            </p>
+            <button
+              type="button"
+              onClick={goLogin}
+              data-bind-gologin
+              className="mt-2 w-full rounded-xl bg-berry-500 px-3 py-2 text-[12.5px] font-extrabold text-white active:btn-press"
+            >
+              用 {attemptedMobile} 登录
+            </button>
+          </div>
+        )}
+
+        {!taken && (error || hint) && (
           <p
             data-bind-error={error ? '' : undefined}
             className={clsx(

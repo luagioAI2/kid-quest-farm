@@ -77,6 +77,16 @@ export function bindAuthLost(fn: (() => void) | null) {
 export const GUEST_NEED_BIND = 10010802
 
 /**
+ * 绑手机号时这个号码已经有一个账号了（`apperrors.MobileAlreadyReg`）。
+ *
+ * 这是游客绑定时**最常见**的失败，而且是个死胡同：绑不上 ⇒ 攒的东西存不下来；
+ * 而这个号码上原本那个账号（以前在别的手机上玩的）又进不去 —— 因为界面上
+ * 只甩了一行「该手机号已注册」，没有任何下一步。所以这里把它单拎出来，
+ * 让面板能改口说「用这个号码登录」。
+ */
+export const MOBILE_ALREADY_REG = 10010202
+
+/**
  * 游客被门槛拦住时调它（由 `useAccount` 注册，弹出「保存进度」）。
  *
  * 为什么挂在这里、不挂在每个调用点：花券的地方有五处，以后还会加。

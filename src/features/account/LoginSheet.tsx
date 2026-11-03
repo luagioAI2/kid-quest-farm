@@ -31,11 +31,19 @@ export function LoginSheet({
   open,
   onClose,
   defaultMode = 'login',
+  prefillMobile,
 }: {
   open: boolean
   onClose: () => void
   /** 从「注册」进来的场景（比如首次使用）可以直接开在注册态 */
   defaultMode?: 'login' | 'register'
+  /**
+   * 打开时预填的手机号。
+   *
+   * 用在「保存进度」面板里那句「这个号码已经有账号了，用它可以登回来」：
+   * 号码用户刚打过一遍，再让他重打一次毫无意义，而且手一抖就打错。
+   */
+  prefillMobile?: string
 }) {
   /**
    * `reset` = 忘记密码。
@@ -78,6 +86,15 @@ export function LoginSheet({
       setMode(defaultMode)
     }
   }, [open, defaultMode])
+
+  /* ★ 只在**打开的那一刻**灌一次号码，之后用户自己改就不许覆盖。
+     依赖里放 `open` 和 `prefillMobile`：从别的入口再打开时（`open` false→true）
+     会重新灌 —— 那正是想要的。 */
+  useEffect(() => {
+    if (!open || !prefillMobile) return
+    setMobile(prefillMobile)
+    setMode('login')
+  }, [open, prefillMobile])
 
   const mobileOk = /^\d{6,}$/.test(mobile.trim())
   /* 验证码：登录用不上；注册**可以不填**（生产环境没有短信通道）；

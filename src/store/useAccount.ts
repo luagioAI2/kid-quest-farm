@@ -51,6 +51,14 @@ interface AccountState {
   busy: boolean
   /** 上一次失败的原因；成功后清空 */
   error: string | null
+  /**
+   * 上一次失败的服务端 `code`（网络错误是 -1）。
+   *
+   * 为什么光有文案不够：界面得按**码**分支 —— 「手机号已注册」不能只甩一行
+   * 红字，得给一条出路（用这个号码登录）。而文案是 i18n 出来的、会变，
+   * 拿中文去 `includes` 判断，改一次文案就静默失效。
+   */
+  errorCode: number | null
 
   /**
    * 启动时「自动拿到账号」的结果。
@@ -118,11 +126,18 @@ export const useAccount = create<AccountState>((set, get) => ({
   session: getSession(),
   busy: false,
   error: null,
+  errorCode: null,
   bootAccount: 'pending',
   bindSheet: { open: false, reason: null },
 
-  openBind: (reason) => set({ bindSheet: { open: true, reason } }),
-  closeBind: () => set({ bindSheet: { open: false, reason: null } }),
+  /* 打开时清一次错误：上一次失败的文案留到下一次打开，会变成
+     「刚打开就说这个号码已经有账号了」—— 用户什么都还没做。 */
+  openBind: (reason) =>
+    set({ bindSheet: { open: true, reason }, error: null, errorCode: null }),
+  /* 关掉同样清：`error` 是**整个账号 store 共用**的，留着会被登录面板读到，
+     于是「保存进度」里那句「该手机号已注册」会跟着跑到登录面板里去。 */
+  closeBind: () =>
+    set({ bindSheet: { open: false, reason: null }, error: null, errorCode: null }),
 
   ensureGuest: (opts) => {
     if (ensuring) return ensuring
@@ -200,14 +215,14 @@ export const useAccount = create<AccountState>((set, get) => ({
   },
 
   bindMobile: async (mobile, code, password) => {
-    set({ busy: true, error: null })
+    set({ busy: true, error: null, errorCode: null })
     try {
       const user = await auth.bindMobile(mobile.trim(), code.trim(), password)
       const cur = get().session
       /* 没会话就绑不了 —— 服务端要求 JWT。正常不会走到这里，
          但真走到了要说清楚，不能静默返回 true 让弹层关掉。 */
       if (!cur) {
-        set({ busy: false, error: '登录状态丢了，请重开一次 App' })
+        set({ busy: false, error: '登录状态丢了，请重开一次 App', errorCode: null })
         return false
       }
       const next: Session = { ...cur, user }
@@ -216,11 +231,18 @@ export const useAccount = create<AccountState>((set, get) => ({
       set({
         session: next,
         busy: false,
+        errorCode: null,
         bindSheet: { open: false, reason: null },
       })
       return true
     } catch (e) {
-      set({ busy: false, error: message(e) })
+      /* ★ 码要单独留下来：界面靠它决定「是号码被占了，还是别的错」。
+         号码被占是最常见的一种（家长以前在别的手机上玩过），而且**必须有出路**。 */
+      set({
+        busy: false,
+        error: message(e),
+        errorCode: e instanceof ApiError ? e.code : null,
+      })
       return false
     }
   },
@@ -263,7 +285,7 @@ export const useAccount = create<AccountState>((set, get) => ({
          · 上次是游客 ⇒ 自动建回来（同一个人，同一台机器）；
          · 上次是正式账号 ⇒ 请他登录（退出的意图就是换个人）。
        真要「不登录先玩」，登录面板上有显式入口。 */
-    set({ session: null, error: null, bootAccount: 'needs-login' })
+    set({ session: null, error: null, errorCode: null, bootAccount: 'needs-login' })
   },
 
   refresh: async () => {

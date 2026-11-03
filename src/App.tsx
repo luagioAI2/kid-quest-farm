@@ -108,6 +108,14 @@ export default function App() {
   const openBind = useAccount((st) => st.openBind)
   /** 「请用手机号登回来」面板。只在 `needs-login` 时自动开一次，关掉不再纠缠 */
   const [loginOpen, setLoginOpen] = useState(false)
+  /**
+   * 登录面板预填的号码。
+   *
+   * 目前只有一个来源：「保存进度」面板里发现号码已经有账号了，改口让人
+   * 用这个号码登回来（见 `BindSheet` 的 `onGoLogin`）。号码刚打过一遍，
+   * 再让人重打一次毫无意义。
+   */
+  const [loginPrefill, setLoginPrefill] = useState<string | undefined>(undefined)
   const loginPrompted = useRef(false)
   /** 给孩子的功能导览开着吗 */
   const [tourOpen, setTourOpen] = useState(false)
@@ -615,12 +623,24 @@ export default function App() {
 
       {/* 「保存进度」面板：游客花兑换券被拒、第 3 次启动、点横条，
           三个入口共用这一个（自己 Portal 到 body，所以放在哪一层都行）。 */}
-      <BindSheet />
+      <BindSheet
+        onGoLogin={(m) => {
+          setLoginPrefill(m)
+          setLoginOpen(true)
+        }}
+      />
 
       {/* 「用手机号登回来」：只有 `bootAccount === 'needs-login'` 会自动开一次。
           以前这里是一整块全屏闸门（`OnlineLoginGate`），新用户一进来就被拦；
           现在默认路径是自动游客账号，只有「上次是正式账号」才需要这一屏。 */}
-      <LoginSheet open={loginOpen} onClose={() => setLoginOpen(false)} />
+      <LoginSheet
+        open={loginOpen}
+        onClose={() => {
+          setLoginOpen(false)
+          setLoginPrefill(undefined)
+        }}
+        prefillMobile={loginPrefill}
+      />
 
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </div>
