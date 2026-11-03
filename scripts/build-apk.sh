@@ -7,6 +7,9 @@
 #   bash scripts/build-apk.sh release    # release 包（需签名配置）
 #   bash scripts/build-apk.sh --offline  # 明知没有后端也照打（纯离线包）
 #   bash scripts/build-apk.sh --web-only # 只构建 Web 产物，不碰 gradle
+#
+# 后端地址读 `.env.apk`（不是 `.env.production` —— 那个会被
+# 所有 `npm run build` 加载，探针会连到线上库）。
 # ============================================================
 set -euo pipefail
 
@@ -89,14 +92,41 @@ fi
 echo "▸ JAVA_HOME    = $JAVA_HOME"
 echo "▸ ANDROID_HOME = $ANDROID_HOME"
 
+# ---------------- 别把线上地址写进 .env.production ----------------
+# 这一条挡的是一个真实的连锁反应：
+#
+#   `.env.production` 会被 `vite build`（默认 mode=production）**自动加载**，
+#   而 `npm run build` 就是这个 mode。地址一旦写在那儿，之后**每一次**
+#   `npm run build` 都会把它打进产物：
+#     · 11 条 e2e 探针（先 build 再 preview）⇒ 连的是**线上库**。
+#       探针会注册账号、下单、兑换、回档 —— 等于往生产数据里灌测试数据；
+#     · `npm run site` ⇒ 官网「在线体验」指向线上 API。
+#   两者都不会报错，只会在几天后被人发现「测试数据怎么进生产了」。
+#
+# 所以 APK 的地址单独放 `.env.apk`，只在 `vite build --mode apk` 时加载。
+# 这里只是提醒，不拦 —— 万一有人真是这么用的。
+if [ -f .env.production ]; then
+  prod_base="$(grep -E '^VITE_API_BASE=' .env.production | head -1 | cut -d= -f2- | tr -d '"'"'"' \r' || true)"
+  case "$prod_base" in
+    "" | *127.0.0.1* | *localhost*) ;;
+    *)
+      echo ""
+      echo "⚠️  .env.production 里有线上地址：$prod_base"
+      echo "    它会被所有 npm run build 加载 —— 包括 11 条探针和官网构建。"
+      echo "    APK 的地址请写到 .env.apk（本脚本只读这个）。"
+      echo ""
+      ;;
+  esac
+fi
+
 # ---------------- 后端地址闸门 ----------------
 # `VITE_API_BASE` 是**构建期常量**：`src/api/client.ts` 里默认值是
 # `http://127.0.0.1:8090`，在手机上那是「手机自己」—— 装上去之后
 # 登录 / 注册 / 兑换码 / 招商申请全部失败，而界面只会说「连不上服务器」，
 # 看不出是地址配错了。所以在这里拦一下，别让它悄悄打进包里。
 API_BASE="${VITE_API_BASE:-}"
-if [ -z "$API_BASE" ] && [ -f .env.production ]; then
-  API_BASE="$(grep -E '^VITE_API_BASE=' .env.production | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
+if [ -z "$API_BASE" ] && [ -f .env.apk ]; then
+  API_BASE="$(grep -E '^VITE_API_BASE=' .env.apk | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
 fi
 
 is_loopback=0
@@ -119,7 +149,7 @@ if [ "$is_loopback" = "1" ]; then
     echo ""
     echo "  两种做法："
     echo "    ① 配真地址（推荐）："
-    echo "         echo 'VITE_API_BASE=https://api.你的域名.com' > .env.production"
+    echo "         echo 'VITE_API_BASE=https://api.你的域名.com' > .env.apk"
     echo "       注意必须是 https：capacitor.config.json 里 allowMixedContent=false，"
     echo "       http 的接口会被 WebView 直接拦掉。"
     echo "    ② 真的要打离线包（不要登录）："
@@ -157,16 +187,35 @@ if [ "$is_loopback" = "0" ] && [ "$WEB_ONLY" != "1" ]; then
   esac
 fi
 
+# ---------------- 地址自检 ----------------
+# 上面两道闸门只看**形状**（不是回环、是 https）。形状对了照样连不上：
+# 域名解析不了 / 证书是自签的 / 反代把 /api 转丢了 / CORS 没放行 App 的 Origin。
+# 这些都只在手机上暴露，症状一律是「连不上服务器」—— 家长只会说「打不开」。
+#
+# 所以真打 APK 之前**实际请求一次**。自检只发 /api/ping 和一次故意失败的登录，
+# 不写任何数据，可以对着生产库跑。
+if [ "$OFFLINE" != "1" ]; then
+  echo ""
+  echo "▸ 地址自检…"
+  if ! node scripts/check-apk-endpoint.mjs "$API_BASE"; then
+    echo ""
+    echo "✗ 地址自检没过。装到手机上就是「连不上服务器」，先修好再打。"
+    echo "  只想先出个包看看界面？加 --offline。"
+    exit 1
+  fi
+fi
+
 # ---------------- 构建 Web ----------------
 echo ""
 echo "▸ [1/3] 构建 Web 产物…"
-# 显式清空 dist。不直接用 rm -rf：某些安全策略会拦截批量删除，
-# 这里改成逐个文件删除，既绕过限制也保持行为可预期。
-if [ -d dist ]; then
-  find dist -type f -delete 2>/dev/null || true
-  find dist -depth -type d -empty -delete 2>/dev/null || true
-fi
-npm run build
+# 不在这里手工清 dist —— 交给 vite 的 emptyOutDir（默认开，outDir 在项目内）。
+#
+# 原来这里是 `find dist -type f -delete`，注释说「绕过批量删除拦截」。
+# 恰恰相反：这台机器把删除实现成**移入回收站**，逐个文件搬 ——
+# dist 里五千多个文件要跑好几分钟，表现是「[1/3] 构建 Web 产物…」之后
+# 一动不动（2026-11-02 实测 120 秒还没完，看着像构建卡死 / 网络卡住）。
+# vite 的 emptyOutDir 是一次 fs.rm，清得一样干净，但没有逐个搬运。
+npm run build:apk
 
 # 构建完再验一次「环境变量真的进产物了」——
 # 文件名写成 `.env.prod`、或者 shell 里 export 了却没传进 vite，
@@ -174,7 +223,7 @@ npm run build
 if [ "$is_loopback" = "0" ]; then
   if grep -rq "127.0.0.1:8090" dist/assets/*.js 2>/dev/null; then
     echo "✗ 产物里还是 127.0.0.1:8090 —— VITE_API_BASE 没生效。"
-    echo "  检查：文件名必须是 .env.production，值不要加引号或空格。"
+    echo "  检查：文件名必须是 .env.apk，值不要加引号或空格。"
     exit 1
   fi
   echo "▸ 产物已写入 API_BASE = $API_BASE"

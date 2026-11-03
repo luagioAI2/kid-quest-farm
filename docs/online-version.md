@@ -418,6 +418,7 @@ node scripts/_probe-snapshot-online.mjs        # 存档还原点 / 回档（41 �
 node scripts/_probe-data-ops-online.mjs        # 在线版不提供导入 / 清空（20 条，§7.15）
 node scripts/_probe-ownership-online.mjs       # 「已拥有」= 服务端名单（11 条，§7.13.6）
 node scripts/_probe-offline-banner.mjs         # 断网横幅（11 条，§7.16；拦 /api/ 模拟断网）
+npm run check:apk                              # APK 地址自检（11 项，§7.18；只读，不写数据）
 ```
 
 > 上面 11 条探针 2026-11-02 深夜全量跑过一遍（改完「回档记录」「所有权口径」
@@ -1984,3 +1985,101 @@ expect(spy.mock.calls.length).toBe(2)               // 一次 + 一次补跑
 > 教训：**「合并并发请求」这类优化，一定要问一句「后来那次调用的写入谁负责读回来」。**
 > 只合并不补跑，等于把「更晚发生的事实」永久丢掉一次 —— 而丢掉的那一次
 > 恰好就是用户刚做的那一下。
+
+## 7.18 APK 的地址：为什么不能放 `.env.production`（2026-11-02 深夜）
+
+APK 的 API 基址是**构建期常量**（`src/api/client.ts` 的默认值 `http://127.0.0.1:8090`），
+在手机上 `127.0.0.1` 是「手机自己」⇒ 登录 / 兑换码 / 招商申请全挂，
+而界面只会说「连不上服务器」，看不出是地址配错了。所以 `build-apk.sh` 有三道闸门。
+
+### 7.18.1 先发现的一个坑：`.env.production` 会污染探针
+
+`build-apk.sh` 原来的提示是「把地址写进 `.env.production`」。但
+**`vite build` 默认 `mode=production`，会自动加载 `.env.production`** ——
+而 `npm run build` 就是这个 mode。于是地址一旦写在那儿：
+
+```
+npm run build（11 条 e2e 探针的第一步）→ 产物里是**线上地址**
+  ⇒ 探针连上线上库，而探针会：注册账号、下单、确认、兑换、回档
+  ⇒ 往生产数据里灌测试数据，全程**没有任何报错**
+npm run site（官网）→ 「在线体验」指向线上 API
+```
+
+所以地址改成放 **`.env.apk`**，只在 `vite build --mode apk` 时加载
+（`package.json` 里 `build:apk` = `tsc -b && vite build --mode apk`）。
+`npm run build` 永远看不到它 —— 探针、官网、本机预览都还是 127.0.0.1。
+
+顺带加了一条提醒（不拦）：`.env.production` 里如果有非回环地址，打 APK 时会
+打一行 ⚠️，说明它会被所有 `npm run build` 加载。
+
+### 7.18.2 三道闸门（都在 `scripts/build-apk.sh`）
+
+| 闸门 | 判据 | 不拦的话 |
+| --- | --- | --- |
+| ① 地址存在且不是回环 | 没有 `.env.apk` / 是 `127.0.0.1` ⇒ 停 | 装上去「连不上服务器」 |
+| ② 必须 https | `--web-only` 除外 | `allowMixedContent:false`，WebView 直接拦 |
+| ③ 真请求一次 | `node scripts/check-apk-endpoint.mjs "$API_BASE"` | 形状对了照样连不上（见下） |
+
+第 ③ 道是这次新加的。前两道只看**形状**，而下面这些只有真机才暴露、
+症状全都是同一句「连不上服务器」：域名解析不了 / 证书自签或过期 /
+反代把 `/api` 转丢了 / 回包是网关的 HTML 错误页 / CORS 没放行 App 的 Origin。
+
+### 7.18.3 自检脚本 `scripts/check-apk-endpoint.mjs`（11 项）
+
+```bash
+npm run check:apk                      # 读 .env.apk
+node scripts/check-apk-endpoint.mjs https://api.你的域名.com
+node scripts/check-apk-endpoint.mjs --allow-http http://192.168.1.9:8090   # 局域网调试
+```
+
+它只发**不写数据**的请求（`/api/ping` + 一次故意失败的登录），可以对着生产库跑：
+
+1. 末尾没有多余斜杠；
+2. 是 https（`--allow-http` 放行）；
+3. **不是回环地址** —— 这条就是「装上去连不上」的头号原因；
+4. 能连上（`/api/ping`，10s 超时）；
+5. 没被重定向到别处（反代配错会 302 到登录页）；
+6. 回包是 JSON 且带 `code`（不是网关的 HTML 错误页）；
+7. 业务码 200；
+8. CORS 预检 · Android（`Origin: https://localhost`）；
+9. CORS 预检 · iOS（`Origin: capacitor://localhost`）；
+10. **真实 POST 也带 `Access-Control-Allow-Origin`** —— 预检过了不等于实际响应过了，
+    这两处是分别加头的，配错时只有预检那条会绿；
+11. 登录接口返回业务错误码（`10010101 用户不存在`）⇒ 鉴权链路是通的。
+
+对着本机跑的结果（10 绿 1 红，**红的那条正是它要抓的**）：
+
+```
+✓ 能连上（/api/ping） — HTTP 200
+✓ CORS 预检 · Android（https://localhost） — Allow-Origin=https://localhost
+✓ CORS 预检 · iOS（capacitor://localhost） — Allow-Origin=capacitor://localhost
+✗ 不能是回环地址（手机上那是「手机自己」） — 127.0.0.1 装到手机后只会说「连不上服务器」
+```
+
+### 7.18.4 验收（5 个场景，都实测过）
+
+| 场景 | 期望 |
+| --- | --- |
+| 没有 `.env.apk` | 停在「没有配置后端地址」，提示改成写 `.env.apk` |
+| `.env.apk` 是 `http://…`（真打 APK） | 停在「必须是 https」 |
+| `.env.apk` 是 `https://api.example.test` | 走到自检，报 `ENOTFOUND` 并停（域名不存在） |
+| `.env.production` 有线上地址 | 打一行 ⚠️，**且不拿它当地址**（仍然报「没有配置后端地址」） |
+| `.env.apk` 存在时跑 `npm run build` | 产物里仍是 `127.0.0.1:8090`，**不含** `.env.apk` 的地址 |
+
+最后一条是这节的**核心判据**：隔离靠的是「`apk` 这个 mode 名」，不是靠文件放得深。
+验法是 `grep` 产物：
+
+```bash
+npm run build && grep -c "127.0.0.1:8090" dist/assets/index-*.js   # 1
+grep -c "api.example.test" dist/assets/index-*.js                   # 0
+```
+
+### 7.18.5 顺手修掉的「构建卡住」
+
+`build-apk.sh` 原来在 build 前有 `find dist -type f -delete`，注释写着「绕过批量删除拦截」。
+**恰恰相反**：这台机器把删除实现成**移入回收站**，逐个文件搬 —— dist 里五千多个文件
+要跑好几分钟，表现是 `▸ [1/3] 构建 Web 产物…` 之后一动不动（实测 120 秒没完），
+看起来像网络卡住 / 构建卡死。删掉这两行，交给 vite 的 `emptyOutDir`（一次 `fs.rm`）。
+
+> 教训：**「绕过安全策略」的写法，要先确认它绕的是哪一层。**
+> 逐个文件删除在正常机器上更「可预期」，在这台机器上却是最慢的一条路。
