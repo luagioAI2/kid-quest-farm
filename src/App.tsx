@@ -14,6 +14,7 @@ import { useAccount } from './store/useAccount'
 import { SetupWizard } from './features/onboarding/SetupWizard'
 import { BindSheet } from './features/account/BindSheet'
 import { GuestBar } from './features/account/GuestBar'
+import { BootRetryPage } from './features/account/BootRetryPage'
 import { LoginSheet } from './features/account/LoginSheet'
 import { shouldNudgeOnLaunch } from './features/account/guestPrompt'
 import { ChildTour } from './features/onboarding/ChildTour'
@@ -313,14 +314,32 @@ export default function App() {
   useEffect(() => {
     let alive = true
     void (async () => {
-      await ensureGuest()
+      const ok = await ensureGuest()
       if (!alive) return
+      /* ★ 账号没建成 ⇒ **别** boot()。
+         没有会话时 `refresh()` 直接返回 `no-session`，一条都不拉 ——
+         孩子会看到一整套空界面（没任务、没积分、农场空的），而屏幕上
+         一个字都不会说。首屏就这么空，他不会去猜，直接关掉。
+         `needs-login` 不走这里：那是「上次是正式账号」，有登录面板那条出口。 */
+      if (!ok && useAccount.getState().bootAccount === 'failed') return
       await boot()
     })()
     return () => {
       alive = false
     }
   }, [boot, ensureGuest])
+
+  /**
+   * 「重试」按钮：再建一次账号，成功才继续 `boot()`。
+   *
+   * `ensureGuest` 本身幂等（已经有会话就直接 ready），所以连点也不会建出
+   * 两个号；请求期间按钮是禁用的（`busy` 在 store 里）。
+   */
+  const retryBoot = async () => {
+    const ok = await ensureGuest()
+    if (!ok) return
+    await boot()
+  }
 
   /** 上一次是正式账号 ⇒ 请他登回来（自动开一次，关掉就不再开） */
   useEffect(() => {
@@ -404,6 +423,13 @@ export default function App() {
   // 数据好了 **并且** 入场页待够了才进主界面。
   // 这里是一次性的启动闸门（之前还没挂载任何子页面），所以可以整棵替换；
   // 进了主界面之后就再也不走这个分支了。
+  //
+  /* ★ 账号没建成（连不上服务器）⇒ 停在这一屏，别进空界面。
+     必须放在 splash 那条**前面**：这时候 `ready` 永远是 false，
+     不拦就是一个永远转圈的开场页。 */
+  if (isOnlineMode && bootAccount === 'failed' && !ready) {
+    return <BootRetryPage onRetry={() => void retryBoot()} />
+  }
   if (!ready || !splashMinElapsed) return <SplashPage />
 
   return (
