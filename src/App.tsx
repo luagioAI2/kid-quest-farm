@@ -9,6 +9,8 @@ import SettingsPage from './features/settings/SettingsPage'
 import { ReviewSheetModal } from './features/parent/ReviewSheet'
 import { SplashPage } from './features/splash/SplashPage'
 import { shouldRefreshOnForeground } from './sync/foreground'
+import { isOnlineMode } from './sync/pull'
+import { useAccount } from './store/useAccount'
 import { SetupWizard } from './features/onboarding/SetupWizard'
 import { OnlineLoginGate } from './features/account/OnlineLoginGate'
 import { ChildTour } from './features/onboarding/ChildTour'
@@ -95,6 +97,8 @@ export default function App() {
   const [splashMinElapsed, setSplashMinElapsed] = useState(false)
   /** 家长设置向导：null = 关着，'first' = 首次引导，'replay' = 设置页点「重看」 */
   const [wizardMode, setWizardMode] = useState<'first' | 'replay' | null>(null)
+  /* 在线版：没登录就别开引导 —— 理由见下面那个 effect 的注释 */
+  const session = useAccount((st) => st.session)
   /** 给孩子的功能导览开着吗 */
   const [tourOpen, setTourOpen] = useState(false)
   /** 首次进入只自动决定一次，之后靠设置页的「重看」入口手动开 */
@@ -138,11 +142,26 @@ export default function App() {
    * 这个 effect 会因为依赖变化再跑一遍。
    */
   const onboardingDone = settings.onboardingDone
+  /**
+   * 在线版**先登录，再谈引导**。
+   *
+   * ★ 引导的两个动作在没登录时都做不成：
+   *   ① 它 `Portal` 到 body、和登录闸门同为 `z-60`，而它**挂得更晚** ⇒
+   *      压在闸门上面，登录按钮 `elementFromPoint` 命中的是引导 —— 点不到；
+   *   ② 它「完成」时要写小名 / 头像，而在线版的设置是**写穿**的：
+   *      没登录 ⇒ 写不上去 ⇒ 回退 + 提示，`onboardingDone` 永远落不下来 ⇒
+   *      下次启动又弹一遍。
+   *   所以在线版没登录时**不决定**这件事（`gateDecided` 不置位），
+   *   等登录之后这个 effect 会再跑一遍，那时候再按 `onboardingDone` 决定。
+   *
+   * 本地版没这个顺序问题，照旧。
+   */
+  const needLogin = isOnlineMode && !session
   useLayoutEffect(() => {
-    if (!entered || gateDecided.current) return
+    if (!entered || gateDecided.current || needLogin) return
     gateDecided.current = true
     if (!onboardingDone) setWizardMode('first')
-  }, [entered, onboardingDone])
+  }, [entered, onboardingDone, needLogin])
 
   /** 向导走完 → 紧接着给孩子看导览（引导是「两段」的，见 SetupWizard 注释） */
   const finishWizard = () => {
