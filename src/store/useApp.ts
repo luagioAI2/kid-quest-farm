@@ -103,7 +103,12 @@ import { settleInstance, type SettleParams } from '../domain/settlement'
 import { isOnlineMode, pullFromServer } from '../sync/pull'
 import { srvId } from '../sync/map'
 import { onlineWrite, writeFailToast } from '../online/write'
-import { isDeviceLocalOnly, oSaveSettings } from '../online/settings'
+import {
+  isUsageOnly,
+  noteUsagePushed,
+  oSaveSettings,
+  pushUsageBestEffort,
+} from '../online/settings'
 import {
   oCheckIn,
   oCreateTask,
@@ -4894,10 +4899,21 @@ export const useApp = create<AppState>((set, get) => ({
     // 先同步更新内存：受控输入框、以及同一 tick 里的后续调用，立刻看到新值
     set({ settings: next })
     settingsWriteChain = settingsWriteChain.catch(() => {}).then(async () => {
-      /* 在线版：**服务端成功了才落本地**（写穿的铁律，见 `online/write.ts`）。
-         `gameClock` 这类设备本地字段不进 payload（见 `online/settings.ts`），
-         只碰它们的改动直接落盘、不发请求 —— 那个计数器每 60 秒动一次。 */
-      if (isOnlineMode && !isDeviceLocalOnly(patch)) {
+      if (isOnlineMode) {
+        /* 只碰用量（`gameClock`）的改动：**本地先落盘，网络尽力而为**。
+           这一条和下面那条是两套语义，别合并：
+             · 它是「限时」的执行依据，每 60 秒动一次；
+             · 走写穿 ⇒ 断网时本地也写不进去 ⇒ 时长不累计 ⇒ 孩子无限玩；
+             · 走失败回退 ⇒ 把时钟拨回去，同样等于放开额度。
+           所以这里不等请求（等的话断网时落库会被超时拖住）、不回退、不弹提示。
+           推送本身有节流，见 `pushUsageBestEffort`。 */
+        if (isUsageOnly(patch)) {
+          await saveSettings(next)
+          void pushUsageBestEffort(next)
+          return
+        }
+
+        /* 其余设置：**服务端成功了才落本地**（写穿的铁律，见 `online/write.ts`） */
         const r = await onlineWrite(() => oSaveSettings(next))
         if (!r.ok) {
           /* 失败要把内存退回去，否则「界面上是新值、重启变回旧值」。
@@ -4907,6 +4923,8 @@ export const useApp = create<AppState>((set, get) => ({
           get().pushToast(writeFailToast(r.error, '这次设置'))
           return
         }
+        /* 那一份 payload 里带着当时的用量 —— 记下来，别马上再推一遍 */
+        noteUsagePushed(next.gameClock)
       }
       await saveSettings(next)
     })

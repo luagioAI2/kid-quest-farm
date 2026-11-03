@@ -2,22 +2,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db, DEFAULT_SETTINGS, getMeta, loadSettings, saveSettings, setMeta } from '../db/db'
 import { setSession } from '../api/session'
 import type { AppSettings } from '../domain/types'
+import { appDayKey } from '../domain/time'
 import {
+  USAGE_PUSH_EVERY_SEC,
   cloudPayload,
-  isDeviceLocalOnly,
+  isUsageOnly,
+  noteUsagePushed,
   oSaveSettings,
   pullSettings,
+  pushUsageBestEffort,
   resetSettingsSyncState,
   settingsFromCloud,
+  shouldPushUsage,
 } from './settings'
 
 /* ============================================================
    在线版 · 家长设置上云
    ------------------------------------------------------------
    这一层错了也都**不报错**：
-     · 把 `gameClock` 传上去 ⇒ 一分钟一个 POST，而且断网时本地也写不进去
-       ⇒ 时长不累计 ⇒ 孩子无限玩；
-     · 拉取时用云端那份盖掉本机 `gameClock` ⇒ 杀 App 重开就刷回额度；
+     · 用量（`gameClock`）**不上云** ⇒ 重装 App / 换台设备，每日限时重置；
+     · 用量走普通设置的「写穿 + 失败回退」⇒ 断网时时长不累计 ⇒ 孩子无限玩；
+     · 拉取时用云端那份盖掉本机 `gameClock` ⇒ 拉一次退回去一点，额度用不完；
+     · 用量一分钟推一次 ⇒ 请求打满（所以有节流）；
      · 云端为空时什么都不做 ⇒ 老账号的设置永远上不去（换台设备全丢）；
      · 读响应比写更晚回来还照用 ⇒ 刚存的设置被上一份读结果盖回去。
 
@@ -32,11 +38,15 @@ vi.mock('../api/settings', () => ({
   settingsSave: (payload: string, version: number) => saveMock(payload, version),
 }))
 
+/* ⚠️ `gameClock.day` 必须是**今天**（走 `appDayKey`，和 `mergeGameClock` 同一个口径）。
+   写死一个日期的话，`mergeGameClock` 会把它当成「别的日子」归 0，
+   下面的断言就全变成了在测 0 == 0。 */
+const TODAY = appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour)
 const LOCAL: AppSettings = {
   ...DEFAULT_SETTINGS,
   childName: '小明',
   parentPin: '2468',
-  gameClock: { day: '2026-11-03', sec: 420 },
+  gameClock: { day: TODAY, sec: 420 },
 }
 
 beforeEach(async () => {
@@ -48,9 +58,9 @@ beforeEach(async () => {
 })
 
 describe('cloudPayload：什么上云、什么不上云', () => {
-  it('剥掉 gameClock（用量不上云）', () => {
+  it('gameClock **也**上云 —— 否则重装 App 就把每日限时重置了', () => {
     const o = JSON.parse(cloudPayload(LOCAL)) as Record<string, unknown>
-    expect(o.gameClock).toBeUndefined()
+    expect(o.gameClock).toEqual(LOCAL.gameClock)
     expect(o.childName).toBe('小明')
   })
 
@@ -62,20 +72,42 @@ describe('cloudPayload：什么上云、什么不上云', () => {
     expect(o.parentPin).toBe('2468')
   })
 
-  it('isDeviceLocalOnly：只碰 gameClock 才为真', () => {
-    expect(isDeviceLocalOnly({ gameClock: { day: '2026-11-03', sec: 1 } })).toBe(true)
-    expect(isDeviceLocalOnly({ gameClock: { day: '2026-11-03', sec: 1 }, childName: 'x' })).toBe(
-      false,
-    )
-    expect(isDeviceLocalOnly({})).toBe(false)
+  it('isUsageOnly：只碰 gameClock 才为真（真了就走「尽力而为」，不走写穿）', () => {
+    expect(isUsageOnly({ gameClock: { day: TODAY, sec: 1 } })).toBe(true)
+    expect(isUsageOnly({ gameClock: { day: TODAY, sec: 1 }, childName: 'x' })).toBe(false)
+    expect(isUsageOnly({})).toBe(false)
   })
 })
 
 describe('settingsFromCloud：合回一份能用的设置', () => {
-  it('保留本机的 gameClock（云端那份可能是别的设备 / 别的日子）', () => {
+  it('云端没有 gameClock ⇒ 保留本机那份', () => {
     const got = settingsFromCloud(JSON.stringify({ childName: '小红' }), LOCAL)
     expect(got?.childName).toBe('小红')
     expect(got?.gameClock).toEqual(LOCAL.gameClock)
+  })
+
+  it('云端那份更大 ⇒ 取云端的（另一台设备玩得更多）', () => {
+    const got = settingsFromCloud(
+      JSON.stringify({ gameClock: { day: TODAY, sec: 900 } }),
+      LOCAL,
+    )
+    expect(got?.gameClock).toEqual({ day: TODAY, sec: 900 })
+  })
+
+  it('云端那份更小 ⇒ 取本机的（**别**被拉回去，否则额度永远用不完）', () => {
+    const got = settingsFromCloud(
+      JSON.stringify({ gameClock: { day: TODAY, sec: 100 } }),
+      LOCAL,
+    )
+    expect(got?.gameClock).toEqual({ day: TODAY, sec: 420 })
+  })
+
+  it('云端那份是别的日子 ⇒ 不算今天的', () => {
+    const got = settingsFromCloud(
+      JSON.stringify({ gameClock: { day: '2000-01-01', sec: 99999 } }),
+      LOCAL,
+    )
+    expect(got?.gameClock).toEqual({ day: TODAY, sec: 420 })
   })
 
   it('解析不出来一律 null —— 让调用方保留本地，而不是清成默认值', () => {
@@ -91,7 +123,11 @@ describe('settingsFromCloud：合回一份能用的设置', () => {
 describe('pullSettings：云端 → 本地 meta', () => {
   it('云端有设置 ⇒ applied，且写进 meta', async () => {
     getMock.mockResolvedValue({
-      payload: JSON.stringify({ childName: '小红', parentPin: '1111' }),
+      payload: JSON.stringify({
+        childName: '小红',
+        parentPin: '1111',
+        gameClock: { day: TODAY, sec: 900 },
+      }),
       updated_at: 1,
       version: 2,
     })
@@ -102,8 +138,8 @@ describe('pullSettings：云端 → 本地 meta', () => {
     const got = await loadSettings()
     expect(got.childName).toBe('小红')
     expect(got.parentPin).toBe('1111')
-    // 设备本地字段还是本机那份
-    expect(got.gameClock).toEqual(LOCAL.gameClock)
+    // 用量取 max：云端 900 > 本机 420
+    expect(got.gameClock).toEqual({ day: TODAY, sec: 900 })
   })
 
   it('**覆盖**而不是合并：云端没有的键不会从本地复活', async () => {
@@ -129,10 +165,11 @@ describe('pullSettings：云端 → 本地 meta', () => {
 
     expect(await pullSettings(await loadSettings())).toBe('pushed')
 
-    // 推上去的那份里必须有 PIN（否则换台设备开不了门），但没有 gameClock
+    // 推上去的那份里必须有 PIN（换台设备要能开门），也必须有今天的用量
+    // （否则重装 App 就把限时重置了）
     const sent = JSON.parse(saveMock.mock.calls[0][0] as string) as Record<string, unknown>
     expect(sent.parentPin).toBe('2468')
-    expect(sent.gameClock).toBeUndefined()
+    expect(sent.gameClock).toEqual(LOCAL.gameClock)
     // 本地设置不该被这次推上去的动作改掉
     expect((await loadSettings()).childName).toBe('小明')
   })
@@ -194,5 +231,50 @@ describe('pullSettings：云端 → 本地 meta', () => {
 
     expect(await pullSettings(await loadSettings())).toBe('stale')
     expect((await loadSettings()).childName).toBe('小明')
+  })
+})
+
+describe('用量上云：节流 + 尽力而为', () => {
+  it('第一次推；累计不到 5 分钟不推；到了就推', () => {
+    expect(shouldPushUsage(undefined)).toBe(false)
+    expect(shouldPushUsage({ day: TODAY, sec: 100 })).toBe(true)
+
+    noteUsagePushed({ day: TODAY, sec: 100 })
+    expect(shouldPushUsage({ day: TODAY, sec: 100 + USAGE_PUSH_EVERY_SEC - 1 })).toBe(false)
+    expect(shouldPushUsage({ day: TODAY, sec: 100 + USAGE_PUSH_EVERY_SEC })).toBe(true)
+  })
+
+  it('跨天一定推 —— 否则云端永远停在昨天，换台设备拉下来就是「昨天玩满了」', () => {
+    noteUsagePushed({ day: TODAY, sec: 1800 })
+    expect(shouldPushUsage({ day: '2000-01-02', sec: 0 })).toBe(true)
+  })
+
+  it('推不上去**不抛也不回退**，下一次 tick 会重试', async () => {
+    saveMock.mockRejectedValue(new Error('连不上服务器'))
+    await expect(pushUsageBestEffort(LOCAL)).resolves.toBeUndefined()
+
+    // 失败了 ⇒ 节流状态没变，下一次还会试
+    expect(shouldPushUsage(LOCAL.gameClock)).toBe(true)
+  })
+
+  it('推成功之后按节流走：30 秒后的那次不推', async () => {
+    saveMock.mockImplementation((payload: string, version: number) =>
+      Promise.resolve({ payload, updated_at: 9, version }),
+    )
+
+    await pushUsageBestEffort(LOCAL)
+    expect(saveMock).toHaveBeenCalledTimes(1)
+
+    await pushUsageBestEffort({
+      ...LOCAL,
+      gameClock: { day: TODAY, sec: 420 + 30 },
+    })
+    expect(saveMock).toHaveBeenCalledTimes(1)
+
+    await pushUsageBestEffort({
+      ...LOCAL,
+      gameClock: { day: TODAY, sec: 420 + USAGE_PUSH_EVERY_SEC },
+    })
+    expect(saveMock).toHaveBeenCalledTimes(2)
   })
 })

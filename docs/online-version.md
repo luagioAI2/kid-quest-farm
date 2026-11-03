@@ -403,7 +403,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1306 条（2 skipped）
+npm test                                       # 1319 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
                                                # ⚠️ 也别接管道：`| tail` 拿到的是 tail 的退出码，ENOSPC 也能显示 EXIT=0
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
@@ -1377,7 +1377,7 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1306 单测（2 skipped）
+npm run lint && npx vitest run && npm run build   # 1319 单测（2 skipped）
 node scripts/_probe-snapshot-online.mjs           # 41 条断言，全绿
 ```
 
@@ -2223,12 +2223,16 @@ go run ./cmd/seed -c configs/config.yaml games   # 21 款，按 manifest 标 0/1
 写上去之后服务端也不会留着。这条有单测盯着（`覆盖而不是合并`），
 因为「合并」看起来更安全，实际上会让删掉的设置永远复活。
 
-### 7.20.2 ★★ 两张「不上云」的清单，**故意不一样**
+### 7.20.2 ★★ 两张清单：**备份剥、云端传**，但理由各不相同
 
-| 字段 | 备份（`stripDeviceLocal`） | 云端（`DEVICE_LOCAL_SETTING_KEYS`） | 为什么 |
+| 字段 | 备份（`stripDeviceLocal`） | 云端 | 为什么 |
 |---|---|---|---|
 | `parentPin` | **剥** | **传** | 备份会被发到微信 / 网盘，4 位数字肉眼就能用；而云端是家长自己的账号，换台设备要能用同一个 PIN 开门 |
-| `gameClock` | 剥 | 剥 | 它是**用量**不是配置，见 7.20.3 第 4 条 |
+| `gameClock` | **剥** | **传**（节流 + 按天取 max） | 备份是「搬去另一台设备」的介质，带着用量只会让「导入一份玩之前的备份」变成刷额度；云端必须传，否则**重装 App 就把每日限时重置了**（§7.20.3 ④） |
+
+⚠️ 两行现在**恰好长得一样**（备份都剥、云端都传），但理由完全不同：
+备份剥是因为「这个文件会离开这台设备」，云端传是因为「账号就是数据源」。
+照着其中一处去改另一处之前，先把 §7.20.3 ④ 读完。
 
 ⚠️ 这两张清单长得像，但**别「统一一下」**：统一成备份那份 ⇒ 换机后开不了家长门；
 统一成云端那份 ⇒ 明文 PIN 跟着备份文件出门。
@@ -2267,52 +2271,76 @@ owner 是别人                             → 整份重置成默认值，一�
 无条件回退会把家长刚接着打的下一个字吞掉（和 `updateSettings` 头注释里那个
 「同一 tick 两次调用」是同一个坑）。
 
-**④ `gameClock` 每 60 秒一个 POST，而且断网时时长不累计。**
+**④ `gameClock`：既要上云，又不能跟着「写穿」走。**
 
 `GamePlayGate` 每 60 秒 `updateSettings({ gameClock })` 落一次盘。它是**限时**这道
-闸的执行依据：
+闸的执行依据，于是三个要求互相打架：
 
-- 上云 ⇒ 一分钟一个请求；
-- 写穿 ⇒ 断网时本地也写不进去 ⇒ 时长不累计 ⇒ **孩子无限玩**。
+| 要求 | 不做会怎样 |
+|---|---|
+| 必须上云 | 重装 App / 换台设备 / 清一次缓存 ⇒ **每日限时重置**，孩子发现重装就能重来 |
+| 不能一分钟一个 POST | 请求打满（每 60 秒一次） |
+| 不能走写穿 | 写穿是「服务端成功才落本地」⇒ 断网时本地也写不进去 ⇒ 时长不累计 ⇒ **孩子无限玩** |
+| 拉取不能直接用云端那份盖 | 本机玩到 25 分钟、云端还是 20 分钟，拉一次退回 20 ⇒ **额度永远用不完** |
 
-闸门：`isDeviceLocalOnly(patch)` —— 只碰设备本地字段的改动直接落盘、不发请求；
-`cloudPayload` 也会把它剥掉。真要跨设备共享额度，光传不够，拉取时还得按
-「同一天取 max(本地, 云端)」合并，否则杀掉 App 重开就能把额度刷回去。
+闸门是三条，各管一件事：
+
+1. `isUsageOnly(patch)` —— 只碰用量的改动走 `pushUsageBestEffort`：
+   **本地先落盘**（时钟必须一直走），网络尽力而为，失败**不回退、不弹提示**。
+2. `shouldPushUsage(clock)` —— 累计多 5 分钟才推一次；跨天必推
+   （否则云端永远停在昨天，换台设备拉下来就是「昨天玩满了」）。
+3. `mergeGameClock(local, cloud, dayStartHour)` —— 同一天取 **max**。
+   取云端那份 ⇒ 额度用不完；两份相加 ⇒ 两台设备同时在玩时同一段时间算两遍。
+
+⚠️ 「失败不回退」是这条链上最容易写错的地方：它和普通设置的写穿语义**相反**，
+而且反得对 —— 普通设置回退是因为「界面上是新值、重启变旧值」；
+用量回退等于把时钟拨回去，直接放开额度。
 
 ### 7.20.4 验收
 
 ```bash
 npm run lint                                       # 0
-npx vitest run src/online/settings.test.ts         # 11 条
-npx vitest run                                     # 1306 条（2 skipped）
+npx vitest run src/online/settings.test.ts         # 18 条
+npx vitest run src/domain/gameTime.test.ts         # 21 条
+npx vitest run                                     # 1319 条（2 skipped）
 npm run build
 npx vite preview --port 4407 --strictPort
 node scripts/_probe-settings-online.mjs http://127.0.0.1:4407/   # 11 条断言
 ```
 
-单测覆盖的是「纯函数 + 闸门」：payload 剥什么留什么、PIN 必须上云、
-`isDeviceLocalOnly`、坏 payload 一律 `null`、覆盖不合并、云端空要推、
-推不上去要保留、换账号要重置、旧读要丢。
+单测覆盖的是「纯函数 + 闸门」：payload 该带什么、PIN 与用量都必须上云、
+`isUsageOnly`、坏 payload 一律 `null`、覆盖不合并、云端空要推、
+推不上去要保留、换账号要重置、旧读要丢、用量节流（30 秒不推 / 5 分钟推）、
+`mergeGameClock` 取 max（含「不是相加」「别的日子按 0」）。
 
 探针（真浏览器 + 真服务端）实测：
 
 ```
 ① 拉取：启动后 store 里是云端那份
   ✓ 云端 payload 里每个键都进了 store — 2 个键一致
-  ✓ 拉取后 gameClock 还是本机那份（云端没有这个概念）
+  ✓ 拉取后 gameClock 取的是 max(本机, 云端)
 ② 写穿：改小名之后服务端跟着变
   ✓ 设 PIN 之后云端也有 parentPin
   ✓ 服务端 payload 里是新小名 — v1001
-  ✓ 云端 payload 里没有 gameClock（用量只属于这台设备）
+  ✓ 云端 payload 里有 gameClock（重装 App 不能重置限时） — {"day":"2026-11-03","sec":0}
   ✓ 云端 payload 里有 parentPin（换台设备要能用同一个 PIN） — 已上云
 ⑤ 断网：写不上去就别装作存好了
   ✓ （前提）断网前 store 里是刚写上去的名字
   ✓ 弹了「这次设置没发出去」
   ✓ 内存回退到断网前那个名字（不是「界面新值、重启旧值」）
+  ✓ 断网时用量仍然落盘、且没被回退 — {"day":"2026-11-03","sec":777}
+  ✓ 用量推不上去时**不弹**提示（每 60 秒一次会把屏幕糊满）
   ✓ 云端一个字节没变 — v1001 → v1001
 ⑥ 重开页面：设置跟着账号走
   ✓ 刷新后 store 里还是刚写上去的名字
+⑦ 跨设备：云端用量更大时，这台设备要跟上
+  ✓ 扮演另一台设备写入了更大的用量 — code=200
+  ✓ 重开之后这台设备跟上了云端那份（否则重装 App 就能重置限时） — 云端 600s，store 600s
 ```
+
+**这条 ⑦ 做过变异验证**：把 `isUsageOnly` 改成恒 `false`（用量退回写穿），
+⑤ 那两条立刻红 —— `断网时用量仍然落盘` 读到 `sec: 0`（被回退了）、
+`用量推不上去时不弹提示` 变成弹了。所以它不是「跑绿了就算」。
 
 ### 7.20.5 探针自己的三个坑（都当场踩到了）
 
@@ -2331,7 +2359,8 @@ node scripts/_probe-settings-online.mjs http://127.0.0.1:4407/   # 11 条断言
 ### 7.20.6 已知没做
 
 - ~~**换账号后本地其它表没清**~~ —— 已做，见 §7.21。
-- **`gameClock` 不跨设备**：见 7.20.3 ④。
+- ~~**`gameClock` 不跨设备**~~ —— 已做（§7.20.3 ④）：用量上云（节流 5 分钟）、
+  拉取按「同一天取 max」合并。重装 App / 换台设备不再重置每日限时。
 - **另一台设备改了设置，这台不实时更新**：只在启动时拉。PIN 只在设它的
   那台设备上用来开门，所以实际影响很小；真要实时得加轮询或长连接。
 
