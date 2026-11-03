@@ -782,7 +782,12 @@ async function doSeedIfEmpty(): Promise<void> {
       source: 'manual_adjust',
       memo: '欢迎来到小任务农场！这是给你的启动积分 🎁',
     })
-    // 2026-10-17：全新用户启动时赠送 500 钻石（和上面的 50 启动积分同一逻辑，只给新装机的孩子）。
+    /* 2026-10-17：全新用户启动时赠送 500 钻石（和上面的 50 启动积分同一逻辑，
+       只给新装机的孩子）。
+       ⚠️ 这是**本机**的种子，在线版里服务端的 `diamond` 是 0 —— 别拿它当
+       「账号里有 500 钻石」。本版钻石只进不出（发放入口和购买入口都撤了，
+       见 `buyGame` 的注释），所以现在对不上也不会有后果；真要恢复钻石经济，
+       顺序见 `docs/online-version.md` §7.15.7 最后一条。 */
     await postMall({
       delta: 500,
       source: 'manual_adjust',
@@ -4567,6 +4572,18 @@ export const useApp = create<AppState>((set, get) => ({
     await get().refresh()
   },
 
+  /**
+   * 用钻石买游戏。
+   *
+   * ⚠️ **界面上没有入口**（游戏商城那个购买按钮已经撤掉，见 `GameStore.tsx`
+   * 的注释），所以这段在线上跑不到。留着的唯一原因：心愿商城的数字商品走的是
+   * 另一条链，别顺手删。
+   *
+   * ★★ 真要把购买接回来，**在线版必须先改走服务端**（`/api/game/purchase`，
+   * 服务端已经会扣钻石 + 发所有权）。照现在这样直接接线的话：本机扣了钻石、
+   * 服务端不知道 ⇒ 刷新之后 `ownedIdsOnline` 一覆盖，游戏还是「没买」，
+   * 而钻石已经没了 —— 孩子会以为钱被吞了。
+   */
   buyGame: async (id) => {
     const g = gameById(id)
     if (!g) return { ok: false, message: '没有这款游戏' }
