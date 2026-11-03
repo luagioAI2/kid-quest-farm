@@ -251,7 +251,7 @@ describe('kvFailToast', () => {
     expect(kvFailToast(new ApiError(10040701, 'x')).title).toBe('存档在别的设备上改过')
     expect(kvFailToast(new ApiError(10040401, 'x')).title).toBe('这个游戏还没兑换过')
     expect(kvFailToast(new ApiError(10040201, 'x')).title).toBe('这个游戏下架了')
-    expect(kvFailToast(new ApiError(10030201, 'x')).title).toBe('存档太大了')
+    expect(kvFailToast(new ApiError(10040601, 'x')).title).toBe('存档太大了')
   })
 
   it('★ 断网时说清「这一局的存档」没发出去', () => {

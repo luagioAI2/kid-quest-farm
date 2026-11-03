@@ -39,8 +39,17 @@ export const KV_GAME_NOT_OWNED = 10040401
 export const KV_GAME_OFFLINE = 10040201
 /** 保留键 / 权限不足 */
 export const KV_FORBIDDEN = 604
-/** 存档太大 */
-export const KV_TOO_LARGE = 10030201
+/**
+ * 存档太大。
+ *
+ * ⚠️ 服务端 `GameKvTooLarge = 10040601`（10 04 游戏域）。
+ * 这里曾经写 `10030201`（10 03 **文件上传**域），而服务端当时也返那个 ——
+ * 两边一致、但都和 `GAME_STORAGE_API.md` §6 的「10040601 存档过大」不一致，
+ * 所以谁也没发现。现在三处统一。
+ *
+ * 同一个码也用于「账号总用量超 64MB」：两种「写不下」要做的事一样。
+ */
+export const KV_TOO_LARGE = 10040601
 
 /** `gameId\u0000key` —— 用 `\0` 而不是 `:`，键名里允许冒号但不允许 NUL */
 function vkey(gameId: string, key: string): string {
