@@ -403,7 +403,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1325 条（2 skipped）
+npm test                                       # 1333 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
                                                # ⚠️ 也别接管道：`| tail` 拿到的是 tail 的退出码，ENOSPC 也能显示 EXIT=0
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
@@ -1377,7 +1377,7 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1325 单测（2 skipped）
+npm run lint && npx vitest run && npm run build   # 1333 单测（2 skipped）
 node scripts/_probe-snapshot-online.mjs           # 41 条断言，全绿
 ```
 
@@ -1886,11 +1886,64 @@ node scripts/_probe-data-ops-online.mjs http://127.0.0.1:4406/    # 20 条断言
 - **真正的「换账号迁移」**（把旧账号的账搬到新账号）：要服务端有迁移接口，
   这一期没做。现在能给的只有「登录同一个账号」。
 - **真正的「清空账号」**：同理。现在能给的只有「退出登录」（记录留着）。
-- 老设备上的兑换券余额还没迁移（和 §7.14.7 里那条同源）。
+- ~~老设备上的兑换券余额还没迁移~~ —— 已做（§7.15.8）：`POST /api/wallet/import`，
+  首次登录自动结转。
 
 真要动手时，接口大概长这样：`POST /api/account/import`（带幂等键 + 全量校验）与
 `POST /api/account/reset`（软删 + 留一份 `before_reset` 快照，可回滚）。
 两件事都必须**在服务端做**，客户端的 Dexie 只是缓存 —— 这是这一节的全部结论。
+（结转那半已经按这个思路做了，只是挂在 `/api/wallet/import` 上：它本来就是钱包操作，
+不新开路由组，也不用动 wire。）
+
+### 7.15.8 从本地版升级上来：旧账要**搬上去**，不是算进余额（2026-11-03）
+
+本地版和在线版共用同一个包名、同一套表。从本地版升级上来的设备，`ledger` /
+`harvestLedger` 里还留着旧行；而余额是**整表求和**（`currentBalance` 等，
+不过滤 `srv_` 行）⇒ 界面显示「服务端 + 本机旧账」。
+
+实测（探针，2026-11-03）：服务端 `points=219`，往本机插一行 `+1000` 之后
+界面显示 **1219**，重开 App 还是 1219。孩子看到 1219 分，兑换时被服务端拒掉，
+而且只说「积分不够」—— 这类「两个都对、加起来不对」的问题，四层验收全绿也看不见。
+
+#### ① 三条路里选了「搬上去」
+
+| 做法 | 结果 |
+|---|---|
+| 什么都不做 | 界面虚高，花不掉，不报错 |
+| 只让界面只算服务端那份 | 数字对了，但孩子的分**看起来**没了 |
+| **搬上去（选定）** | 分数无缝延续，两边只剩一个事实 |
+
+#### ② 只搬余额，不搬流水
+
+逐条搬等于让两边各持一套「同一个事实」的账：重试一次就可能多记一笔，而本地流水
+里的 `refId`（任务实例 / 农场对象）在服务端根本不存在。所以每种币最多写一行
+「从本地版结转」，来源 `legacy_import`，备注带笔数。
+
+#### ③ 幂等键 = 安装 id + 载荷
+
+同一份载荷重试 ⇒ 命中同一把键（服务端按 `(uid, key, 币种)` 去重），不会多记；
+载荷变了（上次只搬了积分）⇒ 另一把键，把差额补上。换一台设备也有自己的安装 id，
+不会互相吞掉。
+
+#### ④ 顺序：先搬、再拉、后删
+
+`pullOnce` 里 `adoptAccount` 之后、拉取之前调 `importLegacyIfNeeded`：
+
+1. 数出本机非 `srv_` 行 → 调接口 → **成功了才**删那几行（按 id 快照删，不整表删）
+2. 紧接着这一趟拉取把服务端那份（含刚搬上去的）读回来
+
+★ 失败**不删**本机行，并记 `legacy.importPending` 让下次刷新重试 —— 否则断网那一次
+没搬成，就永远搬不成了。★ 顺序反了会短暂显示「余额突然变少」。
+
+#### ⑤ 只管积分和兑换券
+
+钻石（`mallLedger`）在在线版里**根本没上云**（见 `mintMall` 的注释），搬一个界面上
+看不见的余额没有意义 —— 那是另一件事，别顺手做。
+
+★ 判据：`online/legacy.test.ts` 8 条 + 探针 `scripts/_probe-legacy-import.mjs`
+（全新 profile → 先不登录插一行旧账 → 注入 session 重开 ⇒ 服务端余额含这笔、
+界面 == 服务端、本机行已删、再重开不翻倍）。**变异验过**：把结转整个关掉 ⇒
+探针红 4 条，其中「界面余额 == 服务端」读到 `store=1219 服务端=219`。
 
 ## 7.16 断网时界面说什么（2026-11-02 深夜）
 
@@ -2302,7 +2355,7 @@ owner 是别人                             → 整份重置成默认值，一�
 npm run lint                                       # 0
 npx vitest run src/online/settings.test.ts         # 18 条
 npx vitest run src/domain/gameTime.test.ts         # 21 条
-npx vitest run                                     # 1325 条（2 skipped）
+npx vitest run                                     # 1333 条（2 skipped）
 npm run build
 npx vite preview --port 4407 --strictPort
 node scripts/_probe-settings-online.mjs http://127.0.0.1:4407/   # 11 条断言

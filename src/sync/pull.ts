@@ -13,6 +13,7 @@ import { listRedeemRecords, listRedeemRows } from '../api/redeem'
 import { listWishItems, listWishOrders } from '../api/wish'
 import { getSession, getToken } from '../api/session'
 import { pullSettings, type PullSettingsStatus } from '../online/settings'
+import { importLegacyIfNeeded } from '../online/legacy'
 import { adoptAccount, type AdoptResult } from '../online/adopt'
 import {
   mapHarvest,
@@ -137,6 +138,12 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
        必须在我们写新数据之前消失。放在请求之后的话，中间那段
        （几百毫秒，断网时是**永久**）界面读到的还是上一个人的行。 */
     adopt = await adoptAccount(getSession()?.user.uid ?? null)
+
+    /* 把本地版留下的旧账结转上去（见 `online/legacy.ts`）。
+       ★ 必须在拉取**之前**：结转成功会删掉本机那几行，紧接着这一趟拉取
+         才能把服务端那份（含刚搬上去的）读回来 —— 否则界面会短暂显示
+         「余额突然变少」。★ 它自己不抛：结转失败不影响拉取。 */
+    await importLegacyIfNeeded(adopt === 'first')
 
     // 三个请求并发：任务板本身会**懒生成**今天的实例，所以它必须在读实例之前完成
     const [b, tasks, wallet] = await Promise.all([

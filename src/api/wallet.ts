@@ -67,6 +67,33 @@ export const walletLedger = (page = 1, pageSize = 50) =>
  * @param clientRequestId 幂等键。**必须每次都不同**（`newCoinRequestId()`），
  *   传空串时服务端不写幂等键 —— 重试就会真的扣两次。
  */
+/**
+ * 把「本地版留下的旧账」一次性结转进这个账号。
+ *
+ * 服务端按 `(uid, key, 币种)` 幂等：同一份载荷重试只生效一次。
+ * 调用方见 `online/legacy.ts`（首次登录时自动跑一次）。
+ */
+export const walletImport = (body: {
+  key: string
+  points: number
+  coupons: number
+  /** 各币种笔数，只用来写备注 */
+  counts?: Record<string, number>
+}) =>
+  api<{
+    imported: boolean
+    points: number
+    coupons: number
+    diamonds: number
+    wallet: ServerWallet
+  }>('/wallet/import', {
+    key: body.key,
+    points: body.points,
+    coupons: body.coupons,
+    diamonds: 0,
+    counts: body.counts,
+  })
+
 export const walletSpend = (body: {
   amount: number
   refId: string
