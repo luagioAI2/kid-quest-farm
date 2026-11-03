@@ -8,6 +8,7 @@ import WishPage from './features/wish/WishPage'
 import SettingsPage from './features/settings/SettingsPage'
 import { ReviewSheetModal } from './features/parent/ReviewSheet'
 import { SplashPage } from './features/splash/SplashPage'
+import { shouldRefreshOnForeground } from './sync/foreground'
 import { SetupWizard } from './features/onboarding/SetupWizard'
 import { OnlineLoginGate } from './features/account/OnlineLoginGate'
 import { ChildTour } from './features/onboarding/ChildTour'
@@ -70,6 +71,8 @@ export default function App() {
   const dismissToast = useApp((s) => s.dismissToast)
   const boot = useApp((s) => s.boot)
   const tick = useApp((s) => s.tick)
+  const refresh = useApp((s) => s.refresh)
+  const reloadSettings = useApp((s) => s.reloadSettings)
   const settings = useApp((s) => s.settings)
   /**
    * 当前正在玩的游戏。底部导航的游戏那一格（图标 + 名字）跟着它走。
@@ -284,15 +287,38 @@ export default function App() {
     })()
   }, [])
 
-  // 从后台切回前台时刷新一次，避免显示过期数据
+  /**
+   * 从后台切回前台：推进一次 + **真的重拉一次**。
+   *
+   * ⚠️ 只调 `tick()` 是不够的 —— 它只在**跨逻辑日**时才 `refresh()`
+   * （见 `store/useApp.ts` 的 `tick`）。所以这条注释以前写着「刷新一次，
+   * 避免显示过期数据」，实际什么都没刷：平板放一边半天再拿起来，
+   * 看到的还是半天前的任务和积分，家长在**另一台设备**上改的 PIN / 限时
+   * 也要等到重启或跨日才生效 —— 全都不报错。
+   *
+   * `refresh()` 自己会把并发调用折叠成一次，所以这里不必再防重入；
+   * 只防「来回切 App 每次都打一轮接口」（30 秒闸门，见 `sync/foreground.ts`）。
+   */
   useEffect(() => {
     if (!ready) return
+    let lastPullAt = 0
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void tick()
+      if (document.visibilityState !== 'visible') return
+      void tick()
+      const now = Date.now()
+      if (!shouldRefreshOnForeground(lastPullAt, now)) return
+      lastPullAt = now
+      /* ★ 顺序不能反：`reloadSettings` 读的是 `refresh()` 刚写进 Dexie 的
+         那份（`refresh` 自己不碰 store 里的 settings）。只调 `refresh()`
+         的话，家长在另一台设备上改的 PIN / 每日限时仍然要等重启才生效。 */
+      void (async () => {
+        await refresh()
+        await reloadSettings()
+      })()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [ready, tick])
+  }, [ready, tick, refresh, reloadSettings])
 
   // 数据好了 **并且** 入场页待够了才进主界面。
   // 这里是一次性的启动闸门（之前还没挂载任何子页面），所以可以整棵替换；

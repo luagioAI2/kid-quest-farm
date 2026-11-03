@@ -13,6 +13,7 @@ import {
   postLedger,
   postMall,
   savePlots,
+  saveSettings,
   setGameKv,
   setMeta,
   wipeAll,
@@ -3915,5 +3916,29 @@ describe('并发 refresh：折叠成一次 + 补跑一次', () => {
     const rounds = spy.mock.calls.length
     spy.mockRestore()
     expect(rounds).toBe(2)
+  })
+})
+
+/* ============================================================
+   reloadSettings：把 Dexie 里的家长设置重新读进 store
+   ------------------------------------------------------------
+   回归的是「另一台设备改了 PIN / 每日限时，这台要等重启才生效」。
+   `refresh()` 只把云端那份写进 Dexie 的 `meta`（`sync/pull.ts` 的
+   `pullSettings`），store 里的 `settings` 一直是旧的那份 —— 不报错，
+   所以只能靠断言 store 真的变了。
+   ============================================================ */
+
+describe('reloadSettings', () => {
+  it('Dexie 里的设置变了 ⇒ store 跟着变', async () => {
+    const before = useApp.getState().settings
+    await saveSettings({ ...before, childName: '另一台设备改的' })
+    await useApp.getState().reloadSettings()
+    expect(useApp.getState().settings.childName).toBe('另一台设备改的')
+  })
+
+  it('没变化就不 set（一次 set 会触发一整轮订阅，而这条会被反复调到）', async () => {
+    const before = useApp.getState().settings
+    await useApp.getState().reloadSettings()
+    expect(useApp.getState().settings).toBe(before)
   })
 })

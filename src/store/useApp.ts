@@ -360,6 +360,17 @@ interface AppState {
    *   农场动作刚提交完时用：本地已经是新的了，再拉一次纯属浪费一个往返。
    */
   refresh: (opts?: { skipPull?: boolean }) => Promise<void>
+  /**
+   * 把「家长设置」重新读进 store。
+   *
+   * ★ 为什么不并进 `refresh()`：它开头就是 `const { settings } = get()`，
+   *   **不重读**。在线版里它只把云端那份写进 Dexie 的 `meta`
+   *   （见 `sync/pull.ts` 的 `pullSettings`），store 里还是旧的那份 ⇒
+   *   「另一台设备改了 PIN / 每日限时」要等重启才生效，而且不报错。
+   * ★ 没变化就**不 set**：一次 `set` 会触发一整轮订阅，而这条会被
+   *   「切回前台」反复调到。
+   */
+  reloadSettings: () => Promise<void>
   /** 每分钟推进一次：动物产出、跨日检测 */
   tick: () => Promise<void>
 
@@ -2659,17 +2670,15 @@ export const useApp = create<AppState>((set, get) => ({
   boot: async () => {
     set({ loading: true })
     await seedIfEmpty()
-    const settings = await loadSettings()
-    set({ settings })
+    /* 先落一份设置再 refresh：`refresh()` 一开头就读 `get().settings`
+       算「今天是哪天」（`dayStartHour`）、时间流速和事件开关。 */
+    set({ settings: await loadSettings() })
     await get().refresh()
-    /* 在线版：`refresh()` 会把云端设置写进本地 meta（见 `sync/pull.ts` 的
-       `pullSettings`），所以这里要**重读一次** —— 否则启动后内存里还是
-       拉取之前那份，「换台设备登录设置就还在」这句话在界面上不成立。
-       比较后再 `set`：没变就别碰，一次 `set` 会触发一整轮订阅。 */
-    if (isOnlineMode) {
-      const pulled = await loadSettings()
-      if (JSON.stringify(pulled) !== JSON.stringify(settings)) set({ settings: pulled })
-    }
+    /* `refresh()` 会把云端设置写进本地 meta（见 `sync/pull.ts` 的
+       `pullSettings`），但**不碰 store** ⇒ 这里要重读一次，否则启动后
+       内存里还是拉取之前那份，「换台设备登录设置就还在」在界面上不成立。
+       比较后再 `set` 的那套在 `reloadSettings` 里。 */
+    await get().reloadSettings()
     set({ ready: true, loading: false })
   },
 
@@ -2703,6 +2712,11 @@ export const useApp = create<AppState>((set, get) => ({
     return refreshInFlight
   },
 
+  reloadSettings: async () => {
+    const pulled = await loadSettings()
+    if (JSON.stringify(pulled) === JSON.stringify(get().settings)) return
+    set({ settings: pulled })
+  },
 
   tick: async () => {
     const { settings, todayKey, animals } = get()

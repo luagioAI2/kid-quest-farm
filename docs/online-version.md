@@ -403,7 +403,7 @@ POST /api/farm/state/save  → { conflict, rev, applied, balances }
 
 ```bash
 npm run lint                                   # tsc -b --noEmit
-npm test                                       # 1319 条（2 skipped）
+npm test                                       # 1325 条（2 skipped）
 npm run build                                  # 看退出码，别看 "built in"
                                                # ⚠️ 也别接管道：`| tail` 拿到的是 tail 的退出码，ENOSPC 也能显示 EXIT=0
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
@@ -1377,7 +1377,7 @@ Puppeteer 的 console 事件是**异步**送过来的，`await` 已经返回、�
 
 ```bash
 cd kid-quest-farm-online
-npm run lint && npx vitest run && npm run build   # 1319 单测（2 skipped）
+npm run lint && npx vitest run && npm run build   # 1325 单测（2 skipped）
 node scripts/_probe-snapshot-online.mjs           # 41 条断言，全绿
 ```
 
@@ -2302,7 +2302,7 @@ owner 是别人                             → 整份重置成默认值，一�
 npm run lint                                       # 0
 npx vitest run src/online/settings.test.ts         # 18 条
 npx vitest run src/domain/gameTime.test.ts         # 21 条
-npx vitest run                                     # 1319 条（2 skipped）
+npx vitest run                                     # 1325 条（2 skipped）
 npm run build
 npx vite preview --port 4407 --strictPort
 node scripts/_probe-settings-online.mjs http://127.0.0.1:4407/   # 11 条断言
@@ -2361,8 +2361,68 @@ node scripts/_probe-settings-online.mjs http://127.0.0.1:4407/   # 11 条断言
 - ~~**换账号后本地其它表没清**~~ —— 已做，见 §7.21。
 - ~~**`gameClock` 不跨设备**~~ —— 已做（§7.20.3 ④）：用量上云（节流 5 分钟）、
   拉取按「同一天取 max」合并。重装 App / 换台设备不再重置每日限时。
-- **另一台设备改了设置，这台不实时更新**：只在启动时拉。PIN 只在设它的
-  那台设备上用来开门，所以实际影响很小；真要实时得加轮询或长连接。
+- ~~**另一台设备改了设置，这台不实时更新**~~ —— 已做（§7.20.7）：切回前台时
+  重拉一次（30 秒闸门）+ 重读设置。仍然**不是实时推送**：App 必须切到前台。
+
+### 7.20.7 切回前台：重拉数据 + 重读设置（2026-11-02）
+
+`App.tsx` 里那条 `visibilitychange` 监听原来只调 `tick()`，注释写着「从后台切回
+前台时刷新一次，避免显示过期数据」—— **这句话一直是假的**：`tick()` 只在
+**跨逻辑日**时才 `refresh()`（`store/useApp.ts` 的 `tick`）。所以平板放一边半天
+再拿起来，看到的还是半天前的任务和积分，家长在**另一台设备**上改的 PIN /
+每日限时也要等到重启或跨日才生效。全都不报错。
+
+#### ① `refresh()` 不会把设置读进 store
+
+`refresh()` → `pullFromServer()` → `pullSettings()` 只做一件事：把云端那份
+**写进 Dexie 的 `meta`**。store 里的 `settings` 还是旧的那份 —— `refresh()` 一
+开头就是 `const { settings } = get()`，**不重读**（备份恢复那里也踩过同一个坑，
+见 `restore` 的注释）。
+
+所以「切回前台只加一个 `refresh()`」会得到一个**一半对**的结果：任务和积分是
+新的，PIN 和每日限时还是旧的 —— 比现在更难查，因为「有些东西同步了」。
+
+⇒ 新增 store action `reloadSettings()`：`loadSettings()` → 和内存里那份比一遍 →
+**不一样才 `set`**（这条会被反复调到，一次 `set` 触发一整轮订阅）。
+`boot()` 原来那段「refresh 完再重读」的内联代码也换成它，两条路径不会再漂。
+
+#### ② 30 秒闸门，不是实时
+
+`src/sync/foreground.ts` 的 `shouldRefreshOnForeground(lastAt, now)`：`lastAt = 0`
+（本进程还没拉过）一定拉，其余满 30 秒才拉。来回切 App（回个消息再切回来）很
+常见，每次都打一轮接口没必要。
+
+| 想要的效果 | 现在能不能 |
+|---|---|
+| 切回来看到最新任务 / 积分 | 能 |
+| 另一台设备改了 PIN / 限时，这台切回来就生效 | 能 |
+| 另一台设备改了，这台**放着不动也会自己变** | **不能** —— 没有轮询也没有长连接，App 必须切到前台 |
+
+最后一行是有意留的：真要推送得加长连接，而孩子的平板一天里绝大部分时间是黑屏
+的，长连接只会白耗电。
+
+#### ③ 顺序不能反
+
+`await refresh()` 之后才 `await reloadSettings()`：后者读的是前者刚写进 Dexie 的
+那份。反过来读到的还是旧设置。
+
+★ 判据在 `useApp.test.ts` 的 `reloadSettings` 两条：一条断言「Dexie 变了 store
+跟着变」（把实现改成空函数就红 —— 实测过），一条断言「没变化时还是同一个对象」
+（用 `toBe`，`toEqual` 抓不到「多 set 了一次」）。
+
+#### ④ 探针里数「打了几轮」必须先等静默
+
+`scripts/_probe-settings-online.mjs` 的 ⑧ 用 `page.on('request')` 数
+`/user/settings/get`。第一版是「dispatch 完等 1.5 秒再数」，**连红两次** ——
+一轮完整拉取要 800ms 上下，上一轮的尾巴正好落进下一个窗口，看起来像闸门没生效。
+改成「连续 2 个 600ms 采样都没有新请求」再开始数。
+
+（先量了一遍才敢改断言：直接调 `refresh()` = 1 轮、直接调 `tick()` = 0 轮、
+dispatch 一次 = 1 轮 —— 说明多出来的那一次不是我的处理器打的。）
+
+★ 这条断言用**变异**验过不是空转：把 `FOREGROUND_REFRESH_GAP_MS` 改成 0、
+把 `await reloadSettings()` 改成 `void reloadSettings` 重新构建 ⇒ ⑧ 一次红 3 条
+（store 没跟上 / 打了两轮 / 第二次切又打了一轮），改回来就全绿。
 
 ## 7.21 换账号：先清上一个人的缓存，再拉（2026-11-03）
 
