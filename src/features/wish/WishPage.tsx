@@ -137,18 +137,11 @@ function gameEntryOf(item: WishItem): StorefrontEntry | undefined {
  * emoji 是「平色块 + 系统字形」，放在 58px 的卡片里和旁边的手绘图标一比，
  * 一眼就是占位图。商店那边 2026-10-25 已经换过一轮，这里跟着走。
  */
-function WishGameIcon({
-  entry,
-  size = 'md',
-}: {
-  entry: StorefrontEntry
-  size?: 'md' | 'lg'
-}) {
-  const box = size === 'lg' ? 'h-20 w-20 rounded-[22px]' : 'h-[72px] w-[72px] rounded-[20px]'
+function WishGameIcon({ entry }: { entry: StorefrontEntry }) {
   return (
     <span
       aria-hidden
-      className={'shrink-0 overflow-hidden border-3 border-ink-900/10 shadow-flat ' + box}
+      className="h-20 w-20 shrink-0 overflow-hidden rounded-[22px] border-3 border-ink-900/10 shadow-flat"
     >
       <GameIconArt id={entry.id} tint={entry.tint} className="h-full w-full" />
     </span>
@@ -656,7 +649,16 @@ function ItemCard({
           emoji={item.emoji}
           className="h-full w-full object-contain"
           emojiClassName="text-3xl"
-          fallback={entry ? <WishGameIcon entry={entry} /> : undefined}
+          fallback={
+            entry ? (
+              <GameIconArt
+                id={entry.id}
+                tint={entry.tint}
+                wide
+                className="h-full w-full"
+              />
+            ) : undefined
+          }
         />
       </span>
       <span className="px-0.5 text-sm font-extrabold leading-snug text-ink-900">
@@ -826,7 +828,7 @@ function DetailView({
          * 不是一颗 🎮。
          */
         <div className="mt-3 flex gap-3 rounded-3xl bg-white p-3.5 shadow-flat">
-          <WishGameIcon entry={gameEntry} size="lg" />
+          <WishGameIcon entry={gameEntry} />
           <div className="min-w-0 flex-1">
             <h2 className="font-display text-lg font-extrabold leading-snug text-ink-900">
               {item.name}

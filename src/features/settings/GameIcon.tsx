@@ -54,20 +54,41 @@ export function GameIconArt({
   id,
   tint = DEFAULT_TINT,
   className,
+  wide = false,
 }: {
   id: string
   tint?: StoreTint
   className?: string
+  /**
+   * 4:3 横幅版（96×72）：底色**铺满整块卡片**，主体还是那一支。
+   *
+   * 心愿商城的列表卡是 153×115 的 4:3 底。正方形图标放进去只有 72px，
+   * 四周空一大圈，和隔壁「实物商品」的满幅插画摆在一起像两种东西。
+   * 横幅版把同一支主体放大到 **1.125 倍**（64×64 → 72×72）摆进 96×72 的画布
+   * （`translate(12 0)`），底色矩形跟着变宽 —— 主体那 1200 行一个字都不用改。
+   *
+   * ⚠️ **倍率只能是 1.125**。这一档刚好让主体撑满画布高度、一点不裁：
+   *    · 再小（比如 1.0）主体只占 89% 高，横向多出来的 32px 全是空渐变，
+   *      `deckrush` 那种「牌本来就小」的会被放大成一张空卡；
+   *    · 再大就会裁掉上下（`farm` / `cloudfarm` 的田垄和地基在 y=64 上）。
+   *    缩到 0.9 更糟：主体自带的地面被抬离下沿，底下露出一条纯渐变，
+   *    看着像地面浮起来了。
+   * ⚠️ 渐变 id 要带 `-w`：同一页里正方形版和横幅版会同时出现（列表 + 详情），
+   * id 撞了颜色会串。
+   */
+  wide?: boolean
 }) {
   const [top, bottom, deep] = BG[tint] ?? BG[DEFAULT_TINT]
-  const uid = `${id}-${tint}`
+  const uid = `${id}-${tint}${wide ? '-w' : ''}`
   const bgId = `gi-${uid}-bg`
   const glossId = `gi-${uid}-gloss`
   /** 没有专属图形就用兜底那支 —— 不在表里 ≠ 报错，但也不假装是那个游戏 */
   const Art = ART[id] ?? Fallback
+  const w = wide ? 96 : 64
+  const h = wide ? 72 : 64
 
   return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden focusable="false">
+    <svg viewBox={`0 0 ${w} ${h}`} className={className} aria-hidden focusable="false">
       <defs>
         <linearGradient id={bgId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={top} />
@@ -80,10 +101,16 @@ export function GameIconArt({
         </linearGradient>
       </defs>
 
-      <rect width="64" height="64" fill={`url(#${bgId})`} />
-      <rect width="64" height="64" fill={`url(#${glossId})`} />
+      <rect width={w} height={h} fill={`url(#${bgId})`} />
+      <rect width={w} height={h} fill={`url(#${glossId})`} />
 
-      <Art deep={deep} />
+      {wide ? (
+        <g transform="translate(12 0) scale(1.125)">
+          <Art deep={deep} />
+        </g>
+      ) : (
+        <Art deep={deep} />
+      )}
     </svg>
   )
 }

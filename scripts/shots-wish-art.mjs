@@ -85,5 +85,19 @@ await page.evaluate(() => {
 await wait(700)
 await page.screenshot({ path: `${OUT}/04-list-blindbox-hero.png` })
 
+// 滚到「游戏」那一段（sort_order 100+，排在 9 个商品之后）——
+// 这一段原来显示的是 72px 的方形图标，现在换成 4:3 横幅
+const reachedGame = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find((x) =>
+    x.textContent?.includes('柯基屁屁'),
+  )
+  if (!b) return false
+  b.scrollIntoView({ block: 'center' })
+  return true
+})
+console.log('滚到游戏卡片：', reachedGame)
+await wait(700)
+await page.screenshot({ path: `${OUT}/05-list-games.png` })
+
 await browser.close()
 console.log('OK', OUT)
