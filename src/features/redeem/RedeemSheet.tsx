@@ -241,7 +241,9 @@ export function RedeemBody() {
   }, [redeemItems, wishRows])
 
   /* ---- 盲盒的揭晓层 ---- */
-  const [boxGame, setBoxGame] = useState<string | null>(null)
+  /* 「5 连开」一单开出多款 ⇒ 存**整个清单**。
+     只存第一个的话，开箱层只揭晓 1 款，另外 4 款静默进游戏柜。 */
+  const [boxGames, setBoxGames] = useState<string[] | null>(null)
 
   /* ---- 从心愿页「去兑换换」跳过来：滚到那一行并闪一下 ---- */
   const takePendingRedeemItem = useApp((s) => s.takePendingRedeemItem)
@@ -335,7 +337,7 @@ export function RedeemBody() {
                           balance={balance}
                           harvestBalance={harvestBalance}
                           flash={flashId === row.item.id}
-                          onBox={setBoxGame}
+                          onBox={setBoxGames}
                         />
                       ),
                     )}
@@ -421,7 +423,7 @@ export function RedeemBody() {
           它原来在心愿页，2026-10-29 随「扣币只留兑换这一处」一起搬过来。
           **必须 Portal 到 body** —— 外壳的 `anim-fade-in` 是隐式层叠上下文，
           留在页面里 z-index 再大也压不住底部导航（项目硬约束）。 */}
-      {boxGame && (
+      {boxGames && (
         <Portal>
           <div
             role="dialog"
@@ -430,7 +432,7 @@ export function RedeemBody() {
             className="fixed inset-0 z-50 flex items-center justify-center bg-paper px-4"
           >
             <div className="w-full max-w-sm">
-              <BoxView gameId={boxGame} onDone={() => setBoxGame(null)} />
+              <BoxView gameIds={boxGames} onDone={() => setBoxGames(null)} />
             </div>
           </div>
         </Portal>
@@ -497,7 +499,7 @@ function WishRedeemRow({
   harvestBalance: number
   /** 刚从心愿页「去兑换换」跳过来 —— 闪一下，让孩子看见是哪一行 */
   flash: boolean
-  onBox: (gameId: string) => void
+  onBox: (gameIds: string[]) => void
 }) {
   const wishRedeem = useApp((s) => s.wishRedeem)
   const pushToast = useApp((s) => s.pushToast)
@@ -520,7 +522,10 @@ function WishRedeemRow({
         return
       }
       setConfirming(false)
-      if (res.gameId && item.kind === 'blindbox') onBox(res.gameId)
+      if (item.kind === 'blindbox') {
+        const ids = res.gameIds?.length ? res.gameIds : res.gameId ? [res.gameId] : []
+        if (ids.length) onBox(ids)
+      }
     } finally {
       setBusy(false)
     }

@@ -570,7 +570,20 @@ interface AppState {
    *
    * ⚠️ 扣券和建单必须在**同一个事务**里：只扣券不建单，孩子的东西就凭空没了。
    */
-  wishRedeem: (itemId: string) => Promise<{ ok: boolean; message: string; gameId?: string }>
+  /**
+   * 孩子「确定兑换」。
+   *
+   * 返回值里的 `gameId` 是**第一款**（老调用方只看这一个），
+   * `gameIds` 是这一单交付的**全部**（「5 连开」一单 5 款）。
+   * ⚠️ 只给 `gameId` 的话，开箱层只能揭晓 1 款，另外 4 款静默进游戏柜 ——
+   * 孩子会以为「我付了 5 份的钱，只开出 1 款」。
+   */
+  wishRedeem: (itemId: string) => Promise<{
+    ok: boolean
+    message: string
+    gameId?: string
+    gameIds?: string[]
+  }>
   /**
    * 家长给商品定价（`voucherPrice > 0`）或关闭（`<= 0`）。
    *
@@ -1778,7 +1791,7 @@ async function onlineWishExpress(get: () => AppState, itemId: string): Promise<v
 async function onlineWishRedeem(
   get: () => AppState,
   itemId: string,
-): Promise<{ ok: boolean; message: string; gameId?: string }> {
+): Promise<{ ok: boolean; message: string; gameId?: string; gameIds?: string[] }> {
   const r = await onlineWrite(() => oWishRedeem(itemId))
   if (!r.ok) {
     const t = wishFailToast(r.error)
@@ -1826,7 +1839,7 @@ async function onlineWishRedeem(
     emoji: view.item_emoji || item?.emoji || '🎁',
   })
   await get().refresh()
-  return { ok: true, message: '兑换成功', gameId }
+  return { ok: true, message: '兑换成功', gameId, gameIds }
 }
 
 /** 家长定价 / 关闭（`price <= 0` = 关闭） */
@@ -4441,7 +4454,7 @@ export const useApp = create<AppState>((set, get) => ({
       emoji: item.emoji,
     })
     await get().refresh()
-    return { ok: true, message: '兑换成功', gameId }
+    return { ok: true, message: '兑换成功', gameId, gameIds }
   },
 
   wishSetOffer: async (itemId, voucherPrice) => {

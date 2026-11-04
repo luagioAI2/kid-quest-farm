@@ -7,11 +7,15 @@ import type { WishTint } from '@/domain/types'
    2026-10-29 从 `WishPage` 里搬出来。
 
    **为什么搬**：家长口径是「兑换 里的东西都是一样，都能用兑换券或者积分，
-   包括游戏也一样。不需要去心愿商城换。心愿商城只是标明心愿的」——
+   包括游戏也一样。不需要去心愿商城换。心愿商城只是标明心意的」——
    所以真正扣币的地方只剩「兑换」那一格，开箱也就发生在那里。
 
    ⚠️ 别把它再放回心愿页：心愿页现在只负责「看 + 许愿」，
       一个页面里既许愿又扣币，家长会分不清哪一步是花钱的。
+
+   ★ 2026-11-04：改成**一次揭晓多款**（「5 连开」）。
+     只接一个 `gameId` 的话，5 连开的孩子只会看到 1 款、另外 4 款静默
+     进游戏柜 —— 他会以为「我付了 5 份的钱，只开出 1 款」。
    ============================================================ */
 
 const TINT_BG: Record<WishTint, string> = {
@@ -23,8 +27,8 @@ const TINT_BG: Record<WishTint, string> = {
   berry: 'bg-berry-100',
 }
 
-export function BoxView({ gameId, onDone }: { gameId: string; onDone: () => void }) {
-  const entry = STOREFRONT.find((s) => s.id === gameId)
+export function BoxView({ gameIds, onDone }: { gameIds: string[]; onDone: () => void }) {
+  const many = gameIds.length > 1
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 pt-safe">
@@ -34,34 +38,56 @@ export function BoxView({ gameId, onDone }: { gameId: string; onDone: () => void
       <p className="mt-3 font-display text-xs font-extrabold tracking-[0.3em] text-sun-500">
         ✦ ✦ ✦
       </p>
-      <h2 className="mt-2 font-display text-2xl font-extrabold">抽到了新游戏</h2>
+      <h2 className="mt-2 font-display text-2xl font-extrabold">
+        {many ? `抽到了 ${gameIds.length} 款新游戏` : '抽到了新游戏'}
+      </h2>
       <p className="mt-1 text-center text-sm font-bold leading-relaxed text-ink-600">
-        这张盲盒里是这一款
-        <br />
-        已经放进你的游戏柜了
+        {many ? (
+          <>
+            这一盒里是这 {gameIds.length} 款
+            <br />
+            都已经放进你的游戏柜了
+          </>
+        ) : (
+          <>
+            这张盲盒里是这一款
+            <br />
+            已经放进你的游戏柜了
+          </>
+        )}
       </p>
 
-      {entry && (
-        <div className="mt-5 flex w-full items-center gap-3 rounded-3xl bg-white p-3 shadow-float">
-          <span
-            className={
-              'flex h-14 w-14 flex-none items-center justify-center rounded-2xl text-2xl ' +
-              TINT_BG[(entry.tint as WishTint) ?? 'sun']
-            }
-          >
-            {entry.emoji}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-display text-base font-extrabold">{entry.name}</span>
-            <span className="mt-0.5 block text-[11px] font-bold text-ink-500">
-              {entry.pitch}
-            </span>
-          </span>
-          <span className="rounded-full bg-berry-100 px-2 py-0.5 text-[10px] font-extrabold text-berry-500">
-            NEW
-          </span>
-        </div>
-      )}
+      <div className="mt-5 flex w-full flex-col gap-2">
+        {gameIds.map((gameId) => {
+          const entry = STOREFRONT.find((s) => s.id === gameId)
+          return (
+            <div
+              key={gameId}
+              className="flex w-full items-center gap-3 rounded-3xl bg-white p-3 shadow-float"
+            >
+              <span
+                className={
+                  'flex h-14 w-14 flex-none items-center justify-center rounded-2xl text-2xl ' +
+                  TINT_BG[(entry?.tint as WishTint) ?? 'sun']
+                }
+              >
+                {entry?.emoji ?? '🎮'}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-display text-base font-extrabold">
+                  {entry?.name ?? gameId}
+                </span>
+                <span className="mt-0.5 block text-[11px] font-bold text-ink-500">
+                  {entry?.pitch ?? ''}
+                </span>
+              </span>
+              <span className="rounded-full bg-berry-100 px-2 py-0.5 text-[10px] font-extrabold text-berry-500">
+                NEW
+              </span>
+            </div>
+          )
+        })}
+      </div>
 
       <button
         onClick={onDone}

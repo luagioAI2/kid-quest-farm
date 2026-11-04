@@ -90,6 +90,13 @@ describe('5 连开盲盒', () => {
     expect(order?.openedGameId).toBe(ids[0])
     // 5 个包都要装（只装第一个 = 付了 5 份的钱拿到 1 款）
     expect(installed).toEqual(ids)
+
+    /* ★ 返回值里也要带上**整个清单**。
+       兑换层（`RedeemSheet`）靠它把 5 款一起交给开箱层；
+       只给 `gameId` 的话，孩子屏幕上只揭晓 1 款，另外 4 款静默进游戏柜 ——
+       他会以为「我付了 5 份的钱，只开出 1 款」。 */
+    expect(res.gameId).toBe(ids[0])
+    expect(res.gameIds, '返回值要带完整清单').toEqual(ids)
   })
 
   it('★ 剩余不足 5 款：整单拒绝，一分券都不扣、不建单', async () => {

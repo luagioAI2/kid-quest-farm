@@ -491,13 +491,49 @@ await page.evaluate(() => {
 })
 await wait(800)
 await page.screenshot({ path: `${OUT}/06b-confirm-again.png` })
-await page.evaluate(() => {
+/* ⚠️ 2026-11-04：实物点「已经买好了」之前**必须填收货信息**。
+   这条规则是 e2e 写完之后才加的（`shipFormIssue`：收件人 / 电话 / 地址
+   三样都必填），于是这一段一直停在 committed、后面 20 多条断言连锁变红，
+   而报错只有一句「(没有 done 的单子)」—— 看着像状态机坏了。
+   基线（`7091749`）与当前代码**同样 25 条红**，所以不是新功能引入的回归。 */
+const fillByPlaceholder = async (ph, val) => {
+  const filled = await page.evaluate(
+    (p, v) => {
+      const el = [...document.querySelectorAll('input')].find((x) =>
+        (x.getAttribute('placeholder') || '').includes(p),
+      )
+      if (!el) return false
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      ).set
+      setter.call(el, v)
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      return true
+    },
+    ph,
+    val,
+  )
+  if (!filled) throw new Error(`收货信息里找不到 placeholder 含「${ph}」的输入框`)
+  await wait(120)
+}
+await fillByPlaceholder('收件人', '测试家长')
+await fillByPlaceholder('电话', '13800000000')
+await fillByPlaceholder('详细地址', '测试省测试市测试小区 1 号楼 101')
+check('填好了收货信息（实物「已经买好了」的前置条件）', true)
+
+/* 找不到按钮就**报失败**，不能 `b?.click()` 静默点空 ——
+   点空的现场是「后面 20 条全红」，而报错只有一句「没有 done 的单子」。 */
+const clickedDone = await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find(
     (x) => x.textContent?.trim() === '已经买好了',
   )
-  b?.click()
+  if (!b) return false
+  b.click()
+  return true
 })
-await wait(1000)
+check('找得到「已经买好了」', clickedDone)
+await wait(1200)
 
 const afterDone = await page.evaluate(() => {
   const s = window.__kqf__.getState()
@@ -968,6 +1004,91 @@ check(
 )
 check('收尾没多写退款流水', digitalDone.refunds === 1, `${digitalDone.refunds} 笔（前面取消那 1 笔）`)
 check('单子收尾后「等爸妈处理」入口消失', !digitalDone.banner)
+
+/* ---------- ⑪b 5 连开：一单开出 5 款、5 款都装上、5 款都揭晓 ----------
+ *
+ * 单测能钉住 store 的编排（`wishBlindbox5.test.ts`），但钉不住
+ * **屏幕上出现了几张卡** —— 开箱层原来只接一个 `gameId`，
+ * 5 连开时会把 5 款只揭晓 1 款：库里东西是对的、界面少 4 张卡，
+ * 孩子以为「付了 5 份的钱只开出 1 款」。这种错只能真跑一遍数卡片。
+ */
+console.log('\n── 5 连开盲盒 ──')
+await page.evaluate(async () => {
+  const st = window.__kqf__.getState()
+  await st.wishSetOffer('wish-blindbox-5', 40)
+  await window.__kqf__.addVouchers(100)
+})
+await wait(600)
+await goWish()
+const before5 = await page.evaluate(() => window.__kqf__.getState().harvestBalance)
+
+/* 目录里有两款盲盒（单开 / 5 连开），所以按「5 连开」这几个字定位卡片 ——
+   按 `/游戏盲盒/` 找会命中第一个（单开），症状是「点进去是 1 款」。 */
+const openedCard5 = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+    (x.textContent ?? '').includes('5 连开'),
+  )
+  if (!b) return false
+  b.click()
+  return true
+})
+check('列表里有「5 连开」这张卡', openedCard5)
+await wait(700)
+await page.screenshot({ path: `${OUT}/07e-blindbox5-detail.png` })
+
+const redeem5 = await redeemInShop('wish-blindbox-5')
+check('★ 5 连开在兑换那一格换掉', redeem5.ok, `卡在 ${redeem5.at}`)
+
+/* 装 5 个包比装 1 个慢得多 —— 轮询「揭晓层出现」，别用固定 sleep */
+await page
+  .waitForFunction(() => document.body.innerText.includes('抽到了 5 款新游戏'), {
+    timeout: 60000,
+  })
+  .catch(() => {})
+await wait(600)
+await page.screenshot({ path: `${OUT}/07f-blindbox5-reveal.png` })
+
+const after5 = await page.evaluate(() => {
+  const s = window.__kqf__.getState()
+  const o = s.wishOrders.find((x) => x.itemId === 'wish-blindbox-5')
+  const ids = o?.openedGameIds ?? []
+  return {
+    title: document.body.innerText.includes('抽到了 5 款新游戏'),
+    cards: [...document.querySelectorAll('*')].filter(
+      (x) => x.children.length === 0 && (x.textContent ?? '').trim() === 'NEW',
+    ).length,
+    ids,
+    firstId: o?.openedGameId ?? '',
+    installed: Object.keys(s.installedGames),
+    balance: s.harvestBalance,
+    status: o?.status ?? '(没有单子)',
+  }
+})
+check('★ 揭晓层标题写「抽到了 5 款新游戏」', after5.title)
+check('★ 屏幕上真的列了 5 张卡（不是只揭晓第一款）', after5.cards === 5, `${after5.cards} 张`)
+check('订单记了完整清单（5 个）', after5.ids.length === 5, `${after5.ids.length} 个`)
+check('openedGameId 仍然是第一个（老字段兼容）', after5.firstId === after5.ids[0], after5.firstId)
+check(
+  '★ 5 款游戏真的都装上了',
+  after5.ids.length === 5 && after5.ids.every((id) => after5.installed.includes(id)),
+  after5.ids.filter((id) => !after5.installed.includes(id)).join(',') || '全在',
+)
+check('券扣了 40 张（5 款一单的价）', after5.balance === before5 - 40, `${before5} → ${after5.balance}`)
+check('订单状态是 committed', after5.status === 'committed', after5.status)
+
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find(
+    (x) => (x.textContent ?? '').trim() === '收下',
+  )
+  b?.click()
+})
+await wait(900)
+
+/* ⚠️ 收下之后**还停在「兑换」那一格**（开箱层是盖在兑换上的，Portal）。
+   不回心愿页的话，后面「单个游戏详情」那一段会在兑换列表里找卡片 ——
+   10 多条一起红，而报错是「列表里找不到游戏卡片」，看着像渲染坏了。 */
+await goWish()
+await wait(600)
 
 /* ---------- ⑫ 单个游戏：就是那个游戏，不是「盒子里的一张卡」 ----------
  *
