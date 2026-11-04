@@ -429,6 +429,11 @@ export function mapWishOrder(s: ServerWishOrder): WishOrder {
   if (s.partner_name) out.partnerName = s.partner_name
   if (s.points_held > 0) out.pointsHeld = s.points_held
   if (s.opened_game_id) out.openedGameId = s.opened_game_id
+  /* 「5 连开」的完整清单。空数组不写 —— 写成 `[]` 会让
+     `redeemedGameIdsFrom` 之类的判据多一个分支要照顾。 */
+  if (s.opened_game_ids && s.opened_game_ids.length) {
+    out.openedGameIds = [...s.opened_game_ids]
+  }
   if (s.tracking_no) out.buyOrderNo = s.tracking_no
   if (s.cancel_reason) out.cancelReason = s.cancel_reason
 

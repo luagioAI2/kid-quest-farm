@@ -97,7 +97,12 @@ export function planWishRedeem(
 export function wishOwnedSet(
   ownedGameIds: readonly string[],
   installedGames: Record<string, unknown>,
-  wishOrders: readonly { status: string; openedGameId?: string }[],
+  wishOrders: readonly {
+    status: string
+    openedGameId?: string
+    /** 「5 连开」一单给了多款 —— 类型不能收窄，否则清单会被当成不存在 */
+    openedGameIds?: string[]
+  }[],
 ): Set<string> {
   return new Set<string>([
     ...ownedGameIds,
@@ -178,9 +183,10 @@ export function wishShelf(
     if (!item || item.archived) continue
 
     if (item.kind === 'gamebox' && item.gameId && owned.has(item.gameId)) continue
-    if (item.kind === 'blindbox' && blindBoxRemaining(item.pool ?? [], [...owned]).length === 0) {
-      continue
-    }
+    /* 盲盒：剩余款数**不足这一盒要开的款数**就不能摆出来（见 blindBoxSoldOut）。
+       只判「池子空了」的话，5 连开会把「只剩 2 款」的盒子也摆出来，
+       点进去必然被拒 —— 那是「界面承诺了它做不到的事」。 */
+    if (item.kind === 'blindbox' && blindBoxSoldOut(item, [...owned])) continue
 
     out.push({ item, price: offer.voucherPrice })
   }
@@ -211,13 +217,23 @@ export function wishShelf(
  * 而且孩子确实没拿到东西）。
  */
 export function redeemedGameIdsFrom(
-  orders: readonly { status: string; openedGameId?: string }[],
+  orders: readonly {
+    status: string
+    openedGameId?: string
+    openedGameIds?: string[]
+  }[],
 ): string[] {
   const out = new Set<string>()
   for (const o of orders) {
-    if (!o.openedGameId) continue
+    /* ★ 「5 连开」一单给了 5 款，5 款都算「兑换过」。
+       只读 `openedGameId` 的话，另外 4 款会：
+         · 盒子卡片变回可兑换 → 再扣一次券；
+         · 盲盒池子把它们放回去 → 再开出来一次。
+       而且全程不报错。 */
+    if (!o.openedGameId && !(o.openedGameIds && o.openedGameIds.length)) continue
     if (o.status === 'committed' || o.status === 'confirmed' || o.status === 'done') {
-      out.add(o.openedGameId)
+      if (o.openedGameId) out.add(o.openedGameId)
+      for (const id of o.openedGameIds ?? []) out.add(id)
     }
   }
   return [...out]
@@ -248,21 +264,67 @@ export function blindBoxRemaining(
 }
 
 /**
- * 开一个盲盒。池子空了返回 `null`（调用方必须**先判断**再扣券）。
+ * 这一盒要开几款（1 = 单开）。
  *
- * `rand` 可注入是为了让测试能钉死结果 —— 用 `Math.random()` 的测试
- * 只能断言「开出来的一定在池子里」，断言不了「全拥有时开不出来」。
+ * 兜底到 1 是必须的：`unlockCount` 缺省、为 0、被手改成负数都当 1 ——
+ * 否则「开 0 款」会变成「扣了券什么都没给」。
  */
-export function pickBlindBox(
+export function blindBoxNeed(item: { unlockCount?: number }): number {
+  const n = Math.round(item.unlockCount ?? 1)
+  return n >= 1 ? n : 1
+}
+
+/**
+ * 这一盒现在还能不能开。
+ *
+ * ★ 判据是「剩余款数 < 需要款数」，**不是**「池子空了」。
+ *   5 连开在只剩 2 款时点下去必然被拒 —— 摆出来就是界面在骗人。
+ */
+export function blindBoxSoldOut(
+  item: { pool?: string[]; unlockCount?: number },
+  owned: readonly string[],
+): boolean {
+  return blindBoxRemaining(item.pool ?? [], owned).length < blindBoxNeed(item)
+}
+
+/**
+ * 一次开 n 款盲盒（「5 连开」）。
+ *
+ * 返回的每一款**都不在 `owned` 里**，而且互不重复 —— 这就是
+ * 「已经解锁的不计算」：孩子已有的先减掉，不占名额。
+ *
+ * ★ 剩余不足 n 时返回**短的列表**（有几款给几款），由调用方决定是
+ *   「整单拒绝」还是「按剩余给」。现在的口径是整单拒绝（见 `wishRedeem`）。
+ *
+ * `rand` 可注入是为了让测试钉死结果；内部由它派生一个确定性的伪随机
+ * 序列来做洗牌（Fisher-Yates），每一款被选中的概率相同。
+ */
+export function pickBlindBoxMany(
   pool: readonly string[],
   owned: readonly string[],
+  n: number,
   rand: () => number = Math.random,
-): string | null {
+): string[] {
+  if (!(n > 0)) return []
   const remaining = blindBoxRemaining(pool, owned)
-  if (remaining.length === 0) return null
-  // `Math.random()` 理论上可能返回 1（规范上不会，但别赌）
-  const i = Math.min(remaining.length - 1, Math.floor(rand() * remaining.length))
-  return remaining[i]
+  if (remaining.length === 0) return []
+  const take = Math.min(n, remaining.length)
+
+  // 由 rand() 派生一个确定性的 LCG 序列：同一个 rand 必须给出同一批，
+  // 否则测试只能断言「在池子里」，断言不了「抽的是哪几款」。
+  let seed = Math.floor(Math.min(0.999999, Math.max(0, rand())) * 1e9) + 1
+  const next = (m: number) => {
+    seed = (seed * 6364136223846793005 + 1442695040888963407) % Number.MAX_SAFE_INTEGER
+    return Math.floor((seed / 2 ** 33) % m)
+  }
+  const deck = [...remaining]
+  const out: string[] = []
+  for (let i = 0; i < take; i++) {
+    const j = i + next(deck.length - i)
+    ;[deck[i], deck[j]] = [deck[j], deck[i]]
+    out.push(deck[i])
+  }
+  return out
 }
 
 /**

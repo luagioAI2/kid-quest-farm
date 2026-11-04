@@ -76,6 +76,8 @@ export interface ServerWishItemView {
   notice: string
   archived: boolean
   sort_order: number
+  /** 一次开出几款（盲盒用；缺省 1） */
+  unlock_count?: number
   // ---- 服务端算的标注（客户端只取前两个）----
   open: boolean
   voucher_price: number
@@ -112,6 +114,8 @@ export interface ServerWishOrder {
   vouchers_held: number
   points_held: number
   opened_game_id: string
+  /** 「一次开 N 款」的完整清单；老服务端没有这个字段 */
+  opened_game_ids?: string[] | null
   code_tail: string
   ship: ServerWishShip | null
   tracking_no: string

@@ -884,7 +884,7 @@ export interface WishItem {
   /**
    * 盲盒池：候选游戏 id。
    *
-   * ⚠️ 真正开奖时还要**减去孩子已拥有的**（见 `domain/wish.ts` 的 `pickBlindBox`）。
+   * ⚠️ 真正开奖时还要**减去孩子已拥有的**（见 `domain/wish.ts` 的 `pickBlindBoxMany`）。
    * 池子里写死「全部游戏」是对的 —— 拥有关系是每个家庭不同的，不能写进常量。
    */
   pool?: string[]
@@ -903,6 +903,15 @@ export interface WishItem {
   buyLabel?: string
   archived?: boolean
   sortOrder?: number
+  /**
+   * 一次开出几款游戏（只对 `blindbox` 有意义，缺省 1 = 单开）。
+   *
+   * ★ 「已经解锁的不计算」落在这里的语义上：开奖时先把已拥有的从池子里
+   *   减掉，再从剩下的里面抽这么多款 —— 已拥有的**不占名额**。
+   * ⚠️ 剩余不足这个数时**整单拒绝**（不是「有几款给几款」）：
+   *   卖的是 N 款的价，给少了就是缺斤少两。
+   */
+  unlockCount?: number
 }
 
 /**
@@ -996,6 +1005,13 @@ export interface WishOrder {
 
   /** 盲盒开出的游戏 id（只有 `blindbox` 会有） */
   openedGameId?: string
+  /**
+   * 「一次开 N 款」时开出的**全部**游戏 id。
+   *
+   * ⚠️ `openedGameId` 仍然写第一个（老代码/老数据只看那一个），
+   * 两个都写是故意的。读的时候必须兼容：清单为空就退回看 `openedGameId`。
+   */
+  openedGameIds?: string[]
 
   /* ---- 收货信息：敏感，见 `docs/wish-mall-spec.md` §9 ---- */
   ship?: WishShipInfo

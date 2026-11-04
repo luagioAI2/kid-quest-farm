@@ -32,6 +32,15 @@ export const WISH_BLINDBOX_ID = 'wish-blindbox'
 /** 盲盒池 = 全部随包发布的插件游戏 */
 const GAME_POOL: string[] = LOCAL_GAMES.map((g) => g.id)
 
+/**
+ * 「一次开 5 款」盲盒的商品 id。
+ *
+ * 与服务端 `seed/wish_catalog.go` 的 `WishBlindBox5ID` 保持一致 ——
+ * 两边不一致的症状是「本地有这个商品，服务端说没有这件商品」，
+ * 孩子点兑换只会收到一句「商品不存在」。
+ */
+export const WISH_BLINDBOX5_ID = 'wish-blindbox-5'
+
 /** 淘宝搜索链接。`encodeURIComponent` 是必须的 —— 商品名里有空格和中文 */
 function taobaoSearch(keyword: string): string {
   return `https://s.taobao.com/search?q=${encodeURIComponent(keyword)}`
@@ -47,6 +56,25 @@ const BLINDBOX: WishItem = {
   note: '随机开出 1 款你还没有的游戏',
   notice: '不会开出你已经有的游戏。全部都有了就不能买啦。',
   sortOrder: 0,
+}
+
+/**
+ * 5 连开。池子**照抄**单开的（全部游戏）—— 拥有关系是每个家庭不同的，
+ * 「已经解锁的不计算」是靠开奖时先减掉已拥有实现的，不能写进池子。
+ *
+ * `sortOrder: 1` ⇒ 排在单开盲盒后面、实物前面（见 `compareWishItem`）。
+ */
+const BLINDBOX5: WishItem = {
+  id: WISH_BLINDBOX5_ID,
+  kind: 'blindbox',
+  name: '游戏盲盒 · 5 连开',
+  emoji: '🎉',
+  tint: 'grape',
+  pool: GAME_POOL,
+  unlockCount: 5,
+  note: '一次开出 5 款你还没有的游戏',
+  notice: '只会开出你还没有的游戏。没解锁的不足 5 款时换不了 —— 等新的游戏再来。',
+  sortOrder: 1,
 }
 
 /**
@@ -200,7 +228,7 @@ const PHYSICAL: WishItem[] = [
 ]
 
 /** 全部商品。顺序由 `compareWishItem` 在渲染时决定，这里只管内容 */
-export const WISH_ITEMS: WishItem[] = [BLINDBOX, ...GAME_BOXES, ...PHYSICAL]
+export const WISH_ITEMS: WishItem[] = [BLINDBOX, BLINDBOX5, ...GAME_BOXES, ...PHYSICAL]
 
 /** 按 id 找商品。找不到返回 `undefined` —— 老存档里可能有已下架的商品 id */
 export function wishItemById(id: string): WishItem | undefined {

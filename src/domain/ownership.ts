@@ -54,7 +54,12 @@ export function ownedSetFor(
   online: boolean,
   ownedIds: readonly string[],
   installedGames: Record<string, unknown>,
-  wishOrders: readonly { status: string; openedGameId?: string }[],
+  wishOrders: readonly {
+    status: string
+    openedGameId?: string
+    /** 「5 连开」一单给了多款 —— 类型不能收窄，否则清单会被当成不存在 */
+    openedGameIds?: string[]
+  }[],
 ): Set<string> {
   if (online) return new Set(ownedIds)
   return wishOwnedSet(ownedIds, installedGames, wishOrders)

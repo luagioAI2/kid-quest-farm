@@ -7,6 +7,11 @@ import { STOREFRONT } from '@/games/storefront'
 import { wishItemById } from '@/games/wishCatalog'
 import WishPage from './WishPage'
 
+/* ⚠️ 找「单开盲盒」那个 hero 按钮时**不能**按 `/游戏盲盒/` 找：
+   目录里现在有两款盲盒（单开 / 5 连开），正则会把两个按钮都命中，
+   症状是 `Found multiple elements` —— 而报错指向的是「点了没反应」，
+   很容易被当成渲染坏了。用单开那条 note 定位，它只出现在 hero 上。 */
+
 /* ============================================================
    心愿商城 —— **数字商品兑换之后**这一屏
    ------------------------------------------------------------
@@ -82,7 +87,7 @@ describe('心愿商城：数字商品兑换之后', () => {
 
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByRole('button', { name: /游戏盲盒/ }))
+    await user.click(await screen.findByRole('button', { name: /随机开出 1 款/ }))
 
     expect(await screen.findByText(/已经放进你的游戏柜了/)).toBeTruthy()
     /* 默认设置里家长锁是开着的（保护默认开）。
@@ -213,7 +218,7 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
 
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByRole('button', { name: /游戏盲盒/ }))
+    await user.click(await screen.findByRole('button', { name: /随机开出 1 款/ }))
 
     expect(await screen.findByText(/爸妈：回应这个心愿/)).toBeTruthy()
     expect(screen.queryByText(/定个价/), '定价要过密码').toBeNull()
@@ -230,7 +235,7 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
 
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByRole('button', { name: /游戏盲盒/ }))
+    await user.click(await screen.findByRole('button', { name: /随机开出 1 款/ }))
 
     expect(await screen.findByText(/定个价/)).toBeTruthy()
     await user.click(screen.getByText('先不要了'))
@@ -257,7 +262,7 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
 
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByRole('button', { name: /游戏盲盒/ }))
+    await user.click(await screen.findByRole('button', { name: /随机开出 1 款/ }))
 
     expect(await screen.findByText(/上次爸妈说/)).toBeTruthy()
     expect(screen.getByText('🤍 想要这个'), '仍然允许再点一次，不加冷却').toBeTruthy()

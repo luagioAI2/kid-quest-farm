@@ -80,7 +80,12 @@ import { redeemWishCode } from '../api/wish'
 import { getToken } from '../api/session'
 import { ApiError } from '../api/client'
 import type { ApiWishCodeResult } from '../api/types'
-import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom, wishOwnedSet } from '../domain/wish'
+import {
+  pickBlindBoxMany,
+  planWishRedeem,
+  redeemedGameIdsFrom,
+  wishOwnedSet,
+} from '../domain/wish'
 import { ownedIdsOnline } from '../domain/ownership'
 import { SYNC_LAST_OK_KEY, SYNC_OK, type SyncState } from '../domain/syncState'
 import { fetchOwnedGameIds } from '../online/ownership'
@@ -559,7 +564,8 @@ interface AppState {
   /**
    * 孩子「确定兑换」：**扣兑换券** + 建单（`committed`）。
    *
-   * 盲盒在这一步开奖（`pickBlindBox`），游戏盒子在下一步装包。
+   * 盲盒在这一步开奖（`pickBlindBoxMany`，一次可能开多款），
+   * 游戏盒子在下一步装包。
    * 返回 `gameId` 让界面能弹开箱结果。
    *
    * ⚠️ 扣券和建单必须在**同一个事务**里：只扣券不建单，孩子的东西就凭空没了。
@@ -1780,11 +1786,21 @@ async function onlineWishRedeem(
   }
 
   const view = r.data
-  const gameId = view.opened_game_id || undefined
+  /* 「5 连开」返回的是清单，老服务端只有 `opened_game_id` —— 两种都认。
+     清单优先：只读单数字段会让 5 连开在界面上显示成「开出 1 款」。 */
+  const gameIds =
+    view.opened_game_ids && view.opened_game_ids.length
+      ? [...view.opened_game_ids]
+      : view.opened_game_id
+        ? [view.opened_game_id]
+        : []
+  const gameId = gameIds[0]
   const item = wishItemById(itemId)
 
-  if (gameId) {
-    const res = await get().installLocalGame(gameId)
+  /* ★ 5 连开要装 5 个包。只装第一个的话，孩子付了 5 份的钱、
+     拿到 1 款，而界面会说「兑换成功」—— 那是最糟的一种错。 */
+  for (const gid of gameIds) {
+    const res = await get().installLocalGame(gid)
     if (!res.ok) {
       const c = await onlineWrite(() =>
         oWishCancel(localWishOrderId(view.id), '游戏没装好'),
@@ -1801,7 +1817,12 @@ async function onlineWishRedeem(
   get().pushToast({
     kind: 'reward',
     title: `兑换成功：${view.item_name || item?.name || '心愿'}`,
-    detail: gameId ? '已经放进你的游戏柜啦' : '等爸爸妈妈去买',
+    detail:
+      gameIds.length > 1
+        ? `已经放进你的游戏柜啦（${gameIds.length} 款）`
+        : gameId
+          ? '已经放进你的游戏柜啦'
+          : '等爸爸妈妈去买',
     emoji: view.item_emoji || item?.emoji || '🎁',
   })
   await get().refresh()
@@ -4298,15 +4319,28 @@ export const useApp = create<AppState>((set, get) => ({
     ])
 
     let gameId: string | undefined
+    let gameIds: string[] = []
     if (item.kind === 'blindbox') {
-      const picked = pickBlindBox(item.pool ?? [], [...owned])
-      // ⚠️ 池子空了必须**在这里**拦住。再往下就扣券了，扣完才发现没得开。
-      if (!picked) return { ok: false, message: '这些游戏你都有啦，等新的再来开' }
-      gameId = picked
+      const need = Math.max(1, item.unlockCount ?? 1)
+      const picked = pickBlindBoxMany(item.pool ?? [], [...owned], need)
+      /* ⚠️ 剩余**不足 need 款**必须在这里拦住，不是「有几款给几款」：
+         卖的是 need 款的价，给少了就是缺斤少两。再往下就扣券了。 */
+      if (picked.length < need) {
+        return {
+          ok: false,
+          message:
+            need === 1
+              ? '这些游戏你都有啦，等新的再来开'
+              : `没解锁的游戏不够 ${need} 款啦，等新的再来开`,
+        }
+      }
+      gameIds = picked
+      gameId = picked[0]
     } else if (item.kind === 'gamebox') {
       if (!item.gameId) return { ok: false, message: '这款游戏没配好' }
       if (owned.has(item.gameId)) return { ok: false, message: '这个游戏你已经有了' }
       gameId = item.gameId
+      gameIds = [item.gameId]
     }
 
     const now = Date.now()
@@ -4374,6 +4408,8 @@ export const useApp = create<AppState>((set, get) => ({
         vouchersHeld: live.voucherPaid,
         pointsHeld: live.pointsPaid,
         openedGameId: gameId,
+        /* 「5 连开」的完整清单。单款时也写 —— 读的地方就不用分两种形状了 */
+        openedGameIds: gameIds.length ? gameIds : undefined,
         createdAt: existed?.createdAt ?? now,
         committedAt: now,
       })
@@ -4381,9 +4417,12 @@ export const useApp = create<AppState>((set, get) => ({
 
     if (!box.ok) return { ok: false, message: '兑换券不够啦' }
 
-    // 游戏类：真正交付 = 装包。失败就把券退回去。
-    if (gameId) {
-      const res = await get().installLocalGame(gameId)
+    // 游戏类：真正交付 = 装包。任何一款失败就把整单退回去。
+    //
+    // ★ 「5 连开」要装 5 个包。只装第一个的话，孩子付了 5 份的钱、
+    //   拿到 1 款，而界面会说「兑换成功」。
+    for (const gid of gameIds) {
+      const res = await get().installLocalGame(gid)
       if (!res.ok) {
         await get().wishCancel(box.id, '游戏没装好')
         return { ok: false, message: `游戏没装好，券已经退回来了：${res.message}` }
@@ -4393,7 +4432,12 @@ export const useApp = create<AppState>((set, get) => ({
     get().pushToast({
       kind: 'reward',
       title: `兑换成功：${item.name}`,
-      detail: gameId ? '已经放进你的游戏柜啦' : '等爸爸妈妈去买',
+      detail:
+        gameIds.length > 1
+          ? `已经放进你的游戏柜啦（${gameIds.length} 款）`
+          : gameId
+            ? '已经放进你的游戏柜啦'
+            : '等爸爸妈妈去买',
       emoji: item.emoji,
     })
     await get().refresh()
@@ -4454,7 +4498,8 @@ export const useApp = create<AppState>((set, get) => ({
     const box = {
       refunded: 0,
       refundedPoints: 0,
-      deliveredGame: undefined as string | undefined,
+      /** 「5 连开」一单交付了多款，取消要**全收回**（见下面的卸载段） */
+      deliveredGames: [] as string[],
     }
 
     await db.transaction('rw', [db.ledger, db.harvestLedger, db.wishOrders], async () => {
@@ -4470,7 +4515,14 @@ export const useApp = create<AppState>((set, get) => ({
 
       // 记下来：这个订单交付过哪款游戏。事务外要把安装摘掉 ——
       // 删 `gameKv` 的行不属于这个事务（另一张表），而且它失败也不该回滚退款。
-      box.deliveredGame = row.openedGameId
+      /* ★ 只取 `openedGameId` 的话，5 连开取消后另外 4 款还装着 ——
+         等于券退回来了、游戏白拿 4 个。去重是为了兼容「清单里含第一个」。 */
+      const delivered = row.openedGameIds?.length
+        ? row.openedGameIds
+        : row.openedGameId
+          ? [row.openedGameId]
+          : []
+      box.deliveredGames = [...new Set(delivered)]
 
       if (row.status !== 'wished') {
         /*
@@ -4533,9 +4585,9 @@ export const useApp = create<AppState>((set, get) => ({
      * 装包失败那条路也会走到这里（`wishRedeem` 装不上就 `wishCancel`），
      * 那时 `gameKv` 里本来就没有包，删 0 行，无副作用。
      */
-    if (box.deliveredGame) {
-      await detachGameKv(box.deliveredGame)
-      if (get().activeGameId === box.deliveredGame) {
+    for (const gid of box.deliveredGames) {
+      await detachGameKv(gid)
+      if (get().activeGameId === gid) {
         // 正在玩的就是它 → 回落，否则底部导航会指向一个已经不存在的游戏
         await get().updateSettings({ activeGame: DEFAULT_GAME_ID })
       }
@@ -4550,7 +4602,7 @@ export const useApp = create<AppState>((set, get) => ({
       get().pushToast({
         kind: 'info',
         title: `已退回 ${parts.join(' + ')}`,
-        detail: box.deliveredGame ? '游戏已收回，进度还在' : undefined,
+        detail: box.deliveredGames.length ? '游戏已收回，进度还在' : undefined,
         emoji: '🎫',
       })
     }

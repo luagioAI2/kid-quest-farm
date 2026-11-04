@@ -4,6 +4,7 @@ import type { WishItem, WishTint } from '@/domain/types'
 import {
   WISH_KIND_META,
   blindBoxRemaining,
+  blindBoxSoldOut,
   compareWishItem,
   daysToSave,
   planWishRedeem,
@@ -555,7 +556,9 @@ function BlindBoxHero({
   onOpen: () => void
 }) {
   const remaining = blindBoxRemaining(item.pool ?? [], [...owned])
-  const soldOut = remaining.length === 0
+  /* ★ 不是「池子空了」，是「不够这一盒开的款数」—— 5 连开只剩 2 款时
+     也必须是售罄，否则点进去必然被拒。 */
+  const soldOut = blindBoxSoldOut(item, [...owned])
   const topUp = offer ? topUpOf(offer.voucherPrice, vouchers, points) : 0
 
   return (
@@ -719,8 +722,9 @@ function DetailView({
 
   const plan = offer ? planWishRedeem(offer.voucherPrice, vouchers, points) : null
   const alreadyOwned = item.kind === 'gamebox' && !!item.gameId && owned.has(item.gameId)
-  const boxRemaining = item.kind === 'blindbox' ? blindBoxRemaining(item.pool ?? [], [...owned]) : []
-  const soldOut = item.kind === 'blindbox' && boxRemaining.length === 0
+  /* ★ 售罄判据用 `blindBoxSoldOut`（剩余 < 这一盒要开的款数），
+     不是「池子空了」—— 5 连开只剩 2 款时点进去必然被拒。 */
+  const soldOut = item.kind === 'blindbox' && blindBoxSoldOut(item, [...owned])
 
   /** 单个游戏的商店条目 + 本地包信息（版本 / 体积） */
   const gameEntry = gameEntryOf(item)
