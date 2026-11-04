@@ -20,6 +20,7 @@ import { STOREFRONT, type StorefrontEntry } from '@/games/storefront'
 import { LOCAL_GAMES } from '@/games/localGames'
 import { formatSize } from '@/games/size'
 import { GameIconArt } from '../settings/GameIcon'
+import { WishArt } from './WishArt'
 import { Portal } from '@/components/Portal'
 import { ParentPinPanel } from '../parent/ParentGate'
 import { MerchantView } from './MerchantView'
@@ -143,7 +144,7 @@ function WishGameIcon({
   entry: StorefrontEntry
   size?: 'md' | 'lg'
 }) {
-  const box = size === 'lg' ? 'h-20 w-20 rounded-[22px]' : 'h-14 w-14 rounded-2xl'
+  const box = size === 'lg' ? 'h-20 w-20 rounded-[22px]' : 'h-[72px] w-[72px] rounded-[20px]'
   return (
     <span
       aria-hidden
@@ -569,8 +570,13 @@ function BlindBoxHero({
       <span className="absolute -top-1.5 right-3 rounded-full bg-berry-500 px-2 py-0.5 text-[10px] font-extrabold text-white">
         优先
       </span>
-      <span className="flex h-16 w-16 flex-none items-center justify-center rounded-2xl bg-white text-3xl shadow-flat">
-        {item.emoji}
+      <span className="flex h-16 aspect-[4/3] flex-none items-center justify-center overflow-hidden rounded-2xl bg-white shadow-flat">
+        <WishArt
+          itemId={item.id}
+          emoji={item.emoji}
+          className="h-full w-full object-contain"
+          emojiClassName="text-3xl"
+        />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block font-display text-base font-extrabold text-ink-900">
@@ -639,12 +645,19 @@ function ItemCard({
     >
       <span
         className={
-          'mb-2 flex aspect-[4/3] items-center justify-center rounded-2xl ' +
+          'mb-2 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl ' +
           TINT_BG[item.tint]
         }
       >
-        {/* 游戏用和商店同一支手绘图标，不用 emoji —— 后者在 58px 下像占位图 */}
-        {entry ? <WishGameIcon entry={entry} /> : <span className="text-3xl">{item.emoji}</span>}
+        {/* 顺序是「插画 → 游戏手绘图标 → emoji」：插画母版就是 4:3，
+            正好铺满这块底；另外两个都只是兜底 */}
+        <WishArt
+          itemId={item.id}
+          emoji={item.emoji}
+          className="h-full w-full object-contain"
+          emojiClassName="text-3xl"
+          fallback={entry ? <WishGameIcon entry={entry} /> : undefined}
+        />
       </span>
       <span className="px-0.5 text-sm font-extrabold leading-snug text-ink-900">
         {item.name}
@@ -833,11 +846,18 @@ function DetailView({
         <>
           <div
             className={
-              'mt-3 flex aspect-[4/3] items-center justify-center rounded-3xl text-7xl shadow-flat ' +
+              'mt-3 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-3xl text-7xl shadow-flat ' +
               TINT_BG[item.tint]
             }
           >
-            {item.emoji}
+            {/* 这一块原来是一颗 72px 的 emoji 浮在 460×345 的空白上 ——
+                「图太大」其实是「图太小、底太大」。插画同比例，铺满就正常了 */}
+            <WishArt
+              itemId={item.id}
+              emoji={item.emoji}
+              className="h-full w-full object-contain"
+              emojiClassName="text-7xl"
+            />
           </div>
 
           <div className="mt-4">
@@ -1295,11 +1315,16 @@ function OfferView({
       <div className="mt-3 flex items-center gap-3 rounded-3xl bg-white p-3.5 shadow-flat">
         <span
           className={
-            'flex h-13 w-13 flex-none items-center justify-center rounded-2xl text-2xl ' +
+            'flex h-13 aspect-[4/3] flex-none items-center justify-center overflow-hidden rounded-2xl text-2xl ' +
             TINT_BG[item.tint]
           }
         >
-          {item.emoji}
+          <WishArt
+            itemId={item.id}
+            emoji={item.emoji}
+            className="h-full w-full object-contain"
+            emojiClassName="text-2xl"
+          />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-extrabold">{item.name}</span>
@@ -1591,13 +1616,20 @@ function ConfirmView({
       <div className="mt-3 flex items-center gap-3 rounded-3xl bg-white p-3.5 shadow-flat">
         <span
           className={
-            'flex h-13 w-13 flex-none items-center justify-center rounded-2xl text-2xl ' +
+            'flex h-13 aspect-[4/3] flex-none items-center justify-center overflow-hidden rounded-2xl text-2xl ' +
             TINT_BG[order.kind === 'toy' || order.kind === 'study' || order.kind === 'collectible'
               ? (item?.tint ?? 'sun')
               : 'sun']
           }
         >
-          {order.itemEmoji}
+          {/* 订单里存的是快照（`itemEmoji`），商品可能已经被删掉 ——
+              没有 `item` 时 itemId 传空串，自动退回那个 emoji */}
+          <WishArt
+            itemId={item?.id ?? ''}
+            emoji={order.itemEmoji}
+            className="h-full w-full object-contain"
+            emojiClassName="text-2xl"
+          />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-extrabold">{order.itemName}</span>

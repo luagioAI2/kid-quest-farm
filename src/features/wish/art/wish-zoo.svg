@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 72" fill="none">
+  <ellipse cx="48" cy="64" rx="31" ry="3.2" fill="#2F5A22" opacity=".14"/>
+
+  <!-- 长颈鹿：站在右侧，全身露出来（藏在门后只会剩下一个头，读不出是长颈鹿） -->
+  <g>
+    <rect x="66.6" y="50" width="4" height="12" rx="2" fill="#D9A03C"/>
+    <rect x="72.4" y="50" width="4" height="12" rx="2" fill="#C98C2C"/>
+    <rect x="79" y="50" width="4" height="12" rx="2" fill="#D9A03C"/>
+    <rect x="84.4" y="50" width="4" height="12" rx="2" fill="#C98C2C"/>
+    <ellipse cx="76" cy="46.4" rx="11" ry="8" fill="#F2C14E"/>
+    <path d="M80.6 42 83 22" stroke="#F2C14E" stroke-width="7" stroke-linecap="round"/>
+    <ellipse cx="84" cy="18.4" rx="6" ry="4.8" fill="#F2C14E"/>
+    <ellipse cx="89.2" cy="19.6" rx="2.8" ry="2.4" fill="#F7D375"/>
+    <ellipse cx="79.4" cy="14.6" rx="2.6" ry="1.5" transform="rotate(-34 79.4 14.6)" fill="#D9A03C"/>
+    <path d="M80.4 12.6v-3M83.6 12.2v-3" stroke="#C98C2C" stroke-width="1.4" stroke-linecap="round"/>
+    <circle cx="85.6" cy="17" r="1" fill="#3A2410"/>
+    <circle cx="84.6" cy="25.4" r="1.7" fill="#D9A03C"/>
+    <circle cx="82.4" cy="31.6" r="1.4" fill="#D9A03C"/>
+    <circle cx="71.4" cy="43.4" r="2" fill="#D9A03C"/>
+    <circle cx="78.6" cy="48.4" r="1.6" fill="#D9A03C"/>
+  </g>
+
+  <!-- 大门：两根柱子 + 一道拱，门里是深色，才有「进得去」的感觉 -->
+  <path d="M18 62V36h32v26Z" fill="#8A5A3B" opacity=".35"/>
+  <rect x="14" y="35" width="9.4" height="27" rx="2" fill="#F0D9A8"/>
+  <rect x="44.6" y="35" width="9.4" height="27" rx="2" fill="#E7CE9E"/>
+  <path d="M18.7 36a15.6 15.6 0 0 1 31.2 0" stroke="#F0D9A8" stroke-width="7.6" stroke-linecap="round"/>
+
+  <!-- 门牌：拱顶一块白牌，画一片叶子当招牌 -->
+  <rect x="24" y="6" width="20.6" height="12" rx="3.4" fill="#FFFFFF"/>
+  <rect x="24" y="6" width="20.6" height="4" rx="2" fill="#FFD264"/>
+  <path d="M29 14.4c2.6-2.8 6.4-3 9.2-1.4-2.6 2.8-6.4 3-9.2 1.4Z" fill="#7CB342"/>
+
+  <!-- 灌木：压住两根柱子的底，画面才「落地」 -->
+  <ellipse cx="18.6" cy="61" rx="9" ry="4.4" fill="#8FD06A"/>
+  <ellipse cx="49.4" cy="61.6" rx="8" ry="4" fill="#7FC15C"/>
+</svg>
