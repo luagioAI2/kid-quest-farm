@@ -5,18 +5,18 @@
   <g>
     <rect x="18" y="10" width="22" height="22" rx="3.4" fill="#FFC247"/>
     <rect x="18" y="10" width="22" height="22" rx="3.4" fill="#FFFFFF" opacity=".22"/>
-    <circle cx="40" cy="21" r="3.6" fill="#FFC247"/>
+    <circle cx="40" cy="21" r="4.6" fill="#FFC247"/>
   </g>
   <g>
     <rect x="40" y="10" width="22" height="22" rx="3.4" fill="#7FC8F0"/>
     <rect x="40" y="10" width="22" height="22" rx="3.4" fill="#FFFFFF" opacity=".22"/>
-    <circle cx="62" cy="21" r="3.6" fill="#7FC8F0"/>
-    <circle cx="51" cy="32" r="3.6" fill="#7FC8F0"/>
+    <circle cx="62" cy="21" r="4.6" fill="#7FC8F0"/>
+    <circle cx="51" cy="32" r="4.6" fill="#7FC8F0"/>
   </g>
   <g>
     <rect x="18" y="32" width="22" height="22" rx="3.4" fill="#A8DE86"/>
     <rect x="18" y="32" width="22" height="22" rx="3.4" fill="#FFFFFF" opacity=".22"/>
-    <circle cx="40" cy="43" r="3.6" fill="#A8DE86"/>
+    <circle cx="40" cy="43" r="4.6" fill="#A8DE86"/>
   </g>
 
   <!-- 空位：虚线框 + 一个浅浅的缺口，读成「还差一块」 -->
@@ -27,10 +27,6 @@
   <g transform="rotate(-14 78 46)">
     <rect x="67" y="35" width="22" height="22" rx="3.4" fill="#C8A2F0"/>
     <rect x="67" y="35" width="22" height="22" rx="3.4" fill="#FFFFFF" opacity=".24"/>
-    <circle cx="89" cy="46" r="3.6" fill="#C8A2F0"/>
+    <circle cx="89" cy="46" r="4.6" fill="#C8A2F0"/>
   </g>
-
-  <!-- 两粒碎屑：画面不空，也不抢主体 -->
-  <circle cx="16" cy="60" r="1.6" fill="#D8B87A" opacity=".7"/>
-  <circle cx="24" cy="63" r="1.1" fill="#D8B87A" opacity=".55"/>
 </svg>

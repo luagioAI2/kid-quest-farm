@@ -99,5 +99,10 @@ console.log('滚到游戏卡片：', reachedGame)
 await wait(700)
 await page.screenshot({ path: `${OUT}/05-list-games.png` })
 
+// 整张列表一张图：30 张卡一起看，才看得出「是不是一套」
+await page.evaluate(() => window.scrollTo(0, 0))
+await wait(400)
+await page.screenshot({ path: `${OUT}/06-list-full.png`, fullPage: true })
+
 await browser.close()
 console.log('OK', OUT)

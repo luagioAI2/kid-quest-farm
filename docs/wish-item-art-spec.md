@@ -183,24 +183,29 @@ subject centered, generous even margins, nothing touching the canvas edge
 
 #### `wish-study-pad` · 儿童学习机
 - **底色** `sky` `#E0F2FE`
-- **画什么**：一台白色平板，屏幕上三根彩色柱子（黄 / 蓝 / 绿，像进度条）+
-  左上角一个粉色圆点。右边斜靠一支天蓝色触控笔。右下角一颗金星。
+- **画什么**：一台套着**橙色防摔套**的儿童平板（套子比机身大一圈，右下露出厚度），
+  白色机身里一块浅蓝屏；屏上三根彩色柱子（黄 / 蓝 / 绿，像进度条）、
+  右上两行浅蓝色块当文字、右下角一颗金星。左窄边一个小圆点是前摄，
+  下边框一条短指示条。
 - **提示词**
   ```
-  A white kids learning tablet with a light blue screen showing three simple
-  colored bar-chart bars in yellow blue green and one pink dot,
-  a sky-blue stylus leaning against its right side, a small gold star beside it,
+  A kids tablet in a chunky orange protective bumper case, white body with a thin
+  bezel, pale blue screen showing three simple bar-chart bars in yellow blue green,
+  two short grey text bars at the upper right, a small gold star at the lower right,
+  a tiny camera dot on the left bezel and a short home indicator on the bottom bezel,
   flat vector, soft pastel, rounded shapes, no outline, soft contact shadow,
   centered, transparent background, 4:3
   ```
+- ⚠️ **别画成白色板子**：这台东西的底色是 `sky`，白机身 + 浅蓝屏 + 浅蓝底
+  三件几乎同一个明度 ⇒ 整张读成「一块白板」。橙色套子是为了给它体积和暖色。
 
 #### `wish-dino` · 恐龙模型套装
 - **底色** `grass` `#DCFCE7`
-- **画什么**：一只绿色长颈小恐龙（背上有三片深绿三角板）+ 前面一只橙色的小恐龙。
+- **画什么**：一只绿色长颈小恐龙（背上两片深绿三角板）+ 前面一只橙色的小恐龙。
   两只都朝右，圆润、可爱，不是写实恐龙。
 - **提示词**
   ```
-  Two cute toy dinosaurs, a larger green long-neck dinosaur with three dark green
+  Two cute toy dinosaurs, a larger green long-neck dinosaur with two dark green
   back plates and a smaller orange baby dinosaur in front of it, both facing right,
   chubby rounded bodies, flat vector, soft pastel, rounded shapes, no outline,
   soft contact shadow, centered, transparent background, 4:3
@@ -221,42 +226,53 @@ subject centered, generous even margins, nothing touching the canvas edge
 
 #### `wish-sticker` · 闪光贴纸册
 - **底色** `berry` `#FFE4E6`
-- **画什么**：一本黄色封面的贴纸册，稍微歪着，底下一叠白纸页露出来。
-  封面上印着三张贴纸（粉星 / 蓝心 / 绿圆），四周四颗闪光。
+- **画什么**：一本**摊开**的贴纸册（不是合上的卡）。黄色封面从左右两页四周露出 3~4px，
+  中间一道压深的书脊；左右白页上各贴几张贴纸（左：粉星 / 绿圆 / 蓝心，
+  右：黄星 / 粉心 / 紫圆），整本歪 5°。左上角一颗小闪光。
 - **提示词**
   ```
-  A yellow sticker booklet slightly tilted with a stack of white pages peeking out
-  behind it, three die-cut stickers on the cover: a pink star, a blue heart,
-  a green circle, four small four-point sparkles around, flat vector,
-  soft pastel, rounded shapes, no outline, soft contact shadow,
-  centered, transparent background, 4:3
+  An open sticker album seen from above, two white pages facing each other with a
+  darker yellow spine between them and a yellow cover edge showing around the pages,
+  colorful die-cut stickers stuck on the pages: pink star, green circle, blue heart
+  on the left page, gold star, pink heart, purple circle on the right page,
+  one small four-point sparkle at the top left, flat vector, soft pastel,
+  rounded shapes, no outline, soft contact shadow, centered,
+  transparent background, 4:3
   ```
+- ⚠️ **别画成一张卡**：白内框 = 画框，同色系的「一叠纸」在缩略图里根本看不见。
+  「书脊 + 左右两页」是任何尺寸下都不会读错的结构。
 
 #### `wish-cake` · 生日蛋糕
 - **底色** `berry` `#FFE4E6`
 - **画什么**：白色盘子上的双层奶油蛋糕，两层都挂着粉色糖霜（带几滴垂下来的），
-  上层插三根不等高的蓝蜡烛，火苗暖黄。下层撒六颗彩色糖针。
+  上层插三根不等高的蓝蜡烛，火苗是**上尖下圆的水滴**（不是椭圆）。
+  下层撒四颗彩色糖针。
 - **提示词**
   ```
   A two-tier cream birthday cake on a white plate, pink frosting dripping down
-  both tiers, three blue candles of different heights with warm yellow flames,
-  colorful sprinkles on the bottom tier, flat vector, soft pastel,
+  both tiers, three blue candles of different heights with teardrop-shaped warm
+  yellow flames, four colorful sprinkles on the bottom tier, flat vector, soft pastel,
   rounded shapes, no outline, soft contact shadow, centered,
   transparent background, 4:3
   ```
 
 #### `wish-zoo` · 动物园一日游
 - **底色** `grass` `#DCFCE7`
-- **画什么**：左边一座奶油色大门（两根柱子 + 一道拱 + 拱顶一块白牌子，牌上画一片叶子），
-  右边一只黄色长颈鹿站着（身上有深黄斑点）。两根柱子脚下各一丛灌木。
+- **画什么**：左边一座奶油色大门（两根柱子 + 一道拱，拱中间是**深棕色的门洞**，
+  一眼是「能走进去」；拱顶上架一块白牌子、两根小托脚接住，牌上画一片叶子），
+  右边一只黄色长颈鹿站着（四条腿全在身体底下，身上有深黄斑点）。两个柱脚各一丛灌木。
 - **提示词**
   ```
-  A cream-colored zoo entrance gate with two pillars and an arch with a small
-  white sign board on top, a friendly yellow giraffe standing to the right of it
-  with darker spots, two small green bushes at the base, flat vector,
-  soft pastel, rounded shapes, no outline, soft contact shadow,
-  centered, transparent background, 4:3
+  A cream-colored zoo entrance gate with two pillars and a wide arch, the opening
+  filled with a dark warm brown doorway so it reads as walkable, a small white sign
+  board mounted on top of the arch with two little brackets and a green leaf on it,
+  a friendly yellow giraffe standing to the right with darker spots and four legs
+  under its body, two small green bushes at the base, flat vector, soft pastel,
+  rounded shapes, no outline, soft contact shadow, centered,
+  transparent background, 4:3
   ```
+- ⚠️ **门洞不能是半透明灰**：35% 的深棕压在薄荷绿底上会变成一块灰水泥，像一堵墙。
+  要**不透明的中棕** —— 既明显比奶油柱子深（是洞），又还在暖色里（不发灰）。
 
 ---
 
