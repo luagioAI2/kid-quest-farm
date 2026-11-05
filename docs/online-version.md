@@ -305,6 +305,18 @@ happy path 一行都没走过）。
 ⚠️ 盲盒**没有**输码入口，页面会明说「盲盒没有激活码」：它开的是随机一款，
 走的是兑换券（`wishRedeem`），硬塞一个输码框只会让人以为盲盒也能用码开。
 
+验收（三条走查，`scripts/` 下，**都不入库**）：
+
+| 脚本 | 验什么 |
+| --- | --- |
+| `_probe-wish-code-ui.mjs` | 入口在不在、保护开着先出密码、假码拿到服务端中文错误、盲盒页的说明 |
+| `_probe-wish-code-happy.mjs <码>` | **真码** happy path：绿字留下 → 进 `ownedGameIds` → 回列表该卡片消失 |
+| `_probe-wish-code-gate.mjs <码>` | 家长锁开着：答加法 → 第一次设密码（两遍）→ 输码 → `设置 → 游戏` 不再是「未拥有」 |
+
+真码用 `tf-admin/scripts/_gen-test-code.mjs` 现生成（调 `POST /mall/wish/code/generate`）。
+⚠️ 局域网是 http（非安全上下文）⇒ 没有 `crypto.subtle`，插件包验签必然失败，
+界面会照实写「已激活，但没装成功」—— 那不是 bug，APK 里是安全上下文。
+
 ---
 
 ## 6. 还没接的（按优先级）
