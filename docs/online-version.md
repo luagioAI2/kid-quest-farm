@@ -409,7 +409,7 @@ npm run build                                  # 看退出码，别看 "built in
 node scripts/_probe-farm-state.mjs             # 服务端契约（12 条）
 node scripts/_probe-write-through.mjs          # 浏览器真跑写穿（15 条，默认连 4401）
 node scripts/_probe-farm-online.mjs            # 浏览器真跑农场上云（25 条，§7.7）
-node scripts/_probe-guest-entry.mjs            # 进来就能玩：游客账号 + 无横条 + 胶囊入口 + 第 3 次启动不弹 + 号码被占 + 真绑定（30 条，§7.8）
+node scripts/_probe-guest-entry.mjs            # 进来就能玩：游客账号 + 无横条 + 胶囊入口 + 第 3 次启动不弹 + 号码被占 + 真绑定（35 条，§7.8）
 node scripts/_probe-guest-tablet.mjs           # 同上两块界面在 1024×768 / 768×1024（18 条，§7.8.10）
 node scripts/_probe-redeem-online.mjs          # 浏览器真跑兑换商城（32 条，§7.9）
 node scripts/_probe-wish-online.mjs            # 浏览器真跑心愿商城（50 条，§7.11）
