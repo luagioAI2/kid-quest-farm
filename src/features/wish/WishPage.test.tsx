@@ -728,6 +728,13 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     expect(hero, '盲盒 hero 应该在').toBeTruthy()
     expect(hero.querySelector('[data-wish-activate]'), '盲盒没有「去激活」').toBeTruthy()
     expect(hero.textContent ?? '').not.toMatch(/有码可输/)
+    /* ★ 状态不再是一排小胶囊标签：整块 hero 只剩右上角「优先」是圆的
+       （用户 2026-11-05：名字 / 类型 / 标签挤在一起很丑）。 */
+    const pills = [...hero.querySelectorAll('[class*="rounded-full"]')]
+    expect(
+      pills.map((p) => p.textContent?.trim()),
+      '小胶囊标签都换成普通文字行，只留右上角「优先」',
+    ).toEqual(['优先'])
   })
 
   /*

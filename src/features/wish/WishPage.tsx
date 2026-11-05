@@ -629,25 +629,32 @@ function BlindBoxHero({
             {item.name}
           </span>
           <span className="mt-0.5 block text-xs font-bold text-ink-500">{item.note}</span>
-          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {soldOut ? (
-              <Tag tone="gray">全都玩过了</Tag>
-            ) : offer ? (
-              <>
-                <Tag tone="green">🎫 {offer.voucherPrice}</Tag>
-                {topUp > 0 && <Tag tone="green">🪙 补 {topUp}</Tag>}
-              </>
-            ) : order?.status === 'wished' ? (
-              /* 和 `ItemCard` 同一个顺序：定价优先于「已告诉爸妈」。
-                 盲盒是列表第一张卡，孩子点完「想要这个」之后如果这里还写着
-                 「等爸妈开放」，他会以为自己那一句没发出去 —— 而详情页
-                 写的是「已经告诉爸妈」，两屏对不上。 */
-              <Tag tone="blue">已告诉爸妈</Tag>
-            ) : (
-              <Tag tone="gray">等爸妈定价</Tag>
+          {/* ★ 定价 / 状态改成普通文字行，不再堆一排小胶囊标签
+              （用户 2026-11-05：「名字、类型、标签啥的」挤在一起很丑）。
+              每句单独一个节点，别拼成一长串 —— 断言是按整句文本定位的。 */}
+          <span className="mt-1.5 block space-y-0.5 text-[11px] font-bold leading-snug">
+            <span className="block text-ink-700">
+              {soldOut ? (
+                '全都玩过了'
+              ) : offer ? (
+                <>
+                  🎫 {offer.voucherPrice}
+                  {topUp > 0 && <> · 🪙 补 {topUp}</>}
+                </>
+              ) : order?.status === 'wished' ? (
+                /* 和 `ItemCard` 同一个顺序：定价优先于「已告诉爸妈」。
+                   孩子点完「想要这个」之后如果这里还写着「等爸妈开放」，
+                   他会以为自己那一句没发出去 —— 详情页写的是
+                   「已经告诉爸妈」，两屏对不上。 */
+                '已告诉爸妈'
+              ) : (
+                '等爸妈定价'
+              )}
+            </span>
+            <span className="block text-ink-500">还能开出 {remaining.length} 款</span>
+            {order?.status === 'committed' && (
+              <span className="block text-grass-700">已放进游戏柜</span>
             )}
-            <Tag tone="plain">还能开出 {remaining.length} 款</Tag>
-            {order?.status === 'committed' && <Tag tone="green">已放进游戏柜</Tag>}
           </span>
         </span>
       </button>
@@ -1919,27 +1926,6 @@ function ConfirmView({
 /* ============================================================
    小零件
    ============================================================ */
-
-function Tag({
-  tone,
-  children,
-}: {
-  tone: 'green' | 'gray' | 'amber' | 'blue' | 'plain'
-  children: React.ReactNode
-}) {
-  const cls = {
-    green: 'bg-grass-100 text-grass-700',
-    gray: 'bg-ink-900/5 text-ink-500',
-    amber: 'bg-sun-100 text-sun-700',
-    blue: 'bg-sky-100 text-sky-500',
-    plain: 'bg-white/70 text-ink-500',
-  }[tone]
-  return (
-    <span className={'rounded-full px-2 py-0.5 text-[10px] font-extrabold ' + cls}>
-      {children}
-    </span>
-  )
-}
 
 function EmptyState({ onBack }: { onBack: () => void }) {
   return (
