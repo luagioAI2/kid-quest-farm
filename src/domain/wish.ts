@@ -360,9 +360,11 @@ export function compareWishItem(
   return a.name.localeCompare(b.name, 'zh-Hans-CN')
 }
 
-/** 状态的中文说法。列表、详情、家长端共用，别在组件里各写一份 */
+/** 状态的中文说法。列表、详情、家长端共用，别在组件里各写一份。
+ *  第四轮：`wished` 不再写「等定价」—— 家长审核时直接定价，孩子这一侧
+ *  只做过一件事：告诉爸妈。许过愿 = 已告诉爸妈。 */
 export const WISH_STATUS_TEXT: Record<string, string> = {
-  wished: '等爸妈定价',
+  wished: '已告诉爸妈',
   committed: '等爸妈确认',
   confirmed: '爸妈去买啦',
   done: '已经拿到',

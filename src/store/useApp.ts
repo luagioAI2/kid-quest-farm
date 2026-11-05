@@ -1796,7 +1796,7 @@ async function onlineWishExpress(get: () => AppState, itemId: string): Promise<v
   get().pushToast({
     kind: 'info',
     title: `已经告诉爸妈：想要「${name}」`,
-    detail: '他们看到之后会给它定一个兑换券的价格',
+    detail: '他们审核时会直接定好兑换券价格',
     emoji: '💌',
   })
   await get().refresh()
@@ -4306,7 +4306,7 @@ export const useApp = create<AppState>((set, get) => ({
     get().pushToast({
       kind: 'info',
       title: `已经告诉爸妈：想要「${item.name}」`,
-      detail: '他们看到之后会给它定一个兑换券的价格',
+      detail: '他们审核时会直接定好兑换券价格',
       emoji: '💌',
     })
     await get().refresh()

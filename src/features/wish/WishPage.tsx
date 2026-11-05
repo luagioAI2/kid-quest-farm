@@ -198,11 +198,13 @@ export default function WishPage() {
   const ownedGameIds = useApp((s) => s.ownedGameIds)
   const installedGames = useApp((s) => s.installedGames)
   const harvestLedger = useApp((s) => s.harvestLedger)
+  /** 第四轮：卡片上的「我想要」直接许愿，不用先绕进详情页 */
+  const wishExpress = useApp((s) => s.wishExpress)
 
   const [view, setView] = useState<WishView>({ kind: 'list' })
   const [filter, setFilter] = useState<WishFilter>(null)
   /**
-   * 列表卡片「去激活」点开的弹框，记的是**从哪件商品点进来的**。
+   * 列表卡片「家长激活」点开的弹框，记的是**从哪件商品点进来的**。
    *
    * ★ 必须挂在页面这一层：激活成功 ⇒ `ownedGameIds` 多一款 ⇒ `hiddenOwned`
    * 把那张游戏卡从列表里摘掉。弹框要是长在卡片里，就会跟卡片一起卸载，
@@ -255,7 +257,7 @@ export default function WishPage() {
    * 某件商品**最近一次被取消**的单子（只看有理由的）。
    *
    * 用途只有一个：孩子被回绝之后再点进这一屏，能看到「上次爸妈说：…」，
-   * 而不是面对一个干干净净的「🤍 想要这个」—— 那样他会以为自己没说过，
+   * 而不是面对一个干干净净的「🤍 我想要」—— 那样他会以为自己没说过，
    * 家长那边则会收到同一个请求第二遍。
    *
    * ⚠️ 只是**提示**，不是冷却：仍然允许再点一次。心愿不是一次性资源，
@@ -336,6 +338,7 @@ export default function WishPage() {
         owned={owned}
         onOpen={(itemId) => setView({ kind: 'detail', itemId })}
         onActivate={(itemId) => setActivateId(itemId)}
+        onWant={(itemId) => void wishExpress(itemId)}
         onMerchant={() => setView({ kind: 'merchant' })}
       />
     )
@@ -392,6 +395,7 @@ function ListView({
   owned,
   onOpen,
   onActivate,
+  onWant,
   onMerchant,
 }: {
   filter: WishFilter
@@ -404,8 +408,10 @@ function ListView({
   points: number
   owned: Set<string>
   onOpen: (id: string) => void
-  /** 卡片上「去激活」：交给页面层开弹框，不进详情页 */
+  /** 卡片上「家长激活」：交给页面层开弹框，不进详情页 */
   onActivate: (id: string) => void
+  /** 卡片上「我想要」：直接许愿；已经有单子时按钮自动改成进详情页 */
+  onWant: (id: string) => void
   /** 右上角「招商」 */
   onMerchant: () => void
 }) {
@@ -528,6 +534,7 @@ function ListView({
               points={points}
               onOpen={() => onOpen(item.id)}
               onActivate={() => onActivate(item.id)}
+              onWant={() => onWant(item.id)}
             />
           ))}
         </div>
@@ -606,6 +613,13 @@ function BlindBoxHero({
   const soldOut = blindBoxSoldOut(item, [...owned])
   const topUp = offer ? topUpOf(offer.voucherPrice, vouchers, points) : 0
 
+  /** 没定价也没许愿时不写状态：家长审核时直接定价，孩子不用「等定价」。 */
+  let statusLine: string | null = null
+  if (soldOut) statusLine = '全都玩过了'
+  else if (offer) {
+    statusLine = `🎫 ${offer.voucherPrice}${topUp > 0 ? ` · 🪙 补 ${topUp}` : ''}`
+  } else if (order?.status === 'wished') statusLine = '已告诉爸妈'
+
   return (
     <div data-wish-card="blindbox" className="relative rounded-3xl bg-sun-100 shadow-flat">
       <span className="absolute -top-1.5 right-3 z-10 rounded-full bg-berry-500 px-2 py-0.5 text-[10px] font-extrabold text-white">
@@ -629,28 +643,11 @@ function BlindBoxHero({
             {item.name}
           </span>
           <span className="mt-0.5 block text-xs font-bold text-ink-500">{item.note}</span>
-          {/* ★ 定价 / 状态改成普通文字行，不再堆一排小胶囊标签
-              （用户 2026-11-05：「名字、类型、标签啥的」挤在一起很丑）。
-              每句单独一个节点，别拼成一长串 —— 断言是按整句文本定位的。 */}
+          {/* ★ 第四轮（2026-11-05）：不再写「等定价」那类话 —— 家长审核时
+              直接定价，孩子这一侧没有这一步；没定价也没许愿就整行不渲染。
+              其余状态仍是独立文本节点（findByText 按整句定位）。 */}
           <span className="mt-1.5 block space-y-0.5 text-[11px] font-bold leading-snug">
-            <span className="block text-ink-700">
-              {soldOut ? (
-                '全都玩过了'
-              ) : offer ? (
-                <>
-                  🎫 {offer.voucherPrice}
-                  {topUp > 0 && <> · 🪙 补 {topUp}</>}
-                </>
-              ) : order?.status === 'wished' ? (
-                /* 和 `ItemCard` 同一个顺序：定价优先于「已告诉爸妈」。
-                   孩子点完「想要这个」之后如果这里还写着「等爸妈开放」，
-                   他会以为自己那一句没发出去 —— 详情页写的是
-                   「已经告诉爸妈」，两屏对不上。 */
-                '已告诉爸妈'
-              ) : (
-                '等爸妈定价'
-              )}
-            </span>
+            {statusLine && <span className="block text-ink-700">{statusLine}</span>}
             <span className="block text-ink-500">还能开出 {remaining.length} 款</span>
             {order?.status === 'committed' && (
               <span className="block text-grass-700">已放进游戏柜</span>
@@ -667,7 +664,7 @@ function BlindBoxHero({
           onClick={onActivate}
           className="flex h-8 w-full items-center justify-center gap-1 rounded-xl bg-white/80 text-[12px] font-extrabold text-grass-700 active:btn-press"
         >
-          🎟️ 去激活
+          🎟️ 家长激活
         </button>
       </div>
     </div>
@@ -683,6 +680,7 @@ function ItemCard({
   points,
   onOpen,
   onActivate,
+  onWant,
 }: {
   item: WishItem
   offer: { voucherPrice: number } | undefined
@@ -693,6 +691,8 @@ function ItemCard({
   points: number
   onOpen: () => void
   onActivate: () => void
+  /** 实物卡「我想要」：直接许愿；已经有单子时按钮自动改成进详情页 */
+  onWant: () => void
 }) {
   const alreadyOwned = item.kind === 'gamebox' && !!item.gameId && owned.has(item.gameId)
   const entry = gameEntryOf(item)
@@ -708,16 +708,20 @@ function ItemCard({
   const badge = cardBadge(item, order, alreadyOwned)
   /** 码自带游戏，和「爸妈有没有给这件商品定价」无关，所以恒显示。 */
   const canActivate = !alreadyOwned && (item.kind === 'gamebox' || item.kind === 'blindbox')
+  /** 已经表过态 / 已经下单：按钮改成进详情页，别让 `wishExpress` 早退成「点了没反应」。 */
+  let actionLabel = '🤍 我想要'
+  if (order?.status === 'wished') actionLabel = '已告诉爸妈 ›'
+  else if (order?.status === 'committed' || order?.status === 'confirmed') actionLabel = '去看看 ›'
 
   return (
     <div
       data-wish-card
       data-wish-kind={item.kind}
-      className="flex h-full flex-col rounded-3xl bg-white p-2 shadow-flat"
+      className="flex h-full flex-col rounded-3xl bg-white p-1.5 shadow-flat"
     >
-      {/* ★ 根节点从 `<button>` 换成 `<div>`：底下要再放一颗「去激活」按钮，
+      {/* ★ 根节点从 `<button>` 换成 `<div>`：底下要再放一颗「家长激活」按钮，
           button 嵌 button 是非法 HTML，而且点击会被外层吃掉。
-          现在「卡片主体」和「去激活」是两颗平级按钮，各走各的。 */}
+          现在「卡片主体」和「家长激活」是两颗平级按钮，各走各的。 */}
       <button
         type="button"
         onClick={onOpen}
@@ -725,7 +729,7 @@ function ItemCard({
       >
         <span
           className={
-            'relative mb-2 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl ' +
+            'relative mb-1.5 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl ' +
             TINT_BG[item.tint]
           }
         >
@@ -754,49 +758,49 @@ function ItemCard({
           )}
         </span>
         {/* 名字固定占两行高度：一行名和两行名混排时，下面「类型 / 价格」
-            不会一张卡高一张卡矮。 */}
-        <span className="line-clamp-2 min-h-[2.6em] px-1 font-display text-[13px] font-extrabold leading-[1.3] text-ink-900">
+            不会一张卡高一张卡矮。第四轮把行距收紧，整张卡矮一截。 */}
+        <span className="line-clamp-2 min-h-[2.4em] px-0.5 font-display text-[12.5px] font-extrabold leading-[1.2] text-ink-900">
           {item.name}
         </span>
-        <span className="mt-0.5 truncate px-1 text-[10.5px] font-bold text-ink-400">
+        <span className="mt-0.5 truncate px-0.5 text-[10.5px] font-bold text-ink-400">
           {WISH_KIND_META[item.kind].label}
           {item.partnerName ? ` · ${item.partnerName}` : ''}
         </span>
-        <span className="mt-1 px-1 text-[11.5px] font-extrabold text-ink-600">
+        {/* ★ 第四轮：没定价就空着这一行，不再写「等定价」那类话。
+            家长审核时直接定价，孩子这一侧没有这一步。
+            固定高度 = 和已定价的卡等高（_probe-wish-card-qa.mjs 量 tailGap）。 */}
+        <span className="mt-0.5 flex h-[1.15em] items-center px-0.5 text-[11.5px] font-extrabold leading-none text-ink-600">
           {offer ? (
             <>
               🎫 {offer.voucherPrice}
               {topUp > 0 && (
-                <span className="ml-1 text-[10.5px] text-grass-700">· 🪙 补 {topUp}</span>
+                <span className="ml-1 text-[10px] text-grass-700">· 🪙 补 {topUp}</span>
               )}
             </>
-          ) : (
-            <span className="font-bold text-ink-400">等爸妈定价</span>
-          )}
+          ) : null}
         </span>
       </button>
-      {/* ★ 2026-11-05 第三轮补：每张卡都占一行**等高**动作区。
-          之前只有游戏 / 盲盒有「去激活」，在「全部」里和实物卡混排时，
-          实物卡被 grid 拉成同一行高度，底部空出约 40px 白块（走查截图里
-          「泡泡玛特盲盒」就是）。实物给一颗安静的「看看这款」，同样进
-          详情页：既不撒谎说它有码，也不在卡片底下留个坑。 */}
+      {/* ★ 2026-11-05 第四轮：每张卡仍然恰好一颗等高动作按钮。
+          游戏 / 盲盒是「家长激活」→ 页面层弹框；实物是「我想要」→ 直接许愿。
+          已经有单子时后者变成「已告诉爸妈 / 去看看」并进详情页 ——
+          `wishExpress` 遇到进行中的单子会早退，不给反馈就是「点了没反应」。 */}
       {canActivate ? (
         <button
           type="button"
           data-wish-activate
           onClick={onActivate}
-          className="mt-2 flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-grass-50 text-[12px] font-extrabold text-grass-700 active:btn-press"
+          className="mt-1.5 flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-grass-50 text-[12px] font-extrabold text-grass-700 active:btn-press"
         >
-          🎟️ 去激活
+          🎟️ 家长激活
         </button>
       ) : (
         <button
           type="button"
           data-wish-detail
-          onClick={onOpen}
-          className="mt-2 flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-ink-100 text-[12px] font-extrabold text-ink-500 active:btn-press"
+          onClick={order ? onOpen : onWant}
+          className="mt-1.5 flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-sun-50 text-[12px] font-extrabold text-sun-700 active:btn-press"
         >
-          看看这款 ›
+          {actionLabel}
         </button>
       )}
     </div>
@@ -822,7 +826,7 @@ function DetailView({
   item: WishItem
   offer: { voucherPrice: number } | undefined
   order: { id: string; status: string; openedGameId?: string } | undefined
-  /** 最近一次被取消、且写了理由的单子。只用来在「想要这个」下面补一句「上次爸妈说：…」 */
+  /** 最近一次被取消、且写了理由的单子。只用来在「我想要」下面补一句「上次爸妈说：…」 */
   lastCancelled: { cancelReason?: string } | undefined
   /** 兑换券余额 */
   vouchers: number
@@ -879,7 +883,7 @@ function DetailView({
    * 而且对 `wished` 这条路径**不碰账本**（还没扣过券）。
    * 自己写一行 `status: 'cancelled'` 会绕过那道重读。
    *
-   * 没有这个动作的话，孩子的心愿会永远停在「等他们定价」——
+   * 没有这个动作的话，孩子的心愿会永远停在「已告诉爸妈」——
    * 他既不能自己撤回，家长也没有「不换」这个选项。
    */
   const doDecline = async () => {
@@ -1115,7 +1119,7 @@ function DetailView({
            * ⚠️ 「已经表明意向」这个分支**只能放在「没有定价」里面**。
            *
            * 放在外面的话会出现一个很荒唐的死结：孩子先点「想要」→ 家长
-           * 随后定了价 → 页面仍然显示「等爸妈定价」，**兑换按钮不出现**。
+           * 随后定了价 → 页面仍然显示「已告诉爸妈」，**兑换按钮不出现**。
            * 孩子表过态反而换不了，而家长那边以为已经放开了。
            * 2026-10-28 走查抓到（`e2e-wishmall.mjs` 的「定价后出现兑换按钮」）。
            */
@@ -1182,7 +1186,7 @@ function DetailView({
                 onClick={() => void wishExpress(item.id)}
                 className="btn h-12 w-full bg-sun-400 text-base font-extrabold text-ink-900 active:btn-press"
               >
-                🤍 想要这个
+                🤍 我想要
               </button>
               {/* 上次被回绝过：把理由摆出来，别让孩子以为自己没说过。
                   仍然允许再点一次 —— 心愿不是一次性资源，加冷却只会让
@@ -1374,8 +1378,8 @@ function OfferView({
    *
    * ⚠️ 这里原来写死「孩子想要这个」。可家长**可以主动**先来定价
    * （这正是最常见的用法：爸妈先开放，孩子才看得到价格），
-   * 那时孩子根本没点过「想要这个」—— 页面却在替孩子撒谎。
-   * 2026-10-28 截图走查发现（capture 的流程从没点过「想要这个」，
+   * 那时孩子根本没点过「我想要」—— 页面却在替孩子撒谎。
+   * 2026-10-28 截图走查发现（capture 的流程从没点过「我想要」，
    * 定价页却写着这句），**结构断言完全看不出来**。
    *
    * ⚠️ **有单子就算**，不按状态筛。一开始只认 `wished/committed/confirmed`，
