@@ -594,6 +594,9 @@ function BlindBoxHero({
           ) : (
             <Tag tone="gray">等爸妈开放</Tag>
           )}
+          {/* 盲盒也能输码（用户 2026-11-05 明确要求）。码是自带游戏的，
+              和「开盒开出来的是哪一款」无关，所以这颗标跟兑换券那几颗并列。 */}
+          <Tag tone="blue">🎟️ 有码可输</Tag>
           <Tag tone="plain">还能开出 {remaining.length} 款</Tag>
           {order?.status === 'committed' && <Tag tone="green">已放进游戏柜</Tag>}
         </span>
@@ -685,6 +688,11 @@ function ItemCard({
           </>
         ) : order?.status === 'wished' ? (
           <Tag tone="blue">已告诉爸妈</Tag>
+        ) : item.kind === 'gamebox' && item.gameId ? (
+          /* 游戏是「挂在商城、还没激活」—— 用户 2026-11-05 的原话。
+             写「等爸妈开放」会让孩子以为得等家长点一下才能用，
+             其实他手里有码、过了家长密码就能自己激活。 */
+          <Tag tone="gray">未激活</Tag>
         ) : (
           <Tag tone="gray">等爸妈开放</Tag>
         )}
@@ -702,9 +710,12 @@ function ItemCard({
              真要「一点就输」，得把卡片根节点换成 div + 内部两个按钮 ——
              那会动到整张卡的可点区域，不值当。
           ⚠️ `alreadyOwned` 时不显示：已经有了就不该再引导去激活。
+          ⚠️ 文案是「有码可输」而不是「有卡能激活」：码是爸妈在淘宝买完
+             卖家发的一串数字，没有实体卡（用户 2026-11-05 指出原来的
+             「游戏卡背面那串」说不通）。
         */}
         {item.kind === 'gamebox' && item.gameId && !alreadyOwned && (
-          <Tag tone="blue">🎟️ 有卡能激活</Tag>
+          <Tag tone="blue">🎟️ 有码可输</Tag>
         )}
       </span>
     </button>
@@ -1139,16 +1150,28 @@ function DetailView({
       )}
 
       {/*
-       * 盲盒为什么没有「激活」：**它本来就没有码**。
+       * 盲盒：开盒走兑换券，但**手里有码也能输**（用户 2026-11-05 明确要求）。
        *
-       * 用户 2026-11-05 问的是「盲盒和游戏都没有激活的地方」。游戏是漏了，
-       * 盲盒是真没有 —— 它开的是随机一款你还没有的游戏，走的是兑换券
-       * （`wishRedeem`）那条路。不说清楚的话，这一页看起来就是「漏做了」。
+       * 盲盒自己**没有 `game_id`**（它开的是一池子里的随机一款），可码是
+       * 自带游戏的 —— 输进去解锁的就是码里那一款，和开盒开出来的是两件事。
+       * 所以这一页两块并存：上面攒券开盒，下面有码直接输。
+       *
+       * ⚠️ 上一版这里写的是「盲盒没有激活码」。那句话在当时是对的（后台
+       *    生成码只挂「游戏」分类），但用户要的是「手里有码就能用」，
+       *    而这不需要盲盒自己有 game_id —— 别再把它删回去。
        */}
       {item.kind === 'blindbox' && (
-        <p className="mt-3 rounded-2xl bg-paper-2 px-3.5 py-2.5 text-[11px] font-bold leading-relaxed text-ink-500">
-          🎁 盲盒没有激活码：它开的是随机一款你还没有的游戏，攒够兑换券在「兑换」里直接开。
-        </p>
+        <>
+          {/* ⚠️ 输码块在**说明上面**。反过来的话（说明 → 输码块）这一块
+              会落到 844 屏的第 706 行，下半截正好被底栏压住 ——
+              走查截图里一眼就能看到，等于「有入口但看不见」。
+              2026-11-05 第二轮量的。 */}
+          <CodeRedeemBlock gate="pin" card compact />
+          <p className="mt-3 rounded-2xl bg-paper-2 px-3.5 py-2.5 text-[11px] font-bold leading-relaxed text-ink-500">
+            🎁 盲盒开的是随机一款你还没有的游戏，靠兑换券在「兑换」里开。
+            上面输的码给的是码里那一款，不参与随机。
+          </p>
+        </>
       )}
 
       {/*
@@ -1435,7 +1458,7 @@ function OfferView({
         <div className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
           <p className="text-sm font-extrabold">也可以直接买这一款</p>
           <p className="mt-1 text-[11px] font-bold leading-relaxed text-ink-500">
-            淘宝 / 天猫上的游戏卡，背面那串就是激活码。买到后在这儿输一次，
+            淘宝 / 天猫上买了游戏，卖家会发一串 6 位激活码。买到后在这儿输一次，
             游戏就进「我的游戏」，孩子那边不用再攒券。
           </p>
 
@@ -1475,7 +1498,7 @@ function OfferView({
               不再让人连输两次密码。 */}
           <CodeRedeemBlock
             gate="open"
-            label="🎟️ 已经买到卡了？输激活码"
+            label="有激活码？输一下"
             onDone={onDone}
           />
         </div>

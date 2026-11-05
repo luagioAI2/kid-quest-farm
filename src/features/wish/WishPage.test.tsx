@@ -46,6 +46,9 @@ beforeEach(async () => {
   await db.delete()
   await db.open()
   await useApp.getState().boot()
+  /* 跨页通道是全局 state：上一条用例点过「去设置看看」会留着，
+     不清的话下一条读到的就是上一条的残留。 */
+  useApp.setState({ pendingSettingsTab: null })
 })
 
 describe('心愿商城：数字商品兑换之后', () => {
@@ -493,7 +496,9 @@ describe('心愿：游戏类商品能直接买卡 / 输激活码', () => {
     await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
     await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
 
-    expect(redeemGameCode).toHaveBeenCalledWith('abc-def')
+    /* `{ silent: true }` —— 这一块自己弹框，别再让 store 飘一条 toast
+       （同一句话说两遍，2026-10-30 恢复备份那里踩过）。 */
+    expect(redeemGameCode).toHaveBeenCalledWith('abc-def', { silent: true })
     // 成功后面板关掉（回到商城列表），失败才留在原地显示原因
     await waitFor(() => expect(screen.queryByText(/也可以直接买这一款/)).toBeNull())
   })
@@ -594,20 +599,64 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
 
     // 界面不偷偷改大小写 / 不替用户去掉那一横 —— 归一化是 store 的事
-    expect(redeemGameCode).toHaveBeenCalledWith('abc-def')
+    expect(redeemGameCode).toHaveBeenCalledWith('abc-def', { silent: true })
 
-    const done = document.querySelector('[data-code-done]')
-    await waitFor(() => expect(done?.textContent).toContain('已激活'))
+    await waitFor(() =>
+      expect(document.querySelector('[data-code-done]')?.textContent).toContain('已激活'),
+    )
 
-    /* ★ 已经拥有了，这一块**还得在**（只是不再写「已经买到卡了？」） */
-    await waitFor(() => expect(document.querySelector('[data-code-done]')).toBeTruthy())
+    /* ★ 成功之后是**弹框**（用户 2026-11-05：「给个弹框提示就可以了」）。
+       上一版是一行绿字 —— 绿字会被 `alreadyOwned` 翻 true 之后的
+       `return null` 连带藏掉；弹框 `Portal` 到 body，压根不在这棵树里。 */
+    expect(document.querySelector('[data-code-done-dialog]'), '成功没弹框').toBeTruthy()
     expect(document.querySelector('[data-code-open]'), '成功之后不该退回按钮').toBeNull()
 
     /* ★ 不替孩子切「当前游戏」。用户 2026-11-05 明确选了
        「保持现状（家长控制）」—— 所以成功之后只有一句指路，
        页面里**不该**冒出一个「去玩 / 切过去」的按钮。 */
-    expect(done?.textContent, '要说清下一步找谁').toContain('设置 → 游戏')
+    expect(
+      document.querySelector('[data-code-done]')?.textContent,
+      '要说清下一步找谁',
+    ).toContain('设置 → 游戏')
     expect(screen.queryByRole('button', { name: /去玩|切过去|开始玩/ })).toBeNull()
+  })
+
+  it('★ 弹框里的「去设置看看」把人送到设置的游戏栏', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    useApp.setState({
+      redeemGameCode: vi.fn(async () => ({ ok: true, message: '已激活：收租公寓' })),
+    })
+
+    const user = await openGameDetail()
+    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
+    await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
+
+    await waitFor(() => expect(document.querySelector('[data-code-goto-settings]')).toBeTruthy())
+    await user.click(document.querySelector('[data-code-goto-settings]') as HTMLElement)
+
+    /* 跨页通道走 store（`App` 监听 → 打开设置页并落到 `game` 栏）。
+       这里只钉「通道真的被设了」—— 真正打开设置页是 `App` 的事。 */
+    expect(useApp.getState().pendingSettingsTab).toBe('game')
+    expect(document.querySelector('[data-code-done-dialog]'), '点了该关掉弹框').toBeNull()
+  })
+
+  it('★ 弹框里的「知道了」只关框，不跳设置', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    useApp.setState({
+      redeemGameCode: vi.fn(async () => ({ ok: true, message: '已激活：收租公寓' })),
+    })
+
+    const user = await openGameDetail()
+    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
+    await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
+
+    await waitFor(() => expect(document.querySelector('[data-code-done-close]')).toBeTruthy())
+    await user.click(document.querySelector('[data-code-done-close]') as HTMLElement)
+
+    expect(document.querySelector('[data-code-done-dialog]')).toBeNull()
+    expect(useApp.getState().pendingSettingsTab, '「知道了」不该偷偷跳设置').toBeNull()
   })
 
   it('★ 失败：红字 + 不清空（要能对着卡片改一位）', async () => {
@@ -626,7 +675,14 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     expect((document.querySelector('[data-code-input]') as HTMLInputElement).value).toBe('ABC-DEG')
   })
 
-  it('★ 盲盒页说清「没有激活码」（否则看着像漏做了）', async () => {
+  /*
+    盲盒也能输码（用户 2026-11-05 明确要求）。
+
+    上一版这里钉的是反过来的事：盲盒没有 `game_id`，后台生成码也只挂
+    「游戏」分类，所以页面上写着「盲盒没有激活码」。用户要的是「手里
+    有码就能用」—— 码是**自带游戏**的，不需要盲盒自己有 game_id。
+  */
+  it('★ 盲盒详情页也能输码（手里有码不用再摸去设置）', async () => {
     const user = userEvent.setup()
     render(<WishPage />)
     await screen.findByText('心愿商城')
@@ -634,8 +690,13 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     // 单开盲盒 hero 整块是一个按钮，点它进详情
     await user.click(screen.getByText('随机开出 1 款你还没有的游戏'))
 
-    expect(await screen.findByText(/盲盒没有激活码/)).toBeTruthy()
-    expect(document.querySelector('[data-wish-code]'), '盲盒不该有输码入口').toBeNull()
+    expect(
+      document.querySelector('[data-wish-code]'),
+      '盲盒详情页没有输码入口 —— 手里有码的孩子还是没地方输',
+    ).toBeTruthy()
+    expect(document.querySelector('[data-code-open]')).toBeTruthy()
+    /* 「盲盒没有激活码」是上一版的说法，现在摆着只会误导。 */
+    expect(screen.queryByText(/盲盒没有激活码/)).toBeNull()
   })
 
   /*
@@ -648,42 +709,45 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     这颗标是**非交互**的（卡片根节点已经是 `<button>`，不能再嵌按钮），
     它只负责让人知道「点进去能输」。
   */
-  it('★ 游戏卡片上写着「有卡能激活」（不用点进去才知道）', async () => {
+  it('★ 游戏卡片上写着「未激活 · 有码可输」（不用点进去才知道）', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
     const card = screen.getByRole('button', { name: /收租公寓/ })
+    /* 用户 2026-11-05：「一开始游戏只是挂在商城，显示未激活」。
+       原来那一支写的是「等爸妈开放」，会让孩子以为得等家长点一下。 */
+    expect(card.textContent, '卡片上没写「未激活」').toMatch(/未激活/)
     expect(
       card.textContent,
-      '卡片上没有「有卡能激活」= 孩子不知道这里能输码',
-    ).toMatch(/有卡能激活/)
+      '卡片上没有「有码可输」= 孩子不知道这里能输码',
+    ).toMatch(/有码可输/)
   })
 
-  it('盲盒那块**不**带「有卡能激活」（它本来就没码）', async () => {
+  it('★ 盲盒那块也写着「有码可输」（盲盒现在也能输码）', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
     const hero = screen.getByText('随机开出 1 款你还没有的游戏').closest('button')
     expect(hero, '盲盒 hero 应该是一个按钮').toBeTruthy()
-    expect(hero?.textContent ?? '').not.toMatch(/有卡能激活/)
+    expect(hero?.textContent ?? '', '盲盒卡上没写「有码可输」').toMatch(/有码可输/)
   })
 
   /*
     反向钉子：这颗标**只能**长在游戏卡上。
 
-    ⚠️ 别写成「整页只有一个『有卡能激活』」—— 列表里十几款游戏各一颗，
-       那样写必红（第一版就是这么写错的，红在「expected 有卡能激活」上，
+    ⚠️ 别写成「整页只有一个『有码可输』」—— 列表里十几款游戏各一颗，
+       那样写必红（第一版就是这么写错的，红在「expected 有码可输」上，
        看着像功能没做，其实是断言写错了）。
 
     ⚠️ 也别指望在列表里验「已拥有的游戏不显示这颗标」：已拥有的游戏
        整张卡都被藏起来了（`hiddenOwned`），`alreadyOwned` 那一支在列表里
        根本走不到。那一支只是防御，真正的判据是下面这条实物卡。
   */
-  it('实物卡片**不**带「有卡能激活」（只有游戏才有码）', async () => {
+  it('实物卡片**不**带「有码可输」（只有游戏 / 盲盒才有码）', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
     const toy = screen.getByRole('button', { name: /恐龙模型套装/ })
-    expect(toy.textContent ?? '').not.toMatch(/有卡能激活/)
+    expect(toy.textContent ?? '').not.toMatch(/有码可输/)
   })
 })

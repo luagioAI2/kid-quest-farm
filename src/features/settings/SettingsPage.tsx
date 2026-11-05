@@ -61,10 +61,18 @@ export function restoreToastDetail(ok: boolean, message: string): string {
 export default function SettingsPage({
   onBack,
   onReplayGuide,
+  initialTab,
 }: {
   onBack: () => void
   /** 「重看新手引导」。不传就不渲染这个入口（老调用点无需改动） */
   onReplayGuide?: () => void
+  /**
+   * 打开时落在哪一栏。不传 = 「孩子」。
+   *
+   * ⚠️ 只在**首次挂载**生效（喂给 `useState` 初值）。要中途换栏，
+   * 得让调用方先改这个值再挂载 —— `App` 那边就是这么做的。
+   */
+  initialTab?: Tab
 }) {
   const settings = useApp((s) => s.settings)
   const updateSettings = useApp((s) => s.updateSettings)
@@ -73,7 +81,7 @@ export default function SettingsPage({
   const resetAll = useApp((s) => s.resetAll)
   const pushToast = useApp((s) => s.pushToast)
 
-  const [tab, setTab] = useState<Tab>('child')
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'child')
   const [locked, setLocked] = useState(true)
   const [dataLocked, setDataLocked] = useState(true)
   const [confirmReset, setConfirmReset] = useState(false)

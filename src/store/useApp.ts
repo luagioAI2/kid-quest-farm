@@ -628,6 +628,20 @@ interface AppState {
   /** 取走并清空。返回 null 表示没有待跳转 */
   takePendingRedeemItem: () => string | null
 
+  /**
+   * 跨页通道（2026-11-05 第二轮）：心愿页「激活成功」的弹框里有一颗
+   * 「去设置看看」，要把人送到**设置 → 游戏**那一栏。
+   *
+   * 和 `pendingRedeemItem` 同一套做法 —— `App` 的 `setShowSettings` /
+   * `SettingsPage` 的 `tab` 都是组件内部 state，别的页拿不到。
+   * **取走要清空**，否则关掉设置还会被弹回去一次。
+   */
+  pendingSettingsTab: 'child' | 'rules' | 'game' | 'data' | null
+  /** 设通道并打开设置页（`App` 那边监听） */
+  jumpToSettings: (tab: 'child' | 'rules' | 'game' | 'data') => void
+  /** 取走并清空。返回 null 表示没有待跳转 */
+  takePendingSettingsTab: () => 'child' | 'rules' | 'game' | 'data' | null
+
   /* ---- 游戏（插件骨架，2026-10-14 起） ---- */
   /**
    * 切换「当前正在玩的游戏」。底部导航的游戏 tab 跟着它走。
@@ -671,7 +685,17 @@ interface AppState {
    * 事务提交之后才装包（装包是网络 + 执行，不能塞进 Dexie 事务）。装失败就把
    * 刚写的那两行删掉 —— 否则孩子拿到一句「装包失败」而码已经没了，只能找客服。
    */
-  redeemGameCode: (code: string) => Promise<{ ok: boolean; message: string; gameId?: string }>
+  redeemGameCode: (
+    code: string,
+    /**
+     * `silent: true` ⇒ 成功时不发那条全局 toast。
+     *
+     * 心愿商城那两处输码口自己弹一个「激活成功」的框，再飘一条
+     * 「已激活：X」就是同一句话说两遍 —— 2026-10-30「从备份恢复」
+     * 那里踩过同一个坑（标题和副标题各说一遍）。
+     */
+    opts?: { silent?: boolean },
+  ) => Promise<{ ok: boolean; message: string; gameId?: string }>
 
   /**
    * **家长手动发钻石**（2026-10-16 起）。
@@ -2704,6 +2728,7 @@ export const useApp = create<AppState>((set, get) => ({
   wishOffers: [],
   wishOrders: [],
   pendingRedeemItem: null,
+  pendingSettingsTab: null,
   farmEvents: [],
   market: createInitialMarket(PRODUCE_BASE_PRICE),
   balance: 0,
@@ -4635,6 +4660,16 @@ export const useApp = create<AppState>((set, get) => ({
     return id
   },
 
+  jumpToSettings: (tab) => {
+    set({ pendingSettingsTab: tab })
+  },
+
+  takePendingSettingsTab: () => {
+    const tab = get().pendingSettingsTab
+    if (tab) set({ pendingSettingsTab: null })
+    return tab
+  },
+
   /* ================= 游戏（插件骨架） ================= */
 
   setActiveGame: async (id) => {
@@ -4703,7 +4738,7 @@ export const useApp = create<AppState>((set, get) => ({
     return { ok: true, message: `已购买「${g.name}」` }
   },
 
-  redeemGameCode: async (raw) => {
+  redeemGameCode: async (raw, opts) => {
     const code = normalizeGameCode(raw)
     if (!isGameCode(code)) {
       // 分开说：格式不对是「敲错了」，表里没有是「这张卡不对」。
@@ -4717,7 +4752,7 @@ export const useApp = create<AppState>((set, get) => ({
     // 服务端在**同一个事务**里验码 → 标记已用 → 写 `user_game`，
     // 「这次调用成功」就等于「游戏已经在他的账号里了」。
     // 下面那张本机 `codeTable` 只用于没登录的情况（离线 / 单测）。
-    if (getToken()) return redeemCodeOnServer(code)
+    if (getToken()) return redeemCodeOnServer(code, opts)
 
     const gameId = await gameIdForCode(code)
     if (!gameId) return { ok: false, message: '没有这个码，对着卡片再核一遍' }
@@ -4773,12 +4808,14 @@ export const useApp = create<AppState>((set, get) => ({
       }
     }
 
-    get().pushToast({
-      kind: 'reward',
-      title: `解锁成功：${name}`,
-      detail: local ? '已经放进你的游戏柜啦' : '底部导航就能切过去',
-      emoji: '🎁',
-    })
+    if (!opts?.silent) {
+      get().pushToast({
+        kind: 'reward',
+        title: `解锁成功：${name}`,
+        detail: local ? '已经放进你的游戏柜啦' : '底部导航就能切过去',
+        emoji: '🎁',
+      })
+    }
     await get().refresh()
     return { ok: true, message: `解锁成功：${name}`, gameId }
   },
@@ -6284,6 +6321,7 @@ async function maybePayStreakBonus(task: Pick<Task, 'streakPerDay' | 'streakCap'
  */
 async function redeemCodeOnServer(
   code: string,
+  opts?: { silent?: boolean },
 ): Promise<{ ok: boolean; message: string; gameId?: string }> {
   let resp: ApiWishCodeResult
   try {
@@ -6325,20 +6363,22 @@ async function redeemCodeOnServer(
     if (!res.ok) note = `，但没装成功（${res.message}），去「我的游戏」里点安装`
   }
 
-  app.pushToast({
-    kind: 'reward',
-    title: `已激活：${name}`,
-    /* ⚠️ 装包失败时**不能**还说「已经放进你的游戏柜啦」——
-       标题刚写完「但没装成功」，副标题自相矛盾，家长会以为孩子能玩了。
-       2026-11-05 用真码在 http 局域网里走查时一眼看到（非安全上下文没有
-       `crypto.subtle`，验签必然失败）。 */
-    detail: note
-      ? '去「我的游戏」里点一下安装'
-      : local
-        ? '已经放进你的游戏柜啦'
-        : '底部导航就能切过去',
-    emoji: '🎁',
-  })
+  if (!opts?.silent) {
+    app.pushToast({
+      kind: 'reward',
+      title: `已激活：${name}`,
+      /* ⚠️ 装包失败时**不能**还说「已经放进你的游戏柜啦」——
+         标题刚写完「但没装成功」，副标题自相矛盾，家长会以为孩子能玩了。
+         2026-11-05 用真码在 http 局域网里走查时一眼看到（非安全上下文没有
+         `crypto.subtle`，验签必然失败）。 */
+      detail: note
+        ? '去「我的游戏」里点一下安装'
+        : local
+          ? '已经放进你的游戏柜啦'
+          : '底部导航就能切过去',
+      emoji: '🎁',
+    })
+  }
   await app.refresh()
   return { ok: true, message: `已激活：${name}${note}`, gameId }
 }

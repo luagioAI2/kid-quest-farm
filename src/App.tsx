@@ -109,6 +109,16 @@ export default function App() {
   const [tab, setTab] = useState<TabKey>('tasks')
   const [showSettings, setShowSettings] = useState(false)
   /**
+   * 设置页打开时落在哪一栏。默认「孩子」。
+   *
+   * 加它是因为心愿页「激活成功」的弹框要能一步跳到「设置 → 游戏」
+   * （2026-11-05）。`SettingsPage` 的 tab 是它自己的 state，
+   * 所以只能由这里先定好初值再挂载 —— 改完再 set 是没用的。
+   */
+  const [settingsTab, setSettingsTab] = useState<'child' | 'rules' | 'game' | 'data'>(
+    'child',
+  )
+  /**
    * 「我的积分」整屏层（2026-11-05）。
    *
    * 它以前是底栏的第五格。用户说「积分挤占了下边栏，4 个为好」，
@@ -290,6 +300,22 @@ export default function App() {
     if (pendingRedeemItem) setTab('redeem')
   }, [pendingRedeemItem])
 
+  /**
+   * 同上一条通道：心愿页说「去设置看看」时，打开设置页并落到指定栏。
+   *
+   * ⚠️ 顺序是「先定栏 → 再打开 → 再清空」。反过来（先打开）会先挂载
+   * 一次「孩子」栏，闪一下再跳 —— 而 `SettingsPage` 的 `useState`
+   * 初值只取一次，晚了就再也改不动了。
+   */
+  const pendingSettingsTab = useApp((s) => s.pendingSettingsTab)
+  const takePendingSettingsTab = useApp((s) => s.takePendingSettingsTab)
+  useEffect(() => {
+    if (!pendingSettingsTab) return
+    setSettingsTab(pendingSettingsTab)
+    setShowSettings(true)
+    takePendingSettingsTab()
+  }, [pendingSettingsTab, takePendingSettingsTab])
+
   const tabs = useMemo(
     () => [
       STATIC_TABS[0],
@@ -461,7 +487,11 @@ export default function App() {
   return (
     <div className="relative flex min-h-screen flex-col">
       {showSettings ? (
-        <SettingsPage onBack={() => setShowSettings(false)} onReplayGuide={replayGuide} />
+        <SettingsPage
+          initialTab={settingsTab}
+          onBack={() => setShowSettings(false)}
+          onReplayGuide={replayGuide}
+        />
       ) : (
         <>
           {/* 顶部状态条：两种币常驻可见，让孩子随时看到自己的收获。
