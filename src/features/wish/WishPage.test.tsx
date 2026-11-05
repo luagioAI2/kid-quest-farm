@@ -737,7 +737,7 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
        那样写必红（第一版就是这么写错的，红在「expected 有码可输」上，
        看着像功能没做，其实是断言写错了）。
   */
-  it('实物卡片不带「去激活」（只有游戏 / 盲盒才有码）', async () => {
+  it('实物卡片不带「去激活」，但要有一颗等高的「看看这款」', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
@@ -746,6 +746,19 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     ) as HTMLElement
     expect(toy, '实物卡没渲染').toBeTruthy()
     expect(toy.querySelector('[data-wish-activate]')).toBeNull()
+    /* ★ 第三轮补：在「全部」里和游戏卡混排时，grid 会把实物卡拉到同一行
+       高度；要是它没有动作按钮，底部就空出约 40px 白块（走查截图实锤）。
+       所以每颗卡都有一颗等高动作按钮，实物这颗只是「看看这款」进详情页。 */
+    const detail = toy.querySelector('[data-wish-detail]') as HTMLElement
+    expect(detail, '实物卡没有动作按钮 ⇒ 混排会留白块').toBeTruthy()
+    expect(detail.textContent).toMatch(/看看这款/)
+    await userEvent.setup().click(detail)
+    expect(document.querySelector('[data-activate-dialog]'), '「看看这款」不该弹激活框').toBeNull()
+
+    /* 每颗卡**恰好一颗**动作按钮：多了是标签堆，少了就是那个白块。 */
+    for (const c of document.querySelectorAll('[data-wish-card][data-wish-kind]')) {
+      expect(c.querySelectorAll('[data-wish-activate], [data-wish-detail]').length).toBe(1)
+    }
   })
 
   it('★ 点「去激活」开弹框：讲清码从哪来 + 就地输码，不进详情页', async () => {

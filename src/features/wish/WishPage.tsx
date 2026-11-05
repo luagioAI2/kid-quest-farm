@@ -768,14 +768,28 @@ function ItemCard({
           )}
         </span>
       </button>
-      {canActivate && (
+      {/* ★ 2026-11-05 第三轮补：每张卡都占一行**等高**动作区。
+          之前只有游戏 / 盲盒有「去激活」，在「全部」里和实物卡混排时，
+          实物卡被 grid 拉成同一行高度，底部空出约 40px 白块（走查截图里
+          「泡泡玛特盲盒」就是）。实物给一颗安静的「看看这款」，同样进
+          详情页：既不撒谎说它有码，也不在卡片底下留个坑。 */}
+      {canActivate ? (
         <button
           type="button"
           data-wish-activate
           onClick={onActivate}
-          className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-xl bg-grass-50 text-[12px] font-extrabold text-grass-700 active:btn-press"
+          className="mt-2 flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-grass-50 text-[12px] font-extrabold text-grass-700 active:btn-press"
         >
           🎟️ 去激活
+        </button>
+      ) : (
+        <button
+          type="button"
+          data-wish-detail
+          onClick={onOpen}
+          className="mt-2 flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-ink-100 text-[12px] font-extrabold text-ink-500 active:btn-press"
+        >
+          看看这款 ›
         </button>
       )}
     </div>
