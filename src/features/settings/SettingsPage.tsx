@@ -86,6 +86,7 @@ export default function SettingsPage({
    * 登录是家长的动作，但不该要求「先知道它在第 4 栏的第 8 张卡」。
    * 所以在标题栏放一个常驻入口：没登录写「登录」，登录了写昵称。 */
   const session = useAccount((s) => s.session)
+  const openBind = useAccount((s) => s.openBind)
   const [loginOpen, setLoginOpen] = useState(false)
 
   /**
@@ -204,13 +205,29 @@ export default function SettingsPage({
               ⚠️ 登录后这里只显示昵称、**不再挂 `data-account-open`**：
                  走查脚本用它判「还需要登录吗」，一直挂着就永远判「需要」。 */}
           {session ? (
-            <span
-              data-account-chip
-              className="flex min-h-[40px] max-w-[132px] items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] font-extrabold text-ink-700 shadow-flat"
-            >
-              <span aria-hidden>👤</span>
-              <span className="truncate">{session.user.nickname || '已登录'}</span>
-            </span>
+            session.user.is_guest ? (
+              /* 游客：这个胶囊**就是**「保存进度」的入口（横条已经删掉了）。
+                 ⚠️ 别挂 `data-account-open` —— 走查脚本拿它判「还没登录」，
+                    游客是有账号的，挂上去会让脚本一直判「需要登录」。 */
+              <button
+                type="button"
+                data-account-chip
+                data-guest-save
+                onClick={() => openBind('manual')}
+                className="btn flex min-h-[40px] max-w-[132px] items-center gap-1.5 rounded-full bg-grape-50 px-3 text-[12.5px] font-extrabold text-ink-700 shadow-flat active:btn-press"
+              >
+                <span aria-hidden>🔖</span>
+                <span className="truncate">{session.user.nickname || '临时账号'}</span>
+              </button>
+            ) : (
+              <span
+                data-account-chip
+                className="flex min-h-[40px] max-w-[132px] items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] font-extrabold text-ink-700 shadow-flat"
+              >
+                <span aria-hidden>👤</span>
+                <span className="truncate">{session.user.nickname || '已登录'}</span>
+              </span>
+            )
           ) : (
             <button
               type="button"

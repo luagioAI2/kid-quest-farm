@@ -14,10 +14,8 @@ import { isOnlineMode } from './sync/pull'
 import { useAccount } from './store/useAccount'
 import { SetupWizard } from './features/onboarding/SetupWizard'
 import { BindSheet } from './features/account/BindSheet'
-import { GuestBar } from './features/account/GuestBar'
 import { BootRetryPage } from './features/account/BootRetryPage'
 import { LoginSheet } from './features/account/LoginSheet'
-import { shouldNudgeOnLaunch } from './features/account/guestPrompt'
 import { ChildTour } from './features/onboarding/ChildTour'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SyncBanner } from './components/SyncBanner'
@@ -108,7 +106,6 @@ export default function App() {
   /** 启动时自动拿账号的结果（`needs-login` = 上一次是正式账号，得请他登回来） */
   const bootAccount = useAccount((st) => st.bootAccount)
   const ensureGuest = useAccount((st) => st.ensureGuest)
-  const openBind = useAccount((st) => st.openBind)
   /** 「请用手机号登回来」面板。只在 `needs-login` 时自动开一次，关掉不再纠缠 */
   const [loginOpen, setLoginOpen] = useState(false)
   /**
@@ -359,22 +356,6 @@ export default function App() {
     setLoginOpen(true)
   }, [bootAccount])
 
-  /**
-   * 第 3 次启动的温和提醒：一辈子只弹一次，关掉就不再提。
-   *
-   * 只对**游客**弹 —— 已经绑好的账号不该看到它。判定「第几次」在
-   * `guestPrompt.ts` 里，这里只管触发；`nudged` 保证一次运行只判一次
-   * （`session` 每次刷新资料都会换一个对象引用，不挡的话会反复判）。
-   */
-  const nudged = useRef(false)
-  useEffect(() => {
-    if (!isOnlineMode || nudged.current) return
-    if (!session?.user?.is_guest) return
-    nudged.current = true
-    if (!shouldNudgeOnLaunch()) return
-    openBind('launch')
-  }, [session, openBind])
-
   // 每分钟推进：跨日检测 + 动物产出
   useEffect(() => {
     if (!ready) return
@@ -578,10 +559,6 @@ export default function App() {
             孩子切到别的页面就看不到，正好在那一刻误以为数据是新的。
           */}
           <SyncBanner />
-
-          {/* 临时账号横条：常驻、不挡任何东西。放顶栏**下面**而不是里面 ——
-              顶栏那一行已经挤满了（见上面那段注释）。 */}
-          <GuestBar />
 
           <main key={tab} className="flex flex-1 flex-col anim-fade-in">
             <ErrorBoundary resetKey={tab}>

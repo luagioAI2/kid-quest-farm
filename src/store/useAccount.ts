@@ -40,8 +40,6 @@ import type { SmsScene } from '../api/auth'
 export type BindReason =
   /** 花兑换券被服务端拦住（硬门槛，关不掉） */
   | 'coupon'
-  /** 第 3 次启动时的温和提醒（一辈子只弹一次） */
-  | 'launch'
   /** 自己点「保存进度」 */
   | 'manual'
 

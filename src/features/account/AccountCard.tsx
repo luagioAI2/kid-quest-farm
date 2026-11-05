@@ -13,8 +13,9 @@ import { LoginSheet } from './LoginSheet'
 
    自动游客账号上线之后，「登录了 / 没登录」这个二分法不成立了：
 
-     · **临时账号**（游客）—— 能玩，但东西会丢。这里是家长最该看到
-       「保存进度」的地方：他本来就在看设置，而且这一刻他手里有手机号。
+     · **临时账号**（游客）—— 能玩，但账号只认这台手机里的一串本机号。
+       这里是家长最该看到「保存进度」的地方：他本来就在看设置，
+       而且这一刻他手里有手机号。
      · **正式账号** —— 显示昵称和脱敏手机号 + 退出登录。
      · **还没有账号**（连不上服务器）—— 给登录 / 注册入口。
 
@@ -44,13 +45,14 @@ export function AccountCard() {
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-extrabold text-ink-900">临时账号</p>
-              <p className="text-[11px] font-bold text-ink-500">不用注册就能玩 · 但东西会丢</p>
+              <p className="text-[11px] font-bold text-ink-500">不用注册就能玩 · 账号绑在这台手机上</p>
             </div>
           </div>
 
           <p className="rounded-xl bg-sun-50 px-3 py-2 text-[11px] leading-snug text-ink-700">
-            积分、兑换券、农场和存档现在只在<b>这台手机</b>上。换手机、清数据、
-            卸载重装，它们就都找不回来了 —— 绑定手机号之后才会存到服务器。
+            进度其实已经存在服务器上，但这个账号认的是<b>这台手机里的一串本机号</b>。
+            换手机、清数据、卸载重装，这串号就没了，那个账号也就进不去了 ——
+            绑定手机号之后，用手机号和密码在哪台手机上都能登回来。
           </p>
 
           <button

@@ -5,7 +5,6 @@ import { useApp } from '@/store/useApp'
 import { MOBILE_ALREADY_REG } from '@/api/client'
 import { deviceIdPersisted } from '@/api/device'
 import { BottomSheet } from '../farm/farmUi'
-import { markNudged } from './guestPrompt'
 
 /* ============================================================
    保存进度 · 绑定手机号（2026-11-03）
@@ -16,11 +15,10 @@ import { markNudged } from './guestPrompt'
    这一屏就是把「临时」变成「真的」的那一步。服务端只往**同一个 uid**
    上加手机号，所以绑完积分、农场、存档、家长设置全都在原地。
 
-   ## 三个入口，一套面板
+   ## 两个入口，一套面板
 
      · 花兑换券被服务端拦住（`reason === 'coupon'`）—— 关不掉
-     · 第 3 次启动时的温和提醒（`'launch'`）—— 可以关
-     · 自己点横条 / 家长区（`'manual'`）—— 当然可以关
+     · 自己点设置页那个账号胶囊 / 家长区（`'manual'`）—— 当然可以关
 
    为什么关掉按钮在 `coupon` 时不出现：那一步服务端**不会**放行，
    给个「以后再说」只会让人以为关掉就能兑换，然后反复试、反复失败。
@@ -40,7 +38,6 @@ import { markNudged } from './guestPrompt'
 
 const REASON_TITLE: Record<BindReason, string> = {
   coupon: '先绑定手机号，才能兑换',
-  launch: '把进度存到账号里',
   manual: '保存这台手机的进度',
 }
 
@@ -102,9 +99,6 @@ export function BindSheet({
   const canSubmit = mobileOk && codeOk && passwordOk && !busy
 
   const dismiss = () => {
-    /* ★ 关掉就算「提醒过了」，以后不再主动弹。
-       只有 `coupon` 不记 —— 那不是提醒，是解释；下次花券还会再弹。 */
-    if (reason && reason !== 'coupon') markNudged()
     close()
   }
 
@@ -129,7 +123,6 @@ export function BindSheet({
     const why = reason
     const ok = await bindMobile(mobile, code, password.trim())
     if (ok) {
-      markNudged()
       setMobile('')
       setCode('')
       setPassword('')
@@ -172,11 +165,11 @@ export function BindSheet({
     >
       <div className="space-y-3 pb-4" data-bind-sheet>
         <p className="rounded-2xl bg-sun-50 px-3 py-2 text-[11.5px] font-bold leading-relaxed text-ink-700">
-          现在用的是<b>临时账号</b>：积分、兑换券、农场和存档都只在
-          {deviceIdPersisted() ? '这台手机上' : '这一次运行里'}。
+          现在用的是<b>临时账号</b>：进度其实已经存在服务器上，但这个账号
+          认的是{deviceIdPersisted() ? '这台手机里的一串本机号' : '这一次运行'}。
           {reason === 'coupon'
             ? '兑换要用兑换券，得先把账号存下来 —— 绑完就能继续。'
-            : '换手机、清数据、卸载重装，这些就都找不回来了。'}
+            : '换手机、清数据、卸载重装，这串号就没了 —— 那个账号也就进不去了。'}
         </p>
 
         <label className="block">

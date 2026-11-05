@@ -1,12 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { GuestBar } from './GuestBar'
 import { BindSheet } from './BindSheet'
 import { ApiError, MOBILE_ALREADY_REG } from '@/api/client'
 import { useAccount } from '@/store/useAccount'
 import { useApp } from '@/store/useApp'
-import { __resetGuestPromptForTest } from './guestPrompt'
 import type { Session } from '@/api/session'
 import type { ApiUser } from '@/api/types'
 
@@ -15,12 +13,15 @@ import type { ApiUser } from '@/api/types'
    ------------------------------------------------------------
    守三件事：
 
-     ① 横条**只在游客时出现**，而且会说出手里有多少东西
-        （「已经攒了 24 分」比「进度会丢」有用得多）；
-     ② 被门槛拦住时（`coupon`）面板**没有「以后再说」** ——
+     ① 被门槛拦住时（`coupon`）面板**没有「以后再说」** ——
         那一步服务端不放行，给个退路只会让人以为关掉就能兑换；
-     ③ 主动弹的那一次（`launch`）关掉之后**不再弹**；
-     ④ 号码已经有账号时**改口给一条出路**（不是只甩一行红字）。
+     ② 自己点开的（`manual`）可以「以后再说」；
+     ③ 号码已经有账号时**改口给一条出路**（不是只甩一行红字）。
+
+   ⚠️ 2026-11-05：顶栏下面那条「临时账号」横条和「第 3 次启动自动弹一次」
+      都删掉了（用户：「任务不是后端有记录吗？」）。进度确实在服务端，
+      但账号认的是本机那串随机号 —— 所以入口留在了设置页的账号胶囊上，
+      不再主动唠叨。横条的用例一并删掉，别留着守一个不存在的组件。
    ============================================================ */
 
 const guestApi = vi.fn()
@@ -73,46 +74,8 @@ const session = (isGuest: boolean): Session => ({
   user: user(isGuest),
 })
 
-describe('临时账号横条', () => {
-  beforeEach(() => {
-    __resetGuestPromptForTest()
-    useAccount.setState({ session: null, bindSheet: { open: false, reason: null } })
-    useApp.setState({ balance: 0, harvestBalance: 0 })
-  })
-
-  it('游客时出现，说「临时账号」', () => {
-    useAccount.setState({ session: session(true) })
-    render(<GuestBar />)
-    expect(document.querySelector('[data-guest-bar]')).not.toBeNull()
-    expect(screen.getByText(/临时账号/)).toBeTruthy()
-  })
-
-  it('★ 手里有东西就把数字写出来', () => {
-    useAccount.setState({ session: session(true) })
-    useApp.setState({ balance: 24, harvestBalance: 3 })
-    render(<GuestBar />)
-    const text = document.querySelector('[data-guest-bar-text]')?.textContent ?? ''
-    expect(text).toContain('24 分')
-    expect(text).toContain('3 张券')
-  })
-
-  it('正式账号时整条不出现', () => {
-    useAccount.setState({ session: session(false) })
-    render(<GuestBar />)
-    expect(document.querySelector('[data-guest-bar]')).toBeNull()
-  })
-
-  it('点「保存进度」打开面板（reason=manual）', async () => {
-    useAccount.setState({ session: session(true) })
-    render(<GuestBar />)
-    await userEvent.click(document.querySelector('[data-guest-bar-save]') as HTMLElement)
-    expect(useAccount.getState().bindSheet).toEqual({ open: true, reason: 'manual' })
-  })
-})
-
 describe('保存进度面板', () => {
   beforeEach(() => {
-    __resetGuestPromptForTest()
     useAccount.setState({ session: session(true), busy: false, error: null, errorCode: null })
   })
 
@@ -124,16 +87,13 @@ describe('保存进度面板', () => {
     expect(document.querySelector('[data-bind-later]')).toBeNull()
   })
 
-  it('主动弹的那次（launch）可以「以后再说」，关掉就不再弹', async () => {
-    useAccount.setState({ bindSheet: { open: true, reason: 'launch' } })
+  it('自己点开的那次（manual）可以「以后再说」', async () => {
+    useAccount.setState({ bindSheet: { open: true, reason: 'manual' } })
     render(<BindSheet />)
     const later = document.querySelector('[data-bind-later]')
     expect(later).not.toBeNull()
     await userEvent.click(later as HTMLElement)
     expect(useAccount.getState().bindSheet.open).toBe(false)
-    /* 关掉 ⇒ 记成「提醒过了」：下次启动不该再弹 */
-    const raw = localStorage.getItem('kqf.guest.prompt.v1') ?? ''
-    expect(raw).toContain('"nudged":true')
   })
 
   it('★ 绑成功之后面板自己关掉，会话里的 is_guest 变成 false', async () => {
@@ -206,7 +166,6 @@ describe('保存进度面板', () => {
    ============================================================ */
 describe('绑成功之后的收尾', () => {
   beforeEach(() => {
-    __resetGuestPromptForTest()
     bindApi.mockReset()
     useApp.setState({ toasts: [] })
     useAccount.setState({
@@ -274,7 +233,6 @@ describe('绑成功之后的收尾', () => {
    ============================================================ */
 describe('保存进度：号码已经被占用', () => {
   beforeEach(() => {
-    __resetGuestPromptForTest()
     useAccount.setState({ session: session(true), busy: false, error: null, errorCode: null })
   })
 
