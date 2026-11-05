@@ -578,7 +578,14 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
 
   it('★ 成功：交给 store、留在原地、说清「已经在我的游戏里」', async () => {
     await useApp.getState().updateSettings({ protectParentActions: false })
-    const redeemGameCode = vi.fn(async () => ({ ok: true, message: '已激活：收租公寓' }))
+    const redeemGameCode = vi.fn(async () => {
+      /* ★ 必须模拟真实实现的收尾：它成功后会 `refresh()`，
+         `ownedGameIds` 立刻多这一款 ⇒ 详情页的 `alreadyOwned` 翻 true。
+         少了这一步，这条测试就抓不到「整块连同绿字被同一帧卸载」那个 bug
+         （2026-11-05 用真码走查抓到的：游戏到账了，页面看着像没反应）。 */
+      useApp.setState({ ownedGameIds: [...useApp.getState().ownedGameIds, 'renttower'] })
+      return { ok: true, message: '已激活：收租公寓' }
+    })
     useApp.setState({ redeemGameCode })
 
     const user = await openGameDetail()
@@ -591,6 +598,10 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
 
     const done = document.querySelector('[data-code-done]')
     await waitFor(() => expect(done?.textContent).toContain('已激活'))
+
+    /* ★ 已经拥有了，这一块**还得在**（只是不再写「已经买到卡了？」） */
+    await waitFor(() => expect(document.querySelector('[data-code-done]')).toBeTruthy())
+    expect(document.querySelector('[data-code-open]'), '成功之后不该退回按钮').toBeNull()
 
     /* ★ 不替孩子切「当前游戏」。用户 2026-11-05 明确选了
        「保持现状（家长控制）」—— 所以成功之后只有一句指路，

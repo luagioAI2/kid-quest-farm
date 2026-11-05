@@ -1111,18 +1111,13 @@ function DetailView({
        * 而且都在家长区（`设置 → 游戏`、定价页）—— 孩子手里捏着卡、
        * 站在卖这张卡的商品上，却没有任何地方能输。
        *
-       * 已拥有就不摆：服务端会直接拒（「这个游戏你已经有了」），
-       * 摆出来只会让人以为还能再激活一次。
+       * ⚠️ 这里**不能**写成 `{... && !alreadyOwned && ...}`：激活成功会
+       * 立刻把 `alreadyOwned` 翻成 true，整块（连同「✅ 已激活」）会在
+       * 同一帧被卸载 —— 2026-11-05 真码走查抓到的就是它：游戏到账了，
+       * 页面上什么都不说。`owned` 交给组件内部判（`return null` 不卸载实例）。
        */}
-      {item.kind === 'gamebox' && item.gameId && !alreadyOwned && (
-        <div data-wish-code className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
-          <p className="text-sm font-extrabold">已经买到卡了？</p>
-          <p className="mt-1 text-[11px] font-bold leading-relaxed text-ink-500">
-            游戏卡背面那串就是激活码。在这儿输一次，游戏就进「我的游戏」——
-            不用先去攒兑换券。输的时候要爸爸妈妈确认一下。
-          </p>
-          <CodeRedeemBlock gate="pin" />
-        </div>
+      {item.kind === 'gamebox' && item.gameId && (
+        <CodeRedeemBlock gate="pin" card owned={alreadyOwned} />
       )}
 
       {/*

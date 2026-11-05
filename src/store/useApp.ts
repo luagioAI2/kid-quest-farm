@@ -6328,7 +6328,15 @@ async function redeemCodeOnServer(
   app.pushToast({
     kind: 'reward',
     title: `已激活：${name}`,
-    detail: local ? '已经放进你的游戏柜啦' : '底部导航就能切过去',
+    /* ⚠️ 装包失败时**不能**还说「已经放进你的游戏柜啦」——
+       标题刚写完「但没装成功」，副标题自相矛盾，家长会以为孩子能玩了。
+       2026-11-05 用真码在 http 局域网里走查时一眼看到（非安全上下文没有
+       `crypto.subtle`，验签必然失败）。 */
+    detail: note
+      ? '去「我的游戏」里点一下安装'
+      : local
+        ? '已经放进你的游戏柜啦'
+        : '底部导航就能切过去',
     emoji: '🎁',
   })
   await app.refresh()
