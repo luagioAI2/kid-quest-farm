@@ -515,3 +515,115 @@ describe('心愿：游戏类商品能直接买卡 / 输激活码', () => {
     expect((document.querySelector('[data-code-input]') as HTMLInputElement).value).toBe('ABC-DEG')
   })
 })
+
+/* ============================================================
+   商品详情页：游戏卡**就地**激活（2026-11-05）
+   ------------------------------------------------------------
+   用户原话：「为啥 游戏 盲盒 还有 游戏 都没有 激活 的地方。
+   应该在心愿商城 对应 item 就可以激活吧。不然拿到了 激活码
+   或者兑换码，咋办。」
+
+   在这之前全 App 只有两个输码口，而且**都在家长区**
+   （`设置 → 游戏`、心愿商城的家长定价页）—— 孩子手里捏着卡、
+   站在卖这张卡的商品上，却没有任何地方能输。
+
+   这里钉四件事：
+     ① 详情页上真的有输码入口（`data-wish-code`）；
+     ② 保护开着时**先过家长密码**，键盘不直接摆给孩子
+        （用户选的是「保持现状（家长控制）」）；
+     ③ 成功 → 留在原地、说「已经在我的游戏里」，**不替孩子切当前**；
+     ④ 失败 → 红字 + 不清空（要能对着卡片改一位）。
+   ============================================================ */
+describe('心愿：商品详情页能就地激活游戏卡', () => {
+  /** 从列表点进某件游戏盒子的详情页 */
+  const openGameDetail = async (name = '收租公寓') => {
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: new RegExp(name) }))
+    return user
+  }
+
+  it('★ 详情页就有输码入口（不用摸到「设置 → 游戏」）', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    await openGameDetail()
+
+    expect(document.querySelector('[data-wish-code]'), '详情页缺了输码那一块').toBeTruthy()
+    expect(document.querySelector('[data-code-open]'), '有块没按钮 = 还是输不了').toBeTruthy()
+  })
+
+  it('★ 保护开着：先要家长密码，输入框不摆给孩子', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: true, parentPin: '1234' })
+    const user = await openGameDetail()
+
+    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    expect(
+      document.querySelector('[data-code-input]'),
+      '没过闸门就出现输入框 —— 那道闸门是假的',
+    ).toBeNull()
+    expect(screen.getByText('请爸爸妈妈来一下')).toBeTruthy()
+
+    /* ★ 手滑点开要有退路。不给 `onCancel` 时 `PinFlow` 底下那颗
+       「先算了」**根本不渲染** —— 只能答完数学题 + 设完密码才出得去。 */
+    await user.click(screen.getByRole('button', { name: '先算了' }))
+    await waitFor(() => expect(document.querySelector('[data-code-open]')).toBeTruthy())
+    expect(document.querySelector('[data-code-input]')).toBeNull()
+
+    // 再点一次，4 位输对才展开（PinPad 第 4 位自动提交）
+    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    for (const d of ['1', '2', '3', '4']) {
+      await user.click(screen.getByRole('button', { name: d }))
+    }
+    await waitFor(() => expect(document.querySelector('[data-code-input]')).toBeTruthy())
+  })
+
+  it('★ 成功：交给 store、留在原地、说清「已经在我的游戏里」', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    const redeemGameCode = vi.fn(async () => ({ ok: true, message: '已激活：收租公寓' }))
+    useApp.setState({ redeemGameCode })
+
+    const user = await openGameDetail()
+    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
+    await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
+
+    // 界面不偷偷改大小写 / 不替用户去掉那一横 —— 归一化是 store 的事
+    expect(redeemGameCode).toHaveBeenCalledWith('abc-def')
+
+    const done = document.querySelector('[data-code-done]')
+    await waitFor(() => expect(done?.textContent).toContain('已激活'))
+
+    /* ★ 不替孩子切「当前游戏」。用户 2026-11-05 明确选了
+       「保持现状（家长控制）」—— 所以成功之后只有一句指路，
+       页面里**不该**冒出一个「去玩 / 切过去」的按钮。 */
+    expect(done?.textContent, '要说清下一步找谁').toContain('设置 → 游戏')
+    expect(screen.queryByRole('button', { name: /去玩|切过去|开始玩/ })).toBeNull()
+  })
+
+  it('★ 失败：红字 + 不清空（要能对着卡片改一位）', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    useApp.setState({
+      redeemGameCode: vi.fn(async () => ({ ok: false, message: '这个兑换码已经用过了' })),
+    })
+
+    const user = await openGameDetail()
+    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'ABC-DEG')
+    await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
+
+    const msg = document.querySelector('[data-code-msg]')
+    await waitFor(() => expect(msg?.textContent).toContain('已经用过'))
+    expect((document.querySelector('[data-code-input]') as HTMLInputElement).value).toBe('ABC-DEG')
+  })
+
+  it('★ 盲盒页说清「没有激活码」（否则看着像漏做了）', async () => {
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+
+    // 单开盲盒 hero 整块是一个按钮，点它进详情
+    await user.click(screen.getByText('随机开出 1 款你还没有的游戏'))
+
+    expect(await screen.findByText(/盲盒没有激活码/)).toBeTruthy()
+    expect(document.querySelector('[data-wish-code]'), '盲盒不该有输码入口').toBeNull()
+  })
+})

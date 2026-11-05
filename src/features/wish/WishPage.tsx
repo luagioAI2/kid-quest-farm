@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/store/useApp'
 import type { WishItem, WishTint } from '@/domain/types'
 import {
@@ -24,6 +24,7 @@ import { WishArt } from './WishArt'
 import { Portal } from '@/components/Portal'
 import { ParentPinPanel } from '../parent/ParentGate'
 import { MerchantView } from './MerchantView'
+import { CodeRedeemBlock } from './CodeRedeemBlock'
 import { openExternal } from '@/platform/openUrl'
 
 /* ============================================================
@@ -1103,6 +1104,41 @@ function DetailView({
       </div>
 
       {/*
+       * 游戏卡：输码入口**就在这件商品自己这一页**（2026-11-05）。
+       *
+       * 用户原话：「应该在心愿商城 对应 item 就可以激活吧。不然拿到了
+       * 激活码或者兑换码，咋办。」在那之前全 App 只有两个输码口，
+       * 而且都在家长区（`设置 → 游戏`、定价页）—— 孩子手里捏着卡、
+       * 站在卖这张卡的商品上，却没有任何地方能输。
+       *
+       * 已拥有就不摆：服务端会直接拒（「这个游戏你已经有了」），
+       * 摆出来只会让人以为还能再激活一次。
+       */}
+      {item.kind === 'gamebox' && item.gameId && !alreadyOwned && (
+        <div data-wish-code className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
+          <p className="text-sm font-extrabold">已经买到卡了？</p>
+          <p className="mt-1 text-[11px] font-bold leading-relaxed text-ink-500">
+            游戏卡背面那串就是激活码。在这儿输一次，游戏就进「我的游戏」——
+            不用先去攒兑换券。输的时候要爸爸妈妈确认一下。
+          </p>
+          <CodeRedeemBlock gate="pin" />
+        </div>
+      )}
+
+      {/*
+       * 盲盒为什么没有「激活」：**它本来就没有码**。
+       *
+       * 用户 2026-11-05 问的是「盲盒和游戏都没有激活的地方」。游戏是漏了，
+       * 盲盒是真没有 —— 它开的是随机一款你还没有的游戏，走的是兑换券
+       * （`wishRedeem`）那条路。不说清楚的话，这一页看起来就是「漏做了」。
+       */}
+      {item.kind === 'blindbox' && (
+        <p className="mt-3 rounded-2xl bg-paper-2 px-3.5 py-2.5 text-[11px] font-bold leading-relaxed text-ink-500">
+          🎁 盲盒没有激活码：它开的是随机一款你还没有的游戏，攒够兑换券在「兑换」里直接开。
+        </p>
+      )}
+
+      {/*
        * 单个游戏：把「设置 → 游戏 → 详情」里的三块内容搬过来 ——
        * 截图 / 练什么 / 关于。放在兑换按钮**下面**，是为了不让说明
        * 把「现在能不能换」挤出第一屏。
@@ -1210,31 +1246,11 @@ function OfferView({
    * 得自己摸到「设置 → 游戏 → 有兑换码」。
    *
    * 所以把「买」和「激活」都摆到家长眼前：买卡、输码、游戏直接进「我的游戏」。
+   *
+   * ⚠️ 2026-11-05：输码那一块搬去 `CodeRedeemBlock` 了 —— 商品详情页
+   * 也要同一个口子（孩子那一侧），两份拷贝迟早走成两套口径。
+   * 这一页传 `gate="open"`：**整页已经在家长闸门后面**了，不必再输一次密码。
    */
-  const redeemGameCode = useApp((s) => s.redeemGameCode)
-  const [codeOpen, setCodeOpen] = useState(false)
-  const [code, setCode] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [codeMsg, setCodeMsg] = useState<{ ok: boolean; text: string } | null>(null)
-
-  async function submitCode(e: FormEvent) {
-    e.preventDefault()
-    if (busy || !item) return
-    setBusy(true)
-    try {
-      const r = await redeemGameCode(code)
-      if (r.ok) {
-        /* 成功后**不写 codeMsg**：`onDone()` 会把这个面板卸载掉，
-           消息跟着消失。改用全局 toast，它挂在 App 上，关面板也还在。 */
-        pushToast({ kind: 'reward', title: r.message, detail: '已经放进「我的游戏」', emoji: '🎁' })
-        onDone()
-      } else {
-        setCodeMsg({ ok: false, text: r.message })
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
 
   /**
    * 孩子到底有没有表达过意向。
@@ -1441,44 +1457,14 @@ function OfferView({
             </p>
           )}
 
-          {!codeOpen ? (
-            <button
-              data-code-open
-              onClick={() => setCodeOpen(true)}
-              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink-300 bg-white/60 py-2 text-[12.5px] font-bold text-ink-600"
-            >
-              🎟️ 已经买到卡了？输激活码
-            </button>
-          ) : (
-            <form onSubmit={submitCode} data-code-box className="mt-2 rounded-xl border border-ink-200 bg-white p-2.5">
-              <div className="flex gap-2">
-                <input
-                  data-code-input
-                  value={code}
-                  onChange={(ev) => setCode(ev.target.value)}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  maxLength={8}
-                  placeholder="ABC-DEF"
-                  className="min-w-0 flex-1 rounded-lg border border-ink-200 px-3 py-2 font-mono text-[15px] uppercase tracking-[0.18em] text-ink-800 outline-none focus:border-grass-400"
-                />
-                <button
-                  type="submit"
-                  data-code-submit
-                  disabled={busy || code.trim().length === 0}
-                  className="shrink-0 rounded-lg bg-grass-500 px-4 py-2 text-[13px] font-extrabold text-white disabled:opacity-50"
-                >
-                  {busy ? '激活中…' : '激活'}
-                </button>
-              </div>
-              {codeMsg && (
-                <p data-code-msg data-code-ok="0" className="mt-2 text-[12px] font-bold text-berry-500">
-                  {codeMsg.text}
-                </p>
-              )}
-            </form>
-          )}
+          {/* 输码口和商品详情页共用一块（`CodeRedeemBlock`）。
+              这一页整页已经在家长闸门后面 ⇒ `gate="open"`，
+              不再让人连输两次密码。 */}
+          <CodeRedeemBlock
+            gate="open"
+            label="🎟️ 已经买到卡了？输激活码"
+            onDone={onDone}
+          />
         </div>
       )}
 

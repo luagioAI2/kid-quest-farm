@@ -8,6 +8,9 @@ dist/
 dist-ssr/
 # 在线版产物（`VITE_APP_MODE=online npx vite build --outDir dist-online`）
 dist-online/
+# 局域网自测包（`VITE_API_BASE=http://<内网IP>:8081 ... --outDir dist-lan`）
+# —— 里面的 API 地址是某台机器的内网 IP，入库只会让下一个人困惑
+dist-lan/
 *.local
 
 # 游戏包产物（`npm run build:games` → games-src/ 的独立构建）。
