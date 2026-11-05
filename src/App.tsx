@@ -9,6 +9,7 @@ import SettingsPage from './features/settings/SettingsPage'
 import { ReviewSheetModal } from './features/parent/ReviewSheet'
 import { SplashPage } from './features/splash/SplashPage'
 import { shouldRefreshOnForeground } from './sync/foreground'
+import { ensureTemplateApplied } from './online/template'
 import { isOnlineMode } from './sync/pull'
 import { useAccount } from './store/useAccount'
 import { SetupWizard } from './features/onboarding/SetupWizard'
@@ -317,6 +318,12 @@ export default function App() {
     void (async () => {
       const ok = await ensureGuest()
       if (!alive) return
+      /* ★ 模板落地排在 boot() **前面**：boot 里的第一次 pull 会顺手把
+         刚铺出来的任务 / 兑换品带进本地 Dexie。反过来先 boot 再铺，
+         孩子第一屏是空的，得等下一次启动才看得到 —— 而新用户不会给第二次机会。
+         本地版 / 没登录时它直接返回，不会多打一次网络请求。 */
+      await ensureTemplateApplied()
+      if (!alive) return
       /* ★ 账号没建成 ⇒ **别** boot()。
          没有会话时 `refresh()` 直接返回 `no-session`，一条都不拉 ——
          孩子会看到一整套空界面（没任务、没积分、农场空的），而屏幕上
@@ -339,6 +346,9 @@ export default function App() {
   const retryBoot = async () => {
     const ok = await ensureGuest()
     if (!ok) return
+    /* 上一次是「模板那一步失败」时，重试要连它一起重来 —— 只重 boot()
+       会得到一个空任务板，而用户以为已经修好了。 */
+    await ensureTemplateApplied()
     await boot()
   }
 

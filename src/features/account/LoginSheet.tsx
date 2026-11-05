@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { useAccount } from '@/store/useAccount'
+import { useApp } from '@/store/useApp'
+import { ensureTemplateApplied } from '@/online/template'
+import { looksLikeInviteCode, peekInviteCode, stashInviteCode } from '@/online/inviteCode'
 import { BottomSheet } from '../farm/farmUi'
 
 /* ============================================================
@@ -57,6 +60,8 @@ export function LoginSheet({
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [nickname, setNickname] = useState('')
+  /* 邀请码：商家推广来的用户在这一格填（链接里带的码会自动填进来） */
+  const [invite, setInvite] = useState('')
   const [countdown, setCountdown] = useState(0)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -96,20 +101,54 @@ export function LoginSheet({
     setMode('login')
   }, [open, prefillMobile])
 
+  /* 打开注册面板时，把「待绑定的码」填进来（商家链接带过来的那个）。
+     ★ 只是**填**，不替用户提交 —— 他可能只是点错面板又关掉。 */
+  useEffect(() => {
+    if (!open || mode !== 'register') return
+    const pending = peekInviteCode()
+    if (pending) setInvite((cur) => cur || pending)
+  }, [open, mode])
+
   const mobileOk = /^\d{6,}$/.test(mobile.trim())
   /* 验证码：登录用不上；注册**可以不填**（生产环境没有短信通道）；
      重设密码必须填 —— 那条路唯一的凭证就是码。 */
   const codeOk = code.trim() === '' ? mode !== 'reset' : /^\d{6}$/.test(code.trim())
   const canSubmit = mobileOk && password.length >= 6 && codeOk && !busy
 
+  /**
+   * 换账号成功之后：铺模板 + 重新 boot。
+   *
+   * ★ 少了这一步，登录完看到的是**上一个账号**留在 Dexie 里的任务 ——
+   *   界面上一句话都不会说。而新账号该有什么（官方模板 / 商家模板）
+   *   只有服务端知道。
+   */
+  const afterSignIn = async () => {
+    await ensureTemplateApplied()
+    await useApp.getState().boot()
+  }
+
   const submit = async () => {
     if (!canSubmit) return
     if (mode === 'login') {
-      if (await login(mobile, password)) onClose()
+      if (await login(mobile, password)) {
+        await afterSignIn()
+        onClose()
+      }
       return
     }
     if (mode === 'register') {
-      if (await register(mobile, password, code, nickname)) onClose()
+      /* ★ 邀请码必须在**注册之前**存进去：铺模板那一步会取它，
+         顺序反了就铺成官方模板 —— 而 apply 一辈子只铺一次。 */
+      const inviteCode = invite.trim()
+      if (inviteCode && !looksLikeInviteCode(inviteCode)) {
+        setHint('邀请码看起来不对（形如 TF73-DC44），可以不填。')
+        return
+      }
+      if (inviteCode) stashInviteCode(inviteCode)
+      if (await register(mobile, password, code, nickname)) {
+        await afterSignIn()
+        onClose()
+      }
       return
     }
     /* reset：成功后**不关面板**，就地转成登录态 ——
@@ -206,6 +245,23 @@ export function LoginSheet({
 
         {mode === 'register' && (
           <label className="block">
+            <span className="text-[11px] font-extrabold text-ink-500">邀请码（可不填）</span>
+            <input
+              data-account-invite
+              value={invite}
+              onChange={(e) => setInvite(e.target.value.slice(0, 32))}
+              placeholder="TF73-DC44"
+              autoComplete="off"
+              className="mt-1 w-full rounded-xl border border-ink-900/10 bg-white px-3 py-3 text-base font-bold uppercase tracking-wider text-ink-900 outline-none focus:border-grape-400"
+            />
+            <span className="mt-1 block text-[10.5px] font-bold leading-snug text-ink-400">
+              商家给的推广码。填了之后看到的是那个商家配的任务和兑换清单。
+            </span>
+          </label>
+        )}
+
+        {mode === 'register' && (
+          <label className="block">
             <span className="text-[11px] font-extrabold text-ink-500">称呼（可不填）</span>
             <input
               data-account-nickname
@@ -278,7 +334,11 @@ export function LoginSheet({
           <button
             type="button"
             onClick={async () => {
-              if (await ensureGuest({ force: true })) onClose()
+              if (!(await ensureGuest({ force: true }))) return
+              /* 这条路是从「上次是正式账号」硬退出来的：没有 boot 过，
+                 不补这一次的话整个 App 停在开场页（转圈，没有出口）。 */
+              await afterSignIn()
+              onClose()
             }}
             disabled={busy}
             data-account-skip
