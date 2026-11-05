@@ -258,8 +258,12 @@ try {
   const restSteps = ['farm', 'redeem', 'points', 'review', 'settings']
   for (let n = 0; n < restSteps.length; n++) {
     const k = restSteps[n]
-    // 最后两步的目标在**顶栏**，其余在底部 tab
-    const isHeader = k === 'review' || k === 'settings'
+    /* 目标在**顶栏**的那几步。
+       ⚠️ 2026-11-05 起 `points` 也在这里：底栏那格「积分」删掉了，
+       明细改从顶栏那颗 🪙 点开（`header-points`）。漏改这一条的症状很具体 ——
+       `[data-tour="tab-points"]` 永远等不到，`waitStable` 超时后返回 null，
+       整段静默跳过（假绿）。 */
+    const isHeader = k === 'points' || k === 'review' || k === 'settings'
     const targetSel = isHeader ? `[data-tour="header-${k}"]` : `[data-tour="tab-${k}"]`
     /* ⚠️ **点之前**先量一次几何，作为 `waitStable` 的「必须和它不一样」基准。
        少了这一步，「旧布局还稳稳待着、新布局还没算出来」的窗口会被判成
@@ -328,7 +332,10 @@ try {
   )
 
   /* ---------- 2. 四个主 Tab ---------- */
-  const tabs = ['任务', '农场', '兑换', '积分']
+  /* 底栏四格（2026-11-05 起）。
+     「积分」**不在这里** —— 它是顶栏那颗 🪙，单独在下面第 8 段走查。
+     换成「心愿」是因为底栏现在就是这四格；少写一格就等于少测一格。 */
+  const tabs = ['任务', '农场', '兑换', '心愿']
   for (const t of tabs) {
     const clicked = await page.evaluate((label) => {
       // 底部导航按钮内容是 emoji + 换行 + 文字，因此取最后一行比对
@@ -1731,15 +1738,31 @@ try {
   })
   await new Promise((r) => setTimeout(r, 700))
 
-  const probeBalanceChips = async (tabLabel) => {
-    await page.evaluate((l) => {
+  /**
+   * 量一次「正文里有没有余额牌」。
+   *
+   * @param rootSel 这次要查的「正文」根节点。
+   * @param how     怎么把这一屏打开：`{ kind: 'tab', label }` 点底栏，
+   *                `{ kind: 'points' }` 点顶栏那颗 🪙。
+   *
+   * ⚠️ 2026-11-05：积分页不再是底栏一格，改成从顶栏点开一层
+   * `[data-points-sheet]`。它 Portal 到 body，**不在 `<main>` 里** ——
+   * 所以根节点必须由调用方给。写死 `main` 的话，
+   * 「main 里没有余额牌」永远成立，这条断言就变成了空转（假绿）。
+   */
+  const probeBalanceChips = async (rootSel, how) => {
+    await page.evaluate((h) => {
+      if (h.kind === 'points') {
+        document.querySelector('[data-tour="header-points"]')?.click()
+        return
+      }
       const b = [...document.querySelectorAll('button')].find(
-        (x) => x.innerText.trim().split('\n').pop().trim() === l,
+        (x) => x.innerText.trim().split('\n').pop().trim() === h.label,
       )
       b?.click()
-    }, tabLabel)
+    }, how)
     await new Promise((r) => setTimeout(r, 1000))
-    return page.evaluate(() => {
+    return page.evaluate((sel) => {
       const bal = String(window.__kqf__.getState().balance)
       /**
        * 找「余额牌」：一个容器，里面同时有
@@ -1774,12 +1797,16 @@ try {
         }
         return out
       }
-      // 正文 = <main>（App.tsx 里顶栏 <header> 与 <main> 是兄弟节点，
-      // 所以"在 main 里"就等于"不在顶栏里"，比 closest 过滤更不易漏）。
-      const main = document.querySelector('main')
+      // 正文根节点由调用方给：普通 tab 是 `<main>`（顶栏 `<header>` 和它是
+      // 兄弟节点，所以"在 main 里"就等于"不在顶栏里"，比 closest 过滤更不易漏）；
+      // 积分层是 `[data-points-sheet]` —— 它 Portal 到 body，不在 main 里。
+      const root = document.querySelector(sel)
       const header = document.querySelector('header')
-      const inBody = main ? findChips(main) : []
+      const inBody = root ? findChips(root) : []
       return {
+        /* 根节点没找到时下面那两条「没有余额牌」会**无条件通过** ——
+           所以必须单独报出来，不然「积分层根本没打开」会被读成「去重做对了」。 */
+        rootFound: !!root,
         bodyChips: inBody.length,
         sample: inBody.slice(0, 3).map((el) =>
           (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40),
@@ -1788,11 +1815,19 @@ try {
         headerText: (header?.innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 60),
         text: document.body.innerText,
       }
-    })
+    }, rootSel)
   }
 
-  for (const [tab, pageName] of [['兑换', '兑换页'], ['积分', '积分页']]) {
-    const p = await probeBalanceChips(tab)
+  for (const [rootSel, pageName, how] of [
+    ['main', '兑换页', { kind: 'tab', label: '兑换' }],
+    ['[data-points-sheet]', '积分页', { kind: 'points' }],
+  ]) {
+    const p = await probeBalanceChips(rootSel, how)
+    check(
+      `${pageName}真的打开了（${rootSel}）`,
+      p.rootFound,
+      p.rootFound ? '' : `找不到 ${rootSel} —— 下面两条会无条件通过，先看这里`,
+    )
     check(
       `${pageName}正文里没有余额牌（余额只在全局顶栏）`,
       p.bodyChips === 0,
@@ -1803,11 +1838,47 @@ try {
       !/你有/.test(p.text) && !/现在一共有/.test(p.text),
       `你有=${/你有/.test(p.text)} 现在一共有=${/现在一共有/.test(p.text)}`,
     )
+    /* 积分层是**盖住整屏**的，不关掉的话后面每一步都点不到东西 ——
+       而且那种失败会伪装成「顶栏没有余额牌」，查半天查不到真因。 */
+    if (how.kind === 'points') {
+      await page.evaluate(() => document.querySelector('[data-points-close]')?.click())
+      await new Promise((r) => setTimeout(r, 600))
+      check(
+        '积分层点「←」能关掉',
+        !(await page.evaluate(() => !!document.querySelector('[data-points-sheet]'))),
+      )
+    }
   }
+
+  /* ---------- 8a. 底栏真的只剩四格（2026-11-05） ----------
+     用户原话：「下边栏 4 个为好」。
+     「积分那一页还能打开」只能证明功能没丢，**证明不了底栏真的少了那一格** ——
+     所以这里直接数底栏里带 `data-tour="tab-*"` 的按钮，并单独确认
+     `tab-points` 不存在、`header-points` 存在。 */
+  const navProbe = await page.evaluate(() => {
+    const nav = document.querySelector('nav')
+    const tabs = [...(nav?.querySelectorAll('[data-tour^="tab-"]') ?? [])]
+    return {
+      n: tabs.length,
+      names: tabs.map((t) => t.getAttribute('data-tour')),
+      hasPointsTab: !!document.querySelector('[data-tour="tab-points"]'),
+      hasPointsHeader: !!document.querySelector('[data-tour="header-points"]'),
+    }
+  })
+  check(
+    '底栏正好四格',
+    navProbe.n === 4,
+    `${navProbe.n} 格：${navProbe.names.join(' / ')}`,
+  )
+  check(
+    '「积分」不在底栏，改成顶栏那颗 🪙',
+    !navProbe.hasPointsTab && navProbe.hasPointsHeader,
+    `tab-points=${navProbe.hasPointsTab} header-points=${navProbe.hasPointsHeader}`,
+  )
 
   // 反向保证：顶栏必须**还在**显示余额。
   // 否则"页面正文里没有余额牌"就成了"整屏都没有"，那是把功能删了而不是去重。
-  const headerChip = await probeBalanceChips('任务')
+  const headerChip = await probeBalanceChips('main', { kind: 'tab', label: '任务' })
   check(
     `全局顶栏仍然显示${MALL.name}、${POINTS.name}和${COUPON.name}`,
     headerChip.headerChips >= 1 &&

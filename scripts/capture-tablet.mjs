@@ -50,11 +50,22 @@ const DEVICES = [
   { tag: 'android-tab-landscape', w: 1280, h: 800, note: 'Android 平板横' },
 ]
 
+/**
+ * 要拍的几屏。
+ *
+ * `open` 不填 = 点底栏 `[data-tour="tab-<key>"]`。
+ * `open` 填了 = 点那个锚点打开一层**盖住整屏**的东西（目前只有积分）；
+ * 这时 `root` 必须指向**那一层自己** —— 量 `main` 量到的是背后那一页，
+ * 数字看着正常、其实量的是别的屏（本项目最忌讳的那种假绿）。
+ *
+ * ⚠️ 2026-11-05：`points` 从底栏搬到了顶栏那颗 🪙（用户：「下边栏 4 个为好」），
+ *    所以它现在走 `open` 这条通道。底栏就只剩任务 / 游戏 / 兑换 / 心愿。
+ */
 const TABS = [
   { key: 'tasks', label: '任务' },
   { key: 'farm', label: '农场' },
   { key: 'redeem', label: '兑换' },
-  { key: 'points', label: '积分' },
+  { key: 'points', label: '积分', open: 'header-points', root: '[data-points-sheet]' },
 ]
 
 const browser = await puppeteer.launch({
@@ -94,10 +105,16 @@ try {
     await wait(2600)
 
     for (const t of TABS) {
-      await page.evaluate((key) => {
-        document.querySelector(`[data-tour="tab-${key}"]`)?.click()
-      }, t.key)
-      await wait(450)
+      const opened = await page.evaluate((tt) => {
+        const sel = `[data-tour="${tt.open ?? 'tab-' + tt.key}"]`
+        const el = document.querySelector(sel)
+        el?.click()
+        return !!el
+      }, t)
+      /* 找不到锚点就喊一声 —— 静默跳过的话，后面截的图是**上一屏**，
+         而报告里那行数字也全是上一屏的，看起来一切正常。 */
+      if (!opened) console.warn(`  ⚠️ ${d.tag}-${t.key}：找不到 [data-tour="${t.open ?? 'tab-' + t.key}"]`)
+      await wait(t.open ? 700 : 450)
 
       /**
        * 体检项：
@@ -111,10 +128,11 @@ try {
        *  · navH     —— 底栏高度（横屏时它占掉屏幕高度的比例）
        *  · tapMin   —— 最小可点区域边长（<44 就低于可访问性下限）
        */
-      const m = await page.evaluate(() => {
+      const m = await page.evaluate((rootSel) => {
         const de = document.documentElement
-        const main = document.querySelector('main')
-        const col = main?.querySelector('.page-col') ?? null
+        /* 根节点：普通 tab 量 `main`；整屏层量它自己（`root`）。 */
+        const root = document.querySelector(rootSel)
+        const col = root?.querySelector('.page-col') ?? null
         const nav = document.querySelector('nav')
         const btns = [...document.querySelectorAll('button')].filter((b) => {
           const r = b.getBoundingClientRect()
@@ -136,7 +154,7 @@ try {
           navH: nav ? Math.round(nav.getBoundingClientRect().height) : -1,
           tapMin: Math.round(minSide),
         }
-      })
+      }, t.root ?? 'main')
 
       const name = `${d.tag}-${t.key}`
       await page.screenshot({ path: `${OUT}/${name}.png` })
@@ -146,6 +164,12 @@ try {
           `占比=${String(m.usedPct).padStart(3)}% 溢出=${String(m.overflow).padStart(3)} ` +
           `底栏=${String(m.navH).padStart(3)} 最小点击=${String(m.tapMin).padStart(3)}`,
       )
+      /* 整屏层是**盖住整屏**的，不关掉的话下一轮 `page.goto` 之前它一直在，
+         而更糟的是同一轮后面的「弹层体检」会点到它上面去。 */
+      if (t.open) {
+        await page.evaluate(() => document.querySelector('[data-points-close]')?.click())
+        await wait(400)
+      }
     }
 
     /* ---- 弹层体检 ----
@@ -154,7 +178,7 @@ try {
        期望：≥768px 起是居中对话框，遮罩必须盖住整个视口
        （遮罩用 absolute 的话，外层一加 padding 就会跟着缩进，露出一圈）。 */
     if (d.sheet) {
-      // 上一步停在「积分」tab，编辑按钮在「任务」tab 上，先切回去
+      // 上一步是积分层（已经关掉，背后停在「兑换」），编辑按钮在「任务」tab 上，先切回去
       await page.evaluate(() => document.querySelector('[data-tour="tab-tasks"]')?.click())
       await wait(500)
       await page.evaluate(() =>

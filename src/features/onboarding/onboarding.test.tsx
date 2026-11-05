@@ -156,7 +156,11 @@ describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
     expect(onStepChange).toHaveBeenLastCalledWith('redeem')
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
-    expect(onStepChange).toHaveBeenLastCalledWith('points')
+    // ⚠️ 2026-11-05：底栏那格「积分」删掉了，明细改从顶栏那颗 🪙 点开
+    // （`header-points`）。所以这一步**不再切 tab**，停在任务页 ——
+    // 顶栏每个 tab 都在，写 `'points'` 会切到一页根本不渲染的空白。
+    expect(onStepChange).toHaveBeenLastCalledWith('tasks')
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-bubble', 'points')
     expect(screen.getByText('4 / 6')).toBeInTheDocument()
 
     // ---- 后两步是给家长的：回到「任务」页，讲顶栏那两个按钮 ----

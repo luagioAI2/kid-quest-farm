@@ -41,7 +41,14 @@ import { useApp } from '../../store/useApp'
       气泡会被推出屏幕下沿。判据是「目标中心在不在视口上半」。
    ============================================================ */
 
-export type TourTabKey = 'tasks' | 'game' | 'redeem' | 'points'
+/**
+ * 导览过程中要切到哪一格。
+ *
+ * ⚠️ 2026-11-05 起**没有 `'points'` 了**：底栏从五格回到四格，「积分」挪到
+ * 顶栏那颗 🪙（`header-points`）。这一格在底栏不存在，写进来就会
+ * `setTab('points')` 切到一页根本不渲染的空白 —— 而且不报错。
+ */
+export type TourTabKey = 'tasks' | 'game' | 'redeem'
 
 interface TourStep {
   /** 气泡的稳定标识。e2e 靠它定位（别改成「第几个」） */
@@ -101,13 +108,18 @@ const STEPS: TourStep[] = [
     body: '攒够积分就来这里换想要的东西 —— 零食、出去玩、多玩一会儿平板都可以。',
   },
   {
+    // ⚠️ 2026-11-05：底栏那格「积分」删掉了（用户：「下边栏 4 个为好」），
+    // 明细改从**顶栏那颗 🪙** 点开。所以这一步的锚点从 `tab-points` 换成
+    // `header-points`，`tab` 回到 `'tasks'`（顶栏每个 tab 都在，
+    // 停在任务页讲最自然）。
+    // 文案必须说「点上面这颗」，别写「下面那一格」—— 孩子会找不到。
     id: 'points',
-    anchor: 'tab-points',
-    tab: 'points',
+    anchor: 'header-points',
+    tab: 'tasks',
     audience: 'kid',
     emoji: '🪙',
     title: '积分',
-    body: '这里能看清积分是怎么来的，还有你攒到的成就徽章。上面那一条随时显示你有多少分。',
+    body: '点上面这颗 🪙，就能看清积分是怎么来的，还有你攒到的成就徽章。',
   },
   {
     // ⚠️ 文案必须写出「交上来 ≠ 积分到账」这件事。孩子那一步（tasks）已经说了

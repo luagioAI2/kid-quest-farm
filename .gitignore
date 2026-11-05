@@ -122,3 +122,4 @@ scripts/__*.mjs
 .env
 .env.*
 !.env.example
+dist-probe/

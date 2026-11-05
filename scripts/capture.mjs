@@ -460,10 +460,12 @@ try {
   await shot('08c-market-row')
   await closeSheet()
 
-  /* 9~10. 其余 Tab */
+  /* 9~10. 其余 Tab
+     ⚠️ 「积分」**不在这个循环里**（2026-11-05）：底栏回到四格，明细改从
+     顶栏那颗 🪙 点开。走查见下面 10-points 那一段 —— 那边必须点
+     `header-points`，不能再按底栏文字找。 */
   for (const [label, name] of [
     ['兑换', '09-redeem'],
-    ['积分', '10-points'],
     // 心愿商城（2026-10-28 新增，P1）。放最后是因为它自己还要往下走两屏
     // （详情 / 家长定价），下一节直接接着拍，不用再切回来。
     ['心愿', '10b-wish-list'],
@@ -526,6 +528,27 @@ try {
   } else {
     console.log('  ⚠️ 09b 跳过：兑换页没找到「管理」')
   }
+  /* 10. 我的积分（2026-11-05 从底栏一格改成顶栏 🪙 点开的整屏层）
+     ------------------------------------------------------------
+     拍它的理由：这是这一轮唯一「入口换地方」的改动 —— 底栏少了一格、
+     顶栏那颗 🪙 从纯展示变成按钮。**光看代码看不出那颗币有没有变样**，
+     而它旁边还挤着 💎 和 🎫，多一个「可点」的视觉线索很容易把那一行撑坏。
+     ⚠️ 一定要拍**关掉之后**的底栏（`11-nav-four`）：
+        「四格」是这个需求的全部，而底栏在页脚、永远不在任何一屏的正中间。 */
+  await page.evaluate(() => document.querySelector('[data-tour="header-points"]')?.click())
+  await wait(700)
+  const pointsOpened = await page.evaluate(
+    () => !!document.querySelector('[data-points-sheet]'),
+  )
+  if (pointsOpened) {
+    await shot('10-points')
+    await page.evaluate(() => document.querySelector('[data-points-close]')?.click())
+    await wait(500)
+  } else {
+    console.warn('  ⚠️ 10-points 跳过：点了顶栏 🪙 但没开出 [data-points-sheet]')
+  }
+  await shot('11-nav-four')
+
   await clickByText('心愿', 'nav')
   await wait(600)
 
@@ -1349,7 +1372,11 @@ try {
   await wait(500)
   // 底栏「游戏」那一格是当前游戏（锚点 tab-<id>），按排除法找，别写死 tab-farm
   await page.evaluate(() => {
-    const staticTours = ['tab-tasks', 'tab-redeem', 'tab-wish', 'tab-points']
+    /* 底栏的固定格（不含运行时算出来的游戏那格）。
+       2026-11-05：`tab-points` 删掉了 —— 底栏回到四格，它已经不存在。
+       留着的话这一句「找一格不在 staticTours 里的 tab」照样能跑，
+       但注释和常量会对着一个不存在的锚点说话，下一个人会以为是自己数错了。 */
+    const staticTours = ['tab-tasks', 'tab-redeem', 'tab-wish']
     const b = [...document.querySelectorAll('[data-tour^="tab-"]')].find(
       (x) => !staticTours.includes(x.getAttribute('data-tour')),
     )

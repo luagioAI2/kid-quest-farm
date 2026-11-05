@@ -2,7 +2,7 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { selectPendingCheckIns, selectPendingReview, useApp } from './store/useApp'
 import { wishesAwaitingReply } from './domain/wish'
 import TaskPage from './features/tasks/TaskPage'
-import PointsPage from './features/tasks/PointsPage'
+import PointsSheet from './features/tasks/PointsSheet'
 import RedeemPage from './features/redeem/RedeemPage'
 import WishPage from './features/wish/WishPage'
 import SettingsPage from './features/settings/SettingsPage'
@@ -27,7 +27,7 @@ import { PluginGameHost } from './games/PluginGameHost'
 import { GamePlayGate } from './features/game/GamePlayGate'
 import './features/farm/farm.css'
 
-type TabKey = 'tasks' | 'game' | 'redeem' | 'wish' | 'points'
+type TabKey = 'tasks' | 'game' | 'redeem' | 'wish'
 
 /**
  * 底部导航里**固定**的那三格。
@@ -39,6 +39,18 @@ type TabKey = 'tasks' | 'game' | 'redeem' | 'wish' | 'points'
  * 游戏那一格的值是 `tab-<当前游戏 id>` —— 默认（农场）时正好是 `tab-farm`，
  * 而 `ChildTour.tsx` 的导览步骤和 `capture-tablet.mjs` / `e2e-check.mjs`
  * 都钉着这个字符串。**别把它改成固定的 `tab-game`**，那会同时弄断导览和 e2e。
+ *
+ * ## 2026-11-05：积分**不再是**一格（用户：「下边栏 4 个为好」）
+ *
+ * 原来五格：任务 / 游戏 / 兑换 / 心愿 / 积分。用户原话：「积分是不是换个地方
+ * 更好，主要是挤占了下边栏，下边栏 4 个为好。」
+ *
+ * 积分那一页本来就不提供任何**动作**（余额常驻在顶栏，那一页只有
+ * 「这分怎么来的 / 攒到哪些成就」），占一格是纯消耗。现在改从**顶栏那颗 🪙**
+ * 点进去（`data-tour="header-points"`），底栏回到四格。
+ *
+ * ⚠️ 别把它加回来。四格在 390px 上是每格约 97px，五格是 78px ——
+ * 手指按得下去，但「任务」和「兑换」两格的文字会贴在一起。
  */
 const STATIC_TABS: { key: TabKey; label: string; emoji: string; tour: string }[] = [
   { key: 'tasks', label: '任务', emoji: '📋', tour: 'tab-tasks' },
@@ -46,7 +58,6 @@ const STATIC_TABS: { key: TabKey; label: string; emoji: string; tour: string }[]
   // 心愿商城（2026-10-28）：和「兑换」并列，不是它的子页 ——
   // 兑换是家里的事（家长自建、家长兑现），心愿是外面的事（合作商商品、淘宝成交）。
   { key: 'wish', label: '心愿', emoji: '🛍️', tour: 'tab-wish' },
-  { key: 'points', label: '积分', emoji: '🪙', tour: 'tab-points' },
 ]
 
 /**
@@ -97,6 +108,14 @@ export default function App() {
 
   const [tab, setTab] = useState<TabKey>('tasks')
   const [showSettings, setShowSettings] = useState(false)
+  /**
+   * 「我的积分」整屏层（2026-11-05）。
+   *
+   * 它以前是底栏的第五格。用户说「积分挤占了下边栏，4 个为好」，
+   * 于是入口挪到顶栏那颗 🪙 —— 那一页没有任何动作，余额本来就常驻顶栏，
+   * 占一格是纯消耗。**别把它加回 `STATIC_TABS`**（理由见那边的注释）。
+   */
+  const [showPoints, setShowPoints] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [splashMinElapsed, setSplashMinElapsed] = useState(false)
   /** 家长设置向导：null = 关着，'first' = 首次引导，'replay' = 设置页点「重看」 */
@@ -235,11 +254,14 @@ export default function App() {
   )
 
   /**
-   * 底部导航的全部五格：把「游戏」那一格插在「任务」和「兑换」之间。
+   * 底部导航的全部四格：把「游戏」那一格插在「任务」和「兑换」之间。
    *
-   * 2026-10-28 从四格变五格（加了「心愿」）。底栏是 `flex-1` + `justify-center`，
-   * 不是固定列宽，所以加一格只是每格变窄（390px 上 97 → 78px），
-   * **不需要改布局代码**。但所有「按第几个 tab」定位的测试都要复查。
+   * 2026-10-28 曾经从四格变五格（加了「心愿」），2026-11-05 又回到四格
+   * （「积分」挪到顶栏那颗 🪙，理由见 `STATIC_TABS` 的注释）。
+   * 底栏是 `flex-1` + `justify-center`，不是固定列宽，所以增删一格只是每格变宽窄
+   * （390px 上五格 78px、四格 97px），**不需要改布局代码**。
+   * 但所有「按第几个 tab」定位的测试都要复查 —— 这次改的就有
+   * `e2e-check.mjs` / `capture-tablet.mjs` / `capture.mjs` 三处。
    *
    * 游戏格是**运行时算**的 —— 图标、名字、`data-tour` 全都来自当前游戏。
    * 农场是首款且默认拥有，所以默认状态下这一格就是原来的「🌾 农场 / tab-farm」，
@@ -279,7 +301,6 @@ export default function App() {
       },
       STATIC_TABS[1],
       STATIC_TABS[2],
-      STATIC_TABS[3],
     ],
     [activeGame, activePlugin, activeGameId],
   )
@@ -491,15 +512,32 @@ export default function App() {
                   {mallBalance}
                 </span>
               </div>
-              <div
-                className="flex shrink-0 items-center gap-1 rounded-full bg-sun-200 px-1.5 py-1.5 shadow-flat"
-                aria-label={`积分 ${balance}`}
+              {/*
+                🪙 积分牌**同时是入口**（2026-11-05）。
+
+                它原来是纯展示的 `div`，因为积分另有一格底栏。用户要求底栏回到
+                四格之后，「这分怎么来的 / 攒到哪些成就」就没有门了 ——
+                所以这里从 `div` 换成 `button`：点一下打开整屏的「我的积分」。
+
+                ⚠️ 别把 `aria-label` 改成不含「积分」两个字的说法：
+                   e2e-check 的顶栏探针靠 `startsWith(POINTS.name)` 找它，
+                   改了就变成「顶栏没有积分牌」的假失败。
+                ⚠️ `data-tour="header-points"` 是新手导览第 4 步的锚点。
+                   改成 `tab-points` 的话导览会指着一个不存在的元素
+                   （挖洞层 `{rect && …}` ⇒ 不压暗、气泡浮在中间、整屏点不动）。
+              */}
+              <button
+                type="button"
+                data-tour="header-points"
+                onClick={() => setShowPoints(true)}
+                aria-label={`积分 ${balance}，看积分明细`}
+                className="btn flex shrink-0 items-center gap-1 rounded-full bg-sun-200 px-1.5 py-1.5 shadow-flat active:btn-press"
               >
                 <span className="text-sm leading-none">🪙</span>
                 <span className="tnum font-display text-sm font-extrabold leading-none text-ink-900">
                   {balance}
                 </span>
-              </div>
+              </button>
               {/*
                 兑换券**所有游戏都显示**（2026-10-24 改）。
 
@@ -597,7 +635,6 @@ export default function App() {
               </Suspense>
               {tab === 'redeem' && <RedeemPage />}
               {tab === 'wish' && <WishPage />}
-              {tab === 'points' && <PointsPage />}
             </ErrorBoundary>
           </main>
 
@@ -635,6 +672,12 @@ export default function App() {
           </nav>
         </>
       )}
+
+      {/* 「我的积分」整屏层：从顶栏那颗 🪙 点开（底栏已经没有这一格了）。
+          挂在这里而不是 `<main>` 里 —— 它自己 Portal 到 body，理由见
+          `components/Portal.tsx`；放在这一层是为了**切 tab 不会把它带走**，
+          关掉之后还停在原来那一格。 */}
+      {showPoints && <PointsSheet onClose={() => setShowPoints(false)} />}
 
       {/* 家长确认弹层：挂在最外层，切 Tab / 进设置都不影响它 */}
       <ReviewSheetModal open={reviewOpen} onClose={() => setReviewOpen(false)} />
