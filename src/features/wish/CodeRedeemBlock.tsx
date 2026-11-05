@@ -29,10 +29,21 @@ import { ParentGate } from '../parent/ParentGate'
 
    ⇒ 码的**来源**说错了。现在没有实体游戏卡，是「爸妈在淘宝买了，
    卖家发一串码」。文案改成从「买」讲起，不要再说「卡背面」。
-   ⇒ 列表上那件商品的状态应该是**未激活**（`WishPage` 的 `ItemCard`），
-   点进去才输码。
    ⇒ **盲盒也能输码**（用户明确要求）。盲盒本身没有 `game_id`，
    但码自带游戏，所以输进去照样解锁那一款。
+
+   ## 第三轮：列表上直接「去激活」（同一天）
+
+   用户原话：「心愿商城每个礼品的设计布局有点丑陋，名字 类型，标签啥的。
+   『有码可输』是啥意思，很奇怪。应该是类似『去激活』，点击就会出现
+   提示框购买、输入激活之类的吧。」
+
+   ⇒ 列表卡片改成一颗**真按钮**「去激活」，点开的是一个**弹框**
+     （`ActivationDialog.tsx`），框里讲清「爸妈买 → 卖家发码 → 输进来」。
+   ⇒ 于是同一套输码状态机现在有两个外壳：详情页的**内联块**（本文件里的
+     `CodeRedeemBlock`）和列表点开的**弹框**。两者共用 `useCodeRedeem` /
+     `CodeForm` / `CodeDonePanel` —— 各写一遍的话，「失败不清空」「成功静音
+     toast」「装包失败的半句提示」这三处迟早只剩一处对。
 
    ## 成功之后：一个弹框，不再是一行绿字
 
@@ -70,6 +81,10 @@ import { ParentGate } from '../parent/ParentGate'
    `return null` 不会卸载实例，`done` 就还在。弹框还多一层保险：
    它 `Portal` 到 `document.body`，压根不在这棵树里。
 
+   ★ 列表那条路上还有**同一类**坑，但解法不同：激活成功后那张游戏卡会被
+   `hiddenOwned` 从列表里摘掉，卡片要是自己持着弹框，弹框会跟卡片一起
+   卸载。所以弹框挂在 `WishPage`（页面层），不在 `ItemCard` 里。
+
    ## 和「设置 → 游戏」那一块的关系
 
    同一套 store 动作（`redeemGameCode`），同一套服务端接口
@@ -77,6 +92,176 @@ import { ParentGate } from '../parent/ParentGate'
    这里激活成功的游戏，设置里的「我的游戏」立刻就有。
    差别只有位置和闸门，不是两条链路。
    ============================================================ */
+
+/**
+ * 输码这件事的**状态机**。内联块和弹框共用，别再各写一份。
+ *
+ * ⚠️ `silent: true` 是必须的 —— 两个外壳都会自己弹成功框，
+ *    store 再飘一条 toast 就是「同一句话说两遍」。
+ * ⚠️ 失败**不清空** `code`：要能对着码改一位再提交。
+ * ⚠️ `onDone` 只给「成功后调用方要收尾」用（定价页关面板）。
+ *    弹框**别传**：传了把弹框关掉，`done` 状态就跟着实例一起没了。
+ */
+export function useCodeRedeem(onDone?: () => void) {
+  const redeemGameCode = useApp((s) => s.redeemGameCode)
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  /** 成功文案。非空 = 成功框开着 */
+  const [done, setDone] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (busy) return
+    setBusy(true)
+    try {
+      const r = await redeemGameCode(code, { silent: true })
+      if (r.ok) {
+        /* 成功后**不再留在输入态**：码已经烧掉了，还摆着一个空输入框
+           会让人以为没成功、再输一遍（第二遍必然报「已经用过了」）。 */
+        setDone(r.message)
+        setErr(null)
+        setCode('')
+        onDone?.()
+      } else {
+        setErr(r.message)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return { code, setCode, busy, done, setDone, err, setErr, submit }
+}
+
+export type CodeRedeem = ReturnType<typeof useCodeRedeem>
+
+/** 激活成功那一屏。**Portal 到 body**（不挂在详情页那棵树里，见文件头）。 */
+export function CodeDonePanel({ done, onClose }: { done: string; onClose: () => void }) {
+  const jumpToSettings = useApp((s) => s.jumpToSettings)
+
+  /* 装包失败时不能还说「已经进我的游戏了，去设成当前」——
+     包没装好，设成当前也玩不了。store 把那半句拼在 message 里。
+     ⚠️ 拼进来的是一整句**带技术原因**的报错（`crypto.subtle` 那一串）。
+     整句当标题会在弹框里变成五行报错墙 —— 2026-11-05 走查截图一眼看到。
+     所以拆开：标题只留「已激活：X」，原因单独一行小字。 */
+  const installFailed = done.includes('，但没装成功')
+  const headline = installFailed ? done.split('，但没装成功')[0] : done
+  const reason = installFailed ? (done.match(/（([^）]*)）/) ?? [])[1] ?? '' : ''
+
+  return (
+    <Portal>
+      <div
+        data-code-done-dialog
+        className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 anim-fade-in"
+      >
+        <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-float">
+          <p className="text-3xl leading-none">🎉</p>
+          <p className="mt-2 font-display text-lg font-extrabold text-ink-900">激活成功</p>
+          {/* `data-code-done` 挂在**整块**上（不只是那句结果）：
+              单测和走查都是读它的 `textContent` 找「设置 → 游戏」那句指路，
+              只挂在一行上就等于把指路排除在断言之外。 */}
+          <div data-code-done className="mt-1.5 space-y-1.5">
+            <p className="text-[13px] font-bold leading-relaxed text-ink-700">{headline}</p>
+            {installFailed ? (
+              <>
+                <p className="text-[12px] font-bold leading-relaxed text-ink-500">
+                  游戏已经进账号了，但这个环境装不了包 —— 去「我的游戏」里点一下安装（换成手机
+                  App 或 https 打开）。
+                </p>
+                {reason && (
+                  <p
+                    data-code-reason
+                    className="break-words text-[10px] leading-relaxed text-ink-400"
+                  >
+                    {reason}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-[12px] font-bold leading-relaxed text-ink-500">
+                游戏已经进「我的游戏」了。想玩的话，让爸妈在「设置 → 游戏」里把它设成当前。
+              </p>
+            )}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              data-code-goto-settings
+              onClick={() => {
+                onClose()
+                jumpToSettings('game')
+              }}
+              className="btn h-11 flex-1 rounded-xl bg-paper-2 text-[13px] font-extrabold text-ink-600 shadow-flat active:btn-press"
+            >
+              去设置看看
+            </button>
+            <button
+              type="button"
+              data-code-done-close
+              onClick={onClose}
+              className="btn h-11 flex-1 rounded-xl bg-grass-500 text-[13px] font-extrabold text-white active:btn-press"
+            >
+              知道了
+            </button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  )
+}
+
+/**
+ * 输入框本体。**不带闸门** —— 闸门由两个外壳各自决定：
+ * 详情页 `gate==='pin'` 才包 `ParentGate`，定价页已经整页在闸门后不包；
+ * 列表弹框一律包。
+ */
+export function CodeForm({
+  hook,
+  autoFocus = false,
+  submitLabel = '激活',
+}: {
+  hook: CodeRedeem
+  autoFocus?: boolean
+  submitLabel?: string
+}) {
+  return (
+    <form
+      onSubmit={hook.submit}
+      data-code-box
+      className="mt-2 rounded-xl border border-ink-200 bg-white p-2.5"
+    >
+      <div className="flex gap-2">
+        <input
+          data-code-input
+          value={hook.code}
+          onChange={(ev) => hook.setCode(ev.target.value)}
+          autoFocus={autoFocus}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          maxLength={8}
+          placeholder="ABC-DEF"
+          aria-label="激活码"
+          className="min-w-0 flex-1 rounded-lg border border-ink-200 px-3 py-2 font-mono text-[15px] uppercase tracking-[0.18em] text-ink-800 outline-none focus:border-grass-400"
+        />
+        <button
+          type="submit"
+          data-code-submit
+          disabled={hook.busy || hook.code.trim().length === 0}
+          className="shrink-0 rounded-lg bg-grass-500 px-4 py-2 text-[13px] font-extrabold text-white disabled:opacity-50"
+        >
+          {hook.busy ? '激活中…' : submitLabel}
+        </button>
+      </div>
+      {hook.err && (
+        <p data-code-msg data-code-ok="0" className="mt-2 text-[12px] font-bold text-berry-500">
+          {hook.err}
+        </p>
+      )}
+    </form>
+  )
+}
 
 export function CodeRedeemBlock({
   gate = 'open',
@@ -105,112 +290,16 @@ export function CodeRedeemBlock({
   /** 成功之后调用方要做的事（定价页：关掉面板回列表） */
   onDone?: () => void
 }) {
-  const redeemGameCode = useApp((s) => s.redeemGameCode)
-  const jumpToSettings = useApp((s) => s.jumpToSettings)
-
   const [open, setOpen] = useState(false)
-  const [code, setCode] = useState('')
-  const [busy, setBusy] = useState(false)
-  /** 成功文案。非空 = 弹框开着 */
-  const [done, setDone] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    if (busy) return
-    setBusy(true)
-    try {
-      /* `silent` —— 这个组件自己弹框，别再让 store 飘一条 toast。 */
-      const r = await redeemGameCode(code, { silent: true })
-      if (r.ok) {
-        /* 成功后**不再留在输入态**：码已经烧掉了，还摆着一个空输入框
-           会让人以为没成功、再输一遍（第二遍必然报「已经用过了」）。 */
-        setDone(r.message)
-        setErr(null)
-        setCode('')
-        setOpen(false)
-        onDone?.()
-      } else {
-        /* 失败**不清空** —— 要能对着卡片改一位再提交。
-           （`CodeRedeem.test.tsx` 里钉着同一条。） */
-        setErr(r.message)
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
+  const hook = useCodeRedeem(() => {
+    setOpen(false)
+    onDone?.()
+  })
 
   /* ① 刚激活成功：弹框 + 指路。**这一支要排在 `owned` 前面** ——
      激活成功时 `owned` 已经是 true 了，排在后面就永远看不到。 */
-  if (done) {
-    /* 装包失败时不能还说「已经进我的游戏了，去设成当前」——
-       包没装好，设成当前也玩不了。store 把那半句拼在 message 里。
-       ⚠️ 拼进来的是一整句**带技术原因**的报错（`crypto.subtle` 那一串）。
-       整句当标题会在弹框里变成五行报错墙 —— 2026-11-05 走查截图一眼看到。
-       所以拆开：标题只留「已激活：X」，原因单独一行小字。 */
-    const installFailed = done.includes('，但没装成功')
-    const headline = installFailed ? done.split('，但没装成功')[0] : done
-    const reason = installFailed ? (done.match(/（([^）]*)）/) ?? [])[1] ?? '' : ''
-    return (
-      <Portal>
-        <div
-          data-code-done-dialog
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-5 anim-fade-in"
-        >
-          <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-float">
-            <p className="text-3xl leading-none">🎉</p>
-            <p className="mt-2 font-display text-lg font-extrabold text-ink-900">激活成功</p>
-            {/* `data-code-done` 挂在**整块**上（不只是那句结果）：
-                单测和走查都是读它的 `textContent` 找「设置 → 游戏」那句指路，
-                只挂在一行上就等于把指路排除在断言之外。 */}
-            <div data-code-done className="mt-1.5 space-y-1.5">
-              <p className="text-[13px] font-bold leading-relaxed text-ink-700">{headline}</p>
-              {installFailed ? (
-                <>
-                  <p className="text-[12px] font-bold leading-relaxed text-ink-500">
-                    游戏已经进账号了，但这个环境装不了包 —— 去「我的游戏」里点一下安装（换成手机
-                    App 或 https 打开）。
-                  </p>
-                  {reason && (
-                    <p
-                      data-code-reason
-                      className="break-words text-[10px] leading-relaxed text-ink-400"
-                    >
-                      {reason}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="text-[12px] font-bold leading-relaxed text-ink-500">
-                  游戏已经进「我的游戏」了。想玩的话，让爸妈在「设置 → 游戏」里把它设成当前。
-                </p>
-              )}
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                data-code-goto-settings
-                onClick={() => {
-                  setDone(null)
-                  jumpToSettings('game')
-                }}
-                className="btn h-11 flex-1 rounded-xl bg-paper-2 text-[13px] font-extrabold text-ink-600 shadow-flat active:btn-press"
-              >
-                去设置看看
-              </button>
-              <button
-                type="button"
-                data-code-done-close
-                onClick={() => setDone(null)}
-                className="btn h-11 flex-1 rounded-xl bg-grass-500 text-[13px] font-extrabold text-white active:btn-press"
-              >
-                知道了
-              </button>
-            </div>
-          </div>
-        </div>
-      </Portal>
-    )
+  if (hook.done) {
+    return <CodeDonePanel done={hook.done} onClose={() => hook.setDone(null)} />
   }
 
   /* ② 已经有了、也不是这次激活的：整块不画（服务端会直接拒「你已经有了」）。
@@ -249,52 +338,16 @@ export function CodeRedeemBlock({
     )
   }
 
-  const form = (
-    <form
-      onSubmit={submit}
-      data-code-box
-      className="mt-2 rounded-xl border border-ink-200 bg-white p-2.5"
-    >
-      <div className="flex gap-2">
-        <input
-          data-code-input
-          value={code}
-          onChange={(ev) => setCode(ev.target.value)}
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          maxLength={8}
-          placeholder="ABC-DEF"
-          aria-label="激活码"
-          className="min-w-0 flex-1 rounded-lg border border-ink-200 px-3 py-2 font-mono text-[15px] uppercase tracking-[0.18em] text-ink-800 outline-none focus:border-grass-400"
-        />
-        <button
-          type="submit"
-          data-code-submit
-          disabled={busy || code.trim().length === 0}
-          className="shrink-0 rounded-lg bg-grass-500 px-4 py-2 text-[13px] font-extrabold text-white disabled:opacity-50"
-        >
-          {busy ? '激活中…' : '激活'}
-        </button>
-      </div>
-      {err && (
-        <p data-code-msg data-code-ok="0" className="mt-2 text-[12px] font-bold text-berry-500">
-          {err}
-        </p>
-      )}
-    </form>
-  )
-
   return wrap(
     gate === 'pin' ? (
       /* ⚠️ 必须给 `onCancel` —— 不给的话 `PinFlow` 底下那颗「先算了」
          根本不渲染（它按 `onCancel` 有无决定要不要画）。表现是：手滑点开
          输码，只能一路答完数学题 + 设完密码，或者按返回退出整件商品。 */
       <ParentGate hint="输激活码需要爸爸妈妈确认" onCancel={() => setOpen(false)}>
-        {form}
+        <CodeForm hook={hook} />
       </ParentGate>
     ) : (
-      form
+      <CodeForm hook={hook} />
     ),
   )
 }

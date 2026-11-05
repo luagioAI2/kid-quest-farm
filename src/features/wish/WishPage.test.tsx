@@ -700,54 +700,111 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
   })
 
   /*
-    ★ 列表上也要有痕迹（2026-11-05 补）。
+    ★ 列表上要有**动作**，不只是痕迹（2026-11-05 第三轮）。
 
-    只把输码口放在详情页是不够的：孩子在列表上看到「收租公寓 / 等爸妈开放」，
-    没有任何字提到「能输码」，于是得出「这里没有地方输」——
-    这正是用户第二次问「为啥都没有激活的地方」时的那种观感。
-
-    这颗标是**非交互**的（卡片根节点已经是 `<button>`，不能再嵌按钮），
-    它只负责让人知道「点进去能输」。
+    第二轮补的是一颗非交互标签「有码可输」，用户看完说「有码可输是啥意思，
+    很奇怪」—— 说清「这里能输码」并不等于给出「怎么输」。现在卡片底部是
+    一颗真按钮「去激活」，点开直接是购买说明 + 输码框。
   */
-  it('★ 游戏卡片上写着「未激活 · 有码可输」（不用点进去才知道）', async () => {
+  it('★ 游戏卡片写着「未激活」，并带一颗「去激活」按钮', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
-    const card = screen.getByRole('button', { name: /收租公寓/ })
-    /* 用户 2026-11-05：「一开始游戏只是挂在商城，显示未激活」。
-       原来那一支写的是「等爸妈开放」，会让孩子以为得等家长点一下。 */
-    expect(card.textContent, '卡片上没写「未激活」').toMatch(/未激活/)
-    expect(
-      card.textContent,
-      '卡片上没有「有码可输」= 孩子不知道这里能输码',
-    ).toMatch(/有码可输/)
+    const card = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
+    expect(card, '游戏卡没渲染').toBeTruthy()
+    expect(card.textContent, '用户要求「一开始游戏只是挂在商城，显示未激活」').toMatch(/未激活/)
+    const btn = card.querySelector('[data-wish-activate]')
+    expect(btn, '卡片上没有「去激活」= 还是得自己摸进详情页').toBeTruthy()
+    expect(btn?.textContent).toMatch(/去激活/)
+    /* 那句看不懂的话必须彻底消失 */
+    expect(card.textContent ?? '').not.toMatch(/有码可输/)
   })
 
-  it('★ 盲盒那块也写着「有码可输」（盲盒现在也能输码）', async () => {
+  it('★ 盲盒那块也有「去激活」（盲盒现在也能输码）', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
-    const hero = screen.getByText('随机开出 1 款你还没有的游戏').closest('button')
-    expect(hero, '盲盒 hero 应该是一个按钮').toBeTruthy()
-    expect(hero?.textContent ?? '', '盲盒卡上没写「有码可输」').toMatch(/有码可输/)
+    const hero = document.querySelector('[data-wish-card="blindbox"]') as HTMLElement
+    expect(hero, '盲盒 hero 应该在').toBeTruthy()
+    expect(hero.querySelector('[data-wish-activate]'), '盲盒没有「去激活」').toBeTruthy()
+    expect(hero.textContent ?? '').not.toMatch(/有码可输/)
   })
 
   /*
-    反向钉子：这颗标**只能**长在游戏卡上。
+    反向钉子：这颗按钮**只能**长在游戏 / 盲盒卡上。
 
-    ⚠️ 别写成「整页只有一个『有码可输』」—— 列表里十几款游戏各一颗，
+    ⚠️ 别写成「整页只有一个『去激活』」—— 列表里十几款游戏各一颗，
        那样写必红（第一版就是这么写错的，红在「expected 有码可输」上，
        看着像功能没做，其实是断言写错了）。
-
-    ⚠️ 也别指望在列表里验「已拥有的游戏不显示这颗标」：已拥有的游戏
-       整张卡都被藏起来了（`hiddenOwned`），`alreadyOwned` 那一支在列表里
-       根本走不到。那一支只是防御，真正的判据是下面这条实物卡。
   */
-  it('实物卡片**不**带「有码可输」（只有游戏 / 盲盒才有码）', async () => {
+  it('实物卡片不带「去激活」（只有游戏 / 盲盒才有码）', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
-    const toy = screen.getByRole('button', { name: /恐龙模型套装/ })
-    expect(toy.textContent ?? '').not.toMatch(/有码可输/)
+    const toy = [...document.querySelectorAll('[data-wish-card]')].find((c) =>
+      (c.textContent ?? '').includes('恐龙模型套装'),
+    ) as HTMLElement
+    expect(toy, '实物卡没渲染').toBeTruthy()
+    expect(toy.querySelector('[data-wish-activate]')).toBeNull()
+  })
+
+  it('★ 点「去激活」开弹框：讲清码从哪来 + 就地输码，不进详情页', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+
+    const card = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
+    await userEvent.setup().click(card.querySelector('[data-wish-activate]') as HTMLElement)
+
+    expect(document.querySelector('[data-activate-dialog]'), '点了「去激活」没弹框').toBeTruthy()
+    const guide = document.querySelector('[data-activate-guide]')?.textContent ?? ''
+    /* 用户第二轮纠正过：没有实体卡、没有「卡背面」，是爸妈买完卖家发码。 */
+    expect(guide, '得说清码是爸妈买完卖家发的').toMatch(/淘宝/)
+    expect(guide).toMatch(/ABC-DEF/)
+    expect(document.querySelector('[data-code-input]'), '框里没有输码口').toBeTruthy()
+    expect(document.querySelector('[data-merchant-entry]'), '不该跳进详情页').toBeTruthy()
+  })
+
+  it('★ 弹框输码成功：卡片被摘掉也不影响成功框 + 去设置看看', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    const redeemGameCode = vi.fn(async () => {
+      /* ★ 模拟真实收尾：成功后 refresh ⇒ owned 多一款 ⇒ `hiddenOwned`
+         把那张游戏卡从列表里摘掉。弹框要是在卡片里，这一帧就跟着没了
+         （页面层挂载就是为这个）。 */
+      useApp.setState({ ownedGameIds: [...useApp.getState().ownedGameIds, 'renttower'] })
+      return { ok: true, message: '已激活：收租公寓' }
+    })
+    useApp.setState({ redeemGameCode })
+
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+    const card = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
+    await user.click(card.querySelector('[data-wish-activate]') as HTMLElement)
+    await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
+    await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
+
+    expect(redeemGameCode).toHaveBeenCalledWith('abc-def', { silent: true })
+    await waitFor(() =>
+      expect(document.querySelector('[data-code-done-dialog]'), '成功没弹框').toBeTruthy(),
+    )
+    expect(document.querySelector('[data-code-done]')?.textContent).toContain('设置 → 游戏')
+    await user.click(document.querySelector('[data-code-goto-settings]') as HTMLElement)
+    expect(useApp.getState().pendingSettingsTab).toBe('game')
+  })
+
+  it('★ 保护开着：弹框里先过家长密码，「先算了」能退出', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: true, parentPin: '1234' })
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+    const card = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
+    await user.click(card.querySelector('[data-wish-activate]') as HTMLElement)
+
+    expect(document.querySelector('[data-activate-dialog]')).toBeTruthy()
+    expect(document.querySelector('[data-code-input]'), '没过闸门就出现输入框').toBeNull()
+    expect(screen.getByText('请爸爸妈妈来一下')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: '先算了' }))
+    await waitFor(() => expect(document.querySelector('[data-activate-dialog]')).toBeNull())
   })
 })
