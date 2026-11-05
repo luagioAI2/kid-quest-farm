@@ -637,4 +637,53 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     expect(await screen.findByText(/盲盒没有激活码/)).toBeTruthy()
     expect(document.querySelector('[data-wish-code]'), '盲盒不该有输码入口').toBeNull()
   })
+
+  /*
+    ★ 列表上也要有痕迹（2026-11-05 补）。
+
+    只把输码口放在详情页是不够的：孩子在列表上看到「收租公寓 / 等爸妈开放」，
+    没有任何字提到「能输码」，于是得出「这里没有地方输」——
+    这正是用户第二次问「为啥都没有激活的地方」时的那种观感。
+
+    这颗标是**非交互**的（卡片根节点已经是 `<button>`，不能再嵌按钮），
+    它只负责让人知道「点进去能输」。
+  */
+  it('★ 游戏卡片上写着「有卡能激活」（不用点进去才知道）', async () => {
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+
+    const card = screen.getByRole('button', { name: /收租公寓/ })
+    expect(
+      card.textContent,
+      '卡片上没有「有卡能激活」= 孩子不知道这里能输码',
+    ).toMatch(/有卡能激活/)
+  })
+
+  it('盲盒那块**不**带「有卡能激活」（它本来就没码）', async () => {
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+
+    const hero = screen.getByText('随机开出 1 款你还没有的游戏').closest('button')
+    expect(hero, '盲盒 hero 应该是一个按钮').toBeTruthy()
+    expect(hero?.textContent ?? '').not.toMatch(/有卡能激活/)
+  })
+
+  /*
+    反向钉子：这颗标**只能**长在游戏卡上。
+
+    ⚠️ 别写成「整页只有一个『有卡能激活』」—— 列表里十几款游戏各一颗，
+       那样写必红（第一版就是这么写错的，红在「expected 有卡能激活」上，
+       看着像功能没做，其实是断言写错了）。
+
+    ⚠️ 也别指望在列表里验「已拥有的游戏不显示这颗标」：已拥有的游戏
+       整张卡都被藏起来了（`hiddenOwned`），`alreadyOwned` 那一支在列表里
+       根本走不到。那一支只是防御，真正的判据是下面这条实物卡。
+  */
+  it('实物卡片**不**带「有卡能激活」（只有游戏才有码）', async () => {
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+
+    const toy = screen.getByRole('button', { name: /恐龙模型套装/ })
+    expect(toy.textContent ?? '').not.toMatch(/有卡能激活/)
+  })
 })
