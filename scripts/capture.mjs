@@ -724,7 +724,7 @@ try {
     await window.__kqf__.getState().wishExpress('wish-dino')
   })
   await wait(700)
-  /* 上面那句「已经告诉爸妈」的 toast 挂在 top-3，会盖住 👀 弹层的标题
+  /* 上面那句「已向爸妈申请」的 toast 挂在 top-3，会盖住 👀 弹层的标题
      （拍出来是「一张被黄条压住的图」）。等它自己消失再拍。 */
   await page
     .waitForFunction(() => window.__kqf__.getState().toasts.length === 0, { timeout: 8000 })

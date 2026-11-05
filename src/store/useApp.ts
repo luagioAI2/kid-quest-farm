@@ -1786,7 +1786,7 @@ async function onlineWishExpress(get: () => AppState, itemId: string): Promise<v
     return
   }
   /* 服务端幂等返回「已有的那一单」—— 如果它已经不在 `wished`（孩子已经
-     兑换过了），再弹一句「已经告诉爸妈」就是假话。本地版是靠「先查有没有
+     兑换过了），再弹一句「已向爸妈申请」就是假话。本地版是靠「先查有没有
      进行中的单子，有就直接 return」挡住的，这里用服务端返回的状态挡。 */
   if (r.data.status !== 'wished') {
     await get().refresh()
@@ -1795,7 +1795,7 @@ async function onlineWishExpress(get: () => AppState, itemId: string): Promise<v
   const name = r.data.item_name || wishItemById(itemId)?.name || '这件东西'
   get().pushToast({
     kind: 'info',
-    title: `已经告诉爸妈：想要「${name}」`,
+    title: `已向爸妈申请：想要「${name}」`,
     detail: '他们审核时会直接定好兑换券价格',
     emoji: '💌',
   })
@@ -4305,7 +4305,7 @@ export const useApp = create<AppState>((set, get) => ({
 
     get().pushToast({
       kind: 'info',
-      title: `已经告诉爸妈：想要「${item.name}」`,
+      title: `已向爸妈申请：想要「${item.name}」`,
       detail: '他们审核时会直接定好兑换券价格',
       emoji: '💌',
     })

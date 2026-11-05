@@ -267,8 +267,8 @@ await page.evaluate(() => {
 })
 await wait(700)
 await page.screenshot({ path: `${OUT}/04-wished.png` })
-const wished = await page.evaluate(() => document.body.innerText.includes('已经告诉爸妈'))
-check('点完变成「已经告诉爸妈」', wished)
+const wished = await page.evaluate(() => document.body.innerText.includes('已向爸妈申请'))
+check('点完变成「已向爸妈申请」', wished)
 
 /* ---------- ⑤.5 家长侧必须看得见这个心愿（2026-10-29，当天改到 👀） ----------
    第一版把待办卡摆在**心愿页顶部**。家长当天改口：
@@ -290,13 +290,13 @@ const wishEntry = await page.evaluate(() => {
   const badgeBtn = document.querySelector('[data-tour="header-review"]')
   return {
     stillOnWishPage: document.body.innerText.includes('心愿等你回应'),
-    childSees: document.body.innerText.includes('已告诉爸妈'),
+    childSees: document.body.innerText.includes('已向爸妈申请'),
     dot: !!badgeBtn?.querySelector('span'),
     label: badgeBtn?.getAttribute('aria-label') ?? '',
   }
 })
 check('★ 心愿页不再摆家长待办卡（已移到顶栏 👀）', !wishEntry.stillOnWishPage)
-check('孩子那一侧仍然写着「已告诉爸妈」', wishEntry.childSees)
+check('孩子那一侧仍然写着「已向爸妈申请」', wishEntry.childSees)
 check('★ 顶栏 👀 出现待办红点', wishEntry.dot && /待办/.test(wishEntry.label), wishEntry.label)
 
 await page.evaluate(() => {

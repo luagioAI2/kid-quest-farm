@@ -169,7 +169,7 @@ function Meta({ children }: { children: React.ReactNode }) {
  *
  * ⚠️ 代价（知情接受）：**没付过钱的 `wished` 单在记录里没有**（那是故意的，
  *    一分钱没扣就不算一笔账）。它现在的出口是商品详情页那句
- *    「已经告诉爸妈，等他们回应」，以及家长那边顶栏 👀 的待办队列。
+ *    「已向爸妈申请，等他们回应」，以及家长那边顶栏 👀 的待办队列。
  */
 type WishView =
   | { kind: 'list' }
@@ -570,7 +570,7 @@ function ListView({
  * 不再是一排互相抢注意力的小圆标。
  *
  * ⚠️ 定价优先这件事没变：`offer` 存在时价格那一行一定会写券数，
- *    孩子不会看到「已告诉爸妈」就以为这一件永远换不了。
+ *    孩子不会看到「已向爸妈申请」就以为这一件永远换不了。
  */
 function cardBadge(
   item: WishItem,
@@ -579,7 +579,7 @@ function cardBadge(
 ): string | null {
   if (alreadyOwned) return '已拥有'
   if (order?.status === 'committed') return '等爸妈确认'
-  if (order?.status === 'wished') return '已告诉爸妈'
+  if (order?.status === 'wished') return '已向爸妈申请'
   /* 用户 2026-11-05：「一开始游戏只是挂在商城，显示未激活」。
      写「等爸妈开放」会让孩子以为得等家长点一下才能用，其实手里有码、
      过了家长密码就能自己激活。 */
@@ -618,7 +618,7 @@ function BlindBoxHero({
   if (soldOut) statusLine = '全都玩过了'
   else if (offer) {
     statusLine = `🎫 ${offer.voucherPrice}${topUp > 0 ? ` · 🪙 补 ${topUp}` : ''}`
-  } else if (order?.status === 'wished') statusLine = '已告诉爸妈'
+  } else if (order?.status === 'wished') statusLine = '已向爸妈申请'
 
   return (
     <div data-wish-card="blindbox" className="relative rounded-3xl bg-sun-100 shadow-flat">
@@ -710,7 +710,7 @@ function ItemCard({
   const canActivate = !alreadyOwned && (item.kind === 'gamebox' || item.kind === 'blindbox')
   /** 已经表过态 / 已经下单：按钮改成进详情页，别让 `wishExpress` 早退成「点了没反应」。 */
   let actionLabel = '🤍 我想要'
-  if (order?.status === 'wished') actionLabel = '已告诉爸妈 ›'
+  if (order?.status === 'wished') actionLabel = '已向爸妈申请 ›'
   else if (order?.status === 'committed' || order?.status === 'confirmed') actionLabel = '去看看 ›'
 
   return (
@@ -782,7 +782,7 @@ function ItemCard({
       </button>
       {/* ★ 2026-11-05 第四轮：每张卡仍然恰好一颗等高动作按钮。
           游戏 / 盲盒是「家长激活」→ 页面层弹框；实物是「我想要」→ 直接许愿。
-          已经有单子时后者变成「已告诉爸妈 / 去看看」并进详情页 ——
+          已经有单子时后者变成「已向爸妈申请 / 去看看」并进详情页 ——
           `wishExpress` 遇到进行中的单子会早退，不给反馈就是「点了没反应」。 */}
       {canActivate ? (
         <button
@@ -883,7 +883,7 @@ function DetailView({
    * 而且对 `wished` 这条路径**不碰账本**（还没扣过券）。
    * 自己写一行 `status: 'cancelled'` 会绕过那道重读。
    *
-   * 没有这个动作的话，孩子的心愿会永远停在「已告诉爸妈」——
+   * 没有这个动作的话，孩子的心愿会永远停在「已向爸妈申请」——
    * 他既不能自己撤回，家长也没有「不换」这个选项。
    */
   const doDecline = async () => {
@@ -1119,7 +1119,7 @@ function DetailView({
            * ⚠️ 「已经表明意向」这个分支**只能放在「没有定价」里面**。
            *
            * 放在外面的话会出现一个很荒唐的死结：孩子先点「想要」→ 家长
-           * 随后定了价 → 页面仍然显示「已告诉爸妈」，**兑换按钮不出现**。
+           * 随后定了价 → 页面仍然显示「已向爸妈申请」，**兑换按钮不出现**。
            * 孩子表过态反而换不了，而家长那边以为已经放开了。
            * 2026-10-28 走查抓到（`e2e-wishmall.mjs` 的「定价后出现兑换按钮」）。
            */
@@ -1144,7 +1144,7 @@ function DetailView({
              */
             <div className="space-y-2">
               <div className="rounded-2xl bg-sky-50 px-4 py-3 text-center text-sm font-extrabold text-sky-500">
-                已经告诉爸妈，等他们回应
+                已向爸妈申请，等他们回应
               </div>
               {needsPin && !pinOk ? (
                 pinOpen ? (

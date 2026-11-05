@@ -362,9 +362,10 @@ export function compareWishItem(
 
 /** 状态的中文说法。列表、详情、家长端共用，别在组件里各写一份。
  *  第四轮：`wished` 不再写「等定价」—— 家长审核时直接定价，孩子这一侧
- *  只做过一件事：告诉爸妈。许过愿 = 已告诉爸妈。 */
+ *  只做过一件事：向爸妈申请。许过愿 = 已向爸妈申请。
+ *  第五轮（2026-11-06）：状态文案统一为「已向爸妈申请」。 */
 export const WISH_STATUS_TEXT: Record<string, string> = {
-  wished: '已告诉爸妈',
+  wished: '已向爸妈申请',
   committed: '等爸妈确认',
   confirmed: '爸妈去买啦',
   done: '已经拿到',

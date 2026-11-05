@@ -176,7 +176,7 @@ describe('心愿商城：单个游戏就是那个游戏', () => {
 
    这里钉的是撤掉之后**还剩什么**：
      · 家长的两个入口都不在这一页了（不能又长回来）；
-     · 孩子自己那一侧仍然看得见「已告诉爸妈」；
+     · 孩子自己那一侧仍然看得见「已向爸妈申请」；
      · 详情页底部的「先不要了 / 回应这个心愿」还在 —— 而且撤回**不进**家长锁。
    ============================================================ */
 const wishedOrder = (patch: Record<string, unknown>) => ({
@@ -205,14 +205,14 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
     ).toBeNull()
   })
 
-  it('孩子那一侧仍然写着「已告诉爸妈」', async () => {
+  it('孩子那一侧仍然写着「已向爸妈申请」', async () => {
     // 撤卡撤的是**家长**的入口，不能顺手把孩子唯一的反馈也撤掉 ——
     // 他点完「我想要」之后，至少要知道这件事已经传达出去了。
     await db.wishOrders.put(wishedOrder({}) as never)
     await useApp.getState().refresh()
 
     render(<WishPage />)
-    expect(await screen.findByText('已告诉爸妈')).toBeTruthy()
+    expect(await screen.findByText('已向爸妈申请')).toBeTruthy()
   })
 
   it('★ 家长锁开着时：「定价」进闸门，但「先不要了」不进', async () => {
@@ -870,7 +870,7 @@ describe('心愿商城：第四轮卡片口径', () => {
         ),
       ).toBe(true),
     )
-    /* ★ 还要等 refresh() 收尾：按钮从「我想要」翻成「已告诉爸妈」
+    /* ★ 还要等 refresh() 收尾：按钮从「我想要」翻成「已向爸妈申请」
        得等 wishOrders 灌回 store 并重渲染。不等的话，组件里那句
        `void wishExpress()` 的 refresh 可能跨到下一条用例的 db.delete()，
        抛 DatabaseClosedError（断言全绿但 vitest 退 1）。 */
@@ -878,12 +878,12 @@ describe('心愿商城：第四轮卡片口径', () => {
       const card = [...document.querySelectorAll('[data-wish-card]')].find((c) =>
         (c.textContent ?? '').includes('恐龙模型套装'),
       )
-      expect(card?.querySelector('[data-wish-detail]')?.textContent).toMatch(/已告诉爸妈/)
+      expect(card?.querySelector('[data-wish-detail]')?.textContent).toMatch(/已向爸妈申请/)
     })
     expect(document.querySelector('[data-merchant-entry]'), '不该跳进详情页').toBeTruthy()
   })
 
-  it('★ 已经表过态的实物卡改成「已告诉爸妈」，点了进详情不是空转', async () => {
+  it('★ 已经表过态的实物卡改成「已向爸妈申请」，点了进详情不是空转', async () => {
     await db.wishOrders.put(
       wishedOrder({
         id: 'wo_dino',
@@ -899,8 +899,8 @@ describe('心愿商城：第四轮卡片口径', () => {
       (c.textContent ?? '').includes('恐龙模型套装'),
     ) as HTMLElement
     const btn = toy.querySelector('[data-wish-detail]') as HTMLElement
-    expect(btn.textContent).toMatch(/已告诉爸妈/)
+    expect(btn.textContent).toMatch(/已向爸妈申请/)
     await userEvent.setup().click(btn)
-    expect(await screen.findByText(/已经告诉爸妈，等他们回应/)).toBeTruthy()
+    expect(await screen.findByText(/已向爸妈申请，等他们回应/)).toBeTruthy()
   })
 })
