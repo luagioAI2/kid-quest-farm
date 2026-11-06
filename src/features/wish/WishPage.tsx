@@ -1876,12 +1876,20 @@ function ConfirmView({
         <p className="text-sm font-extrabold">怎么拿到这个</p>
         <div className="mt-2 flex items-center justify-between py-1.5 text-sm">
           <span className="text-xs font-bold text-ink-500">方式</span>
-          <span className="text-xs font-bold text-ink-600">
+          {/* `data-wish-way`：走查脚本要读这一行的**值**（e2e 里按它判
+              「有没有外链」两种状态下文案对不对）。没有标记只能靠正则猜。 */}
+          <span data-wish-way className="text-xs font-bold text-ink-600">
             {/* ⚠️ 已交付的数字商品**不能**再说「去商店购买」。
-                2026-10-30 给游戏类商品补上 `buyUrl` 之后，这一行差点变成
+                2026-10-30 给游戏类商品补上外链之后，这一行差点变成
                 「游戏已经在孩子柜子里了，方式：去商店购买」——
-                家长会以为还得再去买一次。先判 `digital`，再判链接。 */}
-            {digital ? '已经放进游戏柜' : buyLink ? '去商店购买' : 'App 内直接解锁'}
+                家长会以为还得再去买一次。先判 `digital`，再判链接。
+
+                2026-11-06（第七轮）：外链只认后台配置，实物**可能没有**。
+                这一支原来写「App 内直接解锁」—— 那是数字商品的话术，
+                摆在一只毛绒玩具旁边就是胡说（第七轮之前它走不到，
+                因为每件实物都有一条兜底淘宝链接）。没链接 = 家长自己买，
+                下面那句「App 不代收货款」正好接着说。 */}
+            {digital ? '已经放进游戏柜' : buyLink ? '去商店购买' : '家长自己去买'}
           </span>
         </div>
         {item?.priceCents != null && (
