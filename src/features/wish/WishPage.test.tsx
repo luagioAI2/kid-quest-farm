@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { db } from '@/db/db'
+import { db, postHarvest } from '@/db/db'
 import { useApp } from '@/store/useApp'
 import { STOREFRONT } from '@/games/storefront'
-import { wishItemById } from '@/games/wishCatalog'
+import { wishBuyUrl, wishItemById } from '@/games/wishCatalog'
 import WishPage from './WishPage'
 
 /* ⚠️ 找「单开盲盒」那个 hero 按钮时**不能**按 `/游戏盲盒/` 找：
@@ -243,11 +243,16 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
     expect(await screen.findByText(/定个价/)).toBeTruthy()
     await user.click(screen.getByText('先不要了'))
 
-    await waitFor(async () => {
-      const row = await db.wishOrders.get('wo_wish')
+    /* ⚠️ 同一条坑（见下面「可兑换 / 一次性兑换」那块）：`user.click` 只等到
+       事件派发，「先不要了」的 async 处理函数还在写库 + `refresh()`。
+       拿库行当判据会在写库一落地就通过，剩下的 `refresh()` 被下一条用例的
+       `db.delete()` 掀翻 —— 症状是「全绿 + 一条 DatabaseClosedError」。 */
+    await waitFor(() => {
+      const row = useApp.getState().wishOrders.find((o) => o.id === 'wo_wish')
       expect(row?.status, '回绝之后不能还停在 wished').toBe('cancelled')
       expect(row?.cancelReason).toContain('先不换')
     })
+    expect((await db.wishOrders.get('wo_wish'))?.cancelReason).toContain('先不换')
   })
 
   it('★ 被回绝过之后，详情里还看得见上次的理由', async () => {
@@ -522,45 +527,63 @@ describe('心愿：游戏类商品能直接买卡 / 输激活码', () => {
 })
 
 /* ============================================================
-   商品详情页：游戏卡**就地**激活（2026-11-05）
+   卡片「去激活」弹框（2026-11-06）
    ------------------------------------------------------------
-   用户原话：「为啥 游戏 盲盒 还有 游戏 都没有 激活 的地方。
-   应该在心愿商城 对应 item 就可以激活吧。不然拿到了 激活码
-   或者兑换码，咋办。」
+   用户原话：「礼品，游戏 和 盲盒 有去激活。点开 弹框有输入激活码，
+   没有激活码可以点去购买。」「因为我想要、去激活 已经在礼品 item 有了，
+   所以详情里不需要。」
 
-   在这之前全 App 只有两个输码口，而且**都在家长区**
-   （`设置 → 游戏`、心愿商城的家长定价页）—— 孩子手里捏着卡、
-   站在卖这张卡的商品上，却没有任何地方能输。
+   所以这一轮把输码口从**详情页**搬到**卡片弹框**：
+     · 三种类型（实物 / 游戏 / 盲盒）卡片底部都有「🎟️ 去激活」；
+     · 弹框里：游戏 / 盲盒有输码区，实物只有「去购买」；
+     · 详情页**不再有**输码块 —— 同一件事两个入口，孩子还得先点进详情。
 
-   这里钉四件事：
-     ① 详情页上真的有输码入口（`data-wish-code`）；
-     ② 保护开着时**先过家长密码**，键盘不直接摆给孩子
-        （用户选的是「保持现状（家长控制）」）；
-     ③ 成功 → 留在原地、说「已经在我的游戏里」，**不替孩子切当前**；
-     ④ 失败 → 红字 + 不清空（要能对着卡片改一位）。
+   钉六件事：
+     ① 卡片上有「去激活」，详情页里**没有**输码块（反向断言）；
+     ② 保护开着时先过家长密码，键盘不直接摆给孩子；
+     ③ 成功 → 弹框里说「已经在我的游戏里」，不替孩子切当前；
+     ④ 「去设置看看」/「知道了」两条出口；
+     ⑤ 失败 → 红字 + 不清空；
+     ⑥ 没有激活码时「去购买」是一颗真按钮，不是一句提示。
    ============================================================ */
-describe('心愿：商品详情页能就地激活游戏卡', () => {
-  /** 从列表点进某件游戏盒子的详情页 */
-  const openGameDetail = async (name = '收租公寓') => {
+describe('心愿：卡片「去激活」弹框', () => {
+  /** 从列表里点开某件商品的「去激活」弹框 */
+  const openActivate = async (name = '收租公寓') => {
     const user = userEvent.setup()
     render(<WishPage />)
-    await user.click(await screen.findByRole('button', { name: new RegExp(name) }))
-    return user
+    await screen.findByText('心愿商城')
+    const card = [...document.querySelectorAll('[data-wish-card]')].find((c) =>
+      (c.textContent ?? '').includes(name),
+    ) as HTMLElement | undefined
+    if (!card) throw new Error(`列表里找不到「${name}」`)
+    await user.click(card.querySelector('[data-wish-activate]') as HTMLElement)
+    return { user, card }
   }
 
-  it('★ 详情页就有输码入口（不用摸到「设置 → 游戏」）', async () => {
+  it('★ 卡片上有「去激活」；详情页里**没有**输码块', async () => {
     await useApp.getState().updateSettings({ protectParentActions: false })
-    await openGameDetail()
+    const { user, card } = await openActivate()
 
-    expect(document.querySelector('[data-wish-code]'), '详情页缺了输码那一块').toBeTruthy()
-    expect(document.querySelector('[data-code-open]'), '有块没按钮 = 还是输不了').toBeTruthy()
+    expect(document.querySelector('[data-activate-dialog]'), '点了「去激活」没弹框').toBeTruthy()
+    expect(document.querySelector('[data-code-input]'), '弹框里没有输码口').toBeTruthy()
+
+    await user.click(document.querySelector('[data-activate-close]') as HTMLElement)
+    await waitFor(() => expect(document.querySelector('[data-activate-dialog]')).toBeNull())
+
+    /* ★ 反向断言：用户明确说「去激活已经在礼品 item 有了，所以详情里不需要」。
+       只写正向的话，两块都留着照样全绿 —— 而孩子会看到两个入口。 */
+    await user.click(card.querySelector('button') as HTMLElement)
+    await waitFor(() => expect(document.querySelector('[data-wish-finish]')).toBeNull())
+    expect(
+      document.querySelector('[data-wish-code]'),
+      '详情页还留着输码块 —— 用户要求删掉（去激活已在卡片上）',
+    ).toBeNull()
   })
 
   it('★ 保护开着：先要家长密码，输入框不摆给孩子', async () => {
     await useApp.getState().updateSettings({ protectParentActions: true, parentPin: '1234' })
-    const user = await openGameDetail()
+    await openActivate()
 
-    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
     expect(
       document.querySelector('[data-code-input]'),
       '没过闸门就出现输入框 —— 那道闸门是假的',
@@ -569,32 +592,22 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
 
     /* ★ 手滑点开要有退路。不给 `onCancel` 时 `PinFlow` 底下那颗
        「先算了」**根本不渲染** —— 只能答完数学题 + 设完密码才出得去。 */
-    await user.click(screen.getByRole('button', { name: '先算了' }))
-    await waitFor(() => expect(document.querySelector('[data-code-open]')).toBeTruthy())
-    expect(document.querySelector('[data-code-input]')).toBeNull()
-
-    // 再点一次，4 位输对才展开（PinPad 第 4 位自动提交）
-    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
-    for (const d of ['1', '2', '3', '4']) {
-      await user.click(screen.getByRole('button', { name: d }))
-    }
-    await waitFor(() => expect(document.querySelector('[data-code-input]')).toBeTruthy())
+    await userEvent.setup().click(screen.getByRole('button', { name: '先算了' }))
+    await waitFor(() => expect(document.querySelector('[data-activate-dialog]')).toBeNull())
   })
 
-  it('★ 成功：交给 store、留在原地、说清「已经在我的游戏里」', async () => {
+  it('★ 成功：交给 store、留在弹框里说清「已经在我的游戏里」', async () => {
     await useApp.getState().updateSettings({ protectParentActions: false })
     const redeemGameCode = vi.fn(async () => {
       /* ★ 必须模拟真实实现的收尾：它成功后会 `refresh()`，
-         `ownedGameIds` 立刻多这一款 ⇒ 详情页的 `alreadyOwned` 翻 true。
-         少了这一步，这条测试就抓不到「整块连同绿字被同一帧卸载」那个 bug
-         （2026-11-05 用真码走查抓到的：游戏到账了，页面看着像没反应）。 */
+         `ownedGameIds` 立刻多这一款 ⇒ 列表里的游戏卡会被摘掉。
+         弹框挂在页面层（`activateId`）就是为了这一刻不被连带卸载。 */
       useApp.setState({ ownedGameIds: [...useApp.getState().ownedGameIds, 'renttower'] })
       return { ok: true, message: '已激活：收租公寓' }
     })
     useApp.setState({ redeemGameCode })
 
-    const user = await openGameDetail()
-    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    const { user } = await openActivate()
     await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
     await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
 
@@ -602,53 +615,36 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     expect(redeemGameCode).toHaveBeenCalledWith('abc-def', { silent: true })
 
     await waitFor(() =>
-      expect(document.querySelector('[data-code-done]')?.textContent).toContain('已激活'),
+      expect(document.querySelector('[data-code-done-dialog]'), '成功没弹框').toBeTruthy(),
     )
-
-    /* ★ 成功之后是**弹框**（用户 2026-11-05：「给个弹框提示就可以了」）。
-       上一版是一行绿字 —— 绿字会被 `alreadyOwned` 翻 true 之后的
-       `return null` 连带藏掉；弹框 `Portal` 到 body，压根不在这棵树里。 */
-    expect(document.querySelector('[data-code-done-dialog]'), '成功没弹框').toBeTruthy()
-    expect(document.querySelector('[data-code-open]'), '成功之后不该退回按钮').toBeNull()
-
-    /* ★ 不替孩子切「当前游戏」。用户 2026-11-05 明确选了
-       「保持现状（家长控制）」—— 所以成功之后只有一句指路，
-       页面里**不该**冒出一个「去玩 / 切过去」的按钮。 */
-    expect(
-      document.querySelector('[data-code-done]')?.textContent,
-      '要说清下一步找谁',
-    ).toContain('设置 → 游戏')
+    expect(document.querySelector('[data-code-done]')?.textContent).toContain('设置 → 游戏')
     expect(screen.queryByRole('button', { name: /去玩|切过去|开始玩/ })).toBeNull()
   })
 
-  it('★ 弹框里的「去设置看看」把人送到设置的游戏栏', async () => {
+  it('★ 「去设置看看」把人送到设置的游戏栏', async () => {
     await useApp.getState().updateSettings({ protectParentActions: false })
     useApp.setState({
       redeemGameCode: vi.fn(async () => ({ ok: true, message: '已激活：收租公寓' })),
     })
 
-    const user = await openGameDetail()
-    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    const { user } = await openActivate()
     await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
     await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
 
     await waitFor(() => expect(document.querySelector('[data-code-goto-settings]')).toBeTruthy())
     await user.click(document.querySelector('[data-code-goto-settings]') as HTMLElement)
 
-    /* 跨页通道走 store（`App` 监听 → 打开设置页并落到 `game` 栏）。
-       这里只钉「通道真的被设了」—— 真正打开设置页是 `App` 的事。 */
     expect(useApp.getState().pendingSettingsTab).toBe('game')
     expect(document.querySelector('[data-code-done-dialog]'), '点了该关掉弹框').toBeNull()
   })
 
-  it('★ 弹框里的「知道了」只关框，不跳设置', async () => {
+  it('★ 「知道了」只关框，不跳设置', async () => {
     await useApp.getState().updateSettings({ protectParentActions: false })
     useApp.setState({
       redeemGameCode: vi.fn(async () => ({ ok: true, message: '已激活：收租公寓' })),
     })
 
-    const user = await openGameDetail()
-    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    const { user } = await openActivate()
     await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
     await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
 
@@ -665,8 +661,7 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
       redeemGameCode: vi.fn(async () => ({ ok: false, message: '这个兑换码已经用过了' })),
     })
 
-    const user = await openGameDetail()
-    await user.click(document.querySelector('[data-code-open]') as HTMLElement)
+    const { user } = await openActivate()
     await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'ABC-DEG')
     await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
 
@@ -675,58 +670,45 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     expect((document.querySelector('[data-code-input]') as HTMLInputElement).value).toBe('ABC-DEG')
   })
 
-  /*
-    盲盒也能输码（用户 2026-11-05 明确要求）。
-
-    上一版这里钉的是反过来的事：盲盒没有 `game_id`，后台生成码也只挂
-    「游戏」分类，所以页面上写着「盲盒没有激活码」。用户要的是「手里
-    有码就能用」—— 码是**自带游戏**的，不需要盲盒自己有 game_id。
-  */
-  it('★ 盲盒详情页也能输码（手里有码不用再摸去设置）', async () => {
+  it('★ 盲盒 hero 也能开弹框输码（手里有码不用再摸去设置）', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
     const user = userEvent.setup()
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
-    // 单开盲盒 hero 整块是一个按钮，点它进详情
-    await user.click(screen.getByText('随机开出 1 款你还没有的游戏'))
-
-    expect(
-      document.querySelector('[data-wish-code]'),
-      '盲盒详情页没有输码入口 —— 手里有码的孩子还是没地方输',
-    ).toBeTruthy()
-    expect(document.querySelector('[data-code-open]')).toBeTruthy()
+    const hero = document.querySelector('[data-wish-card="blindbox"]') as HTMLElement
+    await user.click(hero.querySelector('[data-wish-activate]') as HTMLElement)
+    expect(document.querySelector('[data-activate-dialog]')).toBeTruthy()
+    expect(document.querySelector('[data-code-input]')).toBeTruthy()
     /* 「盲盒没有激活码」是上一版的说法，现在摆着只会误导。 */
     expect(screen.queryByText(/盲盒没有激活码/)).toBeNull()
   })
 
-  /*
-    ★ 列表上要有**动作**，不只是痕迹（2026-11-05 第三轮）。
+  it('★ 实物卡的弹框：没有输码区，但有一颗真「去购买」', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    const { user } = await openActivate('恐龙模型套装')
 
-    第二轮补的是一颗非交互标签「有码可输」，用户看完说「有码可输是啥意思，
-    很奇怪」—— 说清「这里能输码」并不等于给出「怎么输」。现在卡片底部是
-    一颗真按钮「家长激活」，点开直接是购买说明 + 输码框。
-  */
-  it('★ 游戏卡片写着「未激活」，并带一颗「家长激活」按钮', async () => {
-    render(<WishPage />)
-    await screen.findByText('心愿商城')
+    expect(document.querySelector('[data-activate-dialog]')).toBeTruthy()
+    /* 实物没有激活码 —— 摆一个必然失败的输入框就是挖坑（2026-11-06 定）。 */
+    expect(document.querySelector('[data-code-input]')).toBeNull()
 
-    const card = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
-    expect(card, '游戏卡没渲染').toBeTruthy()
-    expect(card.textContent, '用户要求「一开始游戏只是挂在商城，显示未激活」').toMatch(/未激活/)
-    const btn = card.querySelector('[data-wish-activate]')
-    expect(btn, '卡片上没有「家长激活」= 还是得自己摸进详情页').toBeTruthy()
-    expect(btn?.textContent).toMatch(/家长激活/)
-    /* 那句看不懂的话必须彻底消失 */
-    expect(card.textContent ?? '').not.toMatch(/有码可输/)
+    const buy = document.querySelector('[data-activate-buy]') as HTMLElement | null
+    expect(buy, '没有激活码时「去购买」是唯一的路，不能只是一句提示').toBeTruthy()
+    expect(buy?.textContent).toMatch(/去购买|去淘宝|京东/)
+
+    /* 兜底：目录里那条淘宝搜索链接必须真的在（点下去有地方去）。 */
+    expect(wishBuyUrl(wishItemById('wish-dino') ?? { name: '恐龙模型套装' })).toMatch(
+      /^https:\/\//,
+    )
+    await user.click(document.querySelector('[data-activate-close]') as HTMLElement)
   })
 
-  it('★ 盲盒那块也有「家长激活」（盲盒现在也能输码）', async () => {
+  it('★ 盲盒 hero：去激活 + 整块只剩「优先」是圆的', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
     const hero = document.querySelector('[data-wish-card="blindbox"]') as HTMLElement
-    expect(hero, '盲盒 hero 应该在').toBeTruthy()
-    expect(hero.querySelector('[data-wish-activate]'), '盲盒没有「家长激活」').toBeTruthy()
+    expect(hero.querySelector('[data-wish-activate]'), '盲盒没有「去激活」').toBeTruthy()
     expect(hero.textContent ?? '').not.toMatch(/有码可输/)
     /* ★ 状态不再是一排小胶囊标签：整块 hero 只剩右上角「优先」是圆的
        （用户 2026-11-05：名字 / 类型 / 标签挤在一起很丑）。 */
@@ -737,98 +719,28 @@ describe('心愿：商品详情页能就地激活游戏卡', () => {
     ).toEqual(['优先'])
   })
 
-  /*
-    反向钉子：这颗按钮**只能**长在游戏 / 盲盒卡上。
-
-    ⚠️ 别写成「整页只有一个『家长激活』」—— 列表里十几款游戏各一颗，
-       那样写必红（第一版就是这么写错的，红在「expected 有码可输」上，
-       看着像功能没做，其实是断言写错了）。
-  */
-  it('实物卡片不带「家长激活」，但要有一颗等高的「我想要」', async () => {
+  it('★ 每颗卡都是「去激活 + 状态」两颗按钮（混排不留白块）', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
-    const toy = [...document.querySelectorAll('[data-wish-card]')].find((c) =>
-      (c.textContent ?? '').includes('恐龙模型套装'),
-    ) as HTMLElement
-    expect(toy, '实物卡没渲染').toBeTruthy()
-    expect(toy.querySelector('[data-wish-activate]')).toBeNull()
-    /* ★ 第三轮补：在「全部」里和游戏卡混排时，grid 会把实物卡拉到同一行
-       高度；要是它没有动作按钮，底部就空出约 40px 白块（走查截图实锤）。
-       所以每颗卡都有一颗等高动作按钮，实物这颗只是「我想要」进详情页。 */
-    const detail = toy.querySelector('[data-wish-detail]') as HTMLElement
-    expect(detail, '实物卡没有动作按钮 ⇒ 混排会留白块').toBeTruthy()
-    expect(detail.textContent).toMatch(/我想要/)
-    await userEvent.setup().click(detail)
-    expect(document.querySelector('[data-activate-dialog]'), '「我想要」不该弹激活框').toBeNull()
-
-    /* 每颗卡**恰好一颗**动作按钮：多了是标签堆，少了就是那个白块。 */
-    for (const c of document.querySelectorAll('[data-wish-card][data-wish-kind]')) {
-      expect(c.querySelectorAll('[data-wish-activate], [data-wish-detail]').length).toBe(1)
+    const cards = [
+      ...document.querySelectorAll('[data-wish-card][data-wish-kind]'),
+    ] as HTMLElement[]
+    expect(cards.length).toBeGreaterThan(5)
+    for (const c of cards) {
+      const head = (c.textContent ?? '').slice(0, 12)
+      expect(c.querySelectorAll('[data-wish-activate]').length, `${head} 缺「去激活」`).toBe(1)
+      expect(c.querySelectorAll('[data-wish-action]').length, `${head} 缺状态按钮`).toBe(1)
     }
-  })
 
-  it('★ 点「家长激活」开弹框：讲清码从哪来 + 就地输码，不进详情页', async () => {
-    await useApp.getState().updateSettings({ protectParentActions: false })
-    render(<WishPage />)
-    await screen.findByText('心愿商城')
-
-    const card = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
-    await userEvent.setup().click(card.querySelector('[data-wish-activate]') as HTMLElement)
-
-    expect(document.querySelector('[data-activate-dialog]'), '点了「家长激活」没弹框').toBeTruthy()
-    const guide = document.querySelector('[data-activate-guide]')?.textContent ?? ''
-    /* 用户第二轮纠正过：没有实体卡、没有「卡背面」，是爸妈买完卖家发码。 */
-    expect(guide, '得说清码是爸妈买完卖家发的').toMatch(/淘宝/)
-    expect(guide).toMatch(/ABC-DEF/)
-    expect(document.querySelector('[data-code-input]'), '框里没有输码口').toBeTruthy()
-    expect(document.querySelector('[data-merchant-entry]'), '不该跳进详情页').toBeTruthy()
-  })
-
-  it('★ 弹框输码成功：卡片被摘掉也不影响成功框 + 去设置看看', async () => {
-    await useApp.getState().updateSettings({ protectParentActions: false })
-    const redeemGameCode = vi.fn(async () => {
-      /* ★ 模拟真实收尾：成功后 refresh ⇒ owned 多一款 ⇒ `hiddenOwned`
-         把那张游戏卡从列表里摘掉。弹框要是在卡片里，这一帧就跟着没了
-         （页面层挂载就是为这个）。 */
-      useApp.setState({ ownedGameIds: [...useApp.getState().ownedGameIds, 'renttower'] })
-      return { ok: true, message: '已激活：收租公寓' }
-    })
-    useApp.setState({ redeemGameCode })
-
-    const user = userEvent.setup()
-    render(<WishPage />)
-    await screen.findByText('心愿商城')
-    const card = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
-    await user.click(card.querySelector('[data-wish-activate]') as HTMLElement)
-    await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
-    await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
-
-    expect(redeemGameCode).toHaveBeenCalledWith('abc-def', { silent: true })
-    await waitFor(() =>
-      expect(document.querySelector('[data-code-done-dialog]'), '成功没弹框').toBeTruthy(),
-    )
-    expect(document.querySelector('[data-code-done]')?.textContent).toContain('设置 → 游戏')
-    await user.click(document.querySelector('[data-code-goto-settings]') as HTMLElement)
-    expect(useApp.getState().pendingSettingsTab).toBe('game')
-  })
-
-  it('★ 保护开着：弹框里先过家长密码，「先算了」能退出', async () => {
-    await useApp.getState().updateSettings({ protectParentActions: true, parentPin: '1234' })
-    const user = userEvent.setup()
-    render(<WishPage />)
-    await screen.findByText('心愿商城')
-    const card = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
-    await user.click(card.querySelector('[data-wish-activate]') as HTMLElement)
-
-    expect(document.querySelector('[data-activate-dialog]')).toBeTruthy()
-    expect(document.querySelector('[data-code-input]'), '没过闸门就出现输入框').toBeNull()
-    expect(screen.getByText('请爸爸妈妈来一下')).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: '先算了' }))
-    await waitFor(() => expect(document.querySelector('[data-activate-dialog]')).toBeNull())
+    /* 实物那颗状态按钮写「我想要」，点它**不弹**激活框 */
+    const toy = cards.find((c) => (c.textContent ?? '').includes('恐龙模型套装')) as HTMLElement
+    const action = toy.querySelector('[data-wish-action]') as HTMLElement
+    expect(action.textContent).toMatch(/我想要/)
+    await userEvent.setup().click(action)
+    expect(document.querySelector('[data-activate-dialog]'), '「我想要」不该弹激活框').toBeNull()
   })
 })
-
 
 /* ============================================================
    ★ 第四轮（2026-11-05）：撤掉「等定价」+ 卡片直接许愿
@@ -844,13 +756,13 @@ describe('心愿商城：第四轮卡片口径', () => {
     expect(document.body.textContent ?? '').not.toMatch(/等爸妈定价|等妈妈定价|等他们定价/)
   })
 
-  it('★ 游戏卡和盲盒 hero 都写「家长激活」', async () => {
+  it('★ 游戏卡和盲盒 hero 都写「去激活」', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
     const game = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
     const hero = document.querySelector('[data-wish-card="blindbox"]') as HTMLElement
-    expect(game.querySelector('[data-wish-activate]')?.textContent).toMatch(/家长激活/)
-    expect(hero.querySelector('[data-wish-activate]')?.textContent).toMatch(/家长激活/)
+    expect(game.querySelector('[data-wish-activate]')?.textContent).toMatch(/去激活/)
+    expect(hero.querySelector('[data-wish-activate]')?.textContent).toMatch(/去激活/)
   })
 
   it('★ 实物卡点「我想要」直接落一条 wished 单，不跳详情页', async () => {
@@ -860,7 +772,7 @@ describe('心愿商城：第四轮卡片口径', () => {
       (c.textContent ?? '').includes('恐龙模型套装'),
     ) as HTMLElement
     expect(toy, '实物卡没渲染').toBeTruthy()
-    const want = toy.querySelector('[data-wish-detail]') as HTMLElement
+    const want = toy.querySelector('[data-wish-action]') as HTMLElement
     expect(want.textContent).toMatch(/我想要/)
     await userEvent.setup().click(want)
     await waitFor(() =>
@@ -878,7 +790,7 @@ describe('心愿商城：第四轮卡片口径', () => {
       const card = [...document.querySelectorAll('[data-wish-card]')].find((c) =>
         (c.textContent ?? '').includes('恐龙模型套装'),
       )
-      expect(card?.querySelector('[data-wish-detail]')?.textContent).toMatch(/已向爸妈申请/)
+      expect(card?.querySelector('[data-wish-action]')?.textContent).toMatch(/已向爸妈申请/)
     })
     expect(document.querySelector('[data-merchant-entry]'), '不该跳进详情页').toBeTruthy()
   })
@@ -898,9 +810,155 @@ describe('心愿商城：第四轮卡片口径', () => {
     const toy = [...document.querySelectorAll('[data-wish-card]')].find((c) =>
       (c.textContent ?? '').includes('恐龙模型套装'),
     ) as HTMLElement
-    const btn = toy.querySelector('[data-wish-detail]') as HTMLElement
+    const btn = toy.querySelector('[data-wish-action]') as HTMLElement
     expect(btn.textContent).toMatch(/已向爸妈申请/)
     await userEvent.setup().click(btn)
     expect(await screen.findByText(/已向爸妈申请，等他们回应/)).toBeTruthy()
+  })
+})
+
+
+/* ============================================================
+   ★ 第六轮（2026-11-06）：可兑换 / 一次性兑换
+   ------------------------------------------------------------
+   用户原话：
+     「家长审核设定兑换卷数量时，还得填是否一次性兑换，都设定好后，
+       接着加入到兑换列表。」
+     「心愿商城也从申请兑换，改成 可兑换，点可兑换就去兑换列表。」
+     「兑换完后，如果是一次性的，就删除，心愿商城 物品状态又变回 我想要。」
+
+   三件事各自错法的样子：
+     · 心愿页自己扣币 ⇒ App 里出现第二个收银台（10-29 家长明确否过）；
+     · 一次性只在客户端补发 set-offer ⇒ 那次请求失败时券扣了、商品还在架上；
+     · 兑换完还挂着「已兑换」⇒ 孩子以为这件永远换完了，其实可以重新许愿。
+   ============================================================ */
+describe('心愿商城：可兑换 / 一次性兑换', () => {
+  /** 列表里某件商品那张卡 */
+  const cardOf = (name: string) => {
+    const el = [...document.querySelectorAll('[data-wish-card]')].find((c) =>
+      (c.textContent ?? '').includes(name),
+    ) as HTMLElement | undefined
+    if (!el) throw new Error(`列表里找不到「${name}」`)
+    return el
+  }
+
+  it('★ 点「可兑换」把人送到兑换那一格，这一页一分钱都不扣', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    await db.wishOffers.put({ itemId: 'wish-dino', voucherPrice: 20, openedAt: Date.now() })
+    await postHarvest({ delta: 50, source: 'manual_adjust', memo: 'test' })
+    await useApp.getState().refresh()
+    useApp.setState({ pendingRedeemItem: null })
+
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+
+    const card = cardOf('恐龙模型套装')
+    const action = card.querySelector('[data-wish-action]') as HTMLElement
+    expect(action.textContent, '定了价就该是「可兑换」').toMatch(/可兑换/)
+
+    const before = useApp.getState().harvestBalance
+    await userEvent.setup().click(action)
+
+    /* 判据是「跨页通道被设了」+「账本一动没动」——
+       只钉按钮文案的话，把 `wishRedeem` 写回去照样绿。 */
+    expect(useApp.getState().pendingRedeemItem, '没把人送到兑换那一格').toBe('wish-dino')
+    expect(useApp.getState().harvestBalance, '心愿商城不该扣币').toBe(before)
+    expect(useApp.getState().wishOrders.length, '不该生成订单').toBe(0)
+  })
+
+  it('★ 家长定价页能选「只兑换一次」，保存时写进 offer', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+
+    await user.click(cardOf('恐龙模型套装').querySelector('button') as HTMLElement)
+    await user.click(await screen.findByText('定价'))
+
+    const once = document.querySelector('[data-wish-once-on]') as HTMLElement | null
+    const repeat = document.querySelector('[data-wish-once-off]') as HTMLElement | null
+    expect(once, '定价页缺「只兑换一次」—— 用户要求审核时一起填').toBeTruthy()
+    expect(repeat).toBeTruthy()
+
+    await user.click(once as HTMLElement)
+    await user.click(screen.getByRole('button', { name: '开放兑换' }))
+
+    /* ⚠️ 判据必须是 **store**，不能是「库行」：
+       `user.click` 只等到事件派发，保存按钮的 async 处理函数还在跑 ——
+       它先 `put`（库行立刻就对），再 `await refresh()`（要读十几张表）。
+       拿库行当判据会在 put 一落地就通过，于是用例结束、下一条 `beforeEach`
+       的 `db.delete()` 把还在读表的 `refresh()` 掀翻 ——
+       症状是「全绿 + 一条 DatabaseClosedError」。
+       store 那份是 `refresh()` 末尾赋的值，读到它就等于 refresh 收工了。 */
+    await waitFor(() => {
+      const offer = useApp.getState().wishOffers.find((o) => o.itemId === 'wish-dino')
+      expect(offer?.oneTime, '一次性标记没落库 ⇒ 兑换完不会离开兑换列表').toBe(true)
+    })
+    /* 再读一次库：store 只是 `refresh()` 的镜像，别把「镜像对了」当「落盘了」 */
+    expect((await db.wishOffers.get('wish-dino'))?.oneTime).toBe(true)
+  })
+
+  it('★ 一次性兑换成功：offer 立刻关掉，卡片回到「我想要」', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    await db.wishOffers.put({
+      itemId: 'wish-dino',
+      voucherPrice: 20,
+      openedAt: Date.now(),
+      oneTime: true,
+    })
+    await postHarvest({ delta: 50, source: 'manual_adjust', memo: 'test' })
+    await useApp.getState().refresh()
+
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+    expect(cardOf('恐龙模型套装').querySelector('[data-wish-action]')?.textContent).toMatch(
+      /可兑换/,
+    )
+
+    const res = await useApp.getState().wishRedeem('wish-dino')
+    expect(res.ok).toBe(true)
+
+    /* ★ 关闭写在**兑换那个事务里**（`wishRedeem`），所以这里读库即可：
+       offer 行还在（历史要能解释），只是 `closedAt` 有值 ⇒ 不在兑换列表里了。 */
+    await waitFor(() => {
+      const offer = useApp.getState().wishOffers.find((o) => o.itemId === 'wish-dino')
+      expect(offer?.closedAt, '一次性商品兑换后必须关掉 offer').toBeTruthy()
+    })
+    expect((await db.wishOffers.get('wish-dino'))?.closedAt).toBeTruthy()
+    await waitFor(() =>
+      expect(
+        cardOf('恐龙模型套装').querySelector('[data-wish-action]')?.textContent,
+        '一次性兑换完，心愿商城要回到「我想要」',
+      ).toMatch(/我想要/),
+    )
+  })
+
+  it('★ 改价不冲掉「只兑换一次」（服务端那条 *bool 的本地镜像）', async () => {
+    await useApp.getState().wishSetOffer('wish-dino', 30, true)
+    expect((await db.wishOffers.get('wish-dino'))?.oneTime).toBe(true)
+
+    /* 不传第三个参数 = 这次请求没提这件事 ⇒ 沿用库里那份。
+       直接 `put(undefined)` 会把标记冲成「可重复」：家长下次重新开放时，
+       一件一次性的玩具就变成可以无限兑换了，界面上看不出任何异常。 */
+    await useApp.getState().wishSetOffer('wish-dino', 40)
+    const after = await db.wishOffers.get('wish-dino')
+    expect(after?.voucherPrice, '价格要改到').toBe(40)
+    expect(after?.oneTime, '改价不该顺手把一次性标记冲掉').toBe(true)
+
+    /* 显式 `false` 才是真的要改成可重复 */
+    await useApp.getState().wishSetOffer('wish-dino', 40, false)
+    expect((await db.wishOffers.get('wish-dino'))?.oneTime).toBe(false)
+  })
+
+  it('★ 对照：可重复兑换的商品换完仍然留在兑换列表里', async () => {
+    await db.wishOffers.put({ itemId: 'wish-dino', voucherPrice: 20, openedAt: Date.now() })
+    await postHarvest({ delta: 50, source: 'manual_adjust', memo: 'test' })
+    await useApp.getState().refresh()
+
+    const res = await useApp.getState().wishRedeem('wish-dino')
+    expect(res.ok).toBe(true)
+
+    const offer = await db.wishOffers.get('wish-dino')
+    expect(offer?.closedAt, '可重复兑换的不该被关掉').toBeFalsy()
   })
 })

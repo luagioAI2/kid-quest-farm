@@ -19,7 +19,12 @@
  * 而目录是跟着版本发布的 —— 一个失效的链接比没有链接更糟。
  * 接商家之后换成商家给的短链。
  *
- * ⚠️ `buyUrl` **只在家长确认页出现**，孩子端读不到（见 `wish-mall-spec.md` §8）。
+ * ⚠️ 两个「外链」别混（第六轮 2026-11-06 起）：
+ *   * **服务端**的 `wish_item.buy_url`（运营在 tf-admin 商城列表里配的那条）
+ *     仍然**只在家长侧返回**，孩子端读不到 —— 这条口径没变；
+ *   * **本文件**里的 `buyUrl`（淘宝搜索页）现在**孩子也能打开**：
+ *     「去激活」弹框里没有激活码时，那颗「去购买」跳的就是它。
+ *     给孩子的永远是**搜索页**而不是具体商品页，换 SKU / 下架都不会失效。
  */
 
 import type { WishItem } from '../domain/types'
@@ -44,6 +49,25 @@ export const WISH_BLINDBOX5_ID = 'wish-blindbox-5'
 /** 淘宝搜索链接。`encodeURIComponent` 是必须的 —— 商品名里有空格和中文 */
 function taobaoSearch(keyword: string): string {
   return `https://s.taobao.com/search?q=${encodeURIComponent(keyword)}`
+}
+
+/**
+ * 「去购买」的兜底链接（2026-11-06）。
+ *
+ * 优先级：目录里配的 `buyUrl`（和 tf-admin 商城列表里那条 `buy_url` 是
+ * 同一个商品）→ 现拼一条淘宝搜索。
+ *
+ * ⚠️ **永远返回一个能打开的链接**。孩子站在「去激活」的弹框里，
+ *    没有激活码时唯一能做的就是去买；返回 undefined 让按钮弹一句
+ *    「还没配链接」，等于把这条路堵死（而且他也没法自己搜）。
+ */
+export function wishBuyUrl(item: { name: string; buyUrl?: string }): string {
+  return item.buyUrl ?? taobaoSearch(item.name)
+}
+
+/** 「去购买」按钮上的字。没配就用「去淘宝搜索」——别写死「去购买」，它得说清去哪 */
+export function wishBuyLabel(item: { name?: string; buyLabel?: string }): string {
+  return item.buyLabel ?? '去淘宝搜索'
 }
 
 const BLINDBOX: WishItem = {

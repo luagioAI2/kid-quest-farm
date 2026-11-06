@@ -196,6 +196,25 @@ export function RedeemBody() {
    */
   const pendingCount = useMemo(() => history.filter((r) => r.pending).length, [history])
 
+  /**
+   * 每件心愿商品**已经兑换过几次**（2026-11-06）。
+   *
+   * 只数「真的成交了」的单子：`wished` 一分钱没扣、`cancelled` 券退回去了，
+   * 把它们算进次数，孩子会看到「已兑换 3 次」而手里只有一件东西。
+   *
+   * 口径和 `redeemedGameIdsFrom` 一致（committed / confirmed / done），
+   * 别在这里另起一套。
+   */
+  const redeemedTimes = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const o of wishOrders) {
+      if (o.status === 'committed' || o.status === 'confirmed' || o.status === 'done') {
+        m.set(o.itemId, (m.get(o.itemId) ?? 0) + 1)
+      }
+    }
+    return m
+  }, [wishOrders])
+
   const wishRows = useMemo(
     () =>
       wishShelf(
@@ -336,6 +355,7 @@ export function RedeemBody() {
                           price={row.price}
                           balance={balance}
                           harvestBalance={harvestBalance}
+                          times={redeemedTimes.get(row.item.id) ?? 0}
                           flash={flashId === row.item.id}
                           onBox={setBoxGames}
                         />
@@ -490,6 +510,7 @@ function WishRedeemRow({
   price,
   balance,
   harvestBalance,
+  times,
   flash,
   onBox,
 }: {
@@ -497,6 +518,8 @@ function WishRedeemRow({
   price: number
   balance: number
   harvestBalance: number
+  /** 这件商品**已经兑换过几次**（只数成交的，见 `redeemedTimes`） */
+  times: number
   /** 刚从心愿页「去兑换换」跳过来 —— 闪一下，让孩子看见是哪一行 */
   flash: boolean
   onBox: (gameIds: string[]) => void
@@ -553,6 +576,15 @@ function WishRedeemRow({
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <CoinPill amount={price} icon="🎫" tone={affordable ? 'sun' : 'danger'} />
             <span className="text-[11px] text-ink-400">{meta.emoji}</span>
+            {/* 已兑换次数：家长看「这件东西到底换过几次」，孩子看「还能不能再换」 */}
+            {times > 0 && (
+              <span
+                data-redeem-times={item.id}
+                className="rounded-full bg-grass-100 px-2 py-0.5 text-[11px] font-extrabold text-grass-700"
+              >
+                已兑换 {times} 次
+              </span>
+            )}
           </div>
           <p className="mt-1 text-[11px] font-bold text-ink-500">
             付款：<PaySplit plan={plan} />

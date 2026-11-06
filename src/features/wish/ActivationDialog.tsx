@@ -1,45 +1,63 @@
 import { Portal } from '@/components/Portal'
 import { ParentGate } from '../parent/ParentGate'
 import { CodeDonePanel, CodeForm, useCodeRedeem } from './CodeRedeemBlock'
+import { useApp } from '@/store/useApp'
+import { openExternal } from '@/platform/openUrl'
+import { wishBuyUrl, wishBuyLabel } from '@/games/wishCatalog'
+import type { WishItem } from '@/domain/types'
 
 /* ============================================================
-   列表卡片「家长激活」点开的那个弹框（第三轮建，第四轮改文案）
+   列表卡片「去激活」点开的那个弹框
    ------------------------------------------------------------
-   用户原话：「心愿商城每个礼品的设计布局有点丑陋……『有码可输』是啥意思，
-   很奇怪。应该是类似『去激活』，点击就会出现提示框购买、输入激活之类的吧。」
+   用户要求：所有类型（礼品 / 游戏 / 盲盒）都有「去激活」按钮，
+   点开弹框有输入激活码，没有激活码可以点「去购买」。
+   去购买链接从 tf-admin 商城列表的 buyUrl 配置取，
+   没配的话用目录里自带的淘宝搜索链接兜底。
 
-   ⇒ 「有码可输」那颗**非交互标签**换成一颗真按钮，点开的是这个框。
-   ⇒ 框里三件事说清：游戏现在是什么状态、码**从哪来**、输完会发生什么。
-     口径按用户第二轮纠正：码是爸妈在淘宝等买完，卖家发的一串 6 位码，
-     没有实体卡、没有「卡背面」。
-
-   2026-11-05 第四轮：用户要求「去激活改成家长激活」。动作、状态机、
-   闸门、成功弹框都没动，只改了列表卡片 / hero 两处可见按钮文案，
-   强调这一步得由爸爸妈妈拿着买来的码确认。上面的历史引文保留原话。
-
-   ⚠️ 挂在 `WishPage`（页面层），不挂在 `ItemCard` 里。激活成功会让
-   `ownedGameIds` 多一款 ⇒ `hiddenOwned` 把那张游戏卡从列表里摘掉 ⇒
-   弹框要是在卡片里，就会和卡片一起卸载，「激活成功 / 去设置看看」
-   在同一帧消失（和详情页那个 `alreadyOwned` bug 是同一类）。
-
-   ⚠️ 闸门：孩子也能点「家长激活」，但码是花钱买来的东西，所以过家长密码。
-   `ParentGate` 的 `onCancel` 必须给 —— 不给的话 `PinFlow` 底下那颗
-   「先算了」不渲染，手滑点开就没法退出。
-
-   ⚠️ 成功之后**不切当前游戏**（用户选的「保持现状（家长控制）」），
-   只给「去设置看看」这条指路。
+   ★ 游戏 / 盲盒：显示输码区 + 去购买按钮
+   ★ 实物礼品：只显示去购买按钮（实物没有激活码）
    ============================================================ */
 
 export function ActivationDialog({
   itemName,
+  item,
   onClose,
 }: {
   /** 从哪件商品点进来的，只是让说明里能叫出名字 */
   itemName: string
+  /** 商品本身（取 buyUrl / buyLabel） */
+  item?: WishItem
   onClose: () => void
 }) {
+  const pushToast = useApp((s) => s.pushToast)
   /** ★ 不传 `onDone`：传了会在成功那一刻把弹框关掉，`done` 也就没了。 */
   const hook = useCodeRedeem()
+
+  /** 是否是数字商品（游戏 / 盲盒）—— 有激活码可以输 */
+  const isDigital = item?.kind === 'gamebox' || item?.kind === 'blindbox'
+
+  /**
+   * 去购买按钮：打开外链（淘宝 / 京东等）。
+   *
+   * 链接来源 = 运营在 tf-admin「商城」列表里配的 `buy_url`；没配就落到
+   * 目录里那条淘宝搜索链接；两处都没有就**现拼一条**（`wishBuyUrl`）。
+   *
+   * ⚠️ 不要退回「这一款还没配购买链接」那种提示 —— 孩子站在这个弹框里
+   *    唯一能做的事就是去买，给他一颗点了只弹提示的死按钮，等于把
+   *    「没有激活码 → 去购买」这条唯一的出路堵死。
+   */
+  const goBuy = async () => {
+    const url = wishBuyUrl(item ?? { name: itemName })
+    const ok = await openExternal(url)
+    if (!ok) {
+      pushToast({
+        kind: 'info',
+        title: '这个链接打不开',
+        detail: `复制「${itemName}」到淘宝里搜一下`,
+        emoji: '🔗',
+      })
+    }
+  }
 
   if (hook.done) {
     return <CodeDonePanel done={hook.done} onClose={onClose} />
@@ -57,10 +75,13 @@ export function ActivationDialog({
               🎟️
             </span>
             <div className="min-w-0 flex-1">
-              <p className="font-display text-base font-extrabold text-ink-900">激活这款游戏</p>
+              <p className="font-display text-base font-extrabold text-ink-900">
+                激活「{itemName}」
+              </p>
               <p data-activate-guide className="mt-1 text-[11.5px] font-bold leading-relaxed text-ink-500">
-                「{itemName}」现在还没激活。爸爸妈妈在淘宝买好之后，卖家会发一串 6 位激活码（像
-                ABC-DEF）。在这里输一次，这款就直接进「我的游戏」—— 不用先攒兑换券。
+                {isDigital
+                  ? '爸爸妈妈在淘宝 / 京东买好之后，卖家会发一串 6 位激活码（像 ABC-DEF）。在这里输一次，这款就直接进「我的游戏」—— 不用先攒兑换券。'
+                  : '这一件是实物，没有激活码。点下面的按钮去淘宝 / 京东看看，买好之后爸妈会在心愿单里收尾。'}
               </p>
             </div>
             <button
@@ -74,9 +95,22 @@ export function ActivationDialog({
             </button>
           </div>
 
-          <ParentGate hint="输激活码需要爸爸妈妈确认" onCancel={onClose}>
-            <CodeForm hook={hook} autoFocus />
-          </ParentGate>
+          {/* 去购买：**所有类型都有**（实物没有码，这条路就是唯一的路） */}
+          <button
+            type="button"
+            data-activate-buy
+            onClick={() => void goBuy()}
+            className="mt-3 flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-sun-400 text-sm font-extrabold text-ink-900 active:btn-press"
+          >
+            ↗ {wishBuyLabel(item ?? { name: itemName })}
+          </button>
+
+          {/* 输码区：只有数字商品（游戏 / 盲盒）才有 */}
+          {isDigital && (
+            <ParentGate hint="输激活码需要爸爸妈妈确认" onCancel={onClose}>
+              <CodeForm hook={hook} autoFocus />
+            </ParentGate>
+          )}
         </div>
       </div>
     </Portal>

@@ -937,6 +937,13 @@ export interface WishOffer {
   openedAt: number
   /** 关闭时间。关掉不删行 —— 孩子之前换过的历史还要能解释 */
   closedAt?: number
+  /**
+   * 是否一次性兑换（2026-11-06）。
+   *
+   * `true` = 兑换一次后就从兑换列表里删掉，心愿商城物品状态变回「我想要」。
+   * `false` / 不填 = 可以反复兑换，兑换列表里始终保留，并显示「已兑换 N 次」。
+   */
+  oneTime?: boolean
 }
 
 /**

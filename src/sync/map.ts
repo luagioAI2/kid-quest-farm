@@ -398,6 +398,7 @@ export function mapWishOffer(s: ServerWishItemView): WishOffer | null {
     itemId: s.id,
     voucherPrice: s.voucher_price,
     openedAt: 0,
+    oneTime: s.one_time === true,
   }
 }
 

@@ -117,8 +117,8 @@ export const oWishRedeem = (itemId: string): Promise<ServerWishOrder> =>
  * 孩子之前换过的历史还要能解释）。别在客户端写「删掉那一行」，
  * 那会让 `wishesAwaitingReply` 把一件家长刚关掉的东西又算成「没回应过」。
  */
-export const oWishSetOffer = (itemId: string, price: number) =>
-  setWishOffer(itemId, Math.round(price))
+export const oWishSetOffer = (itemId: string, price: number, oneTime?: boolean) =>
+  setWishOffer(itemId, Math.round(price), 0, oneTime)
 
 export const oWishConfirm = (localOrderId: string) => {
   const id = serverWishOrderId(localOrderId)

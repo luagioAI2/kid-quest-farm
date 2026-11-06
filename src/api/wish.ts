@@ -82,6 +82,8 @@ export interface ServerWishItemView {
   // ---- 服务端算的标注（客户端只取前两个）----
   open: boolean
   voucher_price: number
+  /** 是否一次性兑换（服务端返回） */
+  one_time?: boolean
   affordable: boolean
   shortfall: number
   has_order: boolean
@@ -182,11 +184,17 @@ export const listWishItems = (opts: { includeArchived?: boolean; kind?: ServerWi
  * ⚠️ 服务端的 `voucher_price` 是 `binding:"omitempty,min=0"`，
  *    所以**必须显式带 0**，不能靠「不传」表示关闭 —— 不传等于没改。
  */
-export const setWishOffer = (itemId: string, voucherPrice: number, diamondPrice = 0) =>
+export const setWishOffer = (
+  itemId: string,
+  voucherPrice: number,
+  diamondPrice = 0,
+  oneTime?: boolean,
+) =>
   api<{ item_id: string; voucher_price: number; diamond_price: number }>('/wish/set-offer', {
     item_id: itemId,
     voucher_price: voucherPrice,
     diamond_price: diamondPrice,
+    one_time: oneTime,
   })
 
 /**

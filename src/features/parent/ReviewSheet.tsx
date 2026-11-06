@@ -187,6 +187,18 @@ function WishReviewCard({
      家长在两个入口看到同一个默认值，不会觉得是两套东西。
      已经定过价、后来被关掉又来的（`voucherPrice` 非 0），从原价起步。 */
   const [price, setPrice] = useState(() => Math.max(5, order.voucherPrice || 30))
+  /**
+   * 是否一次性兑换（2026-11-06，和券价一起在审核这一步定）。
+   *
+   * 用户原话：「家长审核设定兑换卷数量时，还得填是否一次性兑换，
+   * 都设定好后，接着加入到兑换列表。」
+   *
+   * 默认和心愿页的定价屏（`OfferView`）一致：游戏 / 盲盒 = 一次性
+   * （一个游戏换一次就够了），实物 = 可重复（同一个玩具再买一个也合理）。
+   */
+  const [oneTime, setOneTime] = useState(
+    () => item?.kind === 'gamebox' || item?.kind === 'blindbox',
+  )
   const [busy, setBusy] = useState(false)
 
   const nowHave = harvestBalance + balance
@@ -194,7 +206,7 @@ function WishReviewCard({
   const approve = async () => {
     setBusy(true)
     try {
-      await wishSetOffer(order.itemId, price)
+      await wishSetOffer(order.itemId, price, oneTime)
       pushToast({
         kind: 'reward',
         title: `已开放：${price} 张兑换券`,
@@ -295,6 +307,42 @@ function WishReviewCard({
             读起来像「…马上就能换。券不够的部分…」—— 一坨。 */}
         <p className="mt-1 px-1 text-[11px] font-bold leading-snug text-ink-400">
           券不够的部分会自动用积分补（1 张 = 1 积分），和「兑换」里一样。
+        </p>
+      </div>
+
+      {/* 是否一次性：和券价**同一屏**定完，这一件才算「设定好、可以进兑换列表」 */}
+      <div className="mt-3">
+        <p className="mb-2 px-1 font-display text-sm font-extrabold text-ink-500">
+          能兑换几次？
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-wish-once-off
+            onClick={() => setOneTime(false)}
+            className={
+              'btn h-10 flex-1 rounded-xl text-[13px] font-extrabold active:btn-press ' +
+              (!oneTime ? 'bg-sun-300 text-ink-900' : 'bg-white text-ink-500')
+            }
+          >
+            可以重复兑换
+          </button>
+          <button
+            type="button"
+            data-wish-once-on
+            onClick={() => setOneTime(true)}
+            className={
+              'btn h-10 flex-1 rounded-xl text-[13px] font-extrabold active:btn-press ' +
+              (oneTime ? 'bg-grape-400 text-white' : 'bg-white text-ink-500')
+            }
+          >
+            只兑换一次
+          </button>
+        </div>
+        <p className="mt-2 px-1 text-[11px] font-bold leading-snug text-ink-400">
+          {oneTime
+            ? '兑换成功后这一件会自动离开「兑换」列表，孩子想再要可以重新许愿。'
+            : '一直留在「兑换」列表里，并显示已经兑换过几次。'}
         </p>
       </div>
 

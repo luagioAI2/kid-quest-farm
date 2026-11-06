@@ -331,6 +331,12 @@ App 不做收银台，也不代收货款。
 
 商品带 `buyUrl`（淘宝/天猫/京东/闲鱼）。**只在家长确认页出现**，孩子端看不到。
 
+> ⚠️ **第六轮（2026-11-06）改了半句**：服务端返回的 `wish_item.buy_url`
+> （运营在 tf-admin 配的那条）仍然只给家长；但**目录里那条淘宝搜索链接**
+> （`wishCatalog.ts` 的 `buyUrl`）现在孩子也能打开 —— 「去激活」弹框里没有
+> 激活码时，那颗「去购买」跳的就是它。详见 6.3。给孩子的永远是**搜索页**，
+> 不是具体商品页（换 SKU / 下架都不会失效）。
+
 点了就是 `window.open(buyUrl)`，App 不知道也不关心成交结果 ——
 家长回来点「已经买好了」才算 `done`。
 
@@ -994,7 +1000,8 @@ e2e 里所有按索引取 tab 的地方都要复查。
   不再多绕一层详情页。⚠️ 但 `wishExpress` 遇到进行中的单子会**早退** ——
   已经有 `wished` / `committed` / `confirmed` 单子的卡，按钮改成
   `已向爸妈申请 ›` / `去看看 ›` 并 `onOpen()` 进详情页，否则就是「点一下什么都没发生」。
-- **每颗卡仍然恰好一颗动作按钮**（`data-wish-activate` 或 `data-wish-detail`），
+- **每颗卡仍然恰好一颗动作按钮**（`data-wish-activate` 或 `data-wish-detail`）
+  —— ⚠️ 第六轮起改成**两颗**（`data-wish-activate` + `data-wish-action`），见 6.1。
   未定价的价格行给了固定高度，混排时 `heights` / `tailGaps` 仍各自只有一个值。
 - 弹框本体、`useCodeRedeem` 状态机、家长闸门、成功后的「去设置看看」都没动。
 - 判据：`WishPage.test.tsx` 四条新断言 + `_probe-wish-card-qa.mjs` 全品类
@@ -1024,3 +1031,136 @@ e2e 里所有按索引取 tab 的地方都要复查。
 少改一处就是「字改了、断言还按旧文案找」⇒ 静默点空或假红。
 第四轮表格里保留的 `已告诉爸妈` 是**当时的**文案，已被本轮覆盖；
 更早的「已经告诉爸妈，等他们定价」是 2026-10-29 之前的历史叙述，不动。
+
+---
+
+## 第六轮：卡片「去激活」+ 一次性兑换 + 兑换次数（2026-11-06）
+
+用户原话：
+
+> 礼品，游戏 和 盲盒 有去激活。点开 弹框有输入激活码，没有激活码可以点去购买
+> （tf-admin 商城 列表有配置 淘宝或京东等链接，如果没有你随便填一个）。另外
+> 点礼品会打开详情，比如游戏详情（因为我想要，去激活 已经在礼品 item 有了，
+> 所以详情里不需要）。另外 当孩子选择 想要的时候，家长审核设定兑换卷数量时，
+> 还得填是否一次性兑换，都设定好后，接着加入到兑换列表。心愿商城也从申请兑换，
+> 改成 可兑换，点可兑换就去掉 兑换列表。兑换完后，如果是一次性的，就删除，
+> 心愿商城 物品状态又变回 我想要。兑换列表 item 添加已兑换次数。
+
+这一轮把「在哪激活」「一次还是多次」「兑换列表怎么记账」三件事一起定了。
+
+### 6.1 每颗卡两颗按钮
+
+| 位置 | 改动前 | 改动后 |
+| --- | --- | --- |
+| 卡片按钮 | 一颗（`data-wish-activate` **或** `data-wish-detail`） | **两颗**：`[data-wish-activate]`（`🎟️ 去激活`）+ `[data-wish-action]`（状态按钮） |
+| 卡片根节点 | `<div data-wish-card>` | 不变（`<div>`；`button` 不能嵌 `button`） |
+| 按钮文案 | `🎟️ 家长激活`（第四轮） | `🎟️ 去激活` |
+| 盲盒 hero | 只有状态按钮 | 也加了 `[data-wish-activate]` |
+
+- 实物（玩具 / 学习 / 美食 / 出行 / 其他）**也有**「去激活」，弹框里只有「去购买」。
+- 已拥有（`alreadyOwned`）的卡不画「去激活」—— 码已经用过了，再摆一颗只会误导。
+
+### 6.2 详情页不再重复摆输码块
+
+用户明确说「因为我想要，去激活 已经在礼品 item 有了，所以详情里不需要」。
+`WishPage.tsx` 里 `gamebox` / `blindbox` 详情页的 `<CodeRedeemBlock>` 全部摘掉；
+`[data-wish-code]` 现在**全 App 都不渲染**（`CodeRedeemBlock` 的 `card` 分支成了
+死代码，只为家长定价页保留 `card={false}` 的裸控件）。
+
+判据是**反向断言**：`_probe-wish-code-place.mjs` 进详情页后要求
+`document.querySelector('[data-wish-code]') === null`。
+
+### 6.3 「去购买」的链接从哪来
+
+优先级：`item.buyUrl`（tf-admin「商城」列表里配的 `buy_url`）→ `wishBuyUrl()` 现拼一条
+淘宝搜索链接（`https://s.taobao.com/search?q=<商品名>`）。
+
+按钮文案同理：`item.buyLabel`（`buy_label`）→ `去淘宝搜索`。
+
+⚠️ **不许退回「这一款还没配购买链接」那种死按钮**。孩子站在弹框里唯一能做的事
+就是去买，给一颗点了只弹提示的按钮，等于把「没有激活码 → 去购买」这条唯一的
+出路堵死。
+
+### 6.4 家长定「能兑换几次」
+
+`WishOffer.oneTime`（服务端 `wish_offer.one_time`）：
+
+- `true` = 兑换成功那一刻**自动关闭**这一行（`closed_at` 置为当前时间）：
+  商品从「兑换」列表消失，心愿商城回到「我想要」，孩子可以重新许愿、家长重新定价。
+- `false` / 不填 = 可以反复兑换，「兑换」列表里一直留着，并显示「已兑换 N 次」。
+
+入口有两个，**两个都要有**：
+
+| 入口 | 文件 | 说明 |
+| --- | --- | --- |
+| 顶栏 👀 家长待办 | `features/parent/ReviewSheet.tsx`（`WishReviewCard`） | 家长审核「我想要」时定券数 + 一次 / 多次 |
+| 心愿商城 → 家长定价页 | `features/wish/WishPage.tsx`（`OfferView`） | 改价时也能改这个开关 |
+
+默认值：`gamebox` / `blindbox` = 一次性（码只能用一次）；实物 = 可重复。
+
+⚠️ 服务端 `WishSetOfferReq.OneTime` 是 **`*bool`**：`nil` = 保持原值，
+显式 `false` = 改成可重复。用 `bool` 的话，「关闭商品」（`voucher_price = 0`）
+那条请求会顺手把一次性标记冲成 `false`，家长下次重新开放时语义就悄悄变了。
+
+### 6.5 一次性关闭必须和兑换在**同一个事务**里
+
+服务端 `WishService.Redeem` 在 `UpdateOrderCAS` 成功之后，同一个 `tx` 里调
+`CloseOfferWithTx` 写 `closed_at`。
+
+不能交给客户端再发一次 `set-offer(0)`：那次请求失败时券已经扣了、商品却还挂在
+兑换列表上 —— 孩子能再换一遍，而且两边都不报错。本地 Dexie 模式同理，
+`wishRedeem` 的 `db.transaction` 把 `db.wishOffers` 一起纳进来了。
+
+### 6.6 「可兑换」只负责送人，不扣币
+
+心愿商城这一页**从来不扣币**（第 2 节那条设计还在）。所以「可兑换」不再调
+`wishRedeem`，而是 `jumpToRedeem(item.id)` —— 跳到「兑换」那一格并高亮那一行。
+
+判据（`WishPage.test.tsx`）：
+
+```ts
+expect(useApp.getState().pendingRedeemItem).toBe('wish-dino')
+expect(useApp.getState().harvestBalance).toBe(before)   // 没扣
+expect(useApp.getState().wishOrders.length).toBe(0)     // 没生成订单
+```
+
+### 6.7 兑换列表显示「已兑换 N 次」
+
+`RedeemSheet.tsx` 按 `wishOrders` 统计，**只数成交过的**：
+`committed` / `confirmed` / `done`。`wished`（还没成交）和 `cancelled` 不算。
+
+⚠️ 拿 `confirmed` 当「成交过」的例子写测试会翻车：它算**在走流程**，
+`wishShelf` 会把整行排除掉，测试里那一行根本不出现。
+
+### 6.8 一次性兑换完、单子还停在「等爸妈买」怎么办
+
+用户选了「立刻变回『我想要』」。于是卡片状态判据改成**先看 offer 在不在**：
+
+```ts
+if (offerExists) {
+  if (order?.status === 'committed' || order?.status === 'confirmed') return '已兑换'
+  return '可兑换'
+}
+```
+
+offer 被关掉（`closedAt` 有值）⇒ 落到默认的 `🤍 我想要`。
+
+但这时那单可能还没走完，再点「我想要」会撞上进行中的单子。所以 `wishExpress`
+（本地 / 在线两条路）都要给反馈：
+
+```
+这一单还在等爸妈处理 / 处理完了才能再许愿
+```
+
+否则就是「点一下什么都没发生」—— 第四轮踩过的那个坑。
+
+### 6.9 这一轮的验收
+
+| 层 | 判据 |
+| --- | --- |
+| 服务端 | `wish_one_time_srv_test.go`：一次性成交后 offer 关闭、重复兑换不关、`voucher_price=0` 不冲掉 `one_time` |
+| 迁移 | `migrations/000003_wish_one_time.up.sql`（生产库 `AutoMigrate` 关着） |
+| 前端单测 | `WishPage.test.tsx`（弹框 / 实物无输码框 / 详情页反向断言 / 可兑换不扣币 / 一次性回「我想要」）、`RedeemSheet.test.tsx`（已兑换次数只数成交）、`ReviewSheet.test.tsx`（审核卡上「能兑换几次？」） |
+| 类型 | `npm run lint` |
+| 走查 | `_probe-wish-card-qa.mjs`（每颗卡两颗按钮 + 全品类都有「去激活」）、`_probe-wish-code-place.mjs`（弹框在、详情页没有） |
+| 产物 | `_check-copy-bundles.py`：`去激活` / `data-wish-action` / `data-activate-buy` 在，`家长激活` 不在 |

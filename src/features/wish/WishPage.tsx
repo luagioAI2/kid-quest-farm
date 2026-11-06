@@ -15,16 +15,22 @@ import { isOnlineMode } from '@/sync/pull'
 import { describeRedeemPayment } from '@/domain/redeem'
 import { shipFormIssue } from '@/domain/wishShip'
 import { formatPriceCents } from '@/domain/cash'
-import { WISH_BLINDBOX_ID, WISH_ITEMS, wishItemById } from '@/games/wishCatalog'
+import {
+  WISH_BLINDBOX_ID,
+  WISH_ITEMS,
+  wishBuyLabel,
+  wishBuyUrl,
+  wishItemById,
+} from '@/games/wishCatalog'
 import { STOREFRONT, type StorefrontEntry } from '@/games/storefront'
 import { LOCAL_GAMES } from '@/games/localGames'
 import { formatSize } from '@/games/size'
 import { GameIconArt } from '../settings/GameIcon'
 import { WishArt } from './WishArt'
+import { CodeRedeemBlock } from './CodeRedeemBlock'
 import { Portal } from '@/components/Portal'
 import { ParentPinPanel } from '../parent/ParentGate'
 import { MerchantView } from './MerchantView'
-import { CodeRedeemBlock } from './CodeRedeemBlock'
 import { ActivationDialog } from './ActivationDialog'
 import { openExternal } from '@/platform/openUrl'
 
@@ -204,7 +210,7 @@ export default function WishPage() {
   const [view, setView] = useState<WishView>({ kind: 'list' })
   const [filter, setFilter] = useState<WishFilter>(null)
   /**
-   * 列表卡片「家长激活」点开的弹框，记的是**从哪件商品点进来的**。
+   * 列表卡片「去激活」点开的弹框，记的是**从哪件商品点进来的**。
    *
    * ★ 必须挂在页面这一层：激活成功 ⇒ `ownedGameIds` 多一款 ⇒ `hiddenOwned`
    * 把那张游戏卡从列表里摘掉。弹框要是长在卡片里，就会跟卡片一起卸载，
@@ -373,7 +379,8 @@ export default function WishPage() {
       {content}
       {activateId && (
         <ActivationDialog
-          itemName={wishItemById(activateId)?.name ?? '这款游戏'}
+          itemName={wishItemById(activateId)?.name ?? '这款商品'}
+          item={wishItemById(activateId)}
           onClose={() => setActivateId(null)}
         />
       )}
@@ -408,7 +415,7 @@ function ListView({
   points: number
   owned: Set<string>
   onOpen: (id: string) => void
-  /** 卡片上「家长激活」：交给页面层开弹框，不进详情页 */
+  /** 卡片上「去激活」：交给页面层开弹框，不进详情页 */
   onActivate: (id: string) => void
   /** 卡片上「我想要」：直接许愿；已经有单子时按钮自动改成进详情页 */
   onWant: (id: string) => void
@@ -519,6 +526,7 @@ function ListView({
             points={points}
             onOpen={() => onOpen(blindbox.id)}
             onActivate={() => onActivate(blindbox.id)}
+            onWant={() => onWant(blindbox.id)}
           />
         )}
 
@@ -576,9 +584,17 @@ function cardBadge(
   item: WishItem,
   order: { status: string } | undefined,
   alreadyOwned: boolean,
+  offerExists: boolean,
 ): string | null {
   if (alreadyOwned) return '已拥有'
-  if (order?.status === 'committed') return '等爸妈确认'
+  /* ★ 2026-11-06：**先判有没有开放价，再判单子**。
+     一次性商品兑换成功就把 offer 关了 ⇒ 单子还停在 committed，
+     但这一件已经回到「可以重新许愿」的状态 —— 再挂「已兑换」，
+     孩子会以为这件东西永远换完了，而家长那边其实还能再定价一次。 */
+  if (offerExists) {
+    if (order?.status === 'committed' || order?.status === 'confirmed') return '已兑换'
+    return '可兑换'
+  }
   if (order?.status === 'wished') return '已向爸妈申请'
   /* 用户 2026-11-05：「一开始游戏只是挂在商城，显示未激活」。
      写「等爸妈开放」会让孩子以为得等家长点一下才能用，其实手里有码、
@@ -596,9 +612,10 @@ function BlindBoxHero({
   points,
   onOpen,
   onActivate,
+  onWant,
 }: {
   item: WishItem
-  offer: { voucherPrice: number } | undefined
+  offer: { voucherPrice: number; oneTime?: boolean } | undefined
   order: { status: string } | undefined
   owned: Set<string>
   /** 兑换券余额。和 `points` 一起只用来判「券不够、但加上积分够」 */
@@ -606,12 +623,19 @@ function BlindBoxHero({
   points: number
   onOpen: () => void
   onActivate: () => void
+  onWant: () => void
 }) {
   const remaining = blindBoxRemaining(item.pool ?? [], [...owned])
   /* ★ 不是「池子空了」，是「不够这一盒开的款数」—— 5 连开只剩 2 款时
      也必须是售罄，否则点进去必然被拒。 */
   const soldOut = blindBoxSoldOut(item, [...owned])
   const topUp = offer ? topUpOf(offer.voucherPrice, vouchers, points) : 0
+  const offerExists = !!offer && offer.voucherPrice > 0
+  const plan = offerExists ? planWishRedeem(offer!.voucherPrice, vouchers, points) : null
+  /* 「可兑换」只把人送到「兑换」那一格 —— 这一页**不扣币**（2026-10-29 家长口径：
+     「兑换里的东西都是一样…不需要去心愿商城换，心愿商城只是标明心愿的」）。
+     这里直接调 `wishRedeem` 的话，App 里就有了两个收银台。 */
+  const jumpToRedeem = useApp((s) => s.jumpToRedeem)
 
   /** 没定价也没许愿时不写状态：家长审核时直接定价，孩子不用「等定价」。 */
   let statusLine: string | null = null
@@ -619,6 +643,27 @@ function BlindBoxHero({
   else if (offer) {
     statusLine = `🎫 ${offer.voucherPrice}${topUp > 0 ? ` · 🪙 补 ${topUp}` : ''}`
   } else if (order?.status === 'wished') statusLine = '已向爸妈申请'
+
+  /** 状态按钮 */
+  let statusLabel = '🤍 我想要'
+  let statusDisabled = false
+  let statusAction: () => void = onWant
+  let statusKind = 'want'
+
+  if (offerExists && (order?.status === 'committed' || order?.status === 'confirmed') && !soldOut) {
+    statusLabel = '已兑换 ›'
+    statusKind = 'done'
+    statusAction = onOpen
+  } else if (offerExists && !soldOut) {
+    statusLabel = plan?.affordable ? '🎁 可兑换' : `还差 ${plan?.shortfall ?? 0}`
+    statusDisabled = !plan?.affordable
+    statusKind = 'redeem'
+    statusAction = () => jumpToRedeem(item.id)
+  } else if (order?.status === 'wished') {
+    statusLabel = '已向爸妈申请 ›'
+    statusKind = 'waiting'
+    statusAction = onOpen
+  }
 
   return (
     <div data-wish-card="blindbox" className="relative rounded-3xl bg-sun-100 shadow-flat">
@@ -643,9 +688,6 @@ function BlindBoxHero({
             {item.name}
           </span>
           <span className="mt-0.5 block text-xs font-bold text-ink-500">{item.note}</span>
-          {/* ★ 第四轮（2026-11-05）：不再写「等定价」那类话 —— 家长审核时
-              直接定价，孩子这一侧没有这一步；没定价也没许愿就整行不渲染。
-              其余状态仍是独立文本节点（findByText 按整句定位）。 */}
           <span className="mt-1.5 block space-y-0.5 text-[11px] font-bold leading-snug">
             {statusLine && <span className="block text-ink-700">{statusLine}</span>}
             <span className="block text-ink-500">还能开出 {remaining.length} 款</span>
@@ -655,16 +697,33 @@ function BlindBoxHero({
           </span>
         </span>
       </button>
-      {/* ★ 「有码可输」那颗看不懂的标签换成真按钮（用户 2026-11-05 第三轮）。
-          盲盒本身没有 `game_id`，但码自带游戏，所以这一路照样能激活。 */}
-      <div className="px-3.5 pb-3">
+      {/* 两颗按钮：去激活 + 状态按钮 */}
+      <div className="flex gap-2 px-3.5 pb-3">
         <button
           type="button"
           data-wish-activate
           onClick={onActivate}
-          className="flex h-8 w-full items-center justify-center gap-1 rounded-xl bg-white/80 text-[12px] font-extrabold text-grass-700 active:btn-press"
+          className="flex h-8 flex-1 items-center justify-center gap-1 rounded-xl bg-white/80 text-[12px] font-extrabold text-grass-700 active:btn-press"
         >
-          🎟️ 家长激活
+          🎟️ 去激活
+        </button>
+        <button
+          type="button"
+          data-wish-action={statusKind}
+          disabled={statusDisabled}
+          onClick={() => void statusAction()}
+          className={
+            'flex h-8 flex-1 items-center justify-center gap-1 rounded-xl text-[12px] font-extrabold active:btn-press disabled:opacity-50 ' +
+            (statusKind === 'redeem'
+              ? 'bg-grass-500 text-white'
+              : statusKind === 'done'
+                ? 'bg-ink-900/5 text-ink-500'
+                : statusKind === 'waiting'
+                  ? 'bg-sky-50 text-sky-600'
+                  : 'bg-white/80 text-sun-700')
+          }
+        >
+          {statusLabel}
         </button>
       </div>
     </div>
@@ -683,7 +742,7 @@ function ItemCard({
   onWant,
 }: {
   item: WishItem
-  offer: { voucherPrice: number } | undefined
+  offer: { voucherPrice: number; oneTime?: boolean } | undefined
   order: { status: string } | undefined
   owned: Set<string>
   /** 兑换券余额。和 `points` 一起只用来判「券不够、但加上积分够」 */
@@ -696,6 +755,8 @@ function ItemCard({
 }) {
   const alreadyOwned = item.kind === 'gamebox' && !!item.gameId && owned.has(item.gameId)
   const entry = gameEntryOf(item)
+  /** 「可兑换」= 把人送到「兑换」那一格（这一页不扣币，见上面 hero 的注释） */
+  const jumpToRedeem = useApp((s) => s.jumpToRedeem)
 
   /**
    * 券不够、但**加上积分就够** —— 卡片价格行后面补一小截。
@@ -705,13 +766,40 @@ function ItemCard({
    * 🪙 80 积分」。这正是 2026-10-29 这次改动要解决的问题。
    */
   const topUp = offer ? topUpOf(offer.voucherPrice, vouchers, points) : 0
-  const badge = cardBadge(item, order, alreadyOwned)
-  /** 码自带游戏，和「爸妈有没有给这件商品定价」无关，所以恒显示。 */
-  const canActivate = !alreadyOwned && (item.kind === 'gamebox' || item.kind === 'blindbox')
-  /** 已经表过态 / 已经下单：按钮改成进详情页，别让 `wishExpress` 早退成「点了没反应」。 */
-  let actionLabel = '🤍 我想要'
-  if (order?.status === 'wished') actionLabel = '已向爸妈申请 ›'
-  else if (order?.status === 'committed' || order?.status === 'confirmed') actionLabel = '去看看 ›'
+  const offerExists = !!offer && offer.voucherPrice > 0
+  const badge = cardBadge(item, order, alreadyOwned, offerExists)
+
+  /** 「可兑换」时的付款预览 —— 用来判断按钮是亮着还是灰着 */
+  const plan = offerExists ? planWishRedeem(offer!.voucherPrice, vouchers, points) : null
+
+  /** 状态按钮文案 + 行为 */
+  let statusLabel = '🤍 我想要'
+  let statusDisabled = false
+  let statusAction: () => void = onWant
+  let statusKind: 'want' | 'waiting' | 'redeem' | 'done' | 'owned' = 'want'
+
+  if (alreadyOwned) {
+    statusLabel = '已拥有'
+    statusDisabled = true
+    statusKind = 'owned'
+  } else if (offerExists && (order?.status === 'committed' || order?.status === 'confirmed')) {
+    /* 有开放价 + 进行中的兑换单 → 已兑换（等家长确认/收尾） */
+    statusLabel = '已兑换 ›'
+    statusKind = 'done'
+    statusAction = onOpen
+  } else if (offerExists) {
+    /* 有开放价 + 没有进行中的单子 → 可兑换（点了去「兑换」那一格换） */
+    statusLabel = plan?.affordable ? '🎁 可兑换' : `还差 ${plan?.shortfall ?? 0}`
+    statusDisabled = !plan?.affordable
+    statusKind = 'redeem'
+    statusAction = () => jumpToRedeem(item.id)
+  } else if (order?.status === 'wished') {
+    /* 没有开放价 + 孩子已申请 → 已向爸妈申请 */
+    statusLabel = '已向爸妈申请 ›'
+    statusKind = 'waiting'
+    statusAction = onOpen
+  }
+  /* else: 没有开放价 + 没有申请（或一次性兑换完了） → 想要（默认值） */
 
   return (
     <div
@@ -719,9 +807,8 @@ function ItemCard({
       data-wish-kind={item.kind}
       className="flex h-full flex-col rounded-3xl bg-white p-1.5 shadow-flat"
     >
-      {/* ★ 根节点从 `<button>` 换成 `<div>`：底下要再放一颗「家长激活」按钮，
-          button 嵌 button 是非法 HTML，而且点击会被外层吃掉。
-          现在「卡片主体」和「家长激活」是两颗平级按钮，各走各的。 */}
+      {/* ★ 根节点从 `<button>` 换成 `<div>`：底下要再放两颗按钮，
+          button 嵌 button 是非法 HTML，而且点击会被外层吃掉。 */}
       <button
         type="button"
         onClick={onOpen}
@@ -780,29 +867,41 @@ function ItemCard({
           ) : null}
         </span>
       </button>
-      {/* ★ 2026-11-05 第四轮：每张卡仍然恰好一颗等高动作按钮。
-          游戏 / 盲盒是「家长激活」→ 页面层弹框；实物是「我想要」→ 直接许愿。
-          已经有单子时后者变成「已向爸妈申请 / 去看看」并进详情页 ——
-          `wishExpress` 遇到进行中的单子会早退，不给反馈就是「点了没反应」。 */}
-      {canActivate ? (
+      {/* ★ 2026-11-06：所有类型的卡片都有两颗按钮。
+          「去激活」→ 弹框（输码 / 去购买）；
+          状态按钮 → 「想要」/「已申请」/「可兑换」/「已兑换」/「已拥有」。 */}
+      <div className="mt-1.5 flex flex-col gap-1.5">
+        {!alreadyOwned && (
+          <button
+            type="button"
+            data-wish-activate
+            onClick={onActivate}
+            className="flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-grass-50 text-[12px] font-extrabold text-grass-700 active:btn-press"
+          >
+            🎟️ 去激活
+          </button>
+        )}
         <button
           type="button"
-          data-wish-activate
-          onClick={onActivate}
-          className="mt-1.5 flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-grass-50 text-[12px] font-extrabold text-grass-700 active:btn-press"
+          data-wish-action={statusKind}
+          disabled={statusDisabled}
+          onClick={() => void statusAction()}
+          className={
+            'flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl text-[12px] font-extrabold active:btn-press disabled:opacity-50 ' +
+            (statusKind === 'redeem'
+              ? 'bg-grass-500 text-white'
+              : statusKind === 'done'
+                ? 'bg-ink-900/5 text-ink-500'
+                : statusKind === 'owned'
+                  ? 'bg-ink-900/5 text-ink-400'
+                  : statusKind === 'waiting'
+                    ? 'bg-sky-50 text-sky-600'
+                    : 'bg-sun-50 text-sun-700')
+          }
         >
-          🎟️ 家长激活
+          {statusLabel}
         </button>
-      ) : (
-        <button
-          type="button"
-          data-wish-detail
-          onClick={order ? onOpen : onWant}
-          className="mt-1.5 flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-sun-50 text-[12px] font-extrabold text-sun-700 active:btn-press"
-        >
-          {actionLabel}
-        </button>
-      )}
+      </div>
     </div>
   )
 }
@@ -1218,46 +1317,17 @@ function DetailView({
       </div>
 
       {/*
-       * 游戏卡：输码入口**就在这件商品自己这一页**（2026-11-05）。
+       * 输码入口**不在这一页**（2026-11-06）。
        *
-       * 用户原话：「应该在心愿商城 对应 item 就可以激活吧。不然拿到了
-       * 激活码或者兑换码，咋办。」在那之前全 App 只有两个输码口，
-       * 而且都在家长区（`设置 → 游戏`、定价页）—— 孩子手里捏着卡、
-       * 站在卖这张卡的商品上，却没有任何地方能输。
+       * 用户原话：「因为我想要、去激活 已经在礼品 item 有了，所以详情里不需要。」
+       * 现在每张卡片底下就有一颗「🎟️ 去激活」，点开是同一个弹框
+       * （输码 + 去购买）。详情页再摆一块，等于同一件事两个入口，
+       * 而且孩子得先点进详情才知道能输码。
        *
-       * ⚠️ 这里**不能**写成 `{... && !alreadyOwned && ...}`：激活成功会
-       * 立刻把 `alreadyOwned` 翻成 true，整块（连同「✅ 已激活」）会在
-       * 同一帧被卸载 —— 2026-11-05 真码走查抓到的就是它：游戏到账了，
-       * 页面上什么都不说。`owned` 交给组件内部判（`return null` 不卸载实例）。
+       * ⚠️ 别按「详情页更完整」把它加回来：弹框是**页面层**挂的
+       *    （`WishPage` 的 `activateId`），激活成功不会因为卡片被摘掉而卸载；
+       *    详情页里那一块反而要处理「激活成功 ⇒ alreadyOwned 翻转 ⇒ 整块消失」。
        */}
-      {item.kind === 'gamebox' && item.gameId && (
-        <CodeRedeemBlock gate="pin" card owned={alreadyOwned} />
-      )}
-
-      {/*
-       * 盲盒：开盒走兑换券，但**手里有码也能输**（用户 2026-11-05 明确要求）。
-       *
-       * 盲盒自己**没有 `game_id`**（它开的是一池子里的随机一款），可码是
-       * 自带游戏的 —— 输进去解锁的就是码里那一款，和开盒开出来的是两件事。
-       * 所以这一页两块并存：上面攒券开盒，下面有码直接输。
-       *
-       * ⚠️ 上一版这里写的是「盲盒没有激活码」。那句话在当时是对的（后台
-       *    生成码只挂「游戏」分类），但用户要的是「手里有码就能用」，
-       *    而这不需要盲盒自己有 game_id —— 别再把它删回去。
-       */}
-      {item.kind === 'blindbox' && (
-        <>
-          {/* ⚠️ 输码块在**说明上面**。反过来的话（说明 → 输码块）这一块
-              会落到 844 屏的第 706 行，下半截正好被底栏压住 ——
-              走查截图里一眼就能看到，等于「有入口但看不见」。
-              2026-11-05 第二轮量的。 */}
-          <CodeRedeemBlock gate="pin" card compact />
-          <p className="mt-3 rounded-2xl bg-paper-2 px-3.5 py-2.5 text-[11px] font-bold leading-relaxed text-ink-500">
-            🎁 盲盒开的是随机一款你还没有的游戏，靠兑换券在「兑换」里开。
-            上面输的码给的是码里那一款，不参与随机。
-          </p>
-        </>
-      )}
 
       {/*
        * 单个游戏：把「设置 → 游戏 → 详情」里的三块内容搬过来 ——
@@ -1391,6 +1461,19 @@ function OfferView({
 
   const cur = wishOffers.find((o) => o.itemId === itemId && !o.closedAt)
   const [price, setPrice] = useState(cur?.voucherPrice ?? 30)
+  /**
+   * 是否一次性兑换（2026-11-06，家长审核时和券价一起定）。
+   *
+   * 默认：游戏 / 盲盒 = 一次性（一个游戏换一次就够了），实物 = 可重复
+   * （同一个玩具再买一个、同一家店再去一次都是合理的）。
+   *
+   * ⚠️ 已经定过价的商品以**库里那份**为准（`cur.oneTime`），不要每次
+   *    进这一页都按 kind 重新猜 —— 家长改过一次之后，再进来会看到
+   *    自己没选过的值。
+   */
+  const [oneTime, setOneTime] = useState(
+    cur?.oneTime ?? (item?.kind === 'gamebox' || item?.kind === 'blindbox'),
+  )
   const [pinOk, setPinOk] = useState(false)
   /* 保护开着就要过闸门 —— 没设过密码也过（面板会变成「先设一个」） */
   const needsPin = settings.protectParentActions !== false
@@ -1458,6 +1541,8 @@ function OfferView({
             TINT_BG[item.tint]
           }
         >
+          {/* 顺序是「插画 → 游戏手绘图标 → emoji」：插画母版就是 4:3，
+              正好铺满这块底；另外两个都只是兜底 */}
           <WishArt
             itemId={item.id}
             emoji={item.emoji}
@@ -1523,6 +1608,40 @@ function OfferView({
         </p>
       </div>
 
+      {/* 一次性兑换：和券价同一屏定完，商品才能「设定好后加入兑换列表」 */}
+      <div className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
+        <p className="text-sm font-extrabold">能兑换几次</p>
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            data-wish-once-off
+            onClick={() => setOneTime(false)}
+            className={
+              'btn h-10 flex-1 rounded-xl text-[13px] font-extrabold active:btn-press ' +
+              (!oneTime ? 'bg-sun-300 text-ink-900' : 'bg-paper-2 text-ink-500')
+            }
+          >
+            可以重复兑换
+          </button>
+          <button
+            type="button"
+            data-wish-once-on
+            onClick={() => setOneTime(true)}
+            className={
+              'btn h-10 flex-1 rounded-xl text-[13px] font-extrabold active:btn-press ' +
+              (oneTime ? 'bg-grape-400 text-white' : 'bg-paper-2 text-ink-500')
+            }
+          >
+            只兑换一次
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] font-bold leading-relaxed text-ink-500">
+          {oneTime
+            ? '兑换成功后这一件会自动离开「兑换」列表，心愿商城里回到「我想要」—— 下次想要可以重新许愿。'
+            : '一直留在「兑换」列表里，列表上会写「已兑换 N 次」。'}
+        </p>
+      </div>
+
       <div className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
         <div className="flex items-center justify-between py-1.5 text-sm">
           <span className="text-xs font-bold text-ink-500">商品参考价</span>
@@ -1547,40 +1666,34 @@ function OfferView({
             游戏就进「我的游戏」，孩子那边不用再攒券。
           </p>
 
-          {item.buyUrl ? (
-            <button
-              data-wish-buy-game
-              onClick={async () => {
-                /* ⚠️ 别写 `window.open` —— APK 的 WebView 里它什么都不做，
-                   点了没反应也没有报错。`openExternal` 装了淘宝就直接进淘宝。 */
-                const ok = await openExternal(item.buyUrl!)
-                if (!ok) {
-                  pushToast({
-                    kind: 'info',
-                    title: '这个链接打不开',
-                    detail: `复制「${item.name} 激活码」到淘宝里搜一下`,
-                    emoji: '🔗',
-                  })
-                }
-              }}
-              className="btn mt-3 h-11 w-full bg-sun-400 text-sm font-extrabold text-ink-900 active:btn-press"
-            >
-              ↗ {item.buyLabel ?? '去商店购买'}
-            </button>
-          ) : (
-            /* 链接是运营一条条填的（`wish_item.buy_url`），没填的不该装成
-               「点了没反应」。直接说清楚，并给出**能自己动手**的那条路。 */
-            <p
-              data-wish-buy-none
-              className="mt-2 rounded-xl bg-paper-2 px-2.5 py-2 text-[11px] font-bold leading-relaxed text-ink-500"
-            >
-              这一款还没配购买链接 —— 直接在淘宝搜「{item.name} 激活码」就行。
-            </p>
-          )}
+          {/* 链接走 `wishBuyUrl` 兜底：运营没在 tf-admin 商城列表里填
+              `buy_url` 时，退回目录里那条淘宝搜索链接，**永远有得点**。 */}
+          <button
+            data-wish-buy-game
+            onClick={async () => {
+              /* ⚠️ 别写 `window.open` —— APK 的 WebView 里它什么都不做，
+                 点了没反应也没有报错。`openExternal` 装了淘宝就直接进淘宝。 */
+              const ok = await openExternal(wishBuyUrl(item))
+              if (!ok) {
+                pushToast({
+                  kind: 'info',
+                  title: '这个链接打不开',
+                  detail: `复制「${item.name} 激活码」到淘宝里搜一下`,
+                  emoji: '🔗',
+                })
+              }
+            }}
+            className="btn mt-3 h-11 w-full bg-sun-400 text-sm font-extrabold text-ink-900 active:btn-press"
+          >
+            ↗ {wishBuyLabel(item)}
+          </button>
 
-          {/* 输码口和商品详情页共用一块（`CodeRedeemBlock`）。
+          {/* 输码口就这一块（`CodeRedeemBlock`，`card={false}` 裸控件）。
               这一页整页已经在家长闸门后面 ⇒ `gate="open"`，
-              不再让人连输两次密码。 */}
+              不再让人连输两次密码。
+              ⚠️ 第六轮（2026-11-06）起**商品详情页不再有输码块** ——
+              入口只在卡片的「去激活」弹框里，同一件商品摆两个入口
+              孩子会以为要输两次。 */}
           <CodeRedeemBlock
             gate="open"
             label="有激活码？输一下"
@@ -1608,11 +1721,11 @@ function OfferView({
         )}
         <button
           onClick={async () => {
-            await wishSetOffer(itemId, price)
+            await wishSetOffer(itemId, price, oneTime)
             pushToast({
               kind: 'reward',
               title: `已开放：${price} 张兑换券`,
-              detail: '孩子现在可以换了',
+              detail: oneTime ? '孩子现在可以换，只能换一次' : '孩子现在可以换了',
               emoji: '✅',
             })
             onDone()

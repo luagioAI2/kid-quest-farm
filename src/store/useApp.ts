@@ -589,7 +589,7 @@ interface AppState {
    *
    * 关闭是写 `closedAt` 而不是删行 —— 孩子之前换过的历史还要能解释。
    */
-  wishSetOffer: (itemId: string, voucherPrice: number) => Promise<void>
+  wishSetOffer: (itemId: string, voucherPrice: number, oneTime?: boolean) => Promise<void>
   /** 家长确认：已经去外链买了（`committed` → `confirmed`） */
   wishConfirm: (orderId: string) => Promise<void>
   /** 家长标记完成，可顺手存收货信息和成交单号（`confirmed` → `done`） */
@@ -1789,6 +1789,14 @@ async function onlineWishExpress(get: () => AppState, itemId: string): Promise<v
      兑换过了），再弹一句「已向爸妈申请」就是假话。本地版是靠「先查有没有
      进行中的单子，有就直接 return」挡住的，这里用服务端返回的状态挡。 */
   if (r.data.status !== 'wished') {
+    /* 和本地版一字不差：那一单还在走（一次性商品兑换完、等爸妈买），
+       再点「我想要」不该什么都不发生。 */
+    get().pushToast({
+      kind: 'info',
+      title: '这一单还在等爸妈处理',
+      detail: '处理完了才能再许愿',
+      emoji: '⏳',
+    })
     await get().refresh()
     return
   }
@@ -1865,6 +1873,11 @@ async function onlineWishRedeem(
           : '等爸爸妈妈去买',
     emoji: view.item_emoji || item?.emoji || '🎁',
   })
+
+  /* 一次性兑换的「关闭 offer」由**服务端在兑换事务里**做（2026-11-06）——
+     客户端不再补发一次 set-offer：那次请求失败时券已经扣了、商品还挂在
+     兑换列表上，而且不报错。 */
+
   await get().refresh()
   return { ok: true, message: '兑换成功', gameId, gameIds }
 }
@@ -1874,8 +1887,9 @@ async function onlineWishSetOffer(
   get: () => AppState,
   itemId: string,
   voucherPrice: number,
+  oneTime?: boolean,
 ): Promise<void> {
-  const r = await onlineWrite(() => oWishSetOffer(itemId, voucherPrice))
+  const r = await onlineWrite(() => oWishSetOffer(itemId, voucherPrice, oneTime))
   if (!r.ok) {
     get().pushToast(writeFailToast(r.error, '这次定价'))
     return
@@ -4287,7 +4301,18 @@ export const useApp = create<AppState>((set, get) => ({
         o.itemId === itemId &&
         (o.status === 'wished' || o.status === 'committed' || o.status === 'confirmed'),
     )
-    if (active) return
+    /* 一次性商品兑换完之后，卡片会回到「我想要」；但那单可能还停在
+       「等爸妈买」。这时再点一下**必须给一句话** —— 早退而不吭声，
+       孩子的感受就是「点了没反应」（2026-11-06）。 */
+    if (active) {
+      get().pushToast({
+        kind: 'info',
+        title: '这一单还在等爸妈处理',
+        detail: '处理完了才能再许愿',
+        emoji: '⏳',
+      })
+      return
+    }
 
     const offer = get().wishOffers.find((o) => o.itemId === itemId && !o.closedAt)
     await db.wishOrders.put({
@@ -4388,7 +4413,7 @@ export const useApp = create<AppState>((set, get) => ({
     const freshId = uid('wo')
     const box: { ok: boolean; id: string } = { ok: true, id: freshId }
 
-    await db.transaction('rw', [db.ledger, db.harvestLedger, db.wishOrders], async () => {
+    await db.transaction('rw', [db.ledger, db.harvestLedger, db.wishOrders, db.wishOffers], async () => {
       const hTip = await harvestTip()
       const pTip = await ledgerTip()
       // 事务内**重新算一次**：外面那份只是给 UI 看的预览。
@@ -4454,6 +4479,13 @@ export const useApp = create<AppState>((set, get) => ({
         createdAt: existed?.createdAt ?? now,
         committedAt: now,
       })
+
+      /* 一次性兑换：成交那一刻就把 offer 关掉（2026-11-06）。
+         **必须在同一个事务里** —— 放在事务外面的话，中间崩一次就是
+         「券扣了、商品还挂在兑换列表上」，孩子能再换一遍，而且不报错。 */
+      if (offer.oneTime) {
+        await db.wishOffers.update(itemId, { closedAt: now })
+      }
     })
 
     if (!box.ok) return { ok: false, message: '兑换券不够啦' }
@@ -4481,18 +4513,29 @@ export const useApp = create<AppState>((set, get) => ({
             : '等爸爸妈妈去买',
       emoji: item.emoji,
     })
+
     await get().refresh()
     return { ok: true, message: '兑换成功', gameId, gameIds }
   },
 
-  wishSetOffer: async (itemId, voucherPrice) => {
-    if (isOnlineMode) return onlineWishSetOffer(get, itemId, voucherPrice)
+  wishSetOffer: async (itemId, voucherPrice, oneTime) => {
+    if (isOnlineMode) return onlineWishSetOffer(get, itemId, voucherPrice, oneTime)
 
     const price = Math.round(voucherPrice)
     const now = Date.now()
     if (price > 0) {
-      // `put` 整行覆盖 —— 重新开放会顺手清掉旧的 `closedAt`，这是想要的
-      await db.wishOffers.put({ itemId, voucherPrice: price, openedAt: now })
+      /* `put` 整行覆盖 —— 重新开放会顺手清掉旧的 `closedAt`，这是想要的。
+         ⚠️ 但 `oneTime` **不传**（`undefined`）时要沿用库里那份：否则
+         「改个价」会顺手把一次性标记冲成「可重复」，一件一次性的玩具
+         从此可以无限兑换，而界面上看不出任何异常。
+         服务端那条 `WishSetOfferReq.OneTime *bool` 是同一个道理。 */
+      const cur = await db.wishOffers.get(itemId)
+      await db.wishOffers.put({
+        itemId,
+        voucherPrice: price,
+        openedAt: now,
+        oneTime: oneTime ?? cur?.oneTime,
+      })
     } else {
       const cur = await db.wishOffers.get(itemId)
       // 关闭写 `closedAt`，**不删行** —— 孩子之前换过的历史还要能解释

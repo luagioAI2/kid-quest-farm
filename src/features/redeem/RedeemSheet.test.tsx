@@ -318,3 +318,54 @@ describe('兑换页 tab 行', () => {
     }
   })
 })
+
+
+/* ============================================================
+   第六轮：行上写「已兑换 N 次」（2026-11-06）
+   ------------------------------------------------------------
+   用户原话：「兑换列表 item 添加已兑换次数。」
+
+   口径只数**真的成交了**的单子：`wished` 一分钱没扣、`cancelled`
+   券退回去了 —— 把它们算进去，孩子会看到「已兑换 3 次」而手里只有一件。
+   ============================================================ */
+describe('兑换列表：已兑换次数', () => {
+  const order = (id: string, status: string) => ({
+    id,
+    itemId: 'wish-popmart',
+    itemName: '泡泡玛特盲盒',
+    itemEmoji: '🎁',
+    kind: 'toy' as const,
+    voucherPrice: 30,
+    status,
+    vouchersHeld: 30,
+    createdAt: Date.now(),
+  })
+
+  it('★ 成交过的单子才算次数（wished / cancelled 不算）', async () => {
+    await priceItem('wish-popmart', 30)
+    await db.wishOrders.bulkPut([
+      order('wo_a', 'done'),
+      /* ⚠️ 不能拿 `confirmed` 当「成交过」的例子：它算**在走流程**，
+         `wishShelf` 会把整行排除掉（那件东西已经付过钱了）——
+         断言会红在「列表里没有这一行」，看着像次数算错了。 */
+      order('wo_b', 'done'),
+      order('wo_c', 'cancelled'),
+      order('wo_d', 'wished'),
+    ] as never)
+    await useApp.getState().refresh()
+
+    render(<RedeemBody />)
+    await ready()
+
+    const row = shopRow('wish-popmart')
+    expect(within(row).getByText(/已兑换 2 次/), '次数只数成交的').toBeTruthy()
+  })
+
+  it('★ 一次没换过就不写这一行（别写「已兑换 0 次」）', async () => {
+    await priceItem('wish-popmart', 30)
+    render(<RedeemBody />)
+    await ready()
+
+    expect(within(shopRow('wish-popmart')).queryByText(/已兑换/)).toBeNull()
+  })
+})
