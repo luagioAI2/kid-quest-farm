@@ -498,6 +498,7 @@ await setBuyLinks({
   },
 })
 const withLink = await readConfirm()
+await page.screenshot({ path: `${OUT}/06a-confirm-with-link.png` })
 check(
   '★ 后台配了外链：确认页当场长出购买按钮',
   !!withLink.buyText,
