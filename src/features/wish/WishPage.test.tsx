@@ -596,12 +596,25 @@ describe('心愿：卡片「去激活」弹框', () => {
       document.querySelector('[data-code-input]'),
       '没过闸门就出现输入框 —— 那道闸门是假的',
     ).toBeNull()
+    /* ★ 2026-11-06 晚：锁定态**就是统一那个家长密码弹框**，不再自己出一张
+       「🔒 请爸爸妈妈来一下 + 爸爸妈妈在淘宝……」的卡片（用户点名删掉）。
+       判据必须分两半：统一弹框在、激活卡片**不在**。
+       只写「标题出现」的话，两种长相都能过 —— 上一版就是这么漏的。 */
+    expect(document.querySelector('[role="dialog"]'), '没弹统一的家长密码弹框').toBeTruthy()
+    expect(
+      document.querySelector('[data-activate-dialog]'),
+      '锁定态还在出激活卡片 —— 应该由统一弹框顶替它',
+    ).toBeNull()
     expect(screen.getByText('请爸爸妈妈来一下')).toBeTruthy()
 
     /* ★ 手滑点开要有退路。不给 `onCancel` 时 `PinFlow` 底下那颗
        「先算了」**根本不渲染** —— 只能答完数学题 + 设完密码才出得去。 */
     await userEvent.setup().click(screen.getByRole('button', { name: '先算了' }))
-    await waitFor(() => expect(document.querySelector('[data-activate-dialog]')).toBeNull())
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
+    expect(
+      document.querySelector('[data-activate-dialog]'),
+      '取消之后又冒出激活卡片',
+    ).toBeNull()
   })
 
   it('★ 成功：交给 store、留在弹框里说清「已经在我的游戏里」', async () => {

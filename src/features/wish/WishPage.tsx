@@ -13,7 +13,6 @@ import {
 import { ownedSetFor } from '@/domain/ownership'
 import { isOnlineMode } from '@/sync/pull'
 import { describeRedeemPayment } from '@/domain/redeem'
-import { shipFormIssue } from '@/domain/wishShip'
 import { formatPriceCents } from '@/domain/cash'
 import { WISH_BLINDBOX_ID, WISH_ITEMS, wishItemById } from '@/games/wishCatalog'
 import { STOREFRONT, type StorefrontEntry } from '@/games/storefront'
@@ -1443,7 +1442,7 @@ function OfferView({
    *
    * ⚠️ 2026-11-05：输码那一块搬去 `CodeRedeemBlock` 了 —— 商品详情页
    * 也要同一个口子（孩子那一侧），两份拷贝迟早走成两套口径。
-   * 这一页传 `gate="open"`：**整页已经在家长闸门后面**了，不必再输一次密码。
+   * 这一页**整页已经在家长闸门后面**了，组件自己不再套闸门（2026-11-06 起没有 `gate` 参数），不必再输一次密码。
    */
 
   /**
@@ -1718,16 +1717,12 @@ function OfferView({
           )}
 
           {/* 输码口就这一块（`CodeRedeemBlock`，`card={false}` 裸控件）。
-              这一页整页已经在家长闸门后面 ⇒ `gate="open"`，
-              不再让人连输两次密码。
+              这一页整页已经在家长闸门后面，组件自己不再套闸门
+              （2026-11-06 起它没有 `gate` 参数了）。
               ⚠️ 第六轮（2026-11-06）起**商品详情页不再有输码块** ——
               入口只在卡片的「去激活」弹框里，同一件商品摆两个入口
               孩子会以为要输两次。 */}
-          <CodeRedeemBlock
-            gate="open"
-            label="有激活码？输一下"
-            onDone={onDone}
-          />
+          <CodeRedeemBlock label="有激活码？输一下" onDone={onDone} />
         </div>
       )}
 
@@ -1792,18 +1787,16 @@ function ConfirmView({
   const item = order ? wishItemById(order.itemId) : undefined
 
   /*
-   * 收货地址（实物商品才有）。
+   * 收货信息（收件人 / 电话 / 地址）**整块删掉了**（2026-11-06 晚）。
    *
-   * 初值取已有的那份：兑换那一刻可能填过，也可能是家长上次补的。
-   * 这是地址的**唯一入口** —— 孩子那头没有表单，服务端 `/wish/redeem`
-   * 收到的 `ship` 永远是空的。
+   * 用户原话：「不需要寄到哪儿，因为都是在别的平台购买的东西，所以不需要填
+   * 什么收件人之类。」—— 这个 App 从来不经手快递：家长在淘宝 / 京东下单，
+   * 货由卖家发。在这儿问地址，除了让人以为「填了才发货」，还等于替别人的订单
+   * 留一份敏感信息（收件人 + 手机号 + 家庭地址，见 `wish-mall-spec` §9 隐私）。
+   *
+   * ⇒ 服务端 `ship` 字段照旧认（老单子里存过的还在），只是界面不再写它。
    */
-  const [ship, setShip] = useState({
-    receiver: order?.ship?.receiver ?? '',
-    phone: order?.ship?.phone ?? '',
-    address: order?.ship?.address ?? '',
-  })
-  const [shipBusy, setShipBusy] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   /*
    * 订单号（对账用，**选填**）。
@@ -1937,64 +1930,24 @@ function ConfirmView({
             ? '🎮 游戏已经在孩子的游戏柜里了，这里只是把这一单收尾。'
             : '📦 App 不代收货款。买好之后回到这里点「已经买好了」。'}
         </p>
-      </div>
-
-      {/* 收货地址：只有实物需要。数字商品已经进了游戏柜，问地址是多余的。 */}
-      {!digital && (
-        <div data-ship-form className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
-          <p className="text-sm font-extrabold">寄到哪儿</p>
-          <p className="mt-1 text-[11px] font-bold leading-relaxed text-ink-500">
-            填了才会记在这一单上 —— 发货和售后都靠它。
-            {order.ship ? '已经有一份了，要改直接改。' : ''}
-          </p>
-          <div className="mt-2.5 flex flex-col gap-2">
+        {/* 订单号：**选填**。原来和收货地址挤在一块，地址删掉之后搬进这张卡 ——
+            「花了几张券买了哪一单」还是要能对上（见 `redeemHistory`）。
+            maxLength 和服务端的 `max=64` 对齐，否则超长会被服务端按 400 拒掉，
+            界面只弹一句「操作没成功」。 */}
+        {!digital && (
+          <label className="mt-3 block">
+            <span className="text-[11px] font-bold text-ink-500">订单号（选填，对账用）</span>
             <input
-              data-ship-receiver
-              value={ship.receiver}
-              onChange={(e) => setShip((s) => ({ ...s, receiver: e.target.value }))}
-              placeholder="收件人（谁收这个快递）"
-              maxLength={20}
-              className="rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
-            />
-            <input
-              data-ship-phone
-              value={ship.phone}
-              onChange={(e) => setShip((s) => ({ ...s, phone: e.target.value }))}
-              placeholder="电话"
-              inputMode="tel"
-              maxLength={20}
-              className="rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
-            />
-            <input
-              data-ship-address
-              value={ship.address}
-              onChange={(e) => setShip((s) => ({ ...s, address: e.target.value }))}
-              placeholder="详细地址（省市区 + 小区门牌号）"
-              maxLength={120}
-              className="rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
-            />
-            {/*
-              订单号：**选填**，所以不参与 `shipFormIssue` 的校验 ——
-              不填也能点「已经买好了」。maxLength 和服务端的 `max=64` 对齐，
-              否则超长会被服务端按 400 拒掉，界面只弹一句「操作没成功」。
-            */}
-            <input
-              data-ship-order-no
+              data-wish-order-no
               value={orderNo}
               onChange={(e) => setOrderNo(e.target.value)}
-              placeholder="订单号（选填，查物流 / 对账用）"
+              placeholder="淘宝 / 京东那一单的订单号"
               maxLength={64}
-              className="rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
+              className="mt-1 w-full rounded-xl border border-ink-200 px-3 py-2.5 text-sm font-bold text-ink-800 outline-none focus:border-grass-400"
             />
-          </div>
-          {/* 地址只在**这一单**上留 90 天，之后服务端自己抹掉。
-              不说清楚的话，家长会以为这里存的是「我的收货地址」，
-              下次换商品发现要重填就会觉得是 bug。 */}
-          <p className="mt-2 text-[10px] font-bold leading-relaxed text-ink-400">
-            只记在这一单上，90 天后自动删掉。家里常用的地址不用存在这里。
-          </p>
-        </div>
-      )}
+          </label>
+        )}
+      </div>
 
       <div className="mt-3 rounded-3xl bg-white p-3.5 shadow-flat">
         <p className="text-sm font-extrabold">孩子付了什么</p>
@@ -2035,40 +1988,19 @@ function ConfirmView({
           取消兑换
         </button>
         <button
-          data-ship-submit
-          disabled={shipBusy}
+          data-wish-done
+          disabled={busy}
           onClick={async () => {
-            /*
-             * 实物商品：先把地址校验完再走。
-             *
-             * ⚠️ 这一步**不能省**。服务端的 `shipFields` 在地址为空时是
-             * 「一个字都不动」—— 静默不存、不报错。家长填了一半点完成，
-             * 界面上照样「已经完成啦」，地址其实没落库，等发货时才发现。
-             */
-            if (!digital) {
-              const issue = shipFormIssue(ship)
-              if (issue) {
-                pushToast({ kind: 'warn', title: issue, emoji: '📦' })
-                return
-              }
-            }
-            setShipBusy(true)
+            /* 收货表单整块删了（2026-11-06 晚），这一步只剩「确认 + 记订单号」。 */
+            setBusy(true)
             try {
               await wishConfirm(order.id)
-              /*
-               * 数字商品没有「外链订单」这回事 ⇒ 不送 ship、也不送订单号。
-               * `region` 取已有那份（服务端没存过就是空），界面不问省份 ——
-               * 家长的地址里本来就写了。
-               */
               const no = orderNo.trim()
-              await wishDone(order.id, {
-                ...(digital ? {} : { ship: { ...ship, region: order.ship?.region ?? '' } }),
-                ...(no ? { buyOrderNo: no } : {}),
-              })
+              await wishDone(order.id, no ? { buyOrderNo: no } : undefined)
               pushToast({ kind: 'reward', title: '已经完成啦', emoji: '🎉' })
               onDone()
             } finally {
-              setShipBusy(false)
+              setBusy(false)
             }
           }}
           className="btn h-12 flex-1 bg-grass-500 text-base font-extrabold text-white active:btn-press disabled:opacity-60"

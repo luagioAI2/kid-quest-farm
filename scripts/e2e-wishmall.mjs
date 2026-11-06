@@ -593,35 +593,9 @@ await page.evaluate(() => {
 })
 await wait(800)
 await page.screenshot({ path: `${OUT}/06b-confirm-again.png` })
-/* ⚠️ 2026-11-04：实物点「已经买好了」之前**必须填收货信息**。
-   这条规则是 e2e 写完之后才加的（`shipFormIssue`：收件人 / 电话 / 地址
-   三样都必填），于是这一段一直停在 committed、后面 20 多条断言连锁变红，
-   而报错只有一句「(没有 done 的单子)」—— 看着像状态机坏了。
-   基线（`7091749`）与当前代码**同样 25 条红**，所以不是新功能引入的回归。 */
-const fillByPlaceholder = async (ph, val) => {
-  const filled = await page.evaluate(
-    (p, v) => {
-      const el = [...document.querySelectorAll('input')].find((x) =>
-        (x.getAttribute('placeholder') || '').includes(p),
-      )
-      if (!el) return false
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      ).set
-      setter.call(el, v)
-      el.dispatchEvent(new Event('input', { bubbles: true }))
-      return true
-    },
-    ph,
-    val,
-  )
-  if (!filled) throw new Error(`收货信息里找不到 placeholder 含「${ph}」的输入框`)
-  await wait(120)
-}
-await fillByPlaceholder('收件人', '测试家长')
-await fillByPlaceholder('电话', '13800000000')
-await fillByPlaceholder('详细地址', '测试省测试市测试小区 1 号楼 101')
+/* ⚠️ 2026-11-06 晚：这里原来要先填收货信息（收件人 / 电话 / 地址）。
+   用户说「不需要寄到哪儿，都是在别的平台购买的东西」⇒ 表单整块删了，
+   点「已经买好了」现在是一步到位。别再往这里加填表步骤 —— 界面已经没有那几个框。 */
 check('填好了收货信息（实物「已经买好了」的前置条件）', true)
 
 /* 找不到按钮就**报失败**，不能 `b?.click()` 静默点空 ——

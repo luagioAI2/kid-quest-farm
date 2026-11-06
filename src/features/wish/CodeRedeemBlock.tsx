@@ -1,7 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Portal } from '@/components/Portal'
 import { useApp } from '@/store/useApp'
-import { ParentGate } from '../parent/ParentGate'
 
 /* ============================================================
    「有激活码？」—— 心愿商品页上的输码入口（2026-11-05）
@@ -60,7 +59,7 @@ import { ParentGate } from '../parent/ParentGate'
    ⇒ **商品详情页的 `CodeRedeemBlock` 全部摘掉** —— 同一件商品上摆两个
      输码入口，孩子只会以为要输两次；
    ⇒ 于是本文件现在只剩两个出口：
-     · 卡片弹框（`ActivationDialog`，数字商品）—— `CodeForm` + `ParentGate`；
+     · 卡片弹框（`ActivationDialog`，数字商品）—— `CodeForm` + `PinSheetBody`；
      · 家长定价页（`OfferView`）—— 裸 `CodeForm`（整页已在闸门后）。
      `CodeRedeemBlock` 本身只为定价页保留（`card={false}`），详情页那条
      `card` / `compact` 分支已经是死代码，留着是为了少一次改动面。
@@ -75,16 +74,18 @@ import { ParentGate } from '../parent/ParentGate'
    ⇒ 成功时**不再发全局 toast**（`redeemGameCode(code, { silent: true })`）：
    弹框已经说了同一句话，再飘一条就是「同一句话说两遍」。
 
-   ## 两道闸门，两种用法
+   ## 闸门不归这里管
 
-   `gate`：
-     · `'pin'`  —— 曾经给商品详情页用。第六轮详情页摘掉之后**已无调用方**
-                   （卡片弹框自己包 `ParentGate`），分支留着只为少改一处。
-                   保留的理由没变：码是花钱买来的东西，让孩子自己核销等于
-                   把「买」这件事的确认权交给他；而且激活之后游戏就进了
-                   账号，退不回来。
-     · `'open'` —— 家长定价页。那一页**整页**已经在闸门后面了，
-                   这里再套一层就是让人连输两次密码。
+   2026-11-06 删掉了 `gate` 参数和它的 `'pin'` 分支：第六轮详情页摘掉输码块
+   之后它就没有调用方了（唯一调用点是定价页，传 `'open'`），也没有测试传它。
+
+   ★ 为什么不是「留着以后用」：那条分支会包一层 `ParentGate` → `ParentPinPanel`，
+   它**自带 🔒 和标题**，而这个组件自己已经有「🎟️ 有激活码？」的卡片标题 ——
+   一启用就是两个标题叠着，和 👀 审核弹层、任务编辑器、去激活弹框三处
+   刚修掉的毛病一模一样。
+
+   ⇒ 要加闸门，用 `ParentLockButton` + `ParentPinSheet`（见
+     `docs/parent-pin-gate.md`）；这里只负责「输码」这一件事。
 
    ⚠️ 成功之后**不切当前游戏**。切「当前」是家长的事（`设置 → 游戏`），
       和 `purchaseGame` 里的口径一致：买完不自动切。这条是用户
@@ -234,9 +235,8 @@ export function CodeDonePanel({ done, onClose }: { done: string; onClose: () => 
 }
 
 /**
- * 输入框本体。**不带闸门** —— 闸门由两个外壳各自决定：
- * 详情页 `gate==='pin'` 才包 `ParentGate`，定价页已经整页在闸门后不包；
- * 列表弹框一律包。
+ * 输入框本体。**不带闸门** —— 闸门归外壳：卡片弹框用 `PinSheetBody` 包，
+ * 定价页整页已经在闸门后面，不再包。
  */
 export function CodeForm({
   hook,
@@ -286,15 +286,12 @@ export function CodeForm({
 }
 
 export function CodeRedeemBlock({
-  gate = 'open',
   owned = false,
   card = false,
   compact = false,
   label = '输入激活码',
   onDone,
 }: {
-  /** `'pin'` = 自己带一道家长闸门；`'open'` = 调用方已经过闸门了 */
-  gate?: 'pin' | 'open'
   /** 这款游戏**已经在这个账号里**了（详情页传 `alreadyOwned`） */
   owned?: boolean
   /** `true` = 自己带那张白卡片和标题（商品详情页用）；`false` = 裸控件（定价页用） */
@@ -360,16 +357,5 @@ export function CodeRedeemBlock({
     )
   }
 
-  return wrap(
-    gate === 'pin' ? (
-      /* ⚠️ 必须给 `onCancel` —— 不给的话 `PinFlow` 底下那颗「先算了」
-         根本不渲染（它按 `onCancel` 有无决定要不要画）。表现是：手滑点开
-         输码，只能一路答完数学题 + 设完密码，或者按返回退出整件商品。 */
-      <ParentGate hint="输激活码需要爸爸妈妈确认" onCancel={() => setOpen(false)}>
-        <CodeForm hook={hook} />
-      </ParentGate>
-    ) : (
-      <CodeForm hook={hook} />
-    ),
-  )
+  return wrap(<CodeForm hook={hook} />)
 }

@@ -1,5 +1,5 @@
 import { Portal } from '@/components/Portal'
-import { PinSheetBody, parentPinCopy, useParentGate } from '../parent/ParentGate'
+import { ParentPinSheet, useParentGate } from '../parent/ParentGate'
 import { CodeDonePanel, CodeForm, useCodeRedeem } from './CodeRedeemBlock'
 import { useApp } from '@/store/useApp'
 import { openExternal } from '@/platform/openUrl'
@@ -47,18 +47,14 @@ export function ActivationDialog({
   /** 是否是数字商品（游戏 / 盲盒）—— 有激活码可以输 */
   const isDigital = item?.kind === 'gamebox' || item?.kind === 'blindbox'
 
-  /* 家长密码（2026-11-06 统一）：输码要爸妈确认。
-     ★ **标题由弹框这一层出** —— 原来里面还摆一块 `ParentPinPanel`，它自带
-     🔒 和「请爸爸妈妈来一下」，于是弹框里两个标题叠着（真机截图确认过），
-     和 👀 审核弹层、任务编辑器是同一个毛病。 */
-  const settings = useApp((s) => s.settings)
+  /* 家长密码（2026-11-06 晚，第二版）：**锁定态就是那个统一弹框本身**。
+     ★ 用户看了走查图说：「请爸爸来一下，还有一段文字描述（爸爸妈妈在淘宝……）
+     根本不需要，家长密码都是统一的 UI。」
+     所以这里不再自己出一张卡片（🔒 + 标题 + 长说明 + 给「X」输激活码），
+     而是直接把 `ParentPinSheet` 顶上来 —— 和设置 / 兑换 / 心愿详情同一个界面。
+     输对它自己关掉，激活卡片才出现。 */
   const { needsPin, passed, unlock } = useParentGate()
   const gateOn = isDigital && needsPin && !passed
-  const gateCopy = parentPinCopy(
-    !!settings.parentPin,
-    '请爸爸妈妈来一下',
-    `给「${itemName}」输激活码`,
-  )
 
   /** 去购买：打开后台配的那条外链（淘宝 / 京东等） */
   const goBuy = async () => {
@@ -78,6 +74,15 @@ export function ActivationDialog({
     return <CodeDonePanel done={hook.done} onClose={onClose} />
   }
 
+  /* 锁定态：**只出统一那个家长密码弹框**，这张卡片整个不出。
+     ⚠️ 别在这儿补「为什么需要密码」的长句 —— 那是用户点名删掉的东西；
+        一行副标题够了（设置页也是这么写的）。 */
+  if (gateOn) {
+    return (
+      <ParentPinSheet open onClose={onClose} onPass={unlock} hint="输激活码，先输一下密码" />
+    )
+  }
+
   return (
     <Portal>
       <div
@@ -87,19 +92,25 @@ export function ActivationDialog({
         <div className="my-auto w-full max-w-sm rounded-3xl bg-white p-4 shadow-float">
           <div className="flex items-start gap-2.5">
             <span aria-hidden className="text-2xl leading-none">
-              {gateOn ? gateCopy.emoji : '🎟️'}
+              🎟️
             </span>
             <div className="min-w-0 flex-1">
               <p className="font-display text-base font-extrabold text-ink-900">
-                {gateOn ? gateCopy.title : `激活「${itemName}」`}
+                {/* ⚠️ 这里必须是**表达式**。2026-11-06 晚我把它写成纯文本
+                    `激活「${itemName}」`，结果界面原样印出 `激活「$云边小农场」`
+                    —— tsc 不报（JSX 文本合法），只有截图能看出来。 */}
+                {`激活「${itemName}」`}
               </p>
-              <p data-activate-guide className="mt-1 text-[11.5px] font-bold leading-relaxed text-ink-500">
-                {isDigital
-                  ? '爸爸妈妈在淘宝 / 京东买好之后，卖家会发一串 6 位激活码（像 ABC-DEF）。在这里输一次，这款就直接进「我的游戏」—— 不用先攒兑换券。'
-                  : buyLink
+              {/* 说明句**只有实物才有**（没有激活码 → 告诉孩子下一步点哪儿）。
+                  ★ 数字商品一个字都不写：用户看了走查图说「爸爸妈妈在淘宝……
+                  那段文字描述根本不需要」（2026-11-06 晚）。 */}
+              {!isDigital && (
+                <p data-activate-guide className="mt-1 text-[11.5px] font-bold leading-relaxed text-ink-500">
+                  {buyLink
                     ? '这一件是实物，没有激活码。点下面的按钮去淘宝 / 京东看看，买好之后爸妈会在心愿单里收尾。'
                     : '这一件是实物，没有激活码。想要的话关掉这个框，点「🤍 我想要」告诉爸妈，他们买好之后会在心愿单里收尾。'}
-              </p>
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -126,14 +137,8 @@ export function ActivationDialog({
           )}
 
           {/* 输码区：只有数字商品（游戏 / 盲盒）才有。
-              锁定态只摆「副标题 + 键盘」（`PinSheetBody` 不带标题），
-              输对了才换成真输入框。 */}
-          {isDigital &&
-            (gateOn ? (
-              <PinSheetBody hint={gateCopy.hint} onPass={unlock} onClose={onClose} />
-            ) : (
-              <CodeForm hook={hook} autoFocus />
-            ))}
+              锁定态**走不到这里** —— 上面已经 early return 了统一弹框。 */}
+          {isDigital && <CodeForm hook={hook} autoFocus />}
         </div>
       </div>
     </Portal>
