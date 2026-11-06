@@ -4,6 +4,7 @@ import {
   listInstalledBundles,
   loadSettings,
   mirrorGameCoinBalance,
+  saveWishBuyLinks,
 } from '../db/db'
 import { pullCoinBalances } from '../online/coin'
 import { pullGameKv } from '../online/kv'
@@ -12,6 +13,7 @@ import { walletInfo, walletLedger } from '../api/wallet'
 import { listRedeemRecords, listRedeemRows } from '../api/redeem'
 import { listWishItems, listWishOrders } from '../api/wish'
 import { getSession, getToken } from '../api/session'
+import type { WishBuyLink } from '../domain/types'
 import { pullSettings, type PullSettingsStatus } from '../online/settings'
 import { importLegacyIfNeeded } from '../online/legacy'
 import { adoptAccount, type AdoptResult } from '../online/adopt'
@@ -202,6 +204,17 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       .map(mapWishOffer)
       .filter((r): r is NonNullable<typeof r> => r !== null)
     const wishRows = (wishOrders ?? []).map(mapWishOrder)
+    /* 外链（第七轮）：运营在 tf-admin 配的 `buy_url`，孩子那颗「去购买」
+       有没有就看它。**整份替换**、不是合并 —— 运营清掉一条链接时，
+       合并会把旧的留在本地，那颗按钮就再也下不掉了。
+       空 url 直接丢（服务端可能带一堆空串）。 */
+    const buyLinks: Record<string, WishBuyLink> = {}
+    for (const it of wishList?.list ?? []) {
+      const url = (it.buy_url ?? '').trim()
+      if (!url) continue
+      const label = (it.buy_label ?? '').trim()
+      buyLinks[it.id] = label ? { url, label } : { url }
+    }
 
     await db.transaction(
       'rw',
@@ -297,6 +310,18 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       settingsStatus = await pullSettings(await loadSettings())
     } catch (e) {
       console.warn('[sync] 家长设置没拉到：', (e as { message?: string })?.message)
+    }
+
+    /* 外链缓存：**放在大事务外面**。它只写 `meta` 一个键，和上面那些表无关；
+       写失败最多是「这次没更新」，不该连累任务和积分。
+       ⚠️ 只在**拉取成功**时写（`wishList !== null`）：拉失败还照写不误的话，
+         本地那份会被清成空 —— 孩子那颗「去购买」就凭空消失了。 */
+    if (wishList !== null) {
+      try {
+        await saveWishBuyLinks(buyLinks)
+      } catch (e) {
+        console.warn('[sync] 心愿外链没写进本地：', (e as { message?: string })?.message)
+      }
     }
 
     const kv = { keys: 0, failed: 0 }

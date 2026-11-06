@@ -3,7 +3,6 @@ import { ParentGate } from '../parent/ParentGate'
 import { CodeDonePanel, CodeForm, useCodeRedeem } from './CodeRedeemBlock'
 import { useApp } from '@/store/useApp'
 import { openExternal } from '@/platform/openUrl'
-import { wishBuyUrl, wishBuyLabel } from '@/games/wishCatalog'
 import type { WishItem } from '@/domain/types'
 
 /* ============================================================
@@ -11,11 +10,16 @@ import type { WishItem } from '@/domain/types'
    ------------------------------------------------------------
    用户要求：所有类型（礼品 / 游戏 / 盲盒）都有「去激活」按钮，
    点开弹框有输入激活码，没有激活码可以点「去购买」。
-   去购买链接从 tf-admin 商城列表的 buyUrl 配置取，
-   没配的话用目录里自带的淘宝搜索链接兜底。
 
-   ★ 游戏 / 盲盒：显示输码区 + 去购买按钮
+   ★ 游戏 / 盲盒：显示输码区（后台配了链接才多一颗「去购买」）
    ★ 实物礼品：只显示去购买按钮（实物没有激活码）
+
+   ★ 第七轮（2026-11-06）：「去购买」**有没有，看后台配没配链接**
+     —— tf-admin「商城」列表里的 `buy_url`。没配就**不摆这颗按钮**。
+
+     以前这里现拼一条淘宝搜索页兜底（`wishBuyUrl`），结果是
+     「后台没配」和「配了」在界面上长得一模一样：用户看到一颗永远在、
+     却和后台配置毫无关系的按钮。用户原话：「如果没有就不显示。」
    ============================================================ */
 
 export function ActivationDialog({
@@ -25,30 +29,28 @@ export function ActivationDialog({
 }: {
   /** 从哪件商品点进来的，只是让说明里能叫出名字 */
   itemName: string
-  /** 商品本身（取 buyUrl / buyLabel） */
+  /** 商品本身（用它查后台配的外链） */
   item?: WishItem
   onClose: () => void
 }) {
   const pushToast = useApp((s) => s.pushToast)
+  /**
+   * 后台配的外链。**没配 = `undefined` ⇒ 不渲染按钮**。
+   *
+   * ⚠️ 别在这里 `?? 现拼一条淘宝搜索页`。那就是这一轮要修的东西：
+   *    兜底会让「运营没配」和「配了」看起来完全一样。
+   */
+  const buyLink = useApp((s) => (item ? s.wishBuyLinks[item.id] : undefined))
   /** ★ 不传 `onDone`：传了会在成功那一刻把弹框关掉，`done` 也就没了。 */
   const hook = useCodeRedeem()
 
   /** 是否是数字商品（游戏 / 盲盒）—— 有激活码可以输 */
   const isDigital = item?.kind === 'gamebox' || item?.kind === 'blindbox'
 
-  /**
-   * 去购买按钮：打开外链（淘宝 / 京东等）。
-   *
-   * 链接来源 = 运营在 tf-admin「商城」列表里配的 `buy_url`；没配就落到
-   * 目录里那条淘宝搜索链接；两处都没有就**现拼一条**（`wishBuyUrl`）。
-   *
-   * ⚠️ 不要退回「这一款还没配购买链接」那种提示 —— 孩子站在这个弹框里
-   *    唯一能做的事就是去买，给他一颗点了只弹提示的死按钮，等于把
-   *    「没有激活码 → 去购买」这条唯一的出路堵死。
-   */
+  /** 去购买：打开后台配的那条外链（淘宝 / 京东等） */
   const goBuy = async () => {
-    const url = wishBuyUrl(item ?? { name: itemName })
-    const ok = await openExternal(url)
+    if (!buyLink) return
+    const ok = await openExternal(buyLink.url)
     if (!ok) {
       pushToast({
         kind: 'info',
@@ -81,7 +83,9 @@ export function ActivationDialog({
               <p data-activate-guide className="mt-1 text-[11.5px] font-bold leading-relaxed text-ink-500">
                 {isDigital
                   ? '爸爸妈妈在淘宝 / 京东买好之后，卖家会发一串 6 位激活码（像 ABC-DEF）。在这里输一次，这款就直接进「我的游戏」—— 不用先攒兑换券。'
-                  : '这一件是实物，没有激活码。点下面的按钮去淘宝 / 京东看看，买好之后爸妈会在心愿单里收尾。'}
+                  : buyLink
+                    ? '这一件是实物，没有激活码。点下面的按钮去淘宝 / 京东看看，买好之后爸妈会在心愿单里收尾。'
+                    : '这一件是实物，没有激活码。想要的话关掉这个框，点「🤍 我想要」告诉爸妈，他们买好之后会在心愿单里收尾。'}
               </p>
             </div>
             <button
@@ -95,15 +99,18 @@ export function ActivationDialog({
             </button>
           </div>
 
-          {/* 去购买：**所有类型都有**（实物没有码，这条路就是唯一的路） */}
-          <button
-            type="button"
-            data-activate-buy
-            onClick={() => void goBuy()}
-            className="mt-3 flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-sun-400 text-sm font-extrabold text-ink-900 active:btn-press"
-          >
-            ↗ {wishBuyLabel(item ?? { name: itemName })}
-          </button>
+          {/* 去购买：**后台配了链接才有**（2026-11-06 第七轮）。
+              没配就不摆 —— 一颗点下去只会弹提示的按钮，孩子会以为坏了。 */}
+          {buyLink && (
+            <button
+              type="button"
+              data-activate-buy
+              onClick={() => void goBuy()}
+              className="mt-3 flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-sun-400 text-sm font-extrabold text-ink-900 active:btn-press"
+            >
+              ↗ {buyLink.label ?? '去购买'}
+            </button>
+          )}
 
           {/* 输码区：只有数字商品（游戏 / 盲盒）才有 */}
           {isDigital && (

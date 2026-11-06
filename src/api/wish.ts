@@ -79,6 +79,15 @@ export interface ServerWishItemView {
   sort_order: number
   /** 一次开出几款（盲盒用；缺省 1） */
   unlock_count?: number
+  /**
+   * 运营在 tf-admin「商城」列表里配的外链（淘宝 / 京东…）。
+   *
+   * ⚠️ **空 / 缺省 = 没配 = 客户端不摆「去购买」**。别在这边补默认值 ——
+   *    那又会变回「后台没配、按钮还在」。
+   */
+  buy_url?: string
+  /** 外链按钮文字（空 = 客户端用「去购买」） */
+  buy_label?: string
   // ---- 服务端算的标注（客户端只取前两个）----
   open: boolean
   voucher_price: number

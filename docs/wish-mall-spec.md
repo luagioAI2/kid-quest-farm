@@ -329,13 +329,15 @@ App 不做收银台，也不代收货款。
 
 ### 外链
 
-商品带 `buyUrl`（淘宝/天猫/京东/闲鱼）。**只在家长确认页出现**，孩子端看不到。
+商品带 `buy_url`（淘宝/天猫/京东/闲鱼），由运营在 tf-admin「商城」列表里配。
 
-> ⚠️ **第六轮（2026-11-06）改了半句**：服务端返回的 `wish_item.buy_url`
-> （运营在 tf-admin 配的那条）仍然只给家长；但**目录里那条淘宝搜索链接**
-> （`wishCatalog.ts` 的 `buyUrl`）现在孩子也能打开 —— 「去激活」弹框里没有
-> 激活码时，那颗「去购买」跳的就是它。详见 6.3。给孩子的永远是**搜索页**，
-> 不是具体商品页（换 SKU / 下架都不会失效）。
+> ★ **第七轮（2026-11-06）定稿**：这条链接**两端都下发**，而且它是
+> **「去购买」按钮存不存在的唯一判据** —— 后台没配，孩子端和家长端都
+> **不摆这颗按钮**（用户原话：「如果没有就不显示」）。
+>
+> 第六轮之前孩子那颗按钮永远在，链接是客户端**现拼**的淘宝搜索页
+> （`wishCatalog.ts` 的 `wishBuyUrl`），和后台配的东西毫无关系 ——
+> 于是「运营没配」和「配了」在界面上长得一模一样。那一套兜底这一轮**删掉了**。
 
 点了就是 `window.open(buyUrl)`，App 不知道也不关心成交结果 ——
 家长回来点「已经买好了」才算 `done`。
@@ -394,9 +396,9 @@ interface WishItem {
   priceCents?: number
   ageRange?: [number, number]
   notice?: string
-  /** 外链，只在家长确认页出现 */
-  buyUrl?: string
-  buyLabel?: string
+  /* ⚠️ 这里**没有** `buyUrl` / `buyLabel`（2026-11-06 第七轮删了）。
+     外链的唯一来源是服务端下发的 `wishBuyLinks`（`WishBuyLink`），
+     见 §7 —— 目录里放一份会让「后台没配」和「配了」长得一样。 */
   archived?: boolean
   sortOrder?: number
 }
@@ -568,7 +570,9 @@ e2e 里所有按索引取 tab 的地方都要复查。
    所以不是「换个哈希」，是**根本不进文件**。
 3. **完成 30 天后自动抹除**：`ship` 降级成 `{ region, phoneTail }`。启动时扫 `purgeAfter`。
 3. **不进日志 / toast / 埋点**。
-4. **孩子端完全看不到** `ship` 和 `buyUrl`。
+4. **孩子端完全看不到** `ship`。`buy_url` 自第七轮起**两端都下发**
+   —— 它是运营配的公开商品页，不是隐私。但仍然**只用来 `openExternal`**：
+   不写进 `href`、不进日志、不进埋点（否则孩子一点就把外链暴露在 DOM 里）。
 
 ---
 
@@ -613,9 +617,11 @@ e2e 里所有按索引取 tab 的地方都要复查。
 - [x] 盲盒「先算池子再扣券」：池子为空时不产生任何流水
       —— `useApp.test.ts` ⑤：**余额、`wish_redeem` 流水条数、订单条数三样都不许变**
       （只钉「返回 ok:false」是不够的：算池子挪到扣券之后，那条断言照样绿）
-- [x] 孩子端 DOM 里 `grep` 不到 `buyUrl` 和 `ship`
-      —— `e2e-wishmall` ②③（列表页和详情页的 `body.innerHTML` 都没有 `taobao`）；
-      `buyUrl` 只在家长确认页被 `window.open`，从不写进 `href`
+- [x] 孩子端 DOM 里 `grep` 不到 `ship`；外链**不写进 `href`**
+      —— `e2e-wishmall` ②③（列表页和详情页的 `body.innerHTML` 都没有 `taobao`）。
+      ⚠️ 第七轮起 `buy_url` 会下发到孩子端（按钮显隐要用它），但只经
+      `openExternal` 打开，**仍然不进 `href` / 不进 DOM 文本** ——
+      所以「列表页 innerHTML 里没有 taobao」这条断言依然成立、也依然要跑
 - [x] 价格与券价不在同一行，且价格旁有「家长支付」
       —— `e2e-wishmall` ⑨（比两块元素的 `getBoundingClientRect()`：
       参考价底部 ≤ 券价顶部）
@@ -1070,16 +1076,34 @@ e2e 里所有按索引取 tab 的地方都要复查。
 判据是**反向断言**：`_probe-wish-code-place.mjs` 进详情页后要求
 `document.querySelector('[data-wish-code]') === null`。
 
-### 6.3 「去购买」的链接从哪来
+### 6.3 「去购买」的链接从哪来（第七轮定稿）
 
-优先级：`item.buyUrl`（tf-admin「商城」列表里配的 `buy_url`）→ `wishBuyUrl()` 现拼一条
-淘宝搜索链接（`https://s.taobao.com/search?q=<商品名>`）。
+**只有一个来源**：tf-admin「商城」列表里的 `buy_url` / `buy_label`。
+服务端随 `/wish/list` 下发 → 客户端缓存进 `meta['wish.buyLinks']`
+（`db.ts` 的 `WISH_BUY_LINKS_KEY`）→ store 的 `wishBuyLinks`。
 
-按钮文案同理：`item.buyLabel`（`buy_label`）→ `去淘宝搜索`。
+三处按钮**同一套判据**（`buyLink` 有值才渲染）：
 
-⚠️ **不许退回「这一款还没配购买链接」那种死按钮**。孩子站在弹框里唯一能做的事
-就是去买，给一颗点了只弹提示的按钮，等于把「没有激活码 → 去购买」这条唯一的
-出路堵死。
+| 位置 | 标记 | 谁看 |
+| --- | --- | --- |
+| 卡片「去激活」弹框 | `[data-activate-buy]` | 孩子 |
+| 家长定价页「也可以直接买这一款」 | `[data-wish-buy-game]` | 家长 |
+| 家长确认页「去商店购买」 | 无标记（`buyLink` 判空） | 家长 |
+
+⚠️ **没配 = 不渲染**，不是「渲染一颗点了只弹提示的按钮」。孩子站在弹框里
+唯一能做的事就是去买；给他一颗死按钮，比没有更糟（他会以为坏了）。
+实物且没配链接时，弹框改成一句指路：「想要的话关掉这个框，点『🤍 我想要』」。
+
+⚠️ **不要在这里补任何默认值**（淘宝搜索页、`https://…` 占位都不行）。
+一补，「运营没配」和「配了」在界面上就又一样了 —— 这一轮修的就是这个。
+
+⚠️ 同步是**整份替换**：运营清掉一条链接后，本地那条必须跟着消失。
+合并写的话按钮永远下不掉，而且**没有任何报错**。
+拉取失败时**一个字都不动**（和定价表同一条规矩）。
+
+⚠️ 备份里**剥掉**这个 key：它是后台配置的本地缓存，不是孩子挣到的东西。
+跟着备份跑到另一台设备上，运营后来清掉的链接会复活（点进去 404），
+而下次拉取之前没人知道。
 
 ### 6.4 家长定「能兑换几次」
 
@@ -1164,3 +1188,50 @@ offer 被关掉（`closedAt` 有值）⇒ 落到默认的 `🤍 我想要`。
 | 类型 | `npm run lint` |
 | 走查 | `_probe-wish-card-qa.mjs`（每颗卡两颗按钮 + 全品类都有「去激活」）、`_probe-wish-code-place.mjs`（弹框在、详情页没有） |
 | 产物 | `_check-copy-bundles.py`：`去激活` / `data-wish-action` / `data-activate-buy` 在，`家长激活` 不在 |
+
+
+---
+
+## 第七轮：外链只认后台配置（2026-11-06）
+
+用户原话：「有没有去淘宝的按钮，根据后台礼品有没有配置链接（淘宝、京东等等），
+如果没有就不显示。」
+
+### 7.1 服务端
+
+`WishItemView` 新增 `buy_url` / `buy_label`（`omitempty`），由 `buildItemView`
+从 `wish_item` 带出来。`WishItemDetailResp` 里那份**重复的**同名字段删掉
+（外链跟着视图走，两端一样）。
+
+`WishItem.BuyURL` 上的 `json:"-"` **保留**：那个结构体不直接序列化，
+对外的字段在视图上。两处别各写一套口径。
+
+判据（`wish_buy_link_srv_test.go`）：
+- 配了就下发（孩子视角 `Detail(isParent=false)` 也要有）
+- 没配就是空串 —— **空串是判据，不是「没数据」**。服务端要是顺手补一条默认
+  淘宝搜索页，那条断言就是最后一道闸。
+
+### 7.2 客户端
+
+- `ServerWishItemView` 加 `buy_url` / `buy_label`
+- `pull.ts` 建 `Record<itemId, {url,label}>` → `saveWishBuyLinks`（写 `meta`），
+  **整份替换**、**只在拉取成功时写**
+- `store.wishBuyLinks` 由 `refresh()` 从 `meta` 读
+- `wishCatalog.ts` 删掉 `wishBuyUrl` / `wishBuyLabel` / `taobaoSearch`，
+  以及 8 件实物商品上的 `buyUrl` / `buyLabel`（16 行）
+
+### 7.3 本地版（`VITE_APP_MODE=local`）没有购买按钮
+
+本地版没有服务端 ⇒ `wishBuyLinks` 恒为空 ⇒ 三处按钮都不渲染。
+**这是对的**：没有后台，就没有「后台配的链接」。别为了让本地版「看着完整」
+把目录兜底加回来 —— 那正是这一轮删掉的东西。
+
+### 7.4 这一轮的验收
+
+| 层 | 判据 |
+| --- | --- |
+| 服务端 | `wish_buy_link_srv_test.go`（配了→下发 / 没配→空串 / 孩子视角详情页也有） |
+| 同步 | `pull.test.ts`（整份落进 meta / 后台清空→本地也清 / 拉取失败→不动本地） |
+| 前端单测 | `WishPage.test.tsx`（配了→按钮在且文案来自后台 / 没配→`[data-activate-buy]`、`[data-wish-buy-game]` 都是 null） |
+| 类型 | `npm run lint` |
+| 走查 | `_probe-wish-code-place.mjs`（本地版：实物弹框**没有**购买按钮，指路文案在） |

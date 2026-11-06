@@ -15,13 +15,7 @@ import { isOnlineMode } from '@/sync/pull'
 import { describeRedeemPayment } from '@/domain/redeem'
 import { shipFormIssue } from '@/domain/wishShip'
 import { formatPriceCents } from '@/domain/cash'
-import {
-  WISH_BLINDBOX_ID,
-  WISH_ITEMS,
-  wishBuyLabel,
-  wishBuyUrl,
-  wishItemById,
-} from '@/games/wishCatalog'
+import { WISH_BLINDBOX_ID, WISH_ITEMS, wishItemById } from '@/games/wishCatalog'
 import { STOREFRONT, type StorefrontEntry } from '@/games/storefront'
 import { LOCAL_GAMES } from '@/games/localGames'
 import { formatSize } from '@/games/size'
@@ -801,9 +795,13 @@ function ItemCard({
   }
   /* else: 没有开放价 + 没有申请（或一次性兑换完了） → 想要（默认值） */
 
+  /* `data-wish-id` 是给走查脚本用的：它要拿商品 id 去
+     `meta['wish.buyLinks']` 里配外链（「去购买」按钮存不存在就看那条），
+     没有这个属性就只能靠卡片上的名字猜。 */
   return (
     <div
       data-wish-card
+      data-wish-id={item.id}
       data-wish-kind={item.kind}
       className="flex h-full flex-col rounded-3xl bg-white p-1.5 shadow-flat"
     >
@@ -1428,6 +1426,9 @@ function OfferView({
   const wishOrders = useApp((s) => s.wishOrders)
   const settings = useApp((s) => s.settings)
   const pushToast = useApp((s) => s.pushToast)
+  /* 外链：**只有后台配了才有**（tf-admin 商城列表的 `buy_url`）。
+     没配 = 不摆按钮 —— 见 `ActivationDialog` 里同一句话。 */
+  const buyLink = useApp((s) => s.wishBuyLinks[itemId])
 
   /* ---- 游戏类：直接买卡 → 输激活码（2026-10-30） ----
    *
@@ -1666,27 +1667,31 @@ function OfferView({
             游戏就进「我的游戏」，孩子那边不用再攒券。
           </p>
 
-          {/* 链接走 `wishBuyUrl` 兜底：运营没在 tf-admin 商城列表里填
-              `buy_url` 时，退回目录里那条淘宝搜索链接，**永远有得点**。 */}
-          <button
-            data-wish-buy-game
-            onClick={async () => {
-              /* ⚠️ 别写 `window.open` —— APK 的 WebView 里它什么都不做，
-                 点了没反应也没有报错。`openExternal` 装了淘宝就直接进淘宝。 */
-              const ok = await openExternal(wishBuyUrl(item))
-              if (!ok) {
-                pushToast({
-                  kind: 'info',
-                  title: '这个链接打不开',
-                  detail: `复制「${item.name} 激活码」到淘宝里搜一下`,
-                  emoji: '🔗',
-                })
-              }
-            }}
-            className="btn mt-3 h-11 w-full bg-sun-400 text-sm font-extrabold text-ink-900 active:btn-press"
-          >
-            ↗ {wishBuyLabel(item)}
-          </button>
+          {/* 链接来自后台（tf-admin 商城列表的 `buy_url`）——
+              运营没配就**不摆这颗按钮**：一颗点下去只会弹提示的按钮，
+              家长会以为「配了但坏了」。第七轮 2026-11-06 之前这里是
+              现拼淘宝搜索页，后台配没配都一样。 */}
+          {buyLink && (
+            <button
+              data-wish-buy-game
+              onClick={async () => {
+                /* ⚠️ 别写 `window.open` —— APK 的 WebView 里它什么都不做，
+                   点了没反应也没有报错。`openExternal` 装了淘宝就直接进淘宝。 */
+                const ok = await openExternal(buyLink.url)
+                if (!ok) {
+                  pushToast({
+                    kind: 'info',
+                    title: '这个链接打不开',
+                    detail: `复制「${item.name} 激活码」到淘宝里搜一下`,
+                    emoji: '🔗',
+                  })
+                }
+              }}
+              className="btn mt-3 h-11 w-full bg-sun-400 text-sm font-extrabold text-ink-900 active:btn-press"
+            >
+              ↗ {buyLink.label ?? '去购买'}
+            </button>
+          )}
 
           {/* 输码口就这一块（`CodeRedeemBlock`，`card={false}` 裸控件）。
               这一页整页已经在家长闸门后面 ⇒ `gate="open"`，
@@ -1757,6 +1762,8 @@ function ConfirmView({
   const wishDone = useApp((s) => s.wishDone)
   const wishCancel = useApp((s) => s.wishCancel)
   const pushToast = useApp((s) => s.pushToast)
+  /* 外链：**只有后台配了才有**（tf-admin 商城列表的 `buy_url`） */
+  const buyLink = useApp((s) => s.wishBuyLinks[order?.itemId ?? ''])
 
   const item = order ? wishItemById(order.itemId) : undefined
 
@@ -1797,14 +1804,15 @@ function ConfirmView({
   const digital = isDelivered(order)
 
   const buy = async () => {
-    // 只在家长确认页出现外链 —— 孩子端读不到 `buyUrl`
-    if (!item?.buyUrl) {
-      pushToast({ kind: 'info', title: '这件商品没有外链', emoji: '🔗' })
+    // 外链来自后台（tf-admin 商城列表的 `buy_url`）。没配时这颗按钮根本不渲染，
+    // 这里的判断只是兜底 —— 别把「没配」做成一颗点了只弹提示的按钮。
+    if (!buyLink) {
+      pushToast({ kind: 'info', title: '这件商品没配外链', emoji: '🔗' })
       return
     }
     /* ⚠️ 别写成 `window.open` —— APK 的 WebView 里它**什么都不做**，
        家长点了没反应也没有报错。走 `openExternal`：装了淘宝就直接进淘宝。 */
-    const ok = await openExternal(item.buyUrl)
+    const ok = await openExternal(buyLink.url)
     if (!ok) {
       pushToast({
         kind: 'info',
@@ -1873,7 +1881,7 @@ function ConfirmView({
                 2026-10-30 给游戏类商品补上 `buyUrl` 之后，这一行差点变成
                 「游戏已经在孩子柜子里了，方式：去商店购买」——
                 家长会以为还得再去买一次。先判 `digital`，再判链接。 */}
-            {digital ? '已经放进游戏柜' : item?.buyUrl ? '去商店购买' : 'App 内直接解锁'}
+            {digital ? '已经放进游戏柜' : buyLink ? '去商店购买' : 'App 内直接解锁'}
           </span>
         </div>
         {item?.priceCents != null && (
@@ -1884,12 +1892,12 @@ function ConfirmView({
             </span>
           </div>
         )}
-        {!digital && item?.buyUrl && (
+        {!digital && buyLink && (
           <button
             onClick={() => void buy()}
             className="btn mt-3 h-12 w-full bg-sun-400 text-base font-extrabold text-ink-900 active:btn-press"
           >
-            ↗ {item.buyLabel ?? '去商店购买'}
+            ↗ {buyLink.label ?? '去商店购买'}
           </button>
         )}
         <p className="mt-2.5 rounded-xl bg-sun-100 px-2.5 py-2 text-[11px] font-bold leading-relaxed text-sun-700">

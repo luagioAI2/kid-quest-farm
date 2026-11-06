@@ -21,6 +21,7 @@ import type {
   RedeemRecord,
   Task,
   TaskInstance,
+  WishBuyLink,
   WishCode,
   WishOffer,
   WishOrder,
@@ -51,6 +52,7 @@ import {
   loadQuotaCarry,
   loadRedeemItems,
   loadRedeemRecords,
+  loadWishBuyLinks,
   loadWishOffers,
   loadWishOrders,
   ledgerTip,
@@ -70,6 +72,7 @@ import {
   saveSettings,
   setGameKv,
   spendMall,
+  WISH_BUY_LINKS_KEY,
   wipeAll,
   type GameKvRow,
 } from '../db/db'
@@ -288,6 +291,19 @@ interface AppState {
    * 卖多少券」。没有对应行的商品 = 未开放 = 孩子只能表明意向。
    */
   wishOffers: WishOffer[]
+  /**
+   * 心愿商品的**后台外链**：`itemId → { url, label }`（2026-11-06 第七轮）。
+   *
+   * ★ 界面上「去购买 / 去淘宝」那颗按钮**有没有**，全看这里有没有这一条 ——
+   *   运营在 tf-admin「商城」列表里没配 `buy_url`，就不渲染按钮。
+   *   在目录里现拼一条淘宝搜索页兜底是**错**的：那会让「没配」和「配了」
+   *   在界面上长得一模一样（这一轮修的就是这个）。
+   *
+   * ⚠️ 数据来自 `/wish/list` 的 `buy_url`，缓存在 `meta['wish.buyLinks']`。
+   *   本地版（没有服务端）里它恒为空 ⇒ 本地版**没有**购买按钮，这是对的：
+   *   没有后台就没有「后台配的链接」。
+   */
+  wishBuyLinks: Record<string, WishBuyLink>
   /** 心愿单 / 兑换单。一条记录从 `wished` 走到 `done` */
   wishOrders: WishOrder[]
   /** 农场最近发生的事件（给孩子看的「农场日志」） */
@@ -2246,6 +2262,7 @@ async function doRefresh(
     allRedeemItems,
     redeemRecords,
     wishOffers,
+    wishBuyLinks,
     wishOrders,
     farmEvents,
     quotaCarry,
@@ -2270,6 +2287,7 @@ async function doRefresh(
     loadAllRedeemItems(),
     loadRedeemRecords(),
     loadWishOffers(),
+    loadWishBuyLinks(),
     loadWishOrders(),
     loadFarmEvents(40),
     loadQuotaCarry(),
@@ -2328,6 +2346,7 @@ async function doRefresh(
     allRedeemItems,
     redeemRecords,
     wishOffers,
+    wishBuyLinks,
     wishOrders,
     farmEvents,
     market,
@@ -2740,6 +2759,7 @@ export const useApp = create<AppState>((set, get) => ({
   allRedeemItems: [],
   redeemRecords: [],
   wishOffers: [],
+  wishBuyLinks: {},
   wishOrders: [],
   pendingRedeemItem: null,
   pendingSettingsTab: null,
@@ -5288,6 +5308,10 @@ export const useApp = create<AppState>((set, get) => ({
             /* ⚠️ 设备本地状态：`sync.lastOkAt` 是「这台机器上次连上服务器的时间」。
                跟着备份跑到另一台设备上，那边会显示一个它从来没发生过的同步时间。 */
             .filter((m) => m.key !== SYNC_LAST_OK_KEY)
+            /* ⚠️ 后台配置的**本地缓存**，不是孩子挣到的东西：跟着备份跑到
+               另一台设备上，运营后来清掉的链接会复活（孩子点进去 404），
+               而且下次拉取之前没人知道。恢复后第一次拉取会重新写。 */
+            .filter((m) => m.key !== WISH_BUY_LINKS_KEY)
             .map(
               (m): [string, unknown] =>
                 m.key === 'settings'

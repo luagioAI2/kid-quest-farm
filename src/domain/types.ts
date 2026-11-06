@@ -897,10 +897,6 @@ export interface WishItem {
   note?: string
   /** 兑换须知（「不指定款式」这类必须写清楚） */
   notice?: string
-  /** 外链。**只在家长确认页出现**，孩子端读不到 */
-  buyUrl?: string
-  /** 外链按钮文字，如「去淘宝购买」 */
-  buyLabel?: string
   archived?: boolean
   sortOrder?: number
   /**
@@ -912,6 +908,21 @@ export interface WishItem {
    *   卖的是 N 款的价，给少了就是缺斤少两。
    */
   unlockCount?: number
+}
+
+/**
+ * 后台配的外链（tf-admin「商城」列表里的 `buy_url` / `buy_label`）。
+ *
+ * ★ 2026-11-06 起**只有这一份来源**：界面上「去购买」那颗按钮**有没有**，
+ *   全看服务端有没有下发这一条。目录里原来那套「没配就现拼一条淘宝搜索页」
+ *   的兜底已经删掉了 —— 兜底会让「运营没配」和「配了」在界面上长得一模一样，
+ *   而用户要的正是「没配就别显示」。
+ */
+export interface WishBuyLink {
+  /** 打开的外链。**服务端已保证是 http(s)**（后台表单挡过一次，后端再挡一次） */
+  url: string
+  /** 按钮文字。后台没填 = `undefined`，界面用「去购买」 */
+  label?: string
 }
 
 /**

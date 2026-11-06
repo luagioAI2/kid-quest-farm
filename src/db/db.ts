@@ -21,6 +21,7 @@ import type {
   RedeemRecord,
   Task,
   TaskInstance,
+  WishBuyLink,
   WishOffer,
   WishOrder,
   WishCode,
@@ -384,6 +385,39 @@ export async function getMeta<T>(key: string, fallback: T): Promise<T> {
 
 export async function setMeta(key: string, value: unknown): Promise<void> {
   await db.meta.put({ key, value })
+}
+
+/* ---------------- 心愿商城的外链缓存（第七轮） ---------------- */
+
+/**
+ * `itemId → { url, label }`，服务端下发的外链**整份**存这一个键。
+ *
+ * 为什么存 `meta` 而不是新开一张表：`meta` 本来就是 key-value，
+ * 加一个 key **不需要动 Dexie 版本号**，也就不需要写迁移、不需要改老库升级用例。
+ * `wipeAll` 已经会清 `meta`，不用额外处理。
+ *
+ * ⚠️ 它是**后台配置的本地缓存**，不是孩子挣到的东西 ⇒
+ *    `exportBackup` 里要把它剥掉（见那里的注释）：跟着备份跑到另一台设备上，
+ *    运营后来清掉的链接会复活，孩子点进去是 404，而且下次拉取之前没人知道。
+ */
+export const WISH_BUY_LINKS_KEY = 'wish.buyLinks'
+
+export async function loadWishBuyLinks(): Promise<Record<string, WishBuyLink>> {
+  const raw = await getMeta<Record<string, WishBuyLink>>(WISH_BUY_LINKS_KEY, {})
+  // 脏数据（手改过库 / 老版本写过别的形状）不能让整页心愿商城崩 —— 只收有 url 的
+  const out: Record<string, WishBuyLink> = {}
+  for (const [id, v] of Object.entries(raw ?? {})) {
+    if (!v || typeof v.url !== 'string') continue
+    const url = v.url.trim()
+    if (!url) continue
+    const label = typeof v.label === 'string' ? v.label.trim() : ''
+    out[id] = label ? { url, label } : { url }
+  }
+  return out
+}
+
+export async function saveWishBuyLinks(links: Record<string, WishBuyLink>): Promise<void> {
+  await setMeta(WISH_BUY_LINKS_KEY, links)
 }
 
 /* ---------------- 农场状态封装 ---------------- */

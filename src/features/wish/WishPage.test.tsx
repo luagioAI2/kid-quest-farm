@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { db, postHarvest } from '@/db/db'
+import { db, postHarvest, saveWishBuyLinks } from '@/db/db'
 import { useApp } from '@/store/useApp'
 import { STOREFRONT } from '@/games/storefront'
-import { wishBuyUrl, wishItemById } from '@/games/wishCatalog'
 import WishPage from './WishPage'
 
 /* ⚠️ 找「单开盲盒」那个 hero 按钮时**不能**按 `/游戏盲盒/` 找：
@@ -459,7 +458,7 @@ describe('心愿：游戏类商品能直接买卡 / 输激活码', () => {
    * 那一支里渲染（家长主动定价的入口在列表头上，不走这条路）。
    * 少了这一步，测试会停在商品详情页找不到按钮。
    */
-  const openParentPricing = async () => {
+  const openParentPricing = async (buyLink?: { url: string; label?: string }) => {
     await useApp.getState().updateSettings({ protectParentActions: false })
     await db.wishOrders.put(
       wishedOrder({
@@ -470,6 +469,10 @@ describe('心愿：游戏类商品能直接买卡 / 输激活码', () => {
         kind: 'gamebox',
       }) as never,
     )
+    /* 外链是**后台配的**（第七轮）：不先写这一条，页面上就不该有购买按钮。
+       走 `saveWishBuyLinks` + `refresh`，和生产链路（pull 写 meta → refresh 读）
+       同一套，别直接 `setState` 绕过去。 */
+    if (buyLink) await saveWishBuyLinks({ 'wish-game-renttower': buyLink })
     await useApp.getState().refresh()
     const user = userEvent.setup()
     render(<WishPage />)
@@ -478,18 +481,23 @@ describe('心愿：游戏类商品能直接买卡 / 输激活码', () => {
     return user
   }
 
-  it('★ 家长定价页里有「也可以直接买这一款」，且购买链接真的存在', async () => {
-    await openParentPricing()
+  it('★ 后台配了链接：家长定价页才有「也可以直接买这一款」', async () => {
+    await openParentPricing({ url: 'https://item.taobao.com/item.htm?id=9', label: '去淘宝买卡' })
     expect(await screen.findByText(/也可以直接买这一款/)).toBeTruthy()
 
     const buy = document.querySelector('[data-wish-buy-game]') as HTMLButtonElement | null
-    expect(buy, '游戏类商品必须有购买入口 —— 没有的话家长只能自己搜').toBeTruthy()
-    // 21 款游戏共用同一条推导规则，随便挑一款验链接形状
-    const item = wishItemById('wish-game-renttower')
-    expect(item?.buyUrl, '搜索页而不是具体商品链接（具体链接会失效）').toMatch(
-      /^https:\/\/s\.taobao\.com\/search\?q=/,
-    )
-    expect(decodeURIComponent(item?.buyUrl ?? '')).toContain('激活码')
+    expect(buy, '后台配了链接，家长却没有购买入口').toBeTruthy()
+    /* 按钮文字用**后台那句**，不是写死的「去购买」 */
+    expect(buy?.textContent).toContain('去淘宝买卡')
+  })
+
+  it('★ 后台没配链接：定价页不摆「去购买」', async () => {
+    await openParentPricing()
+    expect(await screen.findByText(/也可以直接买这一款/)).toBeTruthy()
+
+    /* 用户原话：「根据后台礼品有没有配置链接，如果没有就不显示。」
+       这是**反向**断言 —— 只写正向的话，淘宝搜索页兜底又长回来也照样全绿。 */
+    expect(document.querySelector('[data-wish-buy-game]')).toBeNull()
   })
 
   it('★ 输码成功后：调的是 store 的兑换（不是本地解锁），并关掉面板', async () => {
@@ -684,8 +692,12 @@ describe('心愿：卡片「去激活」弹框', () => {
     expect(screen.queryByText(/盲盒没有激活码/)).toBeNull()
   })
 
-  it('★ 实物卡的弹框：没有输码区，但有一颗真「去购买」', async () => {
+  it('★ 实物卡的弹框：没有输码区；后台配了链接才有一颗「去购买」', async () => {
     await useApp.getState().updateSettings({ protectParentActions: false })
+    await saveWishBuyLinks({
+      'wish-dino': { url: 'https://item.jd.com/100012043978.html', label: '去京东看看' },
+    })
+    await useApp.getState().refresh()
     const { user } = await openActivate('恐龙模型套装')
 
     expect(document.querySelector('[data-activate-dialog]')).toBeTruthy()
@@ -693,13 +705,24 @@ describe('心愿：卡片「去激活」弹框', () => {
     expect(document.querySelector('[data-code-input]')).toBeNull()
 
     const buy = document.querySelector('[data-activate-buy]') as HTMLElement | null
-    expect(buy, '没有激活码时「去购买」是唯一的路，不能只是一句提示').toBeTruthy()
-    expect(buy?.textContent).toMatch(/去购买|去淘宝|京东/)
+    expect(buy, '后台配了链接，弹框里却没有「去购买」').toBeTruthy()
+    expect(buy?.textContent).toContain('去京东看看')
 
-    /* 兜底：目录里那条淘宝搜索链接必须真的在（点下去有地方去）。 */
-    expect(wishBuyUrl(wishItemById('wish-dino') ?? { name: '恐龙模型套装' })).toMatch(
-      /^https:\/\//,
-    )
+    await user.click(document.querySelector('[data-activate-close]') as HTMLElement)
+  })
+
+  it('★ 后台没配链接：实物卡弹框里不摆「去购买」', async () => {
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    const { user } = await openActivate('恐龙模型套装')
+
+    expect(document.querySelector('[data-activate-dialog]')).toBeTruthy()
+    expect(document.querySelector('[data-code-input]')).toBeNull()
+    /* 用户原话：「如果没有就不显示。」以前这里现拼一条淘宝搜索页，
+       后台配没配都有一颗按钮 —— 这条反向断言钉住它别长回来。 */
+    expect(document.querySelector('[data-activate-buy]')).toBeNull()
+    /* 但弹框不能变成死胡同：得告诉孩子下一步点「我想要」 */
+    expect(document.querySelector('[data-activate-guide]')?.textContent).toContain('我想要')
+
     await user.click(document.querySelector('[data-activate-close]') as HTMLElement)
   })
 
@@ -739,6 +762,13 @@ describe('心愿：卡片「去激活」弹框', () => {
     expect(action.textContent).toMatch(/我想要/)
     await userEvent.setup().click(action)
     expect(document.querySelector('[data-activate-dialog]'), '「我想要」不该弹激活框').toBeNull()
+    /* ⚠️ 这一下点下去会异步写库 + `refresh()`。不等它落地就结束，下一条用例
+       的 `db.delete()` 会掀翻还在读表的 refresh —— 症状是「全绿 + 一条
+       DatabaseClosedError」（vitest 退 1）。判据用 **store** 里的订单
+       （`refresh()` 末尾才赋值），不是库行：库行一 put 就通过，等于没等。 */
+    await waitFor(() =>
+      expect(useApp.getState().wishOrders.some((o) => o.itemId === 'wish-dino')).toBe(true),
+    )
   })
 })
 

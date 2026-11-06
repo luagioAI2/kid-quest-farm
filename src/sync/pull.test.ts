@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
-import { db, gameCoinBalanceOf, getGameKv, readGameCoinLedger, setGameKv } from '../db/db'
+import {
+  db,
+  gameCoinBalanceOf,
+  getGameKv,
+  loadWishBuyLinks,
+  readGameCoinLedger,
+  setGameKv,
+} from '../db/db'
 import { kvVersionOf, resetKvState } from '../online/kv'
 import { pullFromServer, pullOnce } from './pull'
 import { setSession } from '../api/session'
@@ -208,6 +215,10 @@ const WISH_OPEN: ServerWishItemView = {
   notice: '',
   archived: false,
   sort_order: 20,
+  /* 后台配的外链（第七轮）。关掉的那件（WISH_CLOSED）是展开覆盖的，
+     所以它也会继承这两个字段 —— 见下面「关掉的也要有」那条断言。 */
+  buy_url: 'https://item.taobao.com/item.htm?id=6900',
+  buy_label: '去淘宝购买',
   open: true,
   voucher_price: 30,
   affordable: true,
@@ -485,6 +496,44 @@ describe('pullOnce · 心愿商城', () => {
     expect(offers[0].itemId).toBe('wish-popmart')
     expect(offers[0].voucherPrice).toBe(30)
     expect(offers[0].closedAt).toBeUndefined()
+  })
+
+  it('★ 外链整份落进 meta（有 url 的才收）', async () => {
+    await pullOnce()
+    const links = await loadWishBuyLinks()
+    expect(links['wish-popmart']?.url).toBe('https://item.taobao.com/item.htm?id=6900')
+    expect(links['wish-popmart']?.label).toBe('去淘宝购买')
+    /* 关掉定价的那件**照样有外链** —— 孩子还没换，卡片上那颗「去购买」
+       不该因为家长没定价就消失。 */
+    expect(links['wish-dino']?.url).toBe('https://item.taobao.com/item.htm?id=6900')
+  })
+
+  it('★ 后台清掉链接后，重拉要把本地那条也删掉（整份替换，不是合并）', async () => {
+    await pullOnce()
+    expect(Object.keys(await loadWishBuyLinks())).toHaveLength(2)
+
+    /* 运营在 tf-admin 里把外链清空 —— 服务端就不再带 `buy_url`。
+       合并写的话旧的会留在本地，孩子那颗按钮就再也下不掉了。 */
+    wishListMock.mockResolvedValue({
+      count: 2,
+      list: [
+        { ...WISH_OPEN, buy_url: '', buy_label: '' },
+        { ...WISH_CLOSED, buy_url: '', buy_label: '' },
+      ],
+    })
+    await pullOnce()
+    expect(await loadWishBuyLinks()).toEqual({})
+  })
+
+  it('★ 心愿接口挂了时**不许**清掉本地已有的外链', async () => {
+    await pullOnce()
+    expect(Object.keys(await loadWishBuyLinks())).toHaveLength(2)
+
+    wishListMock.mockRejectedValue(new Error('wish down'))
+    await pullOnce()
+    /* 拉失败还照写不误的话，孩子那颗「去购买」会凭空消失，
+       而界面上只会表现为「按钮不见了」，没有任何报错。 */
+    expect(Object.keys(await loadWishBuyLinks())).toHaveLength(2)
   })
 
   it('★ 商品列表要连**下架**的一起拉（否则家长定过价的东西变回「没定价」）', async () => {

@@ -12,19 +12,17 @@
  *   而漏掉的那款在界面上表现为「盒子里没有它」，不报错。
  * * **实物**：手写。这些是商家给的东西，没法推导。
  *
- * ## 外链
+ * ## 外链（2026-11-06 第七轮：只剩服务端那一份）
  *
- * 实物商品的 `buyUrl` 用的是**淘宝搜索页**（`s.taobao.com/search?q=…`），
- * 不是某个具体商品链接。原因：具体链接会失效、会换 SKU、会被下架，
- * 而目录是跟着版本发布的 —— 一个失效的链接比没有链接更糟。
- * 接商家之后换成商家给的短链。
+ * 目录里**不再有** `buyUrl` / `buyLabel`。外链的唯一来源是
+ * `wish_item.buy_url`（运营在 tf-admin「商城」列表里配的那条），
+ * 由服务端随商品列表下发，客户端缓存在 `wishBuyLinks` 里
+ * （`db.ts` 的 `WISH_BUY_LINKS_KEY`）。
  *
- * ⚠️ 两个「外链」别混（第六轮 2026-11-06 起）：
- *   * **服务端**的 `wish_item.buy_url`（运营在 tf-admin 商城列表里配的那条）
- *     仍然**只在家长侧返回**，孩子端读不到 —— 这条口径没变；
- *   * **本文件**里的 `buyUrl`（淘宝搜索页）现在**孩子也能打开**：
- *     「去激活」弹框里没有激活码时，那颗「去购买」跳的就是它。
- *     给孩子的永远是**搜索页**而不是具体商品页，换 SKU / 下架都不会失效。
+ * ⚠️ 这里原来有一套「没配就现拼一条淘宝搜索页」的兜底（`wishBuyUrl`）。
+ *    删掉是因为它让**「后台没配」和「配了」在界面上长得一模一样** ——
+ *    用户看到的是一颗永远在、但和后台配置毫无关系的按钮。
+ *    现在：没配 = 没有按钮。
  */
 
 import type { WishItem } from '../domain/types'
@@ -45,30 +43,6 @@ const GAME_POOL: string[] = LOCAL_GAMES.map((g) => g.id)
  * 孩子点兑换只会收到一句「商品不存在」。
  */
 export const WISH_BLINDBOX5_ID = 'wish-blindbox-5'
-
-/** 淘宝搜索链接。`encodeURIComponent` 是必须的 —— 商品名里有空格和中文 */
-function taobaoSearch(keyword: string): string {
-  return `https://s.taobao.com/search?q=${encodeURIComponent(keyword)}`
-}
-
-/**
- * 「去购买」的兜底链接（2026-11-06）。
- *
- * 优先级：目录里配的 `buyUrl`（和 tf-admin 商城列表里那条 `buy_url` 是
- * 同一个商品）→ 现拼一条淘宝搜索。
- *
- * ⚠️ **永远返回一个能打开的链接**。孩子站在「去激活」的弹框里，
- *    没有激活码时唯一能做的就是去买；返回 undefined 让按钮弹一句
- *    「还没配链接」，等于把这条路堵死（而且他也没法自己搜）。
- */
-export function wishBuyUrl(item: { name: string; buyUrl?: string }): string {
-  return item.buyUrl ?? taobaoSearch(item.name)
-}
-
-/** 「去购买」按钮上的字。没配就用「去淘宝搜索」——别写死「去购买」，它得说清去哪 */
-export function wishBuyLabel(item: { name?: string; buyLabel?: string }): string {
-  return item.buyLabel ?? '去淘宝搜索'
-}
 
 const BLINDBOX: WishItem = {
   id: WISH_BLINDBOX_ID,
@@ -133,8 +107,6 @@ const GAME_BOXES: WishItem[] = STOREFRONT.map((s, i) => ({
    * 用搜索页而不是具体商品链接，理由和实物商品一样：链接会失效 / 换 SKU /
    * 被下架，而目录跟着版本发布 —— **一个失效的链接比没有链接更糟**。
    */
-  buyUrl: taobaoSearch(`${s.name} 激活码`),
-  buyLabel: '去淘宝买激活码',
 }))
 
 /**
@@ -155,8 +127,6 @@ const PHYSICAL: WishItem[] = [
     ageRange: [6, 99],
     note: '随机款，不指定款式',
     notice: '盲盒不指定款式。拆开之后不能退换。',
-    buyUrl: taobaoSearch('泡泡玛特 盲盒'),
-    buyLabel: '去淘宝购买',
     sortOrder: 20,
   },
   {
@@ -170,8 +140,6 @@ const PHYSICAL: WishItem[] = [
     ageRange: [6, 12],
     note: '10.1 英寸 · 含学习卡',
     notice: '大件商品，建议先和爸妈一起看看型号再决定。',
-    buyUrl: taobaoSearch('儿童学习机 10.1'),
-    buyLabel: '去淘宝看看',
     sortOrder: 21,
   },
   {
@@ -184,8 +152,6 @@ const PHYSICAL: WishItem[] = [
     priceCents: 8900,
     ageRange: [4, 10],
     note: '12 只装 · 带收纳盒',
-    buyUrl: taobaoSearch('恐龙模型 套装 12只'),
-    buyLabel: '去淘宝购买',
     sortOrder: 22,
   },
   {
@@ -198,8 +164,6 @@ const PHYSICAL: WishItem[] = [
     priceCents: 4500,
     ageRange: [8, 99],
     note: '风景款 · 成品 70×50cm',
-    buyUrl: taobaoSearch('1000片 拼图 风景'),
-    buyLabel: '去淘宝购买',
     sortOrder: 23,
   },
   {
@@ -212,8 +176,6 @@ const PHYSICAL: WishItem[] = [
     priceCents: 1900,
     ageRange: [4, 12],
     note: '含 200 张 · 可反复贴',
-    buyUrl: taobaoSearch('儿童 闪光贴纸 200张'),
-    buyLabel: '去淘宝购买',
     sortOrder: 24,
   },
   /* ---- 2026-10-29 新增两档分类的样例（用户要求「前面再加美食，出行」）----
@@ -230,8 +192,6 @@ const PHYSICAL: WishItem[] = [
     ageRange: [3, 99],
     note: '6 寸 · 可以写名字',
     notice: '要提前一天预订，爸妈下单时记得选日期。',
-    buyUrl: taobaoSearch('生日蛋糕 6寸 儿童'),
-    buyLabel: '去淘宝预订',
     sortOrder: 25,
   },
   {
@@ -245,8 +205,6 @@ const PHYSICAL: WishItem[] = [
     ageRange: [3, 12],
     note: '含 1 大 1 小两张门票',
     notice: '出行类按当天预约情况走，去之前先确认场次。',
-    buyUrl: taobaoSearch('动物园 门票 亲子'),
-    buyLabel: '去淘宝看看',
     sortOrder: 26,
   },
 ]
