@@ -445,3 +445,60 @@ describe('任务编辑器：单独设连击奖励（长期任务）', () => {
     ).toBeNull()
   })
 })
+
+/* ============================================================
+   家长密码：弹层标题 + 裸键盘（2026-11-06 统一）
+   ------------------------------------------------------------
+   这里原来长这样：`SheetHead` 出「改一改任务」，正文里再摆一块
+   `ParentPinPanel`，它自带 🔒 和「请爸爸妈妈来一下」—— 同一张弹层里
+   两个标题叠着，和 👀 审核弹层以前那个毛病一模一样。
+
+   现在标题归 `SheetHead`：锁定态说「要密码」，解锁后才说「改一改任务」。
+   判据用**正文里那句话出现的次数**，不用 `getAllByText` —— 后者会把
+   只包着一个标题的父级 `<div>` 也数进来，永远数出两份。
+   ============================================================ */
+
+describe('任务编辑器：家长密码是弹层标题 + 裸键盘', () => {
+  beforeEach(bootStore)
+  afterEach(async () => {
+    cleanup()
+  })
+
+  /** 正文里某句话出现了几次（不受 DOM 嵌套影响） */
+  function timesInText(phrase: string): number {
+    const text = document.body.textContent ?? ''
+    return text.split(phrase).length - 1
+  }
+
+  it('★ 锁定态：标题说「请爸爸妈妈来一下」，全页只出现一次', async () => {
+    render(<TaskEditor open task={null} onClose={() => {}} />)
+
+    expect(
+      timesInText('请爸爸妈妈来一下'),
+      '弹层标题和正文标题叠了两份 —— 家长会看到两个一样的标题',
+    ).toBe(1)
+    expect(
+      screen.getByRole('button', { name: '0' }),
+      '键盘没铺出来：打开编辑器就该能输密码',
+    ).toBeTruthy()
+    expect(
+      timesInText('加一个新任务'),
+      '闸门没开就把真标题亮出来了，等于提前告诉孩子这屏是干什么的',
+    ).toBe(0)
+  })
+
+  it('★ 输对之后：标题换成「加一个新任务」，那句话不再出现', async () => {
+    const user = userEvent.setup()
+    render(<TaskEditor open task={null} onClose={() => {}} />)
+
+    for (let i = 0; i < 4; i++) {
+      await user.click(screen.getByRole('button', { name: '0' }))
+    }
+
+    expect(await screen.findByText('加一个新任务')).toBeTruthy()
+    expect(
+      timesInText('请爸爸妈妈来一下'),
+      '过了闸标题还挂着，家长会以为没进去',
+    ).toBe(0)
+  })
+})
