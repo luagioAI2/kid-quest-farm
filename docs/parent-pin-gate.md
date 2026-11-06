@@ -15,8 +15,8 @@
 | `PinSheetBody` | 弹框里那一块（副标题 + 键盘），不带标题 —— 标题归外层 `SheetHead` |
 | `ParentLockButton` | 「👤 爸妈：…」按钮，带 `data-parent-lock` 标记，点开 `ParentPinSheet` |
 | `parentPinCopy` | 标题/副标题/图标口径（第一次用家长区时标题要变成「先设一个家长密码」） |
-| `ParentPinPanel` | 内联面板（带 🔒 + 标题）。**只剩一处**：去激活弹框（经 `ParentGate` 包一层）。它外面没有别的标题，所以这里自带标题是对的 |
-| `ParentGate` | 包一层：要密码就先显示面板，通过后渲染 children（去激活弹框在用） |
+| `ParentPinPanel` | 内联面板（带 🔒 + 标题）。**现在只有 `ParentGate` 自己用**，页面不再直接拿它（2026-11-06 把去激活弹框也换成 `PinSheetBody` 了） |
+| `ParentGate` | 包一层：要密码就先显示面板，通过后渲染 children（`CodeRedeemBlock` 在用） |
 
 ## 七处闸门
 
@@ -29,7 +29,7 @@
 | 兑换 · 管理 tab | 锁卡 + `👤 爸妈：管理兑换品` | 管理面板 |
 | 设置 · 规则 / 游戏 / 数据 | 锁卡 + `👤 爸妈：输密码` | 对应 tab 的内容 |
 | 顶栏 👀 / 任务编辑器 | 已经是弹层，里面直接摆键盘；**标题归 `SheetHead`**（锁定态说「请爸爸妈妈来一下」，过了闸才换成「改一改任务 / 加一个新任务」） | 内容 |
-| 去激活弹框 | 里面是 `ParentGate` → `ParentPinPanel`（自带标题，外层只有「激活『X』」） | 输码框 |
+| 去激活弹框（数字商品） | 标题就是 `🔒 请爸爸妈妈来一下`，副标题带商品名，里面只摆键盘 | 标题变回 `🎟️ 激活『X』` + 输码框 |
 
 ## 三条不能破的规矩
 
@@ -71,9 +71,10 @@ grep -rn "ParentPinPanel\|<PinFlow\|ParentGate" src --include=*.tsx | grep -v "p
   八处都有闸门（`TaskPage` 那处是软闸：点「加任务」先弹「这里要爸爸妈妈来弄」，
   再点「🔑 我是家长」才进编辑器）。
   `AccountCard.tsx:10` 只是**注释**里提到这个开关，代码不读。
-- **③ 没有一处直接 `ParentPinPanel`**：只有 `ParentGate` 在用（`ActivationDialog`、
-  `CodeRedeemBlock` 走的是 `ParentGate`）。`ReviewSheet:859` 那句是注释，提醒别摆回去。
-  ⇒ 「弹层里自带标题」这条规矩目前**靠 `ParentGate` 一个出口**守着，
+- **③ 没有一处直接 `ParentPinPanel`**：只有 `ParentGate` 自己用。`CodeRedeemBlock`
+  走 `ParentGate`，`ActivationDialog` 直接用 `PinSheetBody`。
+  `ReviewSheet:859` 那句是注释，提醒别摆回去。
+  ⇒ 「弹层里自带标题」这条规矩目前**靠 `ParentGate` / `PinSheetBody` 两个出口**守着，
   以后谁再想加闸门，走 `ParentLockButton` + `ParentPinSheet` 就自动合规。
 
 ⚠️ 顺手核过一个**看起来像漏网**的：`AccountCard`（账号 / 退出登录）的注释
