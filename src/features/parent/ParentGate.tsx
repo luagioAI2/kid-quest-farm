@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useApp } from '../../store/useApp'
+import { Sheet, SheetHead } from '../tasks/ui'
 
 /* ============================================================
    家长密码闸门（可复用）
@@ -312,6 +313,26 @@ export function PinFlow({
  * @param onPass  验证 / 设置完成后的回调
  * @param onCancel 取消
  */
+/**
+ * 标题 / 副标题 / 图标 —— 内联面板和弹框**共用一份**。
+ *
+ * 第一次用家长区时，标题不能还是「请爸爸妈妈来一下 / 审核需要密码」——
+ * 那会让人以为要输一个**已有的**密码，而键盘其实在让他设新的。
+ *
+ * ⚠️ 两处各写一套的话，改文案时必然走散（这个项目已经栽过好几次）。
+ */
+export function parentPinCopy(hasPin: boolean, title?: string, hint?: string, adultCheck = true) {
+  return {
+    emoji: hasPin ? '🔒' : '🔑',
+    title: hasPin ? (title ?? '请爸爸妈妈来一下') : '先设一个家长密码',
+    hint: hasPin
+      ? hint
+      : adultCheck
+        ? '第一次进家长区：先答一道小题确认是家长，再设一个 4 位数字。'
+        : '第一次进家长区，设一个 4 位数字。以后每次进来都要输它。',
+  }
+}
+
 export function ParentPinPanel({
   title = '请爸爸妈妈来一下',
   hint,
@@ -328,25 +349,155 @@ export function ParentPinPanel({
 }) {
   const settings = useApp((s) => s.settings)
   const hasPin = !!settings.parentPin
-
-  /* 第一次用家长区时，标题不能还是「请爸爸妈妈来一下 / 审核需要密码」——
-     那会让人以为要输一个**已有的**密码，而键盘其实在让他设新的。 */
-  const headTitle = hasPin ? title : '先设一个家长密码'
-  const headHint = hasPin
-    ? hint
-    : adultCheck
-      ? '第一次进家长区：先答一道小题确认是家长，再设一个 4 位数字。'
-      : '第一次进家长区，设一个 4 位数字。以后每次进来都要输它。'
+  const copy = parentPinCopy(hasPin, title, hint, adultCheck)
 
   return (
     <div className="space-y-5">
       <div className="text-center">
-        <div className="text-5xl">{hasPin ? '🔒' : '🔑'}</div>
-        <h3 className="mt-2 font-display text-xl font-extrabold text-ink-900">{headTitle}</h3>
-        {headHint && <p className="mt-1 text-sm text-ink-500">{headHint}</p>}
+        <div className="text-5xl">{copy.emoji}</div>
+        <h3 className="mt-2 font-display text-xl font-extrabold text-ink-900">{copy.title}</h3>
+        {copy.hint && <p className="mt-1 text-sm text-ink-500">{copy.hint}</p>}
       </div>
       <PinFlow onPass={onPass} onCancel={onCancel} adultCheck={adultCheck} />
     </div>
+  )
+}
+
+/* ============================================================
+   家长密码弹框（2026-11-06 统一）
+   ------------------------------------------------------------
+   用户原话：「需要家长密码的，能否统一成弹框的样式，比如点眼睛时候那样。」
+
+   在这之前同一个动作有四种长相：整页只剩键盘（定价页）、键盘顶替按钮
+   （实物单）、键盘铺在页面里（兑换管理、设置页）、弹层里一块（👀 审核）。
+   现在统一成**一颗按钮 + 同一个弹框**：按钮说明「这是爸妈的事」，
+   点下去才出现键盘，输对了弹框自己关掉、页面接着往下走。
+
+   ⚠️ 别把键盘再铺回页面里：
+     · 孩子扫一眼就看见键盘，会以为这一屏坏了（没有可点的东西）；
+     · 键盘占满第一屏，家长看不到「为什么要密码」的上下文（是定价？是收尾？）；
+     · 页面高度被撑开，底部导航被挤走。
+   ============================================================ */
+
+/**
+ * 弹框里那一块：一句副标题 + 键盘。
+ *
+ * **不带标题** —— 标题归外层的 `SheetHead`（👀 审核、`ParentPinSheet` 都是
+ * 这么用的）。原来 👀 那边是 `SheetHead` 出一次标题、`ParentPinPanel` 又出一次，
+ * 屏幕上两个 🔒、两个「请爸爸妈妈来一下」叠着（2026-11-06 截图确认）。
+ */
+export function PinSheetBody({
+  hint,
+  onPass,
+  onClose,
+  adultCheck = true,
+  cancelLabel = '先算了',
+}: {
+  hint?: string
+  onPass: () => void
+  onClose: () => void
+  adultCheck?: boolean
+  cancelLabel?: string
+}) {
+  return (
+    <>
+      {hint && <p className="mb-4 text-center text-sm leading-relaxed text-ink-500">{hint}</p>}
+      <PinFlow
+        onPass={onPass}
+        onCancel={onClose}
+        adultCheck={adultCheck}
+        cancelLabel={cancelLabel}
+      />
+    </>
+  )
+}
+
+/**
+ * 输家长密码的弹框。**全 App 只有这一个输密码界面**（👀 审核那个
+ * `ReviewSheet` 是同一个壳：`Sheet` + `SheetHead` + `PinSheetBody`）。
+ *
+ * @param open    开关
+ * @param onClose 关掉（取消 / 点遮罩 / ✕）—— 不解除锁定
+ * @param onPass  密码正确（或刚设好密码）
+ */
+export function ParentPinSheet({
+  open,
+  onClose,
+  onPass,
+  title,
+  hint,
+  adultCheck = true,
+  cancelLabel = '先算了',
+}: {
+  open: boolean
+  onClose: () => void
+  onPass: () => void
+  title?: string
+  hint?: string
+  /** 第一次设密码前先答一道加法（见 `PinFlow` 那段注释） */
+  adultCheck?: boolean
+  cancelLabel?: string
+}) {
+  const settings = useApp((s) => s.settings)
+  const hasPin = !!settings.parentPin
+  const copy = parentPinCopy(hasPin, title, hint, adultCheck)
+
+  return (
+    <Sheet open={open} onClose={onClose} labelledBy="pin-sheet-title">
+      <SheetHead
+        id="pin-sheet-title"
+        title={copy.title}
+        emoji={copy.emoji}
+        onClose={onClose}
+      />
+      {/* 副标题**不放 `SheetHead` 的 `sub`**：那里是 `truncate` 单行，
+          「第一次进家长区：先答一道小题……」会被截掉一半，而这句恰恰是
+          第一次用的人最需要看全的。 */}
+      <div className="px-5 pb-8 pt-1">
+        <PinSheetBody
+          hint={copy.hint}
+          onPass={onPass}
+          onClose={onClose}
+          adultCheck={adultCheck}
+          cancelLabel={cancelLabel}
+        />
+      </div>
+    </Sheet>
+  )
+}
+
+/**
+ * 「这件事要爸妈来做」的按钮 —— 点开 `ParentPinSheet`。
+ *
+ * 只负责长相和标记，不管状态：`open` 由调用方持有（每个页面自己决定
+ * 过闸之后要显示什么）。
+ *
+ * `data-parent-lock` 是给走查脚本的：**别按文字找**（文案一改就静默失效）。
+ */
+export function ParentLockButton({
+  label,
+  onClick,
+  tone = 'quiet',
+}: {
+  label: string
+  onClick: () => void
+  /** `primary` = 它就是这一屏的主操作（例如「确认兑换 · 去购买」），只是被锁着 */
+  tone?: 'quiet' | 'primary'
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-parent-lock
+      className={
+        'btn w-full active:btn-press ' +
+        (tone === 'primary'
+          ? 'h-12 rounded-2xl bg-grass-500 text-base font-extrabold text-white'
+          : 'h-11 rounded-2xl bg-white text-sm font-extrabold text-ink-600 shadow-flat')
+      }
+    >
+      👤 {label}
+    </button>
   )
 }
 

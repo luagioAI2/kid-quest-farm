@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { db, postHarvest, saveWishBuyLinks } from '@/db/db'
 import { useApp } from '@/store/useApp'
@@ -990,5 +990,84 @@ describe('心愿商城：可兑换 / 一次性兑换', () => {
 
     const offer = await db.wishOffers.get('wish-dino')
     expect(offer?.closedAt, '可重复兑换的不该被关掉').toBeFalsy()
+  })
+})
+
+/* ============================================================
+   家长密码：全 App 统一成弹框（2026-11-06）
+   ------------------------------------------------------------
+   用户原话：「需要家长密码的，能否统一成弹框的样式，比如点眼睛时候那样。」
+
+   改之前这一页是**键盘顶替按钮**：实物单点进详情，整块区域换成键盘，
+   页面上一个能点的东西都没有 —— 孩子看到的是一片数字键，像坏了。
+   现在是一颗「👤 爸妈：确认兑换 · 去购买」，点下去才弹密码。
+
+   ⚠️ 三条断言必须**成对**写（见 `_probe-*` 那边的同名教训）：
+     只测「输对了能进」⇒ 闸门根本没接上也绿；
+     只测「页面上没键盘」⇒ 点了弹不出框也绿。
+   ============================================================ */
+describe('心愿：家长密码是一个弹框，不是铺在页面里的键盘', () => {
+  /** 实物单（committed）+ 保护开着 + 已知密码 0000 */
+  const openPhysicalCommitted = async () => {
+    await useApp.getState().updateSettings({ protectParentActions: true, parentPin: '0000' })
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_toy_gate',
+        itemId: 'wish-popmart',
+        itemName: '泡泡玛特盲盒',
+        itemEmoji: '🧸',
+        kind: 'collectible',
+        status: 'committed',
+      }) as never,
+    )
+    await useApp.getState().refresh()
+    const user = userEvent.setup()
+    render(<WishPage />)
+    await user.click(await screen.findByRole('button', { name: /泡泡玛特/ }))
+    return user
+  }
+
+  it('★ 页面上只有锁按钮：没有键盘，也没有真按钮', async () => {
+    await openPhysicalCommitted()
+
+    expect(
+      document.querySelector('[data-parent-lock]'),
+      '连锁按钮都没有 —— 这一屏等于没有出口',
+    ).toBeTruthy()
+    expect(
+      document.querySelector('[data-wish-finish]'),
+      '没过闸就渲染出真按钮 = 假闸门',
+    ).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: '确定' }),
+      '键盘又铺回页面里了（用户要的是弹框）',
+    ).toBeNull()
+  })
+
+  it('★ 点锁按钮才弹框；输错不放行，输对了真按钮才出现', async () => {
+    const user = await openPhysicalCommitted()
+
+    await user.click(document.querySelector('[data-parent-lock]') as HTMLElement)
+    const sheet = await screen.findByRole('dialog')
+    expect(within(sheet).getByText('请爸爸妈妈来一下')).toBeTruthy()
+
+    /* 输错：弹框不关、真按钮不出现 */
+    for (const k of ['1', '2', '3', '4']) {
+      await user.click(within(sheet).getByRole('button', { name: k }))
+    }
+    expect(await within(sheet).findByText(/密码不对/)).toBeTruthy()
+    expect(
+      document.querySelector('[data-wish-finish]'),
+      '输错了却放行了 —— 这道闸门是假的',
+    ).toBeNull()
+
+    /* 输对：弹框自己关掉，真按钮出现 */
+    for (const k of ['0', '0', '0', '0']) {
+      await user.click(within(sheet).getByRole('button', { name: k }))
+    }
+    await waitFor(() =>
+      expect(document.querySelector('[data-wish-finish]'), '输对了却没出现真按钮').toBeTruthy(),
+    )
+    expect(screen.queryByRole('dialog'), '过了闸弹框要自己关掉').toBeNull()
   })
 })

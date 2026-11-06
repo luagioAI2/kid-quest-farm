@@ -23,7 +23,7 @@ import { GameIconArt } from '../settings/GameIcon'
 import { WishArt } from './WishArt'
 import { CodeRedeemBlock } from './CodeRedeemBlock'
 import { Portal } from '@/components/Portal'
-import { ParentPinPanel } from '../parent/ParentGate'
+import { ParentLockButton, ParentPinSheet } from '../parent/ParentGate'
 import { MerchantView } from './MerchantView'
 import { ActivationDialog } from './ActivationDialog'
 import { openExternal } from '@/platform/openUrl'
@@ -1161,20 +1161,7 @@ function DetailView({
               ✅ 已经放进你的游戏柜了
             </div>
             {needsPin && !pinOk ? (
-              pinOpen ? (
-                <ParentPinPanel
-                  title="请爸爸妈妈来一下"
-                  hint="处理这一单需要密码"
-                  onPass={() => setPinOk(true)}
-                />
-              ) : (
-                <button
-                  onClick={() => setPinOpen(true)}
-                  className="btn h-11 w-full rounded-2xl bg-white text-sm font-extrabold text-ink-600 shadow-flat active:btn-press"
-                >
-                  👤 爸妈：完成这一单
-                </button>
-              )
+              <ParentLockButton label="爸妈：完成这一单" onClick={() => setPinOpen(true)} />
             ) : (
               <button
                 onClick={() => onConfirm(order.id)}
@@ -1186,13 +1173,23 @@ function DetailView({
             )}
           </div>
         ) : order?.status === 'committed' ? (
-          // 实物：已兑换 = 订单在等家长去外链买。**密码闸门直接顶替按钮** ——
-          // 让面板和按钮同时出现，按钮就成了一个假闸门。
+          /*
+           * 实物：已兑换 = 订单在等家长去外链买。
+           *
+           * 这里原来是「**闸门顶替按钮**」—— 整块换成键盘，页面上一个可点的
+           * 东西都没有，孩子点进来只看到一片数字键，像坏了。2026-11-06 用户
+           * 要求统一成弹框：按钮还在（写着「爸妈：…」，谁的事一目了然），
+           * 点下去才弹密码；输对了弹框自己关掉，真正的「确认兑换 · 去购买」
+           * 才出现。
+           *
+           * ⚠️ 顺序不能反：**真按钮只能在过闸之后渲染**。让真按钮和锁按钮
+           *    同时出现，那颗真按钮就是个假闸门。
+           */
           needsPin && !pinOk ? (
-            <ParentPinPanel
-              title="请爸爸妈妈来一下"
-              hint="确认兑换需要密码"
-              onPass={() => setPinOk(true)}
+            <ParentLockButton
+              label="爸妈：确认兑换 · 去购买"
+              tone="primary"
+              onClick={() => setPinOpen(true)}
             />
           ) : (
             <button
@@ -1244,21 +1241,7 @@ function DetailView({
                 已向爸妈申请，等他们回应
               </div>
               {needsPin && !pinOk ? (
-                pinOpen ? (
-                  <ParentPinPanel
-                    title="请爸爸妈妈来一下"
-                    hint="回应这个心愿需要密码"
-                    onPass={() => setPinOk(true)}
-                  />
-                ) : (
-                  <button
-                    onClick={() => setPinOpen(true)}
-                    data-wish-parent
-                    className="btn h-11 w-full rounded-2xl bg-white text-sm font-extrabold text-ink-600 shadow-flat active:btn-press"
-                  >
-                    👤 爸妈：回应这个心愿
-                  </button>
-                )
+                <ParentLockButton label="爸妈：回应这个心愿" onClick={() => setPinOpen(true)} />
               ) : (
                 <button
                   onClick={onOffer}
@@ -1401,6 +1384,25 @@ function DetailView({
           </button>
         </Portal>
       )}
+
+      {/* 三处闸门共用这一个弹框（三个分支互斥，同一时刻只会有一个入口
+          在页面上）。副标题按「现在在给什么解锁」分三句 —— 写一句万能的
+          「需要密码」等于不告诉家长他正要改什么。 */}
+      <ParentPinSheet
+        open={pinOpen}
+        onClose={() => setPinOpen(false)}
+        onPass={() => {
+          setPinOk(true)
+          setPinOpen(false)
+        }}
+        hint={
+          order?.status === 'committed'
+            ? isDelivered(order)
+              ? '处理这一单需要密码'
+              : '确认兑换需要密码'
+            : '回应这个心愿需要密码'
+        }
+      />
     </div>
   )
 }
@@ -1476,7 +1478,9 @@ function OfferView({
     cur?.oneTime ?? (item?.kind === 'gamebox' || item?.kind === 'blindbox'),
   )
   const [pinOk, setPinOk] = useState(false)
-  /* 保护开着就要过闸门 —— 没设过密码也过（面板会变成「先设一个」） */
+  /* 默认 `true`：家长点「定个价」进来，第一眼就该是密码框 */
+  const [pinOpen, setPinOpen] = useState(true)
+  /* 保护开着就要过闸门 —— 没设过密码也过（弹框会变成「先设一个」） */
   const needsPin = settings.protectParentActions !== false
 
   // 最近 7 天的日均券收入 —— 给家长一个「定多少合理」的锚
@@ -1506,13 +1510,33 @@ function OfferView({
   if (!item) return <EmptyState onBack={onBack} />
 
   if (needsPin && !pinOk) {
+    /*
+     * 定价页原来是**整页只剩键盘**：家长点「定个价」进来，看不到定的是哪件
+     * 商品、也看不到余额，先对着一屏数字键。现在换成「锁卡 + 弹框」，
+     * 弹框默认就开着（点进来第一眼就是密码框，不用再点一次）。
+     *
+     * 取消 = 退回商品详情（和这一页原来那颗「先算了」一致）——
+     * 别把孩子/家长留在一张没有任何出口的锁卡上。
+     */
     return (
       <div className="pt-safe pt-4">
-        <ParentPinPanel
-          title="请爸爸妈妈来一下"
+        <div className="rounded-3xl bg-white p-6 text-center shadow-flat">
+          <div className="text-5xl">🔒</div>
+          <p className="mt-3 font-display text-lg font-extrabold text-ink-900">
+            给商品定价需要密码
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-ink-500">
+            输对了才能改价格、改「能兑换几次」。
+          </p>
+        </div>
+        <ParentPinSheet
+          open={pinOpen}
+          onClose={onBack}
+          onPass={() => {
+            setPinOk(true)
+            setPinOpen(false)
+          }}
           hint="给商品定价需要密码"
-          onPass={() => setPinOk(true)}
-          onCancel={onBack}
         />
       </div>
     )

@@ -10,7 +10,9 @@
  *      2026-11-06 第七轮起它两端都下发，但**永远不写进 `href`**）
  *   ④ 价格和券价都在，且价格旁边写着「家长支付」
  *   ⑤ 家长确认页的购买按钮**由后台外链决定有无**（没配就没有）
- *   ⑥ 全程 0 个 404、0 个 pageerror
+ *   ⑥ 家长密码**一律是弹框**（锁按钮 → 弹框 → 输对才出现真按钮），
+ *      页面里不铺键盘（2026-11-06 统一）
+ *   ⑦ 全程 0 个 404、0 个 pageerror
  *
  * ⚠️ 404 那句话**不带 URL**（老坑），所以必须挂 `response` 记 status+url。
  */
@@ -73,6 +75,27 @@ async function passPin(page) {
     await wait(300)
   }
   return true
+}
+
+/**
+ * 打开家长密码弹框并过闸（2026-11-06 起闸门统一成「锁卡 + 弹框」）。
+ *
+ * 页面上先有一颗 `[data-parent-lock]`（「👤 爸妈：…」），点它才出现键盘。
+ * **先点再输** —— 只调 `passPin` 会在一个没有键盘的页面上空按 4 次「0」，
+ * 然后报「定价需要家长密码」失败，看着像闸门被删了。
+ *
+ * 弹框**自动开着**的两种场景（👀 审核、点「定个价」进来的定价页）不需要
+ * 先点，直接 `passPin` 就行。
+ */
+async function openPin(page) {
+  const clicked = await page.evaluate(() => {
+    const b = document.querySelector('[data-parent-lock]')
+    if (!b) return false
+    b.click()
+    return true
+  })
+  if (clicked) await wait(500)
+  return passPin(page)
 }
 
 /* ---------------- 「兑换」那一格：2026-10-29 起唯一的收银台 ----------------
@@ -423,7 +446,8 @@ check('托管数记的是 30', afterRedeem.held === 30, String(afterRedeem.held)
 console.log('\n── 取消退券 ──')
 await goWish()
 await openWishCard('泡泡玛特')
-await passPin(page)
+await page.screenshot({ path: `${OUT}/05b-detail-locked.png` })
+await openPin(page) // 详情页现在先给「👤 爸妈：确认兑换 · 去购买」，点了才弹键盘
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find((x) =>
     x.textContent?.includes('确认兑换'),
@@ -559,7 +583,7 @@ check('第二次兑换（为了走到 done）', redeem2.ok, `卡在 ${redeem2.at
 await wait(700)
 await goWish()
 await openCard()
-await passPin(page) // committed 状态下，详情页底部就是 PIN 闸门
+await openPin(page) // committed 状态下，详情页底部是「👤 爸妈：确认兑换 · 去购买」
 await wait(300)
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find((x) =>
@@ -848,7 +872,7 @@ await page.evaluate(() => {
   b?.click()
 })
 await wait(700)
-await passPin(page) // 定价页整页是 PIN 闸门，先过闸再读文案
+await passPin(page) // 点「定个价」进来时密码弹框**已经自动开着**，直接输
 await wait(400)
 const offerCopy = await page.evaluate(() => document.body.innerText)
 check(

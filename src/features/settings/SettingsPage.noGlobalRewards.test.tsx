@@ -46,11 +46,19 @@ async function bootStore() {
   await useApp.getState().updateSettings({ parentPin: '0000' })
 }
 
-/** 打开「规则」页并过掉家长密码闸门（默认 PIN 0000，第 4 位自动提交） */
+/**
+ * 打开「规则」页并过掉家长密码闸门（默认 PIN 0000，第 4 位自动提交）。
+ *
+ * 2026-11-06：闸门从「键盘铺在卡片里」改成「锁卡 + 弹框」——
+ * 先点 `[data-parent-lock]` 把弹框叫出来，再按 4 个 0。
+ * ⚠️ 少了点开弹框这一步，按 0 会抛「找不到按钮」；就算改成「找不到就跳过」，
+ *    规则页也根本没渲染 —— 下面那堆「找不到某个控件」会**全部假绿**。
+ */
 async function openRules() {
   const user = userEvent.setup()
   render(<SettingsPage onBack={() => {}} />)
   await user.click(screen.getByRole('button', { name: /规则/ }))
+  await user.click(await screen.findByRole('button', { name: /爸妈：输密码/ }))
   for (let i = 0; i < 4; i++) {
     await user.click(screen.getByRole('button', { name: '0' }))
   }

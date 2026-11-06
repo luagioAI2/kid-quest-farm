@@ -12,7 +12,7 @@ import { redeemHistory } from '@/domain/redeemHistory'
 import { WISH_ITEMS } from '@/games/wishCatalog'
 import { Portal } from '@/components/Portal'
 import { BoxView } from '../wish/BoxView'
-import { ParentPinPanel } from '../parent/ParentGate'
+import { ParentLockButton, ParentPinSheet } from '../parent/ParentGate'
 import { BottomSheet, CoinPill } from '../farm/farmUi'
 
 /* ============================================================
@@ -140,6 +140,8 @@ export function RedeemBody() {
 
   const [tab, setTab] = useState<'shop' | 'records' | 'manage'>('shop')
   const [pinOk, setPinOk] = useState(false)
+  /** 密码弹框开着没有（闸门本身是「锁卡 + 弹框」，不再是内联键盘） */
+  const [pinOpen, setPinOpen] = useState(false)
 
   /*
    * ⚠️ 2026-10-29 撤掉的东西，别加回来：**这一页里没有「招商」**。
@@ -428,16 +430,43 @@ export function RedeemBody() {
         </div>
       )}
 
+      {/* 管理 tab 的闸门（2026-11-06 统一成弹框）。
+          原来是键盘直接铺在这一栏里：切到「⚙️ 管理」的孩子迎面一屏数字键，
+          既没有「这是爸妈的事」的说明，也没有出口。现在是一张锁卡 + 一颗
+          按钮，点下去才弹密码。 */}
       {tab === 'manage' &&
         (needsPin && !pinOk ? (
-          <ParentPinPanel
-            title="请爸爸妈妈来一下"
-            hint="管理兑换品需要密码"
-            onPass={() => setPinOk(true)}
-          />
+          <div className="pt-4">
+            <div className="rounded-3xl bg-white p-6 text-center shadow-flat">
+              <div className="text-5xl">🔒</div>
+              <p className="mt-3 font-display text-lg font-extrabold text-ink-900">
+                管理兑换品需要密码
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-ink-500">
+                加一件、改价格、下架，都是爸妈的事。
+              </p>
+              <div className="mt-4">
+                <ParentLockButton
+                  label="爸妈：管理兑换品"
+                  tone="primary"
+                  onClick={() => setPinOpen(true)}
+                />
+              </div>
+            </div>
+          </div>
         ) : (
           <ManagePanel />
         ))}
+
+      <ParentPinSheet
+        open={pinOpen}
+        onClose={() => setPinOpen(false)}
+        onPass={() => {
+          setPinOk(true)
+          setPinOpen(false)
+        }}
+        hint="管理兑换品需要密码"
+      />
 
       {/* 盲盒的揭晓层。
           它原来在心愿页，2026-10-29 随「扣币只留兑换这一处」一起搬过来。

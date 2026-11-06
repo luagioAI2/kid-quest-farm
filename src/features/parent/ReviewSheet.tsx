@@ -10,7 +10,7 @@ import {
   categoryOf,
   formatMultiplier,
 } from '../tasks/ui'
-import { ParentPinPanel } from './ParentGate'
+import { parentPinCopy, PinSheetBody } from './ParentGate'
 import { settleInstance } from '@/domain/settlement'
 import { checkInPayout } from '@/domain/recurrence'
 import { humanizeMinutes, humanizeAgo } from '@/domain/time'
@@ -840,11 +840,15 @@ export function ReviewSheetModal({
 
   const passed = !needsPin || unlocked
 
+  /* 标题口径和 `ParentPinSheet` 共用一份：第一次用家长区时不能说
+     「请爸爸妈妈来一下」（那会让人以为要输一个**已有的**密码）。 */
+  const gate = parentPinCopy(!!settings.parentPin, '请爸爸妈妈来一下')
+
   return (
     <Sheet open={open} onClose={onClose} labelledBy="review-title">
       <SheetHead
-        title={passed ? '帮宝贝看看' : '请爸爸妈妈来一下'}
-        emoji={passed ? '👀' : '🔒'}
+        title={passed ? '帮宝贝看看' : gate.title}
+        emoji={passed ? '👀' : gate.emoji}
         sub={passed ? '确认任务、签到与心愿' : '审核需要密码'}
         id="review-title"
         onClose={onClose}
@@ -852,12 +856,14 @@ export function ReviewSheetModal({
       {passed ? (
         <ReviewSheet />
       ) : (
-        <div className="px-5 pb-8 pt-2">
-          <ParentPinPanel
-            title="请爸爸妈妈来一下"
-            hint="给宝贝打分、确认奖励，需要先输密码"
+        /* ⚠️ 这里**不要**再摆一块 `ParentPinPanel`：它自带 🔒 和标题，
+           而上面 `SheetHead` 已经出过一次 —— 屏幕上会叠两个锁、两个同名标题
+           （2026-11-06 截图抓到）。只放键盘那一块。 */
+        <div className="px-5 pb-8 pt-1">
+          <PinSheetBody
+            hint={gate.hint ?? '给宝贝打分、确认奖励，需要先输密码'}
             onPass={() => setUnlocked(true)}
-            onCancel={onClose}
+            onClose={onClose}
           />
         </div>
       )}

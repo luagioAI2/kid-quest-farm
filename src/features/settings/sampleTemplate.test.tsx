@@ -58,6 +58,8 @@ async function openDataTab() {
   const user = userEvent.setup()
   render(<SettingsPage onBack={() => {}} />)
   await user.click(screen.getByRole('button', { name: /数据/ }))
+  // 2026-11-06：闸门改成「锁卡 + 弹框」，先点开弹框再输密码
+  await user.click(await screen.findByRole('button', { name: /爸妈：输密码/ }))
   for (let i = 0; i < 4; i++) {
     await user.click(screen.getByRole('button', { name: '0' }))
   }

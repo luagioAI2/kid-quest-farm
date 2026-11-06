@@ -369,3 +369,43 @@ describe('兑换列表：已兑换次数', () => {
     expect(within(shopRow('wish-popmart')).queryByText(/已兑换/)).toBeNull()
   })
 })
+
+/* ============================================================
+   管理 tab 的家长密码：锁卡 + 弹框（2026-11-06 统一）
+   ------------------------------------------------------------
+   改之前切到「⚙️ 管理」就是迎面一屏数字键：没有「这是爸妈的事」的说明，
+   也没有出口。现在是一张锁卡 + 一颗按钮。
+   ============================================================ */
+describe('兑换：管理 tab 的家长密码是弹框', () => {
+  const openManage = async () => {
+    await useApp.getState().updateSettings({ protectParentActions: true, parentPin: '0000' })
+    await useApp.getState().refresh()
+    const user = userEvent.setup()
+    render(<RedeemBody />)
+    await ready()
+    await user.click(screen.getByRole('button', { name: /管理/ }))
+    return user
+  }
+
+  it('★ 切到管理：先看到锁卡，不是一屏数字键', async () => {
+    await openManage()
+    expect(document.querySelector('[data-parent-lock]'), '锁按钮没有').toBeTruthy()
+    expect(screen.queryByRole('button', { name: '确定' }), '键盘铺在页面里了').toBeNull()
+    expect(screen.getByText('管理兑换品需要密码')).toBeTruthy()
+  })
+
+  it('★ 点锁按钮弹框，输对才出现管理面板', async () => {
+    const user = await openManage()
+    await user.click(document.querySelector('[data-parent-lock]') as HTMLElement)
+    const sheet = await screen.findByRole('dialog')
+
+    for (const k of ['0', '0', '0', '0']) {
+      await user.click(within(sheet).getByRole('button', { name: k }))
+    }
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(
+      screen.queryByText('管理兑换品需要密码'),
+      '过了闸锁卡还挂着 —— 说明 pinOk 没接上',
+    ).toBeNull()
+  })
+})

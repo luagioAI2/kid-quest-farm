@@ -15,7 +15,7 @@ import { humanizeAgo } from '../../domain/time'
 import { shareOrDownload } from '../../platform/files'
 // 复用家长端同一个 PinPad，不要在这里再抄一份 —— 之前抄出来的副本
 // 带着"第 4 位自动提交读不到最新值"的 bug，两边各修一次很容易漏。
-import { PinFlow, ParentPinPanel } from '../parent/ParentGate'
+import { ParentLockButton, ParentPinSheet } from '../parent/ParentGate'
 import { AccountCard } from '../account/AccountCard'
 import { LoginSheet } from '../account/LoginSheet'
 import { useAccount } from '../../store/useAccount'
@@ -84,6 +84,8 @@ export default function SettingsPage({
   const [tab, setTab] = useState<Tab>(initialTab ?? 'child')
   const [locked, setLocked] = useState(true)
   const [dataLocked, setDataLocked] = useState(true)
+  /** 密码弹框开着没有（2026-11-06 起三个 tab 共用这一个弹框） */
+  const [pinOpen, setPinOpen] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -368,11 +370,17 @@ export default function SettingsPage({
         {tab === 'rules' && (
           <>
             {!gateOpen ? (
-              <Card
-                title={settings.parentPin ? '请输入家长密码' : '先设一个家长密码'}
-                emoji="🔒"
-              >
-                <PinFlow onPass={() => setLocked(false)} adultCheck={false} />
+              /* 2026-11-06 统一成弹框：这里原来把整块键盘铺在卡片里。
+                 卡片只留一句「为什么」，键盘交给 `ParentPinSheet`。 */
+              <Card title="规则要家长密码" emoji="🔒">
+                <p className="mb-3 text-sm leading-relaxed text-ink-500">
+                  改规则会直接影响孩子拿多少分，所以这一页要过家长密码。
+                </p>
+                <ParentLockButton
+                  label="爸妈：输密码"
+                  tone="primary"
+                  onClick={() => setPinOpen(true)}
+                />
               </Card>
             ) : (
               <>
@@ -660,11 +668,16 @@ export default function SettingsPage({
         {tab === 'game' && (
           <>
             {!gateOpen ? (
-              <Card
-                title={settings.parentPin ? '请输入家长密码' : '先设一个家长密码'}
-                emoji="🔒"
-              >
-                <PinFlow onPass={() => setLocked(false)} adultCheck={false} />
+              <Card title="游戏设置要家长密码" emoji="🔒">
+                <p className="mb-3 text-sm leading-relaxed text-ink-500">
+                  「设为当前」和（将来的）购买都会改状态或花钱，所以这一页也要过密码。
+                  在「规则」那页解过锁的话，这里不用再输一遍。
+                </p>
+                <ParentLockButton
+                  label="爸妈：输密码"
+                  tone="primary"
+                  onClick={() => setPinOpen(true)}
+                />
               </Card>
             ) : (
               <GamesSection gateOpen={gateOpen} />
@@ -679,13 +692,10 @@ export default function SettingsPage({
                 <p className="mb-3 text-sm text-ink-500">
                   导出、恢复、清空数据都需要家长密码，防止孩子误操作。
                 </p>
-                <ParentPinPanel
-                  title="请爸爸妈妈来一下"
-                  hint="导出、恢复或清空数据，需要先输密码"
-                  onPass={() => setDataLocked(false)}
-                  /* 设置页是家长自己从 ⚙️ 导航过来的，不再考一次加法；
-                     其它闸门（审核 / 兑换 / 加任务 / 心愿）才考。 */
-                  adultCheck={false}
+                <ParentLockButton
+                  label="爸妈：输密码"
+                  tone="primary"
+                  onClick={() => setPinOpen(true)}
                 />
               </Card>
             ) : (
@@ -822,6 +832,29 @@ export default function SettingsPage({
             )}
           </>
         )}
+
+        {/* 三个 tab 共用这一个弹框：同一时刻只有一个 tab 可见，所以
+            `onPass` 按当前 tab 决定解哪把锁；副标题也跟着换 —— 家长得
+            知道自己在给哪一页解锁。 */}
+        <ParentPinSheet
+          open={pinOpen}
+          onClose={() => setPinOpen(false)}
+          onPass={() => {
+            if (tab === 'data') setDataLocked(false)
+            else setLocked(false)
+            setPinOpen(false)
+          }}
+          hint={
+            tab === 'data'
+              ? '导出、恢复或清空数据，需要先输密码'
+              : tab === 'game'
+                ? '游戏设置（设为当前、购买）需要家长密码'
+                : '改规则会直接影响孩子拿多少分，先输密码'
+          }
+          /* 设置页是家长自己从 ⚙️ 导航过来的，不再考一次加法；
+             其它闸门（审核 / 兑换 / 加任务 / 心愿）才考。 */
+          adultCheck={false}
+        />
       </main>
     </div>
   )
