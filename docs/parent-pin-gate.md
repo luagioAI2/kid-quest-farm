@@ -47,6 +47,40 @@
 - 键盘占满第一屏，家长看不到「为什么需要密码」的上下文（是定价？是收尾？）；
 - 页面高度被撑开，底部导航被挤出屏幕（390×844 上键盘 + 标题 ≈ 560px）。
 
+## 怎么查有没有漏网的闸门
+
+按**组件名**搜只能找到「已经用统一组件的」，漏掉的恰恰是没用它的那些 ——
+所以要按**凭据**和**开关**搜：
+
+```bash
+cd kid-quest-farm-online
+# ① 谁在比 PIN？（应当只在 ParentGate.tsx 里）
+grep -rn "=== settings.parentPin" src --include=*.tsx
+# ② 谁在读保护开关？（每一处都得配闸门，或写清为什么不用）
+grep -rn "protectParentActions" src --include=*.tsx | grep -v test
+# ③ 谁直接用了内联面板 / 裸键盘？（这些地方外层不能再有标题）
+grep -rn "ParentPinPanel\|<PinFlow\|ParentGate" src --include=*.tsx | grep -v "parent/ParentGate.tsx"
+```
+
+2026-11-06 按这三条全仓核过一遍（下面是**实测输出**，不是估计）：
+
+- **① 两处，都在 `ParentGate.tsx`**：`:40` 验证已设的密码，`:201` 输两遍确认新密码。
+  别的地方一次都没直接比过 PIN —— 这条就是「没人绕过统一组件」的硬证据。
+- **② 八处读开关**：`ParentGate` `:34`、`ReviewSheet` `:834`、`RedeemSheet` `:290`、
+  `SettingsPage` `:113`、`TaskEditor` `:109`、`TaskPage` `:89`、`WishPage` `:948` / `:1484`。
+  八处都有闸门（`TaskPage` 那处是软闸：点「加任务」先弹「这里要爸爸妈妈来弄」，
+  再点「🔑 我是家长」才进编辑器）。
+  `AccountCard.tsx:10` 只是**注释**里提到这个开关，代码不读。
+- **③ 没有一处直接 `ParentPinPanel`**：只有 `ParentGate` 在用（`ActivationDialog`、
+  `CodeRedeemBlock` 走的是 `ParentGate`）。`ReviewSheet:859` 那句是注释，提醒别摆回去。
+  ⇒ 「弹层里自带标题」这条规矩目前**靠 `ParentGate` 一个出口**守着，
+  以后谁再想加闸门，走 `ParentLockButton` + `ParentPinSheet` 就自动合规。
+
+⚠️ 顺手核过一个**看起来像漏网**的：`AccountCard`（账号 / 退出登录）的注释
+写着「规则页有闸门，天然挡住孩子」。它确实渲染在 `gateOpen` 分支里，
+所以注释成立 —— 但这类「靠上游挡」的地方**每改一次页面结构就得重核一次**，
+把账号卡挪出 `gateOpen` 就会静默变成无锁。
+
 ## 怎么验
 
 - 单测：`WishPage.test.tsx` 的「心愿：家长密码是一个弹框…」、`RedeemSheet.test.tsx`
