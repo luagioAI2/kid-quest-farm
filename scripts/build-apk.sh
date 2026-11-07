@@ -126,7 +126,11 @@ fi
 # 看不出是地址配错了。所以在这里拦一下，别让它悄悄打进包里。
 API_BASE="${VITE_API_BASE:-}"
 if [ -z "$API_BASE" ] && [ -f .env.apk ]; then
-  API_BASE="$(grep -E '^VITE_API_BASE=' .env.apk | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
+  # ★ `|| true` 不能省：grep 找不到匹配行时返回 1，而这里是
+  #   `set -euo pipefail` 下的赋值语句 —— 赋值失败 = **整个脚本静默退出 1**。
+  #   症状是打完 JAVA_HOME / ANDROID_HOME 两行就没了，一个字的提示都没有，
+  #   看着像脚本崩了。实测：.env.apk 里只有 VITE_GAME_CATALOG_URL 那一行就会踩中。
+  API_BASE="$(grep -E '^VITE_API_BASE=' .env.apk | head -1 | cut -d= -f2- | tr -d '"'"'"' \r' || true)"
 fi
 
 is_loopback=0
@@ -205,6 +209,43 @@ if [ "$OFFLINE" != "1" ]; then
   fi
 fi
 
+# ---------------- 目录地址（「从服务器下载」） ----------------
+# `VITE_GAME_CATALOG_URL` 是**另一个**编译期常量，和 API_BASE 各管各的：
+# 没配 ⇒ 设置页里「从服务器下载」那一整块**不渲染**（fail closed，故意的）。
+#
+# 麻烦在于「没配」和「配了但没生效」在日志上长得一模一样：构建成功、产物正常、
+# 装到手机上只是少了那一块，**没有任何报错**。所以和 API_BASE 一样处理：
+# 配了就必须能在产物里找到（下面 [1/3] 之后验）。
+CATALOG_URL="${VITE_GAME_CATALOG_URL:-}"
+if [ -z "$CATALOG_URL" ] && [ -f .env.apk ]; then
+  # 同上：`|| true` 必须留着，否则「没配这一行」= 脚本静默退出 1。
+  CATALOG_URL="$(grep -E '^VITE_GAME_CATALOG_URL=' .env.apk | head -1 | cut -d= -f2- | tr -d '"'"'"' \r' || true)"
+fi
+
+cat_loopback=0
+case "$CATALOG_URL" in
+  "" | *127.0.0.1* | *localhost*) cat_loopback=1 ;;
+esac
+
+if [ -z "$CATALOG_URL" ]; then
+  echo ""
+  echo "▸ 没配 VITE_GAME_CATALOG_URL —— 这个包里「从服务器下载」那一块不会出现。"
+  echo "  想让远端下载可用，在 .env.apk 里加一行："
+  echo "    VITE_GAME_CATALOG_URL=https://api.你的域名.com/api/game/catalog"
+elif [ "$cat_loopback" = "0" ] && [ "$WEB_ONLY" != "1" ]; then
+  case "$CATALOG_URL" in
+    https://*) ;;
+    *)
+      echo ""
+      echo "✗ VITE_GAME_CATALOG_URL 必须是 https，现在是：$CATALOG_URL"
+      echo "  目录也是走网络拉的，http 同样会被 WebView 拦掉（allowMixedContent=false）。"
+      echo "  只是本机调试 Web 产物？用 --web-only（那条路不拦）。"
+      exit 1
+      ;;
+  esac
+  echo "▸ CATALOG_URL  = $CATALOG_URL"
+fi
+
 # ---------------- 构建 Web ----------------
 echo ""
 echo "▸ [1/3] 构建 Web 产物…"
@@ -227,6 +268,19 @@ if [ "$is_loopback" = "0" ]; then
     exit 1
   fi
   echo "▸ 产物已写入 API_BASE = $API_BASE"
+
+  # 目录地址同理：配了却不在产物里 ⇒ 那个包「看着正常、少一块功能」。
+  # 用 -F 按字面匹配（URL 里有 `:` `/` `.`，别让 grep 当正则）。
+  if [ -n "$CATALOG_URL" ] && [ "$cat_loopback" = "0" ]; then
+    if ! grep -rqF "$CATALOG_URL" dist/assets/*.js 2>/dev/null; then
+      echo ""
+      echo "✗ 产物里找不到 VITE_GAME_CATALOG_URL —— 目录地址没生效。"
+      echo "  这个包能装、能玩，但设置页里「从服务器下载」那一块不会出现，"
+      echo "  而且**不会有任何报错**。先检查 .env.apk 里那一行有没有拼错 / 多空格。"
+      exit 1
+    fi
+    echo "▸ 产物已写入 CATALOG_URL = $CATALOG_URL"
+  fi
 fi
 
 if [ "$WEB_ONLY" = "1" ]; then

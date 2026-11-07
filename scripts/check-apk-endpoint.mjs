@@ -223,6 +223,78 @@ if (!loginTry.ok) {
   )
 }
 
+/* ---------------- ⑤ 游戏目录地址（配了才查） ---------------- */
+/* 「从服务器下载」那块游戏的目录地址是**编译期**变量 `VITE_GAME_CATALOG_URL`。
+   它和 `VITE_API_BASE` 是两个独立的地址（目录将来会挪到 CDN / OSS），所以
+   配错了 `VITE_API_BASE` 全绿也说明不了它没问题。
+
+   症状很隐蔽：App 一切正常，只有「设置 → 游戏」里那块要么整块不出现
+   （地址为空），要么写一句「目录没拉下来」。家长会理解成「服务器上没有游戏」。
+
+   三条判据和主地址一样：https、不是回环、拉得下来且签名能验（只验形状，
+   验签要公钥，那是客户端的事 —— 这里只确认「拿到的是一份 JSON 目录」）。 */
+const catLine = ['.env.apk', '.env.production']
+  .filter((f) => fs.existsSync(f))
+  .map((f) => ({
+    f,
+    v: fs
+      .readFileSync(f, 'utf8')
+      .split(/\r?\n/)
+      .find((l) => l.startsWith('VITE_GAME_CATALOG_URL=')),
+  }))
+  .find((x) => x.v)
+
+if (!catLine) {
+  console.log('\n· 没有配 VITE_GAME_CATALOG_URL —— 打出来的包里没有「从服务器下载」这一块')
+} else {
+  const catUrl = catLine.v
+    .slice('VITE_GAME_CATALOG_URL='.length)
+    .replace(/^["']|["']$/g, '')
+    .trim()
+  console.log(`\n游戏目录：${catUrl}（来自 ${catLine.f}）\n`)
+  const catHttps = /^https:\/\//i.test(catUrl)
+  check('目录地址是 https', catHttps, catHttps ? '' : 'WebView 会拦掉 http')
+  const catHost = (() => {
+    try {
+      return new URL(catUrl).hostname
+    } catch {
+      return ''
+    }
+  })()
+  check(
+    '目录地址不是回环',
+    !/^(127\.0\.0\.1|localhost|\[?::1\]?)$/i.test(catHost),
+    catHost || '解析不出主机名',
+  )
+  const catTry = await tryFetch(catUrl)
+  if (!catTry.ok) {
+    check('目录拉得下来', false, catTry.code || catTry.message)
+  } else {
+    const t = await catTry.res.text()
+    let j = null
+    try {
+      j = JSON.parse(t)
+    } catch {
+      /* 非 JSON */
+    }
+    check('目录拉得下来', catTry.res.status === 200, `HTTP ${catTry.res.status}`)
+    check(
+      '是一份目录（JSON，带 games 数组）',
+      !!j && Array.isArray(j.games),
+      j ? `${j.games?.length ?? 0} 款` : `拿到的是 ${t.slice(0, 60).replace(/\s+/g, ' ')}…`,
+    )
+    /* 包地址和目录地址**不同源**是常态（CDN），所以单独看一眼第一款包的协议 */
+    const firstPkg = j?.games?.[0]?.url
+    if (firstPkg) {
+      check(
+        '包地址也是 https',
+        /^https:\/\//i.test(firstPkg),
+        firstPkg.slice(0, 70),
+      )
+    }
+  }
+}
+
 /* ---------------- 汇总 ---------------- */
 const bad = results.filter((r) => !r.ok)
 console.log('')
