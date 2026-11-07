@@ -65,10 +65,20 @@ describe('设置 → 游戏 → 详情：经济参数', () => {
     expect(text).toContain('9')
   })
 
-  it('没装的时候没有参数可看（manifest 还没下来）', () => {
+  it('★ 拥有但没装：详情里没有参数可看（manifest 还没下来）', async () => {
+    /*
+      2026-11-07 起「未拥有的游戏不显示」⇒ 未拥有的行**整行不渲染**，
+      `[data-store-detail]` 也一起没有。原来这条断言的是「没装时详情按钮还在」，
+      新口径下那个按钮根本不存在 —— 能点进详情的前提是**已经拥有**。
+      所以改成「拥有但没装」：详情能打开，但里面没有经济参数。
+    */
+    useApp.setState({ installedGames: {}, ownedGameIds: ['anthill'] })
     render(<GameMarket gateOpen />)
     expect(document.querySelector('[data-plugin-economy]')).toBeNull()
-    // 详情按钮还在，只是点进去没有这一栏
-    expect(document.querySelector('[data-store-detail="anthill"]')).toBeTruthy()
+    const open = document.querySelector('[data-store-detail="anthill"]') as HTMLElement
+    expect(open).toBeTruthy()
+    await userEvent.click(open)
+    // 点进去也没有这一栏 —— manifest 还没下来，没有数可写
+    expect(document.querySelector('[data-plugin-economy]')).toBeNull()
   })
 })

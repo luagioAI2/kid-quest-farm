@@ -19,6 +19,10 @@ import { ownedSetFor } from '../../domain/ownership'
 import { isOnlineMode } from '../../sync/pull'
 import { GameIconArt } from './GameIcon'
 import { SnapshotSection } from './SnapshotSection'
+import { fetchVerifiedCatalog } from '../../games/install'
+import { catalogPublicKeyRaw } from '../../games/catalogKey'
+import { CATALOG_URL, catalogConfigured } from '../../games/catalogUrl'
+import type { CatalogGame } from '../../games/verify'
 
 /**
  * 我的游戏 —— 手机应用市场那种形态（2026-10-24 用户要求）。
@@ -355,6 +359,24 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
   const ownedSet = ownedSetFor(isOnlineMode, ownedGameIds, installedGames, wishOrders)
 
   /*
+    2026-11-07 家长：「未拥有的游戏不要显示在上面，除非已经激活拥有」。
+
+    ⇒ 没拥有的插件**整行不渲染**（原来是显示一颗「未拥有」药丸）。理由：
+      这一屏叫「我的游戏」，列一堆自己打不开的东西，只会让家长以为自己买过。
+
+    三条例外，都是「已经在这台机器上生效了」，藏掉会更糟：
+      · `installedGames[id]` —— 装过。万一服务端把拥有权撤了，藏掉的话
+        家长既看不到它、也没地方卸载，包白占空间；
+      · `activeGameId === id` —— 当前正在用的那款。列表里没有「当前」是最诡异的；
+      · 内置游戏一律显示 —— 它们随包发、不存在「未拥有」，`RowShell` 里写的是「自带」。
+  */
+  const visibleRows = rows.filter((row) => {
+    if (row.src === 'builtin') return true
+    const id = row.local.id
+    return ownedSet.has(id) || !!installedGames[id] || activeGameId === id
+  })
+
+  /*
     ⚠️ 这里原来有一个 `buy()` —— 点「💎 价格」调 `buyGame`。
     2026-10-28 购买分支整段删掉之后它没有读者了，一起删。
     （`buyGame` 本身还在 store 里：心愿商城的数字商品走的是另一条链，别顺手删。）
@@ -364,26 +386,15 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
     <>
       <Card title="我的游戏" emoji="🎮">
         {/*
-          2026-10-28 家长：「换成『游戏不是为了沉迷，而是为了激励孩子完成任务』，
-          优化下话语，让家长能认同」。
+          2026-11-07 家长要求：把「我的游戏」下面那两段说明**去掉**
+          （「这些游戏是任务之后的奖励…」一直到「…底部那个游戏按钮就是它」）。
 
-          ⚠️ 那句话本身是「不只是 X 而是 Y」句式，**不能照抄上去** ——
-          本项目的文案口径见 `GamesSection.tsx` 头注释。这里把它拆成三句
-          陈述句：先做事、才换得到时间；时长有上限；游戏自己动不了账。
-          家长要的「认同」来自**这三条事实**，不是来自一句口号。
+          ⚠️ 别再加回来。这一屏的定位是**控制台**，不是介绍页：
+          家长进来是要切换 / 卸载游戏，不是读理念。
+          文案口径本身没变（见 `GamesSection.tsx` 头注释），只是不摆在这儿。
         */}
-        <p className="text-sm leading-relaxed text-ink-600">
-          这些游戏是任务之后的奖励，不是随时能打开的消遣。
-          孩子做完任务、拿到积分，才换得到游戏时间；玩多久由上面的「每天玩多久」管着。
-          游戏自己发不了积分，也延长不了时长。
-        </p>
-
-        <p className="mt-2 text-sm leading-relaxed text-ink-500">
-          点「详情」看每一款是让孩子练什么的。装好之后在这一行点「设为当前」，底部那个游戏按钮就是它。
-        </p>
-
         {GAME_KIND_ORDER.map((kind) => {
-          const group = rows.filter((r) => r.kind === kind)
+          const group = visibleRows.filter((r) => r.kind === kind)
           if (group.length === 0) return null
           return (
             <section key={kind} data-market-kind={kind} className="mt-5">
@@ -517,17 +528,20 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
         })}
 
         <p className="mt-4 text-[11px] leading-snug text-ink-500">
-          {/* ⚠️ 这一句必须留着：21 款游戏默认全是「未拥有」，
-              不说一句，孩子只会觉得游戏都不见了。
+          {/* ⚠️ 这一句必须留着：表里只列**已拥有**的游戏（2026-11-07 起），
+              默认一款都没有 —— 不说一句「去哪儿弄」，家长只会觉得游戏全丢了、
+              连个入口都没有。
 
               ⚠️ 别写成「在那里用兑换券换」：**心愿商城不收钱**
               （`WishPage` 那一页只把人送到兑换，见 `jumpToRedeem` 的注释；
               家长 10-29 原话「不需要去心愿商城换，心愿商城只是标明心愿的」）。
               照着旧文案去心愿页找付款按钮，找到的只有「去兑换换」。 */}
-          写着「未拥有」的还不能装 —— 让孩子在「心愿」里说要哪款、你定价之后到「兑换」里换；
+          表里只有已经拥有的游戏。想要别的：让孩子在「心愿」里说要哪款、你定价之后到「兑换」里换；
           兑换码可以直接输在下面，换完会顺手装好。
           装之前会核对包的内容（本地包对内置哈希）。卸载在「详情」最下面 —— 会把存档一起删掉。
         </p>
+
+        <RemoteGames gateOpen={gateOpen} />
 
         <CodeRedeem gateOpen={gateOpen} />
       </Card>
@@ -1015,5 +1029,189 @@ function GameIcon({ g, size = 'md' }: { g: StorefrontEntry; size?: 'md' | 'lg' }
     >
       <GameIconArt id={g.id} tint={g.tint} className="h-full w-full" />
     </span>
+  )
+}
+
+/* ============================================================
+   ①.6 从服务器下载（远端目录）
+   ============================================================ */
+
+/**
+ * 「从服务器下载」—— 目录里那些**不随包发**的游戏。
+ *
+ * ## 为什么单独一块，不混进上面那张表
+ *
+ * 上面那张表是**本地已知**的游戏（内置 + `public/games/` 随包发），数据来自
+ * 编译期的 `STOREFRONT`，永远在。这里的数据来自**网络 + 签名**，加载失败是
+ * 常态之一（没网 / 目录没配 / 签名不对）。混进去的话，一次网络抖动就会让
+ * 「我的游戏」整张表空掉 —— 那是两件完全不同的事，不该共享一个失败模式。
+ *
+ * ## 三条判据
+ *
+ *  - 目录没配（`catalogConfigured()` 为 false）⇒ **整块不渲染**。
+ *    不摆一个点了必然失败的按钮（本项目最忌讳界面承诺它做不到的事）。
+ *  - 目录拉不到 / 签名不对 ⇒ 只说一句错，**不自动重试**：
+ *    签名错重试一万次还是错，而重试会让家长以为在慢慢加载。
+ *  - 「下载」只在**已拥有**时出现 —— 和 `installLocalGame` 同一道门槛
+ *    （门槛在 store 里，这里只是不摆按钮，见 `installFromCatalog` 的注释）。
+ */
+function RemoteGames({ gateOpen }: { gateOpen: boolean }) {
+  const installedGames = useApp((s) => s.installedGames)
+  const ownedGameIds = useApp((s) => s.ownedGameIds)
+  const wishOrders = useApp((s) => s.wishOrders)
+  const activeGameId = useApp((s) => s.activeGameId)
+  const setActiveGame = useApp((s) => s.setActiveGame)
+  const installFromCatalog = useApp((s) => s.installFromCatalog)
+
+  const [games, setGames] = useState<CatalogGame[] | null>(null)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState('')
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!catalogConfigured()) return
+    let alive = true
+    ;(async () => {
+      try {
+        const cat = await fetchVerifiedCatalog({
+          catalogUrl: CATALOG_URL,
+          publicKeyRaw: catalogPublicKeyRaw(),
+        })
+        if (alive) setGames(cat.games)
+      } catch (e) {
+        if (alive) setError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  if (!catalogConfigured()) return null
+
+  /* 和上面那张表**同一口径**（`ownedSetFor`）。两处各写一份迟早走散 */
+  const ownedSet = ownedSetFor(isOnlineMode, ownedGameIds, installedGames, wishOrders)
+
+  /*
+    2026-11-07 家长：「未拥有的游戏不要显示在上面。」—— 这条对这块同样成立。
+    这块的用途是「已经拥有、还没下载」，列一堆点不开的只会让家长以为自己买过。
+    和 `visibleRows` 三条例外一致：已拥有 / 装过 / 当前在用。
+  */
+  const shown = (games ?? []).filter(
+    (g) => ownedSet.has(g.id) || !!installedGames[g.id] || activeGameId === g.id,
+  )
+
+  /* 目录拉到了、但一款都不该显示 ⇒ **整块不渲染**。
+     摆一个空标题（或一句「服务器上暂时没有」）比不摆更糟：家长会以为
+     自己的游戏丢了。 */
+  if (games && shown.length === 0) return null
+
+  async function download(id: string) {
+    if (busyId || !gateOpen) return
+    setBusyId(id)
+    setMsg(null)
+    try {
+      const r = await installFromCatalog(CATALOG_URL, id)
+      setMsg({ ok: r.ok, text: r.message ?? (r.ok ? '装好了' : '没装成') })
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  return (
+    <section className="mt-5 border-t border-ink-100 pt-4" data-remote-section>
+      <h3 className="text-[13px] font-extrabold text-ink-700">从服务器下载</h3>
+      <p className="mt-1 text-[11px] leading-snug text-ink-500">
+        这些游戏不随 App 一起发，点「下载」才会装上。装之前会验签名、核对哈希。
+      </p>
+
+      {error && (
+        <p data-remote-error className="mt-2 text-[11px] font-bold leading-snug text-berry-500">
+          目录没拉下来：{error}
+        </p>
+      )}
+
+      {!error && games === null && (
+        <p className="mt-2 text-[11px] text-ink-400">正在看有哪些…</p>
+      )}
+
+      {!!shown.length && (
+        <ul className="mt-2">
+          {shown.map((g) => {
+            const installed = installedGames[g.id]
+            const isCurrent = activeGameId === g.id
+            const owned = ownedSet.has(g.id)
+            const kb = g.size ? ` · ${(g.size / 1024).toFixed(0)} KB` : ''
+            return (
+              <li
+                key={g.id}
+                data-remote-row={g.id}
+                className="flex items-center gap-3 border-t border-ink-100 py-2.5 first:border-t-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="truncate font-display text-[14px] font-extrabold text-ink-900">
+                      {g.name}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-bold text-ink-300">
+                      v{g.version}
+                      {kb}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-snug text-ink-500">
+                    {installed
+                      ? `已装 v${installed.version}`
+                      : owned
+                        ? '已拥有 · 还没下载'
+                        : '未拥有'}
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  {installed ? (
+                    isCurrent ? (
+                      <span className={PILL_MUTE}>当前</span>
+                    ) : (
+                      <button
+                        disabled={!gateOpen}
+                        data-remote-set-current={g.id}
+                        onClick={() => void setActiveGame(g.id)}
+                        className={PILL_SOFT}
+                      >
+                        设为当前
+                      </button>
+                    )
+                  ) : owned ? (
+                    <button
+                      disabled={!gateOpen || !!busyId}
+                      data-remote-install={g.id}
+                      onClick={() => void download(g.id)}
+                      className={PILL_SOFT}
+                    >
+                      {busyId === g.id ? '正在装…' : '下载'}
+                    </button>
+                  ) : (
+                    <span className={PILL_MUTE} data-remote-need-own={g.id}>
+                      未拥有
+                    </span>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {msg && (
+        <p
+          data-remote-msg
+          className={
+            'mt-2 text-[11px] font-bold leading-snug ' +
+            (msg.ok ? 'text-grass-600' : 'text-berry-500')
+          }
+        >
+          {msg.text}
+        </p>
+      )}
+    </section>
   )
 }

@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS } from '@/db/db'
 import { appDayKey } from '@/domain/time'
 import { GamesSection } from './GamesSection'
 import type { AppSettings } from '@/domain/types'
+import type { GameManifestV2 } from '@/games/plugin'
 
 /* ============================================================
    设置 → 游戏（2026-10-28 改版）
@@ -93,97 +94,89 @@ describe('设置 → 游戏：每天玩多久', () => {
 })
 
 /* ============================================================
-   没拥有不能装（2026-10-30 家长拍板）
+   我的游戏：只列**已经拥有**的（2026-11-07 家长拍板）
    ------------------------------------------------------------
-   门槛本身在 `installLocalGame` 里（单测在 store），这里钉的是**界面**：
+   家长原话：「未拥有的游戏不要显示在上面。除非已经激活拥有。」
 
-     · 没拥有的那一行**不许出现安装按钮** —— 摆一个按钮再点出一句
-       「还没拥有」是最差的组合：界面先承诺，再当场否认；
-     · 那颗灰药丸是 `span`（不可点），却坐在动作列里、外面裹着
-       `pointer-events-auto` ⇒ 整行别处都能点进详情，唯独这块点下去没事发生。
-       所以它**只能陈述状态**，不能写「去…」这种像指令的话。
+   ⇒ 没拥有的插件**整行不渲染**（原来是显示一颗「未拥有」药丸）。
+     这一屏叫「我的游戏」，列一堆自己打不开的东西，只会让家长以为买过。
+
+   还有三条例外**仍然显示**，因为它们已经在这台机器上生效了
+   （`GameMarket` 的 `visibleRows` 里逐条写着）：装过的、当前在用的、内置游戏。
+
+   ⚠️ 所以「未拥有药丸」那个分支**不能删** —— 装了但拥有权被撤时还会走到它。
    ============================================================ */
-describe('设置 → 游戏：没拥有不能装', () => {
+describe('设置 → 游戏：未拥有的不显示', () => {
   const GAME = 'cloudfarm'
+  const NAME = '云边小农场'
 
-  it('★ 没拥有：没有安装按钮，只写「未拥有」', () => {
+  it('★ 没拥有：整行不出现，连名字都看不到', () => {
     useApp.setState({ ownedGameIds: [], installedGames: {} })
     render(<GamesSection gateOpen />)
+    // 行不渲染 ⇒ 安装按钮 / 未拥有药丸 / 详情入口，三个锚点全都不在
+    expect(document.querySelector(`[data-local-row="${GAME}"]`)).toBeNull()
     expect(document.querySelector(`[data-local-install="${GAME}"]`)).toBeNull()
-    const need = document.querySelector(`[data-local-need-own="${GAME}"]`)
-    expect(need).toBeTruthy()
-    // 不是按钮 ⇒ 不能让人以为点了会有反应
-    expect(need!.tagName).toBe('SPAN')
-    expect(need!.textContent?.trim()).toBe('未拥有')
-  })
-
-  it('★ 拥有之后才出现安装按钮，那颗「未拥有」消失', () => {
-    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
-    render(<GamesSection gateOpen />)
     expect(document.querySelector(`[data-local-need-own="${GAME}"]`)).toBeNull()
+    expect(document.querySelector(`[data-store-detail="${GAME}"]`)).toBeNull()
+    // 判据最后落在**名字**上：锚点可能改名，用户看到的才是事实
+    expect(screen.queryByText(NAME)).toBeNull()
+  })
+
+  it('★ 拥有之后才出现：行、安装按钮、详情入口都在', () => {
+    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    expect(screen.getByText(NAME)).toBeTruthy()
+    expect(document.querySelector(`[data-local-row="${GAME}"]`)).toBeTruthy()
     expect(document.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
+    expect(document.querySelector(`[data-store-detail="${GAME}"]`)).toBeTruthy()
+    // 拥有之后不该再有「未拥有」
+    expect(document.querySelector(`[data-local-need-own="${GAME}"]`)).toBeNull()
   })
 
-  it('★ 详情页同一个口径：没拥有时也不摆安装按钮', async () => {
+  it('★ 内置游戏不受影响（它们不存在「未拥有」）', () => {
     /*
-      列表和详情是**同一个动作的两个入口**。2026-10-30 实拍发现：
-      列表行写着「未拥有」，点进详情却是一个大黄「安装」——
-      点下去当然装不成，弹「没装成 / 还没拥有」。
-      正是列表注释里那句「界面先承诺，再当场否认」。
+      按拥有权过滤最容易顺手把内置游戏一起藏掉 —— 它们不占 `ownedGameIds`，
+      `RowShell` 里写的是「自带」。这一屏一空，家长会以为游戏全丢了。
     */
     useApp.setState({ ownedGameIds: [], installedGames: {} })
+    render(<GamesSection gateOpen />)
+    // 内置行用的是 `data-market-builtin`（`data-local-row` 只挂在插件行上）
+    expect(document.querySelector('[data-market-builtin="farm"]')).toBeTruthy()
+  })
+
+  it('★ 装过的即使拥有权被撤，也要留在表里（否则没地方卸载）', () => {
+    /*
+      `installedGames` 有值 = 这台机器上真的装了。藏掉的话：包还占着空间、
+      存档还在，而家长既看不到它、也没地方卸载。
+    */
+    useApp.setState({
+      ownedGameIds: [],
+      installedGames: {
+        [GAME]: {
+          id: GAME,
+          name: NAME,
+          emoji: '🌾',
+          tabLabel: '农场',
+          version: '1.0.0',
+          minHostApi: 1,
+        } as unknown as GameManifestV2,
+      },
+    })
+    render(<GamesSection gateOpen />)
+    expect(document.querySelector(`[data-local-row="${GAME}"]`)).toBeTruthy()
+  })
+
+  it('★ 详情页那道闸不能松：只有拥有的才摆安装按钮', async () => {
+    // 列表把未拥有的行藏了，详情就只剩「拥有的」这一条入口 ——
+    // 但详情自己也得判一次（`GameDetailSheet` 拿的是同一个 `ownedSet`）。
+    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
     render(<GamesSection gateOpen />)
     const open = document.querySelector(`[data-store-detail="${GAME}"]`) as HTMLElement
     expect(open).toBeTruthy()
     await userEvent.click(open)
-
     const dlg = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
     expect(dlg).toBeTruthy()
-    expect(dlg!.querySelector(`[data-local-install="${GAME}"]`)).toBeNull()
-    expect(dlg!.querySelector(`[data-local-need-own="${GAME}"]`)).toBeTruthy()
-    // 详情页是单独的屏，列表底部那句说明它看不到 ⇒ 这里必须自己说一句
-    expect(dlg!.textContent).toMatch(/兑换/)
-  })
-
-  it('★ 详情页：拥有之后那颗按钮回来', async () => {
-    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
-    render(<GamesSection gateOpen />)
-    const open = document.querySelector(`[data-store-detail="${GAME}"]`) as HTMLElement
-    await userEvent.click(open)
-    const dlg = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
     expect(dlg!.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
-    expect(dlg!.querySelector(`[data-local-need-own="${GAME}"]`)).toBeNull()
-  })
-
-  it('★ 详情页同一个口径：没拥有时也不摆安装按钮', async () => {
-    /*
-      列表和详情是**同一个动作的两个入口**。2026-10-30 实拍发现：
-      列表行写着「未拥有」，点进详情却是一个大黄「安装」——
-      点下去当然装不成，弹「没装成 / 还没拥有」。
-      正是列表注释里那句「界面先承诺，再当场否认」。
-    */
-    useApp.setState({ ownedGameIds: [], installedGames: {} })
-    render(<GamesSection gateOpen />)
-    const open = document.querySelector(`[data-store-detail="${GAME}"]`) as HTMLElement
-    expect(open).toBeTruthy()
-    await userEvent.click(open)
-
-    const dlg = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
-    expect(dlg).toBeTruthy()
-    expect(dlg!.querySelector(`[data-local-install="${GAME}"]`)).toBeNull()
-    expect(dlg!.querySelector(`[data-local-need-own="${GAME}"]`)).toBeTruthy()
-    // 详情页是单独的屏，列表底部那句说明它看不到 ⇒ 这里必须自己说一句
-    expect(dlg!.textContent).toMatch(/兑换/)
-  })
-
-  it('★ 详情页：拥有之后那颗按钮回来', async () => {
-    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
-    render(<GamesSection gateOpen />)
-    const open = document.querySelector(`[data-store-detail="${GAME}"]`) as HTMLElement
-    await userEvent.click(open)
-    const dlg = document.querySelector('[role="dialog"][aria-label="游戏详情"]')
-    expect(dlg!.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
-    expect(dlg!.querySelector(`[data-local-need-own="${GAME}"]`)).toBeNull()
   })
 
   it('★ 表底说明指向「兑换」，不写「在那里用券换」', () => {
@@ -192,53 +185,7 @@ describe('设置 → 游戏：没拥有不能装', () => {
     useApp.setState({ ownedGameIds: [], installedGames: {} })
     render(<GamesSection gateOpen />)
     const p = [...document.querySelectorAll('p')].find((x) =>
-      /还不能装/.test(x.textContent ?? ''),
-    )
-    expect(p).toBeTruthy()
-    expect(p!.textContent).toMatch(/兑换/)
-    expect(p!.textContent).not.toMatch(/在那里/)
-  })
-})
-
-/* ============================================================
-   没拥有不能装（2026-10-30 家长拍板）
-   ------------------------------------------------------------
-   门槛本身在 `installLocalGame` 里（单测在 store），这里钉的是**界面**：
-
-     · 没拥有的那一行**不许出现安装按钮** —— 摆一个按钮再点出一句
-       「还没拥有」是最差的组合：界面先承诺，再当场否认；
-     · 那颗灰药丸是 `span`（不可点），却坐在动作列里、外面裹着
-       `pointer-events-auto` ⇒ 整行别处都能点进详情，唯独这块点下去没事发生。
-       所以它**只能陈述状态**，不能写「去…」这种像指令的话。
-   ============================================================ */
-describe('设置 → 游戏：没拥有不能装', () => {
-  const GAME = 'cloudfarm'
-
-  it('★ 没拥有：没有安装按钮，只写「未拥有」', () => {
-    useApp.setState({ ownedGameIds: [], installedGames: {} })
-    render(<GamesSection gateOpen />)
-    expect(document.querySelector(`[data-local-install="${GAME}"]`)).toBeNull()
-    const need = document.querySelector(`[data-local-need-own="${GAME}"]`)
-    expect(need).toBeTruthy()
-    // 不是按钮 ⇒ 不能让人以为点了会有反应
-    expect(need!.tagName).toBe('SPAN')
-    expect(need!.textContent?.trim()).toBe('未拥有')
-  })
-
-  it('★ 拥有之后才出现安装按钮，那颗「未拥有」消失', () => {
-    useApp.setState({ ownedGameIds: [GAME], installedGames: {} })
-    render(<GamesSection gateOpen />)
-    expect(document.querySelector(`[data-local-need-own="${GAME}"]`)).toBeNull()
-    expect(document.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
-  })
-
-  it('★ 表底说明指向「兑换」，不写「在那里用券换」', () => {
-    // 心愿商城**不收钱**（`WishPage` 只把人送到兑换，见 `jumpToRedeem`）。
-    // 旧文案写「在那里用兑换券换」⇒ 家长照着去心愿页找付款按钮，只会看到「去兑换换」。
-    useApp.setState({ ownedGameIds: [], installedGames: {} })
-    render(<GamesSection gateOpen />)
-    const p = [...document.querySelectorAll('p')].find((x) =>
-      /还不能装/.test(x.textContent ?? ''),
+      /只有已经拥有/.test(x.textContent ?? ''),
     )
     expect(p).toBeTruthy()
     expect(p!.textContent).toMatch(/兑换/)

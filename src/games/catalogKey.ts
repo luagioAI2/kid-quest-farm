@@ -1,15 +1,20 @@
 /**
  * `catalog.json` 的 **Ed25519 公钥**（spec §12.4：「公钥**烧进 APK**」）。
  *
- * ── 现在为什么是空的 ────────────────────────────────────────────────
+ * ── 现在配的是哪一把 ────────────────────────────────────────────────
  *
- * 私钥**不该**出现在仓库里，也不该由写代码的人生成 —— 它属于发布者。
- * 生成 + 保管 + 签名都用 `scripts/sign-catalog.mjs`：
+ * 2026-11-07 配上了（同日轮换过一次）。公钥**不要自己从私钥里截**：
+ * 私钥可能是 32 字节 seed，也可能是 64 字节 seed+public，截法不一样，
+ * 截错只会得到一串「长度对但内容错」的 base64，症状是「所有包都验签失败」。
+ * 唯一可信的来源是自检接口（它直接返回服务端正在用的公钥）：
  *
- *     node scripts/sign-catalog.mjs keygen          # 生成密钥对（私钥只落一份，别提交）
- *     node scripts/sign-catalog.mjs sign catalog.json   # 产出 catalog.json.sig
+ *     POST /api/admin/game/release/self-check  →  data.public_key_base64
  *
- * 把 `keygen` 打印出来的 base64 公钥粘到下面，再提交。
+ *     node scripts/sign-catalog.mjs keygen          # 生成新密钥对（私钥别提交）
+ *     node scripts/sign-catalog.mjs sign catalog.json   # 手工签一份目录
+ *
+ * ⚠️ **私钥不许进仓库**。现在 `tf-platform-api/configs/config.yaml` 里那把是联调用的，
+ *    上生产要换环境变量 `TF_GAME_CATALOG_KEY` 并轮换，这里跟着换公钥。
  *
  * ── ⚠️⚠️ 空着 = 下载功能不可用，这是**故意的**（fail closed） ──────────
  *
@@ -21,7 +26,7 @@
 
 import type { Bytes } from './bytes'
 
-export const CATALOG_PUBLIC_KEY_B64 = ''
+export const CATALOG_PUBLIC_KEY_B64 = 'HPxsTdyzBjbnFVvvbzRM9jjhfeTKsQSX9I8w128mm5k='
 
 /**
  * Ed25519 原始公钥固定 32 字节。

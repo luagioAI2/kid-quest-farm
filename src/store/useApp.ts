@@ -4899,6 +4899,15 @@ export const useApp = create<AppState>((set, get) => ({
   /* ---- 插件游戏：装配（spec §12.5） ---- */
 
   installFromCatalog: async (catalogUrl, gameId) => {
+    /* ★ 和 `installLocalGame` **同一道门槛**（2026-10-30 家长：「加门槛，没拥有不能装」）。
+     *
+     * 这里原来没有 —— 从目录装走的是另一条路，漏了就等于「远端包谁都能装」。
+     * 门槛必须在 store，不在按钮上：按钮只是入口之一（将来的批量装、调试桥都会绕过它）。
+     */
+    if (!(await ownedGameSetNow()).has(gameId)) {
+      return { ok: false, message: '这款还没拥有 —— 去心愿商城兑换，或者用激活码' }
+    }
+
     // ① 先把整条校验链跑完（验签 → 解析 → 取包 → 验哈希）。
     //    它会把**任何没验过的东西**拒掉；公钥没配也会在这里抛。
     let resolved: ResolvedGame
