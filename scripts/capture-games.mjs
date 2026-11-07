@@ -16,6 +16,7 @@
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
+import { grantGame } from './lib/own.mjs'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 
 /* ⚠️ 变量名**别叫 `URL`** —— 那会遮住全局的 `URL` 构造器（本项目踩过）。 */
@@ -127,14 +128,36 @@ for (const vp of VIEWPORTS) {
       : '没找到栏目条',
   )
 
-  /* ---- ③ 过家长密码（默认 0000，第 4 位自动提交） ---- */
-  const pinShown = await page
-    .waitForFunction(() => document.body.innerText.includes('请输入家长密码'), { timeout: 5000 })
+  /* ---- ③ 过家长密码（默认 0000，第 4 位自动提交） ----
+     ⚠️ 闸门改成了「卡片 + 按钮」：先进到一张「游戏设置要家长密码」的卡，
+     点「爸妈：输密码」才弹出数字键盘（`ParentPinSheet`）。
+     这里原来直接点 4 次 0 —— 键盘根本没打开，页面停在那张卡上，
+     后面全红成「内置 0 行 / 没有『每天玩多久』」，看着像整块界面坏了，
+     真因却是「没点那颗按钮」。 */
+  const gateCard = await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].some((b) =>
+          /爸妈：输密码/.test(b.textContent ?? ''),
+        ),
+      { timeout: 6000 },
+    )
     .then(() => true, () => false)
-  check('游戏页先要家长密码', pinShown)
-  for (let i = 0; i < 4; i++) {
-    await clickExact(page, '0')
-    await wait(180)
+  check('游戏页先要家长密码（卡片上那颗按钮）', gateCard)
+  if (gateCard) {
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find((x) =>
+        /爸妈：输密码/.test(x.textContent ?? ''),
+      )
+      b?.click()
+    })
+    await page
+      .waitForFunction(() => document.body.innerText.includes('请输入家长密码'), { timeout: 5000 })
+      .catch(() => {})
+    for (let i = 0; i < 4; i++) {
+      await clickExact(page, '0')
+      await wait(180)
+    }
   }
   const unlocked = await page
     .waitForFunction(() => document.querySelector('[data-market-builtin]') !== null, {
@@ -198,11 +221,17 @@ for (const vp of VIEWPORTS) {
   const expectedPlugins = JSON.parse(
     readFileSync('public/games/index.json', 'utf8'),
   ).games ?? []
+  /*
+    ⚠️ 2026-11-07 起「未拥有的游戏不显示」⇒ 插件行数**不再等于注册表条数**。
+    默认状态一款都没拥有 ⇒ 0 行。这条断言就是新口径本身：列表里出现未拥有的
+    游戏，说明过滤被谁拆了（或者 `ownedSetFor` 的口径变了）。
+    「0 行」不是「这一栏坏了」—— 内置那几行还在，下面 `builtinRows` 会说话。
+  */
   check(
-    '★ 内置游戏和插件游戏排在同一张表里',
-    info.builtinRows.length === info.games.length && info.pluginRows.length === expectedPlugins.length,
+    '★ 内置游戏在表里，未拥有的插件一行都不出现',
+    info.builtinRows.length === info.games.length && info.pluginRows.length === 0,
     `内置 ${info.builtinRows.length}/${info.games.length} 行，` +
-      `插件 ${info.pluginRows.length}/${expectedPlugins.length} 行`,
+      `插件 ${info.pluginRows.length} 行（注册表 ${expectedPlugins.length} 款）`,
   )
   check(
     '★ 那三张单独的卡没有回来',
@@ -245,6 +274,41 @@ for (const vp of VIEWPORTS) {
 
   await page.screenshot({ path: `${OUT}/${vp.name}-2-家长栏游戏.png`, fullPage: true })
   console.log(`  · 已存图 ${OUT}/${vp.name}-2-家长栏游戏.png`)
+
+  /* ---- ④b 「拥有之后才出现」的**正例** ----
+     只判「没拥有不显示」不够：把过滤写成「一律不显示」也会绿。
+     所以预置一款拥有，判它单独出现、而且只有它。
+     ★ 放在截图**之后** —— 上面那张图要拍的是家长打开这一页的默认样子。 */
+  const grantedId = expectedPlugins[0]?.id ?? ''
+  check('注册表里至少有 1 款可下载的游戏', !!grantedId)
+  if (grantedId) {
+    await grantGame(page, grantedId)
+    const afterGrant = await page
+      .waitForFunction(
+        (id) =>
+          document.querySelectorAll('[data-local-row]').length === 1 &&
+          !!document.querySelector(`[data-local-row="${id}"]`),
+        { timeout: 8000 },
+        grantedId,
+      )
+      .then(() => true, () => false)
+    const visible = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-local-row]')]
+        .map((x) => x.getAttribute('data-local-row'))
+        .join(','),
+    )
+    check(
+      '★ 拥有之后只出现那一行（正例，否则「全藏起来」也会绿）',
+      afterGrant,
+      `拥有 ${grantedId}，表里现在是 [${visible}]`,
+    )
+    await page.evaluate(() => {
+      document.querySelector('[data-local-row]')?.scrollIntoView({ block: 'center' })
+    })
+    await wait(300)
+    await page.screenshot({ path: `${OUT}/${vp.name}-2b-拥有之后.png`, fullPage: true })
+    console.log(`  · 已存图 ${OUT}/${vp.name}-2b-拥有之后.png`)
+  }
 
   /* ---- ⑤ 「练什么」只在详情里（2026-10-25 家长要求） ----
      ★ 两边都要判：行上**没有**、详情里**有**。

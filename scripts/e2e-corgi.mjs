@@ -213,8 +213,38 @@ console.log('\n【② 安装：设置 → 游戏】')
   await wait(600)
 
   // 家长密码默认 0000，第 4 位自动提交（没有确认按钮）
+  /* 2026-11 起家长密码闸门是「卡片 + 按钮」：先点「爸妈：输密码」才弹数字键盘
+     （`ParentPinSheet`）。不点的话下面那 4 次 0 全打在空气里，页面停在那张卡上，
+     报错却是「游戏列表没渲染」—— 排查方向整个是错的。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+      /爸妈：输密码/.test(x.textContent ?? ''),
+    )
+    b?.click()
+  })
+  /* ★ 必须**等键盘真的出现**再点数字。少了这一句，下面的循环第一轮就会
+     因为「页面上没有『请输入家长密码』」直接 break，而 `check('过了家长密码')`
+     判的是「没有这几个字」⇒ **假绿**，后面全部红成「列表里没这一行」。 */
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
   for (let round = 0; round < 2; round++) {
-    const locked = await page.evaluate(() => document.body.innerText.includes('请输入家长密码'))
+    /* 判「还锁着」用**数字键盘在不在**。旧写法判「页面上有没有『请输入家长密码』」，
+       `ParentPinSheet` 文案一换就永远 false ⇒ 循环第一轮 break、4 位密码一次没输，
+       而下面那句 check 判的又是「没有这几个字」⇒ **假绿**，后面全红成
+       「列表里没这一行」，排查方向整个是错的。 */
+    const locked = await page.evaluate(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+    )
     if (!locked) break
     for (let i = 0; i < 4; i++) {
       await page.evaluate(() => {
@@ -225,11 +255,13 @@ console.log('\n【② 安装：设置 → 游戏】')
     }
     await wait(600)
   }
-  check('过了家长密码', !(await page.evaluate(() => document.body.innerText.includes('请输入家长密码'))))
+  /* 判据落在**表渲染出来了**：闸门开了才有 `[data-market-builtin]`。 */
+  check('过了家长密码', await page.evaluate(() => !!document.querySelector('[data-market-builtin]')))
 
-  check('游戏列表在页面上', await waitFor(`[data-local-row="${GAME_ID}"]`, 12000))
-  /* 2026-10-30 起「没拥有不能装」—— 先预置拥有，否则下面找不到安装按钮 */
+  /* 2026-11-07 起「未拥有的游戏不显示」⇒ 必须先预置拥有、再等那一行，
+     反过来的话 `waitFor` 白等一轮，报的是「列表里没有」，真因却是「没拥有」。 */
   await grantGame(page, GAME_ID)
+  check('游戏列表在页面上', await waitFor(`[data-local-row="${GAME_ID}"]`, 12000))
 
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)

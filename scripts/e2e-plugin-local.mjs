@@ -244,6 +244,27 @@ async function openGameSettings() {
   await wait(600)
 
   // 默认 PIN = 0000（第 4 位自动提交，没有确认按钮）
+  /* 2026-11 起家长密码闸门是「卡片 + 按钮」：先点「爸妈：输密码」才弹数字键盘
+     （`ParentPinSheet`）。不点的话下面那 4 次 0 全打在空气里，页面停在那张卡上，
+     报错却是「游戏列表没渲染」—— 排查方向整个是错的。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+      /爸妈：输密码/.test(x.textContent ?? ''),
+    )
+    b?.click()
+  })
+  /* ★ 必须**等键盘真的出现**再点数字。少了这一句，下面的循环第一轮就会
+     因为「页面上没有『请输入家长密码』」直接 break，而 `check('过了家长密码')`
+     判的是「没有这几个字」⇒ **假绿**，后面全部红成「列表里没这一行」。 */
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
   for (let round = 0; round < 2; round++) {
     const locked = await page.evaluate(() =>
       document.body.innerText.includes('请输入家长密码'),

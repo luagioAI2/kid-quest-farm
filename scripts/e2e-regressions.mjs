@@ -106,10 +106,35 @@ try {
    * 报「没找到开关」，其实是没进门，属于假失败）。
    */
   const enterPinIfLocked = async () => {
-    const locked = await page.evaluate(() =>
-      [...document.querySelectorAll('button')].some((x) => x.textContent?.trim() === '清空'),
+    /* ⚠️ 2026-11 起设置页的闸门是「卡片 + 按钮」：卡片上只有「爸妈：输密码」，
+       点它才弹数字键盘。旧判据是「页面上有没有『清空』按钮」—— 卡片上根本没有，
+       于是恒 false ⇒ 一次密码都不输 ⇒ 后面全红成「没找到开关」，方向全错。
+       新判据：**按钮在不在**（卡片态）或**键盘在不在**（已经弹出来了）。 */
+    const locked = await page.evaluate(
+      () =>
+        [...document.querySelectorAll('button')].some((x) =>
+          /爸妈：输密码/.test(x.textContent ?? ''),
+        ) ||
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
     )
     if (!locked) return false
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find((x) =>
+        /爸妈：输密码/.test(x.textContent ?? ''),
+      )
+      b?.click()
+    })
+    await page
+      .waitForFunction(
+        () =>
+          [...document.querySelectorAll('button')].filter((b) =>
+            /^[0-9]$/.test((b.textContent ?? '').trim()),
+          ).length >= 8,
+        { timeout: 5000 },
+      )
+      .catch(() => {})
     for (let i = 0; i < 4; i++) {
       await page.evaluate(() => {
         const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.trim() === '0')

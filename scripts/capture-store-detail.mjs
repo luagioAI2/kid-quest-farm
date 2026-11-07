@@ -26,7 +26,8 @@
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4396/'
 const OUT = process.argv[3] ?? '.e2e-scratch/store-detail'
@@ -102,6 +103,24 @@ for (const vp of VIEWPORTS) {
   }
   check('设置页有「🎮 游戏」这一栏', await clickExact(page, '🎮 游戏'))
   await wait(400)
+  /* 2026-11 起闸门是「卡片 + 按钮」：先点「爸妈：输密码」才弹数字键盘。
+     不点的话下面 4 次 0 全落空，而报出来的是「输 0000 后进入游戏栏 ✗」——
+     看着像密码错了，其实键盘根本没打开。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+      /爸妈：输密码/.test(x.textContent ?? ''),
+    )
+    b?.click()
+  })
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
   for (let i = 0; i < 4; i++) {
     await clickExact(page, '0')
     await wait(180)
@@ -114,6 +133,18 @@ for (const vp of VIEWPORTS) {
     await browser.close()
     continue
   }
+
+  /*
+    ⚠️ 2026-11-07 起「未拥有的游戏不显示」⇒ 未拥有的行**连同详情入口一起不渲染**，
+    这里直接读 DOM 会读到空数组（然后报「市场里有游戏可点 ✗」，
+    真因却是「一款都没拥有」，不是这一屏坏了）。
+    所以先按注册表把每一款都预置拥有，再读 DOM —— 顺序反了就一个都读不到。
+  */
+  const pluginIds = (
+    JSON.parse(readFileSync('public/games/index.json', 'utf8')).games ?? []
+  ).map((g) => g.id)
+  for (const id of pluginIds) await grantGame(page, id)
+  await wait(600)
 
   /* 市场里有哪几款 —— 从 DOM 读，不写死 */
   const ids = await page.evaluate(() =>

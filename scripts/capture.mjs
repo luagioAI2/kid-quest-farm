@@ -19,7 +19,7 @@ import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
 import { seedParentPin } from './lib/onboarding.mjs'
 import { grantGame } from './lib/own.mjs'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const OUT = process.argv[3] ?? 'screenshots/redesign'
@@ -931,8 +931,11 @@ try {
   await wait(900)
   await shot('11b-games-settings')
 
-  // 列表已经摊在设置页上（2026-10-25 改，不再有「进入游戏市场」弹层）
-  await page.waitForFunction(() => !!document.querySelector('[data-local-row]'), {
+  /* 列表已经摊在设置页上（2026-10-25 改，不再有「进入游戏市场」弹层）。
+     ⚠️ 2026-11-07 起「未拥有的游戏不显示」⇒ 新档案下**一行插件都没有**，
+     等 `[data-local-row]` 会白等 10 秒再抛，整轮图从这里断掉。
+     等**内置行**（`data-market-builtin`，永远在）。 */
+  await page.waitForFunction(() => !!document.querySelector('[data-market-builtin]'), {
     timeout: 10000,
   })
   /*
@@ -941,29 +944,60 @@ try {
       `block:'center'` 而不是 `'start'`：`'start'` 会把它顶到顶栏底下被盖住一半。
   */
   await page.evaluate(() => {
-    document.querySelector('[data-local-row]')?.scrollIntoView({ block: 'center' })
+    document.querySelector('[data-market-builtin]')?.scrollIntoView({ block: 'center' })
   })
   await wait(400)
   await shot('11b2-games-market')
 
   /*
-    11b4：表格底下那两句说明（「未拥有」怎么解锁 / 兑换码在哪 / 卸载在哪）。
-    它是**家长唯一的操作指引**，而且 2026-10-30 改过口径（原来写「去心愿商城换」，
-    而心愿商城不收钱）—— 不进图集就等于这次改文案没验过。
+    11b4：表格底下那两句说明（去哪儿弄游戏 / 兑换码在哪 / 卸载在哪）。
+    它是**家长唯一的操作指引**，而且改过两次口径：
+      · 2026-10-30：原来写「去心愿商城换」，而心愿商城不收钱；
+      · 2026-11-07：未拥有的行不显示了，原来那句「写着『未拥有』的还不能装」
+        指向一个界面上已经不存在的东西。
+    不进图集就等于这次改文案没验过。判据用**新文案里的词**（只有已经拥有）。
   */
   await page.evaluate(() => {
     const el = [...document.querySelectorAll('p')].find((x) =>
-      /还不能装/.test(x.textContent ?? ''),
+      /只有已经拥有/.test(x.textContent ?? ''),
     )
     el?.scrollIntoView({ block: 'center' })
   })
   await wait(400)
   await shot('11b4-games-footnote')
 
+  /*
+    ★★ 未拥有的行不渲染 ⇒ 详情入口 `[data-store-detail]` **也不存在**。
+    这一屏的默认状态是「一款插件都没有」，直接点会**静默拍成设置页** ——
+    错图比缺图更糟（看起来像「详情改坏了」，其实根本没打开）。
+    所以先预置拥有；后面点「安装」用的也是这一款。
+
+    id 从**仓库里那份真实注册表**挑（`public/games/index.json`，App 自己也读它），
+    不在脚本里写死：换一款游戏就要改脚本，而改漏了不会响。
+  */
+  const pluginIds = (JSON.parse(readFileSync('public/games/index.json', 'utf8')).games ?? []).map(
+    (g) => g.id,
+  )
+  const needOwnId = await page.evaluate((ids) => {
+    const s = window.__kqf__?.getState?.()
+    if (!s) return ''
+    const have = new Set([...(s.ownedGameIds ?? []), ...Object.keys(s.installedGames ?? {})])
+    return ids.find((id) => !have.has(id)) ?? ''
+  }, pluginIds)
+  if (!needOwnId) {
+    throw new Error('注册表里的插件全都有了 —— 没法拍详情 / 安装这条路。先看 public/games/index.json。')
+  }
+  await grantGame(page, needOwnId)
+  await page.waitForFunction(
+    (id) => !!document.querySelector(`[data-store-detail="${id}"]`),
+    { timeout: 8000 },
+    needOwnId,
+  )
+
   // 详情页（第一款的「帮助孩子 / 截图 / 关于」）
-  await page.evaluate(() => {
-    document.querySelector('[data-store-detail]')?.scrollIntoView({ block: 'center' })
-  })
+  await page.evaluate((id) => {
+    document.querySelector(`[data-store-detail="${id}"]`)?.scrollIntoView({ block: 'center' })
+  }, needOwnId)
   await wait(200)
   await page.evaluate(() => document.querySelector('[data-store-detail]')?.click())
   await wait(900)
@@ -984,16 +1018,14 @@ try {
     再走家长那条路点「安装」—— 截图要拍的是**界面**，用 `installFromUrl` 绕过
     就拍不到「正在装…」和装完那一行的状态。
   */
-  const needOwnId = await page.evaluate(
-    () => document.querySelector('[data-local-need-own]')?.getAttribute('data-local-need-own') ?? '',
-  )
-  if (!needOwnId) {
-    throw new Error(
-      '游戏列表里既没有「安装」也没有「去心愿商城」—— 这一屏没渲染成预期状态，先看图 11b2。',
-    )
-  }
+  /* 拥有权已经在上一步（拍详情之前）预置好了 —— 这里只等那一行的安装按钮。
+     `grantGame` 幂等，再调一次也无害。 */
   await grantGame(page, needOwnId)
-  await wait(600)
+  await page.waitForFunction(
+    (id) => !!document.querySelector(`[data-local-install="${id}"]`),
+    { timeout: 8000 },
+    needOwnId,
+  )
 
   const localInstallClicked = await page.evaluate((id) => {
     const b = document.querySelector(`[data-local-install="${id}"]`)
