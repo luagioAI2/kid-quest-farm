@@ -34,7 +34,8 @@
 
 import { createHmac } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
-import { basename, extname } from 'node:path'
+import { basename, extname, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const args = process.argv.slice(2)
 const arg = (name, fallback = '') => {
@@ -81,6 +82,107 @@ function mintAdminToken(key, userID = '1') {
   const b64 = Buffer.from(`${ts}:${userID}:${sig}`, 'utf8').toString('base64url')
   return b64 + '='.repeat((4 - (b64.length % 4)) % 4)
 }
+
+/* ============================================================
+   发布前对一遍「包里的 manifest」和「这次要发布成什么」
+   ------------------------------------------------------------
+   三件事，任何一件对不上都是**静默事故**，必须在这里拦住：
+
+   ① `manifest.id` ≠ `--id`
+      把 A 的字节发成 B 的版本。客户端照单收下，装完打开是另一款游戏 ——
+      没有一处会报错。这是三者里最致命的一条，**没有逃生口**。
+
+   ② `manifest.version` ≠ `--version`
+      目录里写 v1.0.0、代码其实是 1.0.2。客户端的「有没有新版本」比的
+      就是 manifest 里的 version ⇒ 以后真发 1.0.1 时，装了这份的机器
+      永远认为「已是最新」，再也收不到更新。也**没有逃生口**。
+
+   ③ `manifest.name` ≠ 库里 `game.name`
+      名字有两个来源：商城列表读库里那一列，装完显示包内这一份。
+      两边不一致时家长看到的是「列表里叫 A、装上去叫 B」——
+      实测 `demo` 就是这样（库里「插件演示」、包里「许愿池」）。
+      这条**留了逃生口**：改名是正常操作，只是必须先把库里那列改了；
+      真要不等库里改就发，显式 `--allow-name-mismatch`。
+
+   ## 为什么用 `import` 读，而不是正则抠 `name:`
+   manifest 是构建产物里的一段对象，压缩后键序、引号、嵌套都可能变，
+   正则抠出来的是「看起来对」的字符串。`import` 拿到的是**模块真的导出的**
+   那个对象，和宿主 `mountBundle` 拿到的是同一份。
+   代价是会执行模块顶层代码 —— 而「顶层不许碰 window」本来就是契约
+   （见 `notes/plugin-host.md`），所以这里执行失败本身就是个信号，
+   默认当错误处理（`--no-manifest-check` 可跳过）。
+   ============================================================ */
+const NO_MANIFEST_CHECK = args.includes('--no-manifest-check')
+const ALLOW_NAME_MISMATCH = args.includes('--allow-name-mismatch')
+
+async function checkBundleAgainstTarget() {
+  if (ext === '.zip') {
+    console.log('· 跳过 manifest 校验：zip 里读不到（只有 .mjs / .js 能 import）')
+    return
+  }
+  if (NO_MANIFEST_CHECK) {
+    console.log('· 跳过 manifest 校验（--no-manifest-check）')
+    return
+  }
+
+  let manifest
+  try {
+    const mod = await import(pathToFileURL(resolve(FILE)).href)
+    /* ★ 和宿主同一口径（`src/games/loader.ts`：`mod.default ?? mod`）。
+       两种导出形状并存：`export default { manifest, mount }`（demo）
+       和 `export { manifest, mount }`（claw3d / prizepark）。
+       只认 `.default` 的话，后一种会被判成「包里没有 manifest」——闸门误拦。 */
+    manifest = (mod.default ?? mod)?.manifest
+  } catch (e) {
+    console.error(`✗ 这个包在 Node 里 import 不起来：${e.message}`)
+    console.error('  包顶层碰了 window / document？那是契约禁止的（见 notes/plugin-host.md）。')
+    console.error('  确认没问题要硬发：加 --no-manifest-check')
+    process.exit(1)
+  }
+  if (!manifest?.id) {
+    console.error('✗ 包里没有 manifest（`export default { manifest, mount }` 那一条）')
+    process.exit(1)
+  }
+
+  if (manifest.id !== GAME_ID) {
+    console.error(`✗ 包里的 id 是「${manifest.id}」，你要发布成「${GAME_ID}」`)
+    console.error('  这样会把别的游戏的字节挂到这个 id 下，客户端装完是另一款。拒绝。')
+    process.exit(1)
+  }
+  if (manifest.version !== VERSION) {
+    console.error(`✗ 包里的版本是「${manifest.version}」，你要发布成「${VERSION}」`)
+    console.error('  客户端的「有没有新版本」比的是包内 version ⇒ 以后真发新版时这台机器收不到。拒绝。')
+    process.exit(1)
+  }
+  console.log(`· 包内 manifest：${manifest.id}@${manifest.version}「${manifest.name}」`)
+
+  /* ③ 名字：问服务端「库里这一列写的是什么」 */
+  let serverName = ''
+  try {
+    const r = await fetch(`${API}/api/game/detail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game_id: GAME_ID }),
+    }).then((x) => x.json())
+    serverName = r?.data?.name ?? ''
+  } catch (e) {
+    console.warn(`⚠ 读不到库里的名字（${e.message}），跳过这一条`)
+    return
+  }
+  if (!serverName) {
+    console.log('· 库里还没有这款（首次发布？）⇒ 名字这条无从比对')
+    return
+  }
+  if (serverName === manifest.name) return
+
+  console.error(`✗ 名字对不上：库里叫「${serverName}」，包里叫「${manifest.name}」`)
+  console.error('  商城列表读库里那一列，装完显示包里这一份 ⇒ 家长会看到「买的和装上的不是一个」。')
+  console.error(`  先去后台把 game.name 改成「${manifest.name}」再发；确实要按现状发就加 --allow-name-mismatch。`)
+  if (!ALLOW_NAME_MISMATCH) process.exit(1)
+  console.warn('  ⚠ 你加了 --allow-name-mismatch，按现状继续发布')
+}
+
+await checkBundleAgainstTarget()
 
 const form = new FormData()
 form.set('game_id', GAME_ID)
