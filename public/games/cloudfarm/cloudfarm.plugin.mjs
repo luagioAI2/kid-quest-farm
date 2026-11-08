@@ -973,14 +973,14 @@ var T = x(w()), E = {
 		l: k(e.l, 0, 100),
 		a: k(e.a)
 	};
-}, F = function(e) {
+}, re = function(e) {
 	return {
 		h: O(e.h),
 		s: O(e.s),
 		l: O(e.l),
 		a: O(e.a, 3)
 	};
-}, I = function(e) {
+}, F = function(e) {
 	return te((n = (t = e).s, {
 		h: t.h,
 		s: (n *= ((r = t.l) < 50 ? r : 100 - r) / 100) > 0 ? 2 * n / (r + n) * 100 : 0,
@@ -988,7 +988,7 @@ var T = x(w()), E = {
 		a: t.a
 	}));
 	var t, n, r;
-}, re = function(e) {
+}, I = function(e) {
 	return {
 		h: (t = ee(e)).h,
 		s: (i = (200 - (n = t.s)) * (r = t.v) / 100) > 0 && i < 200 ? n * r / 100 / (i <= 100 ? i : 200 - i) * 100 : 0,
@@ -1025,7 +1025,7 @@ var T = x(w()), E = {
 			var t = ie.exec(e) || ae.exec(e);
 			if (!t) return null;
 			var n, r;
-			return I(ne({
+			return F(ne({
 				h: (n = t[1], r = t[2], r === void 0 && (r = "deg"), Number(n) * (E[r] || 1)),
 				s: Number(t[3]),
 				l: Number(t[4]),
@@ -1045,7 +1045,7 @@ var T = x(w()), E = {
 		}, "rgb"],
 		[function(e) {
 			var t = e.h, n = e.s, r = e.l, i = e.a, a = i === void 0 ? 1 : i;
-			return !D(t) || !D(n) || !D(r) ? null : I(ne({
+			return !D(t) || !D(n) || !D(r) ? null : F(ne({
 				h: Number(t),
 				s: Number(n),
 				l: Number(r),
@@ -1069,35 +1069,35 @@ var T = x(w()), E = {
 			}));
 		}, "hsv"]
 	]
-}, ce = function(e, t) {
+}, R = function(e, t) {
 	for (var n = 0; n < t.length; n++) {
 		var r = t[n][0](e);
 		if (r) return [r, t[n][1]];
 	}
 	return [null, void 0];
-}, le = function(e) {
-	return typeof e == "string" ? ce(e.trim(), se.string) : typeof e == "object" && e ? ce(e, se.object) : [null, void 0];
-}, ue = function(e, t) {
-	var n = re(e);
+}, ce = function(e) {
+	return typeof e == "string" ? R(e.trim(), se.string) : typeof e == "object" && e ? R(e, se.object) : [null, void 0];
+}, le = function(e, t) {
+	var n = I(e);
 	return {
 		h: n.h,
 		s: k(n.s + 100 * t, 0, 100),
 		l: n.l,
 		a: n.a
 	};
-}, de = function(e) {
+}, ue = function(e) {
 	return (299 * e.r + 587 * e.g + 114 * e.b) / 1e3 / 255;
-}, fe = function(e, t) {
-	var n = re(e);
+}, de = function(e, t) {
+	var n = I(e);
 	return {
 		h: n.h,
 		s: n.s,
 		l: k(n.l + 100 * t, 0, 100),
 		a: n.a
 	};
-}, R = (function() {
+}, fe = (function() {
 	function e(e) {
-		this.parsed = le(e)[0], this.rgba = this.parsed || {
+		this.parsed = ce(e)[0], this.rgba = this.parsed || {
 			r: 0,
 			g: 0,
 			b: 0,
@@ -1107,11 +1107,11 @@ var T = x(w()), E = {
 	return e.prototype.isValid = function() {
 		return this.parsed !== null;
 	}, e.prototype.brightness = function() {
-		return O(de(this.rgba), 2);
+		return O(ue(this.rgba), 2);
 	}, e.prototype.isDark = function() {
-		return de(this.rgba) < .5;
+		return ue(this.rgba) < .5;
 	}, e.prototype.isLight = function() {
-		return de(this.rgba) >= .5;
+		return ue(this.rgba) >= .5;
 	}, e.prototype.toHex = function() {
 		return e = M(this.rgba), t = e.r, n = e.g, r = e.b, a = (i = e.a) < 1 ? P(O(255 * i)) : "", "#" + P(t) + P(n) + P(r) + a;
 		var e, t, n, r, i, a;
@@ -1121,9 +1121,9 @@ var T = x(w()), E = {
 		return e = M(this.rgba), t = e.r, n = e.g, r = e.b, (i = e.a) < 1 ? "rgba(" + t + ", " + n + ", " + r + ", " + i + ")" : "rgb(" + t + ", " + n + ", " + r + ")";
 		var e, t, n, r, i;
 	}, e.prototype.toHsl = function() {
-		return F(re(this.rgba));
+		return re(I(this.rgba));
 	}, e.prototype.toHslString = function() {
-		return e = F(re(this.rgba)), t = e.h, n = e.s, r = e.l, (i = e.a) < 1 ? "hsla(" + t + ", " + n + "%, " + r + "%, " + i + ")" : "hsl(" + t + ", " + n + "%, " + r + "%)";
+		return e = re(I(this.rgba)), t = e.h, n = e.s, r = e.l, (i = e.a) < 1 ? "hsla(" + t + ", " + n + "%, " + r + "%, " + i + ")" : "hsl(" + t + ", " + n + "%, " + r + "%)";
 		var e, t, n, r, i;
 	}, e.prototype.toHsv = function() {
 		return e = ee(this.rgba), {
@@ -1142,15 +1142,15 @@ var T = x(w()), E = {
 		});
 		var e;
 	}, e.prototype.saturate = function(e) {
-		return e === void 0 && (e = .1), pe(ue(this.rgba, e));
+		return e === void 0 && (e = .1), pe(le(this.rgba, e));
 	}, e.prototype.desaturate = function(e) {
-		return e === void 0 && (e = .1), pe(ue(this.rgba, -e));
+		return e === void 0 && (e = .1), pe(le(this.rgba, -e));
 	}, e.prototype.grayscale = function() {
-		return pe(ue(this.rgba, -1));
+		return pe(le(this.rgba, -1));
 	}, e.prototype.lighten = function(e) {
-		return e === void 0 && (e = .1), pe(fe(this.rgba, e));
+		return e === void 0 && (e = .1), pe(de(this.rgba, e));
 	}, e.prototype.darken = function(e) {
-		return e === void 0 && (e = .1), pe(fe(this.rgba, -e));
+		return e === void 0 && (e = .1), pe(de(this.rgba, -e));
 	}, e.prototype.rotate = function(e) {
 		return e === void 0 && (e = 15), this.hue(this.hue() + e);
 	}, e.prototype.alpha = function(e) {
@@ -1162,7 +1162,7 @@ var T = x(w()), E = {
 		}) : O(this.rgba.a, 3);
 		var t;
 	}, e.prototype.hue = function(e) {
-		var t = re(this.rgba);
+		var t = I(this.rgba);
 		return typeof e == "number" ? pe({
 			h: e,
 			s: t.s,
@@ -1173,10 +1173,10 @@ var T = x(w()), E = {
 		return this.toHex() === pe(e).toHex();
 	}, e;
 })(), pe = function(e) {
-	return e instanceof R ? e : new R(e);
+	return e instanceof fe ? e : new fe(e);
 }, me = [], he = function(e) {
 	e.forEach(function(e) {
-		me.indexOf(e) < 0 && (e(R, se), me.push(e));
+		me.indexOf(e) < 0 && (e(fe, se), me.push(e));
 	});
 };
 function ge(e, t) {
@@ -9189,8 +9189,8 @@ function Hd(e, t, n, r, i, a) {
 			p.push(S - E * M, C - D * M), p.push(S + E * N, C + D * N), o >= 0 && (s.join === "round" ? h += Vd(S, C, S - E * M, C - D * M, S - O * M, C - k * M, p, !1) + 4 : h += 2, p.push(S - O * N, C - k * N), p.push(S + O * M, C + k * M));
 			continue;
 		}
-		let u = (-E + b) * (-D + C) - (-E + S) * (-D + x), d = (-O + w) * (-k + C) - (-O + S) * (-k + T), f = (n * d - i * u) / c, m = (a * u - r * d) / c, g = (f - S) * (f - S) + (m - C) * (m - C), j = S + (f - S) * M, P = C + (m - C) * M, ee = S - (f - S) * N, te = C - (m - C) * N, ne = Math.min(n * n + r * r, i * i + a * a), F = l ? M : N;
-		g <= ne + F * F * v ? s.join === "bevel" || g / v > y ? (l ? (p.push(j, P), p.push(S + E * N, C + D * N), p.push(j, P), p.push(S + O * N, C + k * N)) : (p.push(S - E * M, C - D * M), p.push(ee, te), p.push(S - O * M, C - k * M), p.push(ee, te)), h += 2) : s.join === "round" ? l ? (p.push(j, P), p.push(S + E * N, C + D * N), h += Vd(S, C, S + E * N, C + D * N, S + O * N, C + k * N, p, !0) + 4, p.push(j, P), p.push(S + O * N, C + k * N)) : (p.push(S - E * M, C - D * M), p.push(ee, te), h += Vd(S, C, S - E * M, C - D * M, S - O * M, C - k * M, p, !1) + 4, p.push(S - O * M, C - k * M), p.push(ee, te)) : (p.push(j, P), p.push(ee, te)) : (p.push(S - E * M, C - D * M), p.push(S + E * N, C + D * N), s.join === "round" ? h += l ? Vd(S, C, S + E * N, C + D * N, S + O * N, C + k * N, p, !0) + 2 : Vd(S, C, S - E * M, C - D * M, S - O * M, C - k * M, p, !1) + 2 : s.join === "miter" && g / v <= y && (l ? (p.push(ee, te), p.push(ee, te)) : (p.push(j, P), p.push(j, P)), h += 2), p.push(S - O * M, C - k * M), p.push(S + O * N, C + k * N), h += 2);
+		let u = (-E + b) * (-D + C) - (-E + S) * (-D + x), d = (-O + w) * (-k + C) - (-O + S) * (-k + T), f = (n * d - i * u) / c, m = (a * u - r * d) / c, g = (f - S) * (f - S) + (m - C) * (m - C), j = S + (f - S) * M, P = C + (m - C) * M, ee = S - (f - S) * N, te = C - (m - C) * N, ne = Math.min(n * n + r * r, i * i + a * a), re = l ? M : N;
+		g <= ne + re * re * v ? s.join === "bevel" || g / v > y ? (l ? (p.push(j, P), p.push(S + E * N, C + D * N), p.push(j, P), p.push(S + O * N, C + k * N)) : (p.push(S - E * M, C - D * M), p.push(ee, te), p.push(S - O * M, C - k * M), p.push(ee, te)), h += 2) : s.join === "round" ? l ? (p.push(j, P), p.push(S + E * N, C + D * N), h += Vd(S, C, S + E * N, C + D * N, S + O * N, C + k * N, p, !0) + 4, p.push(j, P), p.push(S + O * N, C + k * N)) : (p.push(S - E * M, C - D * M), p.push(ee, te), h += Vd(S, C, S - E * M, C - D * M, S - O * M, C - k * M, p, !1) + 4, p.push(S - O * M, C - k * M), p.push(ee, te)) : (p.push(j, P), p.push(ee, te)) : (p.push(S - E * M, C - D * M), p.push(S + E * N, C + D * N), s.join === "round" ? h += l ? Vd(S, C, S + E * N, C + D * N, S + O * N, C + k * N, p, !0) + 2 : Vd(S, C, S - E * M, C - D * M, S - O * M, C - k * M, p, !1) + 2 : s.join === "miter" && g / v <= y && (l ? (p.push(ee, te), p.push(ee, te)) : (p.push(j, P), p.push(j, P)), h += 2), p.push(S - O * M, C - k * M), p.push(S + O * N, C + k * N), h += 2);
 	}
 	b = e[(m - 2) * 2], x = e[(m - 2) * 2 + 1], S = e[(m - 1) * 2], C = e[(m - 1) * 2 + 1], E = -(x - C), D = b - S, A = Math.sqrt(E * E + D * D), E /= A, D /= A, E *= _, D *= _, p.push(S - E * M, C - D * M), p.push(S + E * N, C + D * N), d || (s.cap === "round" ? h += Vd(S - E * (M - N) * .5, C - D * (M - N) * .5, S - E * M, C - D * M, S + E * N, C + D * N, p, !1) + 2 : s.cap === "square" && (h += Bd(S, C, E, D, M, N, !1, p)));
 	let P = Rd * Rd;
@@ -17169,21 +17169,21 @@ var JC = class e {
 			let m = i.globalUniforms.globalUniformData?.worldColor ?? 4294967295, h = c.color, g = (m >>> 24 & 255) / 255, _ = (h >>> 24 & 255) / 255, v = i.filter?.alphaMultiplier ?? 1, y = g * _ * v;
 			if (y <= 0) continue;
 			o.globalAlpha = y;
-			let b = m & 16777215, x = mt(dt(h & 16777215, b)), S = l.frame, C = d.addressModeU ?? d.addressMode, w = d.addressModeV ?? d.addressMode, T = e._getPatternRepeat(C, w), E = l.source._resolution ?? l.source.resolution ?? 1, D = c.renderable?.renderGroup?.isCachedAsTexture, O = S.x * E, k = S.y * E, A = S.width * E, j = S.height * E, M = c.bounds, N = i.renderTarget.renderTarget.isRoot, P = M.minX, ee = M.minY, te = M.maxX - M.minX, ne = M.maxY - M.minY, F = l.rotate, I = l.uvs, re = Math.min(I.x0, I.x1, I.x2, I.x3, I.y0, I.y1, I.y2, I.y3), ie = Math.max(I.x0, I.x1, I.x2, I.x3, I.y0, I.y1, I.y2, I.y3), ae = T !== "no-repeat" && (re < 0 || ie > 1), oe = F && (!!ae || x === 16777215 && !F);
-			oe ? (e._tempPatternMatrix.copyFrom(c.transform), H.matrixAppendRotationInv(e._tempPatternMatrix, F, P, ee, te, ne), a.setContextTransform(e._tempPatternMatrix, c.roundPixels === 1, void 0, D && N)) : a.setContextTransform(c.transform, c.roundPixels === 1, void 0, D && N);
-			let L = te, se = ne, ce = oe ? 0 : P, le = oe ? 0 : ee;
-			if (!oe && c.roundPixels === 1 && (ce |= 0, le |= 0), ae) {
-				let t = u, n = x !== 16777215 && !F, r = S.width <= l.source.width && S.height <= l.source.height;
+			let b = m & 16777215, x = mt(dt(h & 16777215, b)), S = l.frame, C = d.addressModeU ?? d.addressMode, w = d.addressModeV ?? d.addressMode, T = e._getPatternRepeat(C, w), E = l.source._resolution ?? l.source.resolution ?? 1, D = c.renderable?.renderGroup?.isCachedAsTexture, O = S.x * E, k = S.y * E, A = S.width * E, j = S.height * E, M = c.bounds, N = i.renderTarget.renderTarget.isRoot, P = M.minX, ee = M.minY, te = M.maxX - M.minX, ne = M.maxY - M.minY, re = l.rotate, F = l.uvs, I = Math.min(F.x0, F.x1, F.x2, F.x3, F.y0, F.y1, F.y2, F.y3), ie = Math.max(F.x0, F.x1, F.x2, F.x3, F.y0, F.y1, F.y2, F.y3), ae = T !== "no-repeat" && (I < 0 || ie > 1), oe = re && (!!ae || x === 16777215 && !re);
+			oe ? (e._tempPatternMatrix.copyFrom(c.transform), H.matrixAppendRotationInv(e._tempPatternMatrix, re, P, ee, te, ne), a.setContextTransform(e._tempPatternMatrix, c.roundPixels === 1, void 0, D && N)) : a.setContextTransform(c.transform, c.roundPixels === 1, void 0, D && N);
+			let L = te, se = ne, R = oe ? 0 : P, ce = oe ? 0 : ee;
+			if (!oe && c.roundPixels === 1 && (R |= 0, ce |= 0), ae) {
+				let t = u, n = x !== 16777215 && !re, r = S.width <= l.source.width && S.height <= l.source.height;
 				n && r && (t = ma.getTintedCanvas({ texture: l }, x));
 				let i = o.createPattern(t, T);
 				if (!i) continue;
 				let a = L, s = se;
 				if (a === 0 || s === 0) continue;
-				let c = 1 / a, d = 1 / s, f = (I.x1 - I.x0) * c, p = (I.y1 - I.y0) * c, m = (I.x3 - I.x0) * d, h = (I.y3 - I.y0) * d, g = I.x0 - f * ce - m * le, _ = I.y0 - p * ce - h * le, v = l.source.pixelWidth, y = l.source.pixelHeight;
-				e._tempPatternMatrix.set(f * v, p * y, m * v, h * y, g * v, _ * y), ma.applyPatternTransform(i, e._tempPatternMatrix), o.fillStyle = i, o.fillRect(ce, le, L, se);
+				let c = 1 / a, d = 1 / s, f = (F.x1 - F.x0) * c, p = (F.y1 - F.y0) * c, m = (F.x3 - F.x0) * d, h = (F.y3 - F.y0) * d, g = F.x0 - f * R - m * ce, _ = F.y0 - p * R - h * ce, v = l.source.pixelWidth, y = l.source.pixelHeight;
+				e._tempPatternMatrix.set(f * v, p * y, m * v, h * y, g * v, _ * y), ma.applyPatternTransform(i, e._tempPatternMatrix), o.fillStyle = i, o.fillRect(R, ce, L, se);
 			} else {
-				let e = x !== 16777215 || F ? ma.getTintedCanvas({ texture: l }, x) : u, t = e !== u;
-				o.drawImage(e, t ? 0 : O, t ? 0 : k, t ? e.width : A, t ? e.height : j, ce, le, L, se);
+				let e = x !== 16777215 || re ? ma.getTintedCanvas({ texture: l }, x) : u, t = e !== u;
+				o.drawImage(e, t ? 0 : O, t ? 0 : k, t ? e.width : A, t ? e.height : j, R, ce, L, se);
 			}
 		}
 	}
@@ -24740,8 +24740,8 @@ var EP = TP, DP = class {
 		}
 		let g = n.smoothProperty, _ = m.source.style.scaleMode !== "nearest";
 		r[g] !== _ && (r[g] = _);
-		let v = p !== 16777215 || m.rotate !== 0, y = v ? ma.getTintedCanvas({ texture: m }, p) : h, { leftWidth: b, topHeight: x, rightWidth: S, bottomHeight: C, width: w, height: T } = e, E = b + S, D = x + C, O = Math.min(E > w ? w / E : 1, D > T ? T / D : 1, 1), k = b * O, A = S * O, j = x * O, M = C * O, N = Math.max(0, w - k - A), P = Math.max(0, T - j - M), ee = e.anchor, te = m.source._resolution ?? m.source.resolution ?? 1, ne = m.frame.x * te, F = m.frame.y * te, I = -ee.x * w, re = -ee.y * T, ie = b * te, ae = x * te, oe = S * te, L = C * te, se = m.frame.width * te, ce = m.frame.height * te;
-		v && (ne = 0, F = 0, se = y.width, ce = y.height), r.drawImage(y, ne, F, ie, ae, I, re, k, j), r.drawImage(y, ne + ie, F, se - ie - oe, ae, I + k, re, N, j), r.drawImage(y, ne + se - oe, F, oe, ae, I + w - A, re, A, j), r.drawImage(y, ne, F + ae, ie, ce - ae - L, I, re + j, k, P), r.drawImage(y, ne + ie, F + ae, se - ie - oe, ce - ae - L, I + k, re + j, N, P), r.drawImage(y, ne + se - oe, F + ae, oe, ce - ae - L, I + w - A, re + j, A, P), r.drawImage(y, ne, F + ce - L, ie, L, I, re + T - M, k, M), r.drawImage(y, ne + ie, F + ce - L, se - ie - oe, L, I + k, re + T - M, N, M), r.drawImage(y, ne + se - oe, F + ce - L, oe, L, I + w - A, re + T - M, A, M), r.restore();
+		let v = p !== 16777215 || m.rotate !== 0, y = v ? ma.getTintedCanvas({ texture: m }, p) : h, { leftWidth: b, topHeight: x, rightWidth: S, bottomHeight: C, width: w, height: T } = e, E = b + S, D = x + C, O = Math.min(E > w ? w / E : 1, D > T ? T / D : 1, 1), k = b * O, A = S * O, j = x * O, M = C * O, N = Math.max(0, w - k - A), P = Math.max(0, T - j - M), ee = e.anchor, te = m.source._resolution ?? m.source.resolution ?? 1, ne = m.frame.x * te, re = m.frame.y * te, F = -ee.x * w, I = -ee.y * T, ie = b * te, ae = x * te, oe = S * te, L = C * te, se = m.frame.width * te, R = m.frame.height * te;
+		v && (ne = 0, re = 0, se = y.width, R = y.height), r.drawImage(y, ne, re, ie, ae, F, I, k, j), r.drawImage(y, ne + ie, re, se - ie - oe, ae, F + k, I, N, j), r.drawImage(y, ne + se - oe, re, oe, ae, F + w - A, I, A, j), r.drawImage(y, ne, re + ae, ie, R - ae - L, F, I + j, k, P), r.drawImage(y, ne + ie, re + ae, se - ie - oe, R - ae - L, F + k, I + j, N, P), r.drawImage(y, ne + se - oe, re + ae, oe, R - ae - L, F + w - A, I + j, A, P), r.drawImage(y, ne, re + R - L, ie, L, F, I + T - M, k, M), r.drawImage(y, ne + ie, re + R - L, se - ie - oe, L, F + k, I + T - M, N, M), r.drawImage(y, ne + se - oe, re + R - L, oe, L, F + w - A, I + T - M, A, M), r.restore();
 	}
 	destroy() {
 		this._renderer = null;
@@ -28291,7 +28291,7 @@ function hR({ runtime: e, renderer: t, defaultSkin: n, worldReferenceSpan: r, on
 		te = mR(l, ee?.matches), e.setPhotosafe?.(te), t.setPhotosafe?.(te);
 	};
 	ee?.addEventListener?.("change", ne), ne();
-	let F = {
+	let re = {
 		registerPreset(t) {
 			if (T(), m.has(t?.id)) throw Error(`duplicate preset id: ${t.id}`);
 			E(t);
@@ -28412,7 +28412,7 @@ function hR({ runtime: e, renderer: t, defaultSkin: n, worldReferenceSpan: r, on
 			C ||= (e.clear(), t.dispose(), f.clear(), p.clear(), m.clear(), h.clear(), g.clear(), y = null, !0);
 		}
 	};
-	return o && F.registerLightCatalog(o), Object.freeze(F);
+	return o && re.registerLightCatalog(o), Object.freeze(re);
 }
 var gR = /^[a-z0-9][a-z0-9-]{0,63}$/;
 function _R(e) {
@@ -36818,7 +36818,7 @@ function SU(e, t, n) {
 }
 function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r, mediaElementFactory: i, telemetrySink: a, now: o = () => Date.now(), spatialProfile: s } = {}) {
 	if (!VH(e)) throw TypeError("manifest is required");
-	let c = HH(e.assets, "assets"), l = HH(e.cues, "cues"), u = HH(e.buses, "buses"), d = UH(e.mixStates, "mixStates"), f = UH(e.musicStates, "musicStates"), p = UH(e.duckRules, "duckRules"), m = VH(e.voicePolicy) ? e.voicePolicy : {}, h = null, g = null, _ = /* @__PURE__ */ new Set(), v = !1, y = !1, b = /* @__PURE__ */ new Set(), x = null, S = [], C = null, w = !1, T = !1, E = !1, D = 0, O = null, k = null, A = hH({ profile: mU(s, $V.three) }), j = { ...LH }, M = /* @__PURE__ */ new Map(), N = /* @__PURE__ */ new Map(), P = /* @__PURE__ */ new Map(), ee = /* @__PURE__ */ new Map(), te = [], ne = /* @__PURE__ */ new Map(), F = /* @__PURE__ */ new Map(), I = /* @__PURE__ */ new Map(), re = [], ie = Math.max(1, Math.floor(vU(e.loadPolicy?.maxConcurrentDecodes, e.runtimePolicy?.maxConcurrentDecodes, 3))), ae = 0, oe = {
+	let c = HH(e.assets, "assets"), l = HH(e.cues, "cues"), u = HH(e.buses, "buses"), d = UH(e.mixStates, "mixStates"), f = UH(e.musicStates, "musicStates"), p = UH(e.duckRules, "duckRules"), m = VH(e.voicePolicy) ? e.voicePolicy : {}, h = null, g = null, _ = /* @__PURE__ */ new Set(), v = !1, y = !1, b = /* @__PURE__ */ new Set(), x = null, S = [], C = null, w = !1, T = !1, E = !1, D = 0, O = null, k = null, A = hH({ profile: mU(s, $V.three) }), j = { ...LH }, M = /* @__PURE__ */ new Map(), N = /* @__PURE__ */ new Map(), P = /* @__PURE__ */ new Map(), ee = /* @__PURE__ */ new Map(), te = [], ne = /* @__PURE__ */ new Map(), re = /* @__PURE__ */ new Map(), F = /* @__PURE__ */ new Map(), I = [], ie = Math.max(1, Math.floor(vU(e.loadPolicy?.maxConcurrentDecodes, e.runtimePolicy?.maxConcurrentDecodes, 3))), ae = 0, oe = {
 		assetLoads: 0,
 		decodeFallbacks: 0,
 		streamFallbacks: 0,
@@ -36836,23 +36836,23 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 		if (!w) {
 			if (v || _.size > 0) {
 				for (let e of ee.values()) e.kind === "stream" && e.element && e.element.paused === !1 && (e.element.pause?.(), b.add(e));
-				h && h.state === "running" && typeof h.suspend == "function" && Promise.resolve(h.suspend()).catch(() => {}), y || (y = !0, R("sound_runtime_held", {
+				h && h.state === "running" && typeof h.suspend == "function" && Promise.resolve(h.suspend()).catch(() => {}), y || (y = !0, fe("sound_runtime_held", {
 					pageHidden: v,
 					holds: [..._].sort()
 				}));
 			} else if (y) {
 				y = !1, T && h && h.state === "suspended" && typeof h.resume == "function" && Promise.resolve(h.resume()).catch(() => {});
 				for (let e of b) e.finalized || Promise.resolve(e.element?.play?.()).catch(() => B(e, "stream-play-error"));
-				b.clear(), R("sound_runtime_resumed", {});
+				b.clear(), fe("sound_runtime_resumed", {});
 			}
 		}
 	}
-	let ce = typeof document == "object" && document ? document : null;
-	function le() {
-		v = ce.visibilityState === "hidden" || ce.hidden === !0, se();
+	let R = typeof document == "object" && document ? document : null;
+	function ce() {
+		v = R.visibilityState === "hidden" || R.hidden === !0, se();
 	}
-	ce?.addEventListener && (ce.addEventListener("visibilitychange", le), v = ce.visibilityState === "hidden" || ce.hidden === !0);
-	function ue(e, t) {
+	R?.addEventListener && (R.addEventListener("visibilitychange", ce), v = R.visibilityState === "hidden" || R.hidden === !0);
+	function le(e, t) {
 		if (L(), typeof e != "string" || !e) throw TypeError("setHold requires a non-empty string id");
 		return t === !0 ? _.add(e) : _.delete(e), se(), Object.freeze({
 			type: "hold",
@@ -36860,24 +36860,24 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 			holds: Object.freeze([..._].sort())
 		});
 	}
-	function de() {
-		if (!w) for (; ae < ie && re.length > 0;) {
-			let e = re.shift();
+	function ue() {
+		if (!w) for (; ae < ie && I.length > 0;) {
+			let e = I.shift();
 			ae += 1, Promise.resolve().then(e.task).then(e.resolve, e.reject).finally(() => {
-				--ae, de();
+				--ae, ue();
 			});
 		}
 	}
-	function fe(e) {
+	function de(e) {
 		return L(), new Promise((t, n) => {
-			re.push({
+			I.push({
 				task: e,
 				resolve: t,
 				reject: n
-			}), de();
+			}), ue();
 		});
 	}
-	function R(t, n = {}) {
+	function fe(t, n = {}) {
 		if (!a) return;
 		let r = Object.freeze({
 			...n,
@@ -37035,11 +37035,11 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 			reason: t,
 			endedAt: e.endedAt
 		}));
-		return R("sound_voice_stopped", r), r;
+		return fe("sound_voice_stopped", r), r;
 	}
 	function Oe(e, t, n) {
 		let r = De(e);
-		return !r || r.priority > t ? !1 : (oe.steals += 1, B(r, `stolen:${n}`), R("sound_voice_stolen", {
+		return !r || r.priority > t ? !1 : (oe.steals += 1, B(r, `stolen:${n}`), fe("sound_voice_stolen", {
 			instanceId: r.instanceId,
 			cueId: r.cueId,
 			scope: n,
@@ -37085,7 +37085,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 	}
 	function Ne(e) {
 		let t = 0;
-		for (let n of F.values()) n.phase !== "idle" && je(n.rule) === e && (t += Me(n.rule));
+		for (let n of re.values()) n.phase !== "idle" && je(n.rule) === e && (t += Me(n.rule));
 		return t;
 	}
 	function Pe(e, { attackMs: t = 0, releaseMs: n = 0, holdMs: r = 0, releasing: i = !1 } = {}) {
@@ -37106,16 +37106,16 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 		if (!r) throw Error(`cue ${e.cueId} references unknown duck rule ${t}`);
 		let i = je(r);
 		if (!i) throw Error(`duck rule ${t} has no target bus`);
-		let a = F.get(t);
+		let a = re.get(t);
 		a || (a = {
 			id: t,
 			rule: r,
 			voices: /* @__PURE__ */ new Set(),
 			phase: "active",
 			releaseTimer: null
-		}, F.set(t, a)), a.releaseTimer && clearTimeout(a.releaseTimer), a.releaseTimer = null, a.phase = "active", a.voices.add(e.instanceId), e.duckRuleId = t;
+		}, re.set(t, a)), a.releaseTimer && clearTimeout(a.releaseTimer), a.releaseTimer = null, a.phase = "active", a.voices.add(e.instanceId), e.duckRuleId = t;
 		let o = Math.max(0, vU(r.attackMs) ?? 0), s = Se(i), c = Math.max(h.currentTime, n ?? h.currentTime);
-		YH(s.duck.gain, c), KH(s.duck.gain, s.duck.gain.value, c), s.duckDb = Ne(i), JH(s.duck.gain, WH(s.duckDb), c + o / 1e3), R("sound_duck_started", {
+		YH(s.duck.gain, c), KH(s.duck.gain, s.duck.gain.value, c), s.duckDb = Ne(i), JH(s.duck.gain, WH(s.duckDb), c + o / 1e3), fe("sound_duck_started", {
 			ruleId: t,
 			targetBusId: i,
 			instanceId: e.instanceId
@@ -37124,16 +37124,16 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 	function Ie(e) {
 		let t = e.duckRuleId;
 		if (!t) return;
-		let n = F.get(t);
+		let n = re.get(t);
 		if (!n || (n.voices.delete(e.instanceId), n.voices.size > 0)) return;
 		n.phase = "releasing";
 		let r = je(n.rule), i = Math.max(0, vU(n.rule.holdMs) ?? 0), a = Math.max(0, vU(n.rule.releaseMs) ?? 0);
-		F.delete(t), Pe(r, {
+		re.delete(t), Pe(r, {
 			holdMs: i,
 			releaseMs: a,
 			releasing: !0
-		}), F.set(t, n), n.releaseTimer = setTimeout(() => {
-			n.voices.size === 0 && (F.delete(t), Pe(r), R("sound_duck_ended", {
+		}), re.set(t, n), n.releaseTimer = setTimeout(() => {
+			n.voices.size === 0 && (re.delete(t), Pe(r), fe("sound_duck_ended", {
 				ruleId: t,
 				targetBusId: r
 			}));
@@ -37197,7 +37197,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 		if (!n) throw Error(`unknown asset ${e}`);
 		let i = QH(n, e);
 		if (i.length === 0) throw Error(`asset ${e} has no variants`);
-		let a = xe(), o = fe(async () => {
+		let a = xe(), o = de(async () => {
 			let o = [];
 			for (let s = 0; s < i.length; s += 1) {
 				let c = i[s], l = c.pack ? `pack:${c.pack.id}` : dU(t, uU(c));
@@ -37209,7 +37209,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 						t = await e.arrayBuffer();
 					}
 					let i = await Ve(a, t);
-					return oe.assetLoads += 1, s > 0 && (oe.decodeFallbacks += 1), R("sound_asset_loaded", {
+					return oe.assetLoads += 1, s > 0 && (oe.decodeFallbacks += 1), fe("sound_asset_loaded", {
 						assetId: e,
 						variantId: c.id,
 						mode: "buffer"
@@ -37221,7 +37221,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 						buffer: i
 					};
 				} catch (t) {
-					o.push(`${c.id}: ${t.message}`), R("sound_variant_failed", {
+					o.push(`${c.id}: ${t.message}`), fe("sound_variant_failed", {
 						assetId: e,
 						variantId: c.id,
 						mode: "buffer"
@@ -37287,7 +37287,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 			scheduledAt: i,
 			reason: r
 		});
-		return pe(a), R("sound_cue_suppressed", a), a;
+		return pe(a), fe("sound_cue_suppressed", a), a;
 	}
 	async function Ke({ voice: e, cue: t, assetId: n, spatialPlan: r, at: i, loadPolicy: a }) {
 		let o = await He(n), s = V(e.cueId, t, e.busId, e.priority);
@@ -37340,7 +37340,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 				}, m = Math.max(0, (o - h.currentTime) * 1e3);
 				return m > 1 ? e.startTimer = setTimeout(() => {
 					u().catch(() => B(e, "stream-play-error"));
-				}, m) : await u(), i > 0 && (oe.streamFallbacks += 1), oe.assetLoads += 1, R("sound_asset_loaded", {
+				}, m) : await u(), i > 0 && (oe.streamFallbacks += 1), oe.assetLoads += 1, fe("sound_asset_loaded", {
 					assetId: r,
 					variantId: c.id,
 					mode: "stream"
@@ -37351,7 +37351,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 					g?.pause?.();
 				} catch {}
 				for (let e of x ?? [_, v]) _U(e);
-				R("sound_variant_failed", {
+				fe("sound_variant_failed", {
 					assetId: r,
 					variantId: c.id,
 					mode: "stream"
@@ -37368,7 +37368,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 			type: "unlock",
 			status: T ? "running" : e.state
 		});
-		return pe(t), R("sound_runtime_unlocked", { status: t.status }), t;
+		return pe(t), fe("sound_runtime_unlocked", { status: t.status }), t;
 	}
 	async function Ye(t) {
 		L(), xe();
@@ -37389,7 +37389,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 				status: r[t].status
 			}))
 		});
-		return R("sound_preload_completed", i), i;
+		return fe("sound_preload_completed", i), i;
 	}
 	function Xe({ cueId: e, cue: t, eventId: n, emitter: r, position: i, loadPolicy: a }) {
 		if (!(r || i)) return null;
@@ -37398,7 +37398,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 				cueId: e,
 				hint: "attachThree/attachPixi/attachPhaser 会每帧代劳；裸用 core 时自己喂听者"
 			});
-			return oe.spatialDegradations += 1, R("sound_spatial_degraded", {
+			return oe.spatialDegradations += 1, fe("sound_spatial_degraded", {
 				cueId: e,
 				eventId: n ?? null,
 				reason: "listener-missing"
@@ -37447,7 +37447,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 				lockedPolicy: r
 			});
 		}
-		let y = Math.max(0, vU(h.cooldownMs, h.cooldown) ?? 0), b = o(), x = I.get(t);
+		let y = Math.max(0, vU(h.cooldownMs, h.cooldown) ?? 0), b = o(), x = F.get(t);
 		if (x != null && b - x < y) return oe.cooldownSuppressions += 1, Ge({
 			cueId: t,
 			eventId: n,
@@ -37469,7 +37469,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 			position: a,
 			loadPolicy: E
 		});
-		I.set(t, b);
+		F.set(t, b);
 		let k = O?.degraded ?? null, A = k ? null : O, j = p ? p.stopEpoch : 0, M = `sound-${++D}`, N = vU(h.priority) ?? 0, P = {
 			sequence: D,
 			instanceId: M,
@@ -37537,9 +37537,9 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 					doppler: A.doppler
 				} : k
 			});
-			return pe(r), R("sound_cue_played", r), r;
+			return pe(r), fe("sound_cue_played", r), r;
 		} catch (e) {
-			throw oe.playErrors += 1, ee.get(M) === P && B(P, "play-error", { emitReceipt: !1 }), R("sound_cue_failed", {
+			throw oe.playErrors += 1, ee.get(M) === P && B(P, "play-error", { emitReceipt: !1 }), fe("sound_cue_failed", {
 				cueId: t,
 				assetId: S,
 				eventId: n ?? null,
@@ -37607,7 +37607,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 			eventId: t.eventId ?? null,
 			instanceId: l?.instanceId ?? k
 		});
-		return pe(u), R("sound_music_state_changed", u), u;
+		return pe(u), fe("sound_music_state_changed", u), u;
 	}
 	function tt(e, { active: t = !0, eventId: n } = {}) {
 		if (L(), !d.has(e)) throw Error(`unknown mix state ${e}`);
@@ -37618,7 +37618,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 			stateId: e,
 			eventId: n ?? null
 		});
-		return pe(r), R("sound_mix_state_changed", r), r;
+		return pe(r), fe("sound_mix_state_changed", r), r;
 	}
 	function nt(e) {
 		if (L(), !VH(e)) throw TypeError("volume settings must be an object");
@@ -37633,7 +37633,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 			status: "applied",
 			volumes: { ...j }
 		});
-		return pe(t), R("sound_user_volumes_changed", { volumes: { ...j } }), t;
+		return pe(t), fe("sound_user_volumes_changed", { volumes: { ...j } }), t;
 	}
 	function rt(e) {
 		if (L(), typeof e != "boolean") throw TypeError("muted must be boolean");
@@ -37642,7 +37642,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 			type: "mute",
 			status: E ? "muted" : "unmuted"
 		});
-		return pe(t), R("sound_mute_changed", { muted: E }), t;
+		return pe(t), fe("sound_mute_changed", { muted: E }), t;
 	}
 	function it(e) {
 		L();
@@ -37650,8 +37650,8 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 		return t ? B(t, "requested") : null;
 	}
 	function at() {
-		for (let e of F.values()) e.releaseTimer && clearTimeout(e.releaseTimer);
-		if (F.clear(), g && h) for (let e of g.values()) e.duckDb = 0, YH(e.duck.gain, h.currentTime), KH(e.duck.gain, 1, h.currentTime);
+		for (let e of re.values()) e.releaseTimer && clearTimeout(e.releaseTimer);
+		if (re.clear(), g && h) for (let e of g.values()) e.duckDb = 0, YH(e.duck.gain, h.currentTime), KH(e.duck.gain, 1, h.currentTime);
 	}
 	function ot(e = "voices") {
 		L();
@@ -37663,14 +37663,14 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 		else if (["cache", "receipts"].includes(n)) r = [];
 		else if (!["voices", "all"].includes(n)) throw Error(`unknown clear scope ${n}`);
 		for (let e of r) B(e, "clear");
-		(n === "cache" || n === "all") && M.clear(), (n === "receipts" || n === "all") && (te.length = 0), n === "all" && (Be(), at(), ne.clear(), Ae(), I.clear(), O = null);
+		(n === "cache" || n === "all") && M.clear(), (n === "receipts" || n === "all") && (te.length = 0), n === "all" && (Be(), at(), ne.clear(), Ae(), F.clear(), O = null);
 		let i = Object.freeze({
 			type: "clear",
 			status: "cleared",
 			scope: n,
 			stopped: r.length
 		});
-		return pe(i), R("sound_runtime_cleared", i), i;
+		return pe(i), fe("sound_runtime_cleared", i), i;
 	}
 	function st() {
 		let t = g;
@@ -37739,7 +37739,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 				position: e.position,
 				duckRuleId: e.duckRuleId ?? null
 			})),
-			ducks: [...F.values()].map((e) => ({
+			ducks: [...re.values()].map((e) => ({
 				id: e.id,
 				targetBusId: je(e.rule),
 				reductionDb: Me(e.rule),
@@ -37760,7 +37760,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 				},
 				bufferLoadQueue: {
 					active: ae,
-					queued: re.length,
+					queued: I.length,
 					maxConcurrent: ie
 				}
 			},
@@ -37771,14 +37771,14 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 	async function ct() {
 		if (w) return;
 		for (let e of [...ee.values()]) B(e, "dispose", { emitReceipt: !1 });
-		for (at(), A.clear(), M.clear(), ne.clear(), I.clear(); re.length > 0;) re.shift().reject(bU("SOUND_RUNTIME_DISPOSED", "sound runtime disposed"));
-		if (ce?.removeEventListener?.("visibilitychange", le), _.clear(), b.clear(), g) for (let e of g.values()) _U(e.input), _U(e.canonical), _U(e.mix), _U(e.duck), _U(e.user);
+		for (at(), A.clear(), M.clear(), ne.clear(), F.clear(); I.length > 0;) I.shift().reject(bU("SOUND_RUNTIME_DISPOSED", "sound runtime disposed"));
+		if (R?.removeEventListener?.("visibilitychange", ce), _.clear(), b.clear(), g) for (let e of g.values()) _U(e.input), _U(e.canonical), _U(e.mix), _U(e.duck), _U(e.user);
 		if (_U(x), C) {
 			for (let e of C.stream?.getTracks?.() ?? []) e.stop?.();
 			C = null;
 		}
 		let e = h;
-		w = !0, BH.get(_t)?.(), R("sound_runtime_disposed"), e && e.state !== "closed" && typeof e.close == "function" && await e.close();
+		w = !0, BH.get(_t)?.(), fe("sound_runtime_disposed"), e && e.state !== "closed" && typeof e.close == "function" && await e.close();
 	}
 	function lt(e) {
 		L();
@@ -37905,7 +37905,7 @@ function CU({ manifest: e, baseUrl: t = "", audioContextFactory: n, fetchImpl: r
 		setMixState: tt,
 		setUserVolumes: nt,
 		setMuted: rt,
-		setHold: ue,
+		setHold: le,
 		settings: gt,
 		setListener: lt,
 		resetListenerMotion: ut,
@@ -42329,12 +42329,12 @@ var fG = (e) => {
 	hideBobber() {
 		this.bobber &&= (this.bobber.destroy(), null);
 	}
-	layout(e, t, n, r, i) {
+	layout(e, t, n, r, i, a = !0) {
 		this.viewW = e, this.viewH = t, this.topInset = r, this.bottomInset = i, this.scale = n / 750, this.colX = (e - n) / 2, this.wxBandH = this.viewH / this.scale + 240, this.wxResizeRects(), this.world.scale.set(this.scale), this.world.x = this.colX;
-		let a = e > n + 2;
-		this.backdrop.visible = a;
-		let o = Math.max(e / 750, t / NW);
-		this.backdrop.scale.set(o), this.backdrop.x = (e - 750 * o) / 2, this.clampScroll(!0);
+		let o = e > n + 2;
+		this.backdrop.visible = o && a !== !1;
+		let s = Math.max(e / 750, t / NW);
+		this.backdrop.scale.set(s), this.backdrop.x = (e - 750 * s) / 2, this.clampScroll(!0);
 	}
 	maxScroll() {
 		return Math.max(0, NW - (this.viewH - this.bottomInset * .35) / this.scale);
@@ -43908,6 +43908,20 @@ html[lang=ja] #ui{font-family:${DG}}
 #ui *{box-sizing:border-box}
 #ui [hidden]{display:none!important}
 #ui .col{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);pointer-events:none}
+/* ---- 宽屏两侧舞台（平板横屏）----
+   ★ 原来两侧画的是「同一个世界放大 + blur(10) + alpha .75」。在 iPad 上量下来
+     缩放比 sb = max(vw/750, vh/WORLD_H) ≈ 1.37，等于把 750 宽的世界拉满 1024 再糊
+     20px —— 糊成一片荧光绿，用户的原话是「中间有内容，两侧[很怪]」。
+   现在改成奶油底 + 上下两团暖光，边缘一道内阴影把游戏列「框」出来。
+   好处有两个：① 看起来是有意为之的舞台，不是渲染坏了；② PIXI 那层全屏
+   BlurFilter 可以关掉（view.layout 的 showBackdrop=false），平板省一大笔 GPU。 */
+#ui .gut{position:absolute;top:0;bottom:0;display:none;pointer-events:none;overflow:hidden;background:radial-gradient(120% 46% at 50% 0%,rgba(255,224,150,.34),rgba(255,246,230,0) 64%),radial-gradient(90% 40% at 50% 100%,rgba(198,232,170,.26),rgba(255,246,230,0) 62%),linear-gradient(180deg,#FFF6E8,#FFFAF2 46%,#F7FAF0)}
+#ui.wide .gut{display:block}
+#ui .gut.l{left:0}
+#ui .gut.r{right:0}
+#ui .gut.l::after,#ui .gut.r::after{content:"";position:absolute;top:0;bottom:0;width:22px}
+#ui .gut.l::after{right:0;background:linear-gradient(90deg,rgba(90,56,20,0),rgba(90,56,20,.11))}
+#ui .gut.r::after{left:0;background:linear-gradient(270deg,rgba(90,56,20,0),rgba(90,56,20,.11))}
 #ui button{font-family:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s cubic-bezier(.3,1.6,.5,1),background-color .15s,box-shadow .15s}
 #ui button:active{transform:scale(.92)}
 #ui button:disabled{cursor:default}
@@ -43952,9 +43966,19 @@ html[lang=ja] #ui{font-family:${DG}}
 #ui .rbtn.on{background:rgba(255,255,255,.7);box-shadow:${OG};color:${Q.harvestDark}}
 .rbtn span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px;line-height:1.1}
 .badge{position:absolute;top:1px;left:calc(50% + 6px);min-width:18px;height:18px;border-radius:9px;background:${Q.danger};color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 5px;box-shadow:0 0 0 2px #fff}
+/* ---- 宽屏：底栏改成左侧竖排 ----
+   ★ 横屏平板上，这条底栏正好压在宿主底栏的上方，两条栏叠着，还吃掉一整行画面。
+     两侧本来就有空（iPad 4:3 横屏每侧 130~178px），搬过去正好。
+     竖排时不再需要那层通栏玻璃底，玻璃挪到每个按钮自己身上。 */
+#ui.wide .rail{left:12px;right:auto;top:0;bottom:0;grid-template-columns:1fr;grid-auto-rows:min-content;align-content:center;gap:6px;padding:0;background:transparent;border:none;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+#ui.wide .rbtn{min-height:58px;padding:7px 0;background:rgba(255,252,245,.74);border:1px solid rgba(255,255,255,.72);box-shadow:${OG};border-radius:18px}
+#ui.wide .rbtn.on{background:#fff;box-shadow:${kG}}
+#ui.wide .rbtn .ic{width:28px;height:28px}
+#ui.wide .rbtn span{font-size:11px}
 /* ---- 收起状态 ---- */
 #ui.bars-off .hud{transform:translateY(calc(-100% - 12px));opacity:0}
 #ui.bars-off .rail{transform:translateY(calc(100% + 16px));opacity:0;pointer-events:none}
+#ui.wide.bars-off .rail{transform:translateX(calc(-100% - 18px));opacity:0;pointer-events:none}
 #ui .unfold{position:absolute;top:calc(16px + env(safe-area-inset-top));right:16px;display:flex;align-items:center;gap:4px;height:48px;padding:0 6px 0 10px;border:none;border-radius:999px;box-shadow:${kG};pointer-events:auto;font-weight:800;font-size:14px;color:${Q.text};font-variant-numeric:tabular-nums;opacity:0;transform:translateY(-8px) scale(.9);transition:opacity .25s,transform .3s cubic-bezier(.2,.9,.3,1);visibility:hidden}
 #ui .unfold img{width:22px;height:22px}
 #ui .unfold svg{width:18px;height:18px;color:${Q.wood}}
@@ -44142,14 +44166,18 @@ function XG(e) {
 	let o = document.createElement("div");
 	o.id = "ui", n && (o.style.position = "absolute");
 	let s = document.createElement("div");
-	s.className = "col", o.appendChild(s), t.appendChild(o);
-	let c = null;
-	n && typeof ResizeObserver < "u" && (c = new ResizeObserver(() => {
+	s.className = "gut l";
+	let c = document.createElement("div");
+	c.className = "gut r";
+	let l = document.createElement("div");
+	l.className = "col", o.append(s, c, l), t.appendChild(o);
+	let u = null;
+	n && typeof ResizeObserver < "u" && (u = new ResizeObserver(() => {
 		try {
 			e.ui.layout();
 		} catch {}
-	}), c.observe(t));
-	let l = () => {
+	}), u.observe(t));
+	let d = () => {
 		if (!n) return {
 			vw: window.innerWidth,
 			vh: window.innerHeight
@@ -44159,63 +44187,71 @@ function XG(e) {
 			vw: e.width || window.innerWidth,
 			vh: e.height || window.innerHeight
 		};
-	}, u = () => {
-		let { vw: e, vh: t } = l(), n = e > t * 1.05, r = n ? 900 : 780, i = t * .87, a = t * .62;
+	}, f = () => {
+		let { vw: e, vh: t } = d(), n = e > t * 1.05, r = n ? 900 : 780, i = t * .87, a = t * .62;
 		return Math.min(e, Math.max(360, Math.min(r, n ? i : a)));
-	}, d = document.createElement("div");
-	d.className = "rail glass";
-	let f = document.createElement("div");
-	f.className = "hud";
-	let p = document.createElement("div");
-	p.className = "toasts";
+	}, p = document.createElement("div");
+	p.className = "rail glass";
 	let m = document.createElement("div");
-	m.style.cssText = "position:absolute;inset:0;pointer-events:none";
+	m.className = "hud";
 	let h = document.createElement("div");
-	h.style.cssText = "position:absolute;inset:0;pointer-events:none";
-	let g = document.createElement("button");
-	g.className = "unfold glass", g.id = "unfoldBtn", s.append(f, d, g, p, m, h);
-	let _ = !!e.audioPrefs().barsHidden;
-	function v() {
-		o.classList.toggle("bars-off", _), g.setAttribute("aria-label", X("a11y.showBars")), g.title = X("a11y.showBars"), g.setAttribute("aria-hidden", String(!_)), g.tabIndex = _ ? 0 : -1, f.toggleAttribute("inert", _), d.toggleAttribute("inert", _);
+	h.className = "toasts";
+	let g = document.createElement("div");
+	g.style.cssText = "position:absolute;inset:0;pointer-events:none";
+	let _ = document.createElement("div");
+	_.style.cssText = "position:absolute;inset:0;pointer-events:none";
+	let v = document.createElement("button");
+	v.className = "unfold glass", v.id = "unfoldBtn", l.append(m, v, h, g, _), o.appendChild(p);
+	let y = !!e.audioPrefs().barsHidden;
+	function b() {
+		o.classList.toggle("bars-off", y), v.setAttribute("aria-label", X("a11y.showBars")), v.title = X("a11y.showBars"), v.setAttribute("aria-hidden", String(!y)), v.tabIndex = y ? 0 : -1, m.toggleAttribute("inert", y), p.toggleAttribute("inert", y);
 	}
-	function y(t, n = !0) {
-		if (t !== _) {
-			_ = t, v(), t && b(), S?.cue("sfx.tap");
+	function x(t, n = !0) {
+		if (t !== y) {
+			y = t, b(), t && S(), w?.cue("sfx.tap");
 			try {
 				globalThis.__cfHaptic?.();
 			} catch {}
 			n && e.setPrefs({ barsHidden: t }), setTimeout(() => {
-				S?.relayout(), Fe();
+				w?.relayout(), Le();
 			}, 340);
 		}
 	}
-	g.addEventListener("click", () => y(!1)), e.onPrefs((e) => {
-		typeof e.barsHidden == "boolean" && e.barsHidden !== _ && (_ = e.barsHidden, v(), S?.relayout());
+	v.addEventListener("click", () => x(!1)), e.onPrefs((e) => {
+		typeof e.barsHidden == "boolean" && e.barsHidden !== y && (y = e.barsHidden, b(), w?.relayout());
 	});
-	function b() {
-		let e = !!S?.farm?.wallet?.enabled;
-		g.innerHTML = e ? HG : `<img src="${WG("coin")}" alt=""><span>${S ? S.farm.s.points : ""}</span>${HG}`, g.classList.toggle("solo", e);
+	function S() {
+		let e = !!w?.farm?.wallet?.enabled;
+		v.innerHTML = e ? HG : `<img src="${WG("coin")}" alt=""><span>${w ? w.farm.s.points : ""}</span>${HG}`, v.classList.toggle("solo", e);
 	}
-	v();
-	let x = null;
+	b();
+	let C = null;
 	e.ui.layout = () => {
-		let e = u();
-		s.style.width = e + "px", s.classList.toggle("narrow", e < 380);
-		let t = d.getBoundingClientRect().height, n = _ ? 0 : t + 10;
-		return p.style.bottom = n + 8 + (x ? 60 : 0) + "px", x && (x.style.bottom = n + 6 + "px"), {
-			colW: e,
+		let { vw: e } = d(), t = f();
+		l.style.width = t + "px", l.classList.toggle("narrow", t < 380);
+		let n = Math.max(0, Math.round((e - t) / 2)), r = n >= 104;
+		if (o.classList.toggle("wide", r), r) {
+			s.style.width = n + 1 + "px", c.style.width = n + 1 + "px";
+			let e = Math.max(76, Math.min(n - 40, 112));
+			p.style.left = Math.round((n - e) / 2) + "px", p.style.right = "auto", p.style.width = e + "px";
+		} else p.style.left = n + 8 + "px", p.style.right = n + 8 + "px", p.style.width = "";
+		let i = r ? 0 : p.getBoundingClientRect().height, a = y ? 0 : i + 10;
+		return h.style.bottom = a + 8 + (C ? 60 : 0) + "px", C && (C.style.bottom = a + 6 + "px"), {
+			colW: t,
 			top: 0,
-			bottom: n
+			bottom: a,
+			wide: r,
+			gut: n
 		};
 	};
-	let S;
+	let w;
 	e.gameReady.then((e) => {
-		S = e, Re();
+		w = e, Be();
 	});
-	function C() {
-		f.innerHTML = `
+	function T() {
+		m.innerHTML = `
       <div class="topbar">
-        <div class="lv" id="lvBadge" title="${$(X("hud.lv", { n: S.farm.level.level }))}"><span class="lvt" id="lvt"></span><span class="exp" id="exp"></span></div>
+        <div class="lv" id="lvBadge" title="${$(X("hud.lv", { n: w.farm.level.level }))}"><span class="lvt" id="lvt"></span><span class="exp" id="exp"></span></div>
         <div class="seg glass" role="tablist">
           <span class="wx" id="weatherChip"><span id="wicon"></span><span class="vh" id="wname"></span></span><i class="ssep"></i>
           <button data-zone="ranch" role="tab">${$(X("hud.ranch"))}</button><button data-zone="field" role="tab">${$(X("hud.field"))}</button><button data-zone="pond" role="tab">${$(X("hud.pond"))}</button>
@@ -44223,37 +44259,37 @@ function XG(e) {
         </div>
         <button class="iconbtn" id="logBtn" aria-label="${$(X("a11y.log"))}">${FG("log", 22)}<i class="dot" id="logDot" hidden></i></button>
         <button class="iconbtn" id="setBtn" aria-label="${$(X("a11y.settings"))}">${FG("gear", 22)}</button>
-      </div>`, f.classList.add("tv-a"), f.querySelector("#foldBtn").addEventListener("click", () => y(!0)), f.querySelector("#logBtn").addEventListener("click", () => {
-			S.cue("sfx.tap"), ie("log");
-		}), f.querySelector("#setBtn").addEventListener("click", () => {
-			S.cue("sfx.tap"), ie("settings");
-		}), f.querySelectorAll("[data-zone]").forEach((e) => e.addEventListener("click", () => {
-			S.cue("sfx.tap"), S.scrollToZone(e.dataset.zone), setTimeout(T, 400);
-		})), N = {}, w = "", setTimeout(T, 0);
+      </div>`, m.classList.add("tv-a"), m.querySelector("#foldBtn").addEventListener("click", () => x(!0)), m.querySelector("#logBtn").addEventListener("click", () => {
+			w.cue("sfx.tap"), oe("log");
+		}), m.querySelector("#setBtn").addEventListener("click", () => {
+			w.cue("sfx.tap"), oe("settings");
+		}), m.querySelectorAll("[data-zone]").forEach((e) => e.addEventListener("click", () => {
+			w.cue("sfx.tap"), w.scrollToZone(e.dataset.zone), setTimeout(D, 400);
+		})), ee = {}, E = "", setTimeout(D, 0);
 	}
-	let w = "";
-	function T() {
-		if (!S?.view) return;
-		let e = S.view, t = e.scrollY + e.viewH / Math.max(.01, e.scale) / 2, n = t < PW + 80 ? "ranch" : t < 1857 ? "field" : "pond";
-		n !== w && (w = n, f.querySelectorAll("[data-zone]").forEach((e) => {
+	let E = "";
+	function D() {
+		if (!w?.view) return;
+		let e = w.view, t = e.scrollY + e.viewH / Math.max(.01, e.scale) / 2, n = t < PW + 80 ? "ranch" : t < 1857 ? "field" : "pond";
+		n !== E && (E = n, m.querySelectorAll("[data-zone]").forEach((e) => {
 			let t = e.dataset.zone === n;
 			e.classList.toggle("on", t), e.setAttribute("aria-selected", String(t));
 		}));
 	}
-	let E = [], D = (e) => (E.push(e), e);
-	D(setInterval(() => T(), 300));
-	let O = {
+	let O = [], k = (e) => (O.push(e), e);
+	k(setInterval(() => D(), 300));
+	let A = {
 		music: .8,
 		sfx: 1
-	}, k = !1;
-	function A() {
-		let e = S.view && S.view.nightness > .5, t = S.farm.weather();
-		P("wicon", e ? "🌙" : t === "rain" ? "🌧️" : t === "cloud" ? "☁️" : "☀️"), P("wname", X(e ? "weather.night" : "weather." + t));
+	}, j = !1;
+	function M() {
+		let e = w.view && w.view.nightness > .5, t = w.farm.weather();
+		te("wicon", e ? "🌙" : t === "rain" ? "🌧️" : t === "cloud" ? "☁️" : "☀️"), te("wname", X(e ? "weather.night" : "weather." + t));
 		let n = document.getElementById("weatherChip");
-		n && n.title !== (N.wname ?? "") && (n.title = N.wname ?? "", n.setAttribute("aria-label", n.title));
+		n && n.title !== (ee.wname ?? "") && (n.title = ee.wname ?? "", n.setAttribute("aria-label", n.title));
 	}
-	function j() {
-		d.innerHTML = [
+	function N() {
+		p.innerHTML = [
 			[
 				"seeds",
 				"seeds",
@@ -44279,173 +44315,173 @@ function XG(e) {
 				"bag",
 				"rail.bag"
 			]
-		].map(([e, t, n]) => `<button class="rbtn" data-open="${e}" id="rail-${e}">${FG(t, 28)}<span>${$(X(n))}</span>${e === "market" ? "<i class=\"badge\" id=\"mkBadge\" hidden></i>" : ""}</button>`).join(""), d.querySelectorAll("[data-open]").forEach((e) => e.addEventListener("click", () => {
-			S.cue("sfx.tap"), ie(e.dataset.open);
+		].map(([e, t, n]) => `<button class="rbtn" data-open="${e}" id="rail-${e}">${FG(t, 28)}<span>${$(X(n))}</span>${e === "market" ? "<i class=\"badge\" id=\"mkBadge\" hidden></i>" : ""}</button>`).join(""), p.querySelectorAll("[data-open]").forEach((e) => e.addEventListener("click", () => {
+			w.cue("sfx.tap"), oe(e.dataset.open);
 		}));
 	}
-	function M() {
-		let e = F && [
+	function P() {
+		let e = I && [
 			"seeds",
 			"ranch",
 			"pond",
 			"market",
 			"bag"
-		].includes(F.kind) ? F.kind : "";
-		d.querySelectorAll("[data-open]").forEach((t) => t.classList.toggle("on", t.dataset.open === e));
+		].includes(I.kind) ? I.kind : "";
+		p.querySelectorAll("[data-open]").forEach((t) => t.classList.toggle("on", t.dataset.open === e));
 	}
-	let N = {}, P = (e, t) => {
-		if (N[e] !== t) {
-			N[e] = t;
+	let ee = {}, te = (e, t) => {
+		if (ee[e] !== t) {
+			ee[e] = t;
 			let n = document.getElementById(e);
 			n && (n.textContent = t);
 		}
 	};
-	function ee() {
-		if (!S) return;
-		let e = S.farm, t = e.level;
-		P("lvt", X("hud.lv", { n: t.level })), P("exp", `${t.into}/${t.need}`);
+	function ne() {
+		if (!w) return;
+		let e = w.farm, t = e.level;
+		te("lvt", X("hud.lv", { n: t.level })), te("exp", `${t.into}/${t.need}`);
 		let n = Math.round(t.into / t.need * 100);
-		document.getElementById("lvBadge")?.style.setProperty("--p", n + "%"), e.wallet.commit(), _ && b(), A();
+		document.getElementById("lvBadge")?.style.setProperty("--p", n + "%"), e.wallet.commit(), y && S(), M();
 		let r = document.getElementById("logDot");
 		r && (r.hidden = e.unreadLog() === 0);
 		let i = document.getElementById("mkBadge"), a = e.sellableCount();
 		i && (i.hidden = a === 0, i.textContent = String(a));
 	}
-	function te(e) {
+	function re(e) {
 		let t = document.getElementById(e);
 		t && (t.classList.remove("bump"), t.offsetWidth, t.classList.add("bump"));
 	}
-	function ne() {
-		let e = S.selectedSeed;
+	function F() {
+		let e = w.selectedSeed;
 		if (!e) {
-			x && (x.remove(), x = null, S.relayout());
+			C && (C.remove(), C = null, w.relayout());
 			return;
 		}
-		x || (x = document.createElement("div"), x.className = "guide", s.appendChild(x));
+		C || (C = document.createElement("div"), C.className = "guide", l.appendChild(C));
 		let t = LU(e);
-		x.innerHTML = `<img src="${GG(e)}" alt=""><span class="gt">${$(X("guide.plant", {
+		C.innerHTML = `<img src="${GG(e)}" alt=""><span class="gt">${$(X("guide.plant", {
 			name: xW(e),
 			n: t.seed
-		}))}</span><button class="xbtn" aria-label="${$(X("a11y.cancelSeed"))}">✕</button>`, x.querySelector("button").addEventListener("click", () => {
-			S.selectSeed(null), ne();
-		}), S.relayout();
+		}))}</span><button class="xbtn" aria-label="${$(X("a11y.cancelSeed"))}">✕</button>`, C.querySelector("button").addEventListener("click", () => {
+			w.selectSeed(null), F();
+		}), w.relayout();
 	}
 	{
 		let t = e.audioPrefs();
-		O = {
+		A = {
 			music: t.music,
 			sfx: t.sfx
-		}, k = t.muted;
+		}, j = t.muted;
 	}
-	let F = null, I = !1, re = 0;
-	function ie(e, t, n) {
-		ae(!0), S.cue("sfx.open"), ye = null;
+	let I = null, ie = !1, ae = 0;
+	function oe(e, t, n) {
+		L(!0), w.cue("sfx.open"), xe = null;
 		let r = document.createElement("div");
 		r.className = "scrim";
 		let i = document.createElement("div");
 		i.className = "sheet", i.setAttribute("role", "dialog");
 		let a = document.createElement("div");
-		a.style.cssText = "position:absolute;inset:0;pointer-events:none", a.append(r, i), m.appendChild(a), re = performance.now(), r.addEventListener("click", () => {
-			performance.now() - re > 600 && ae();
+		a.style.cssText = "position:absolute;inset:0;pointer-events:none", a.append(r, i), g.appendChild(a), ae = performance.now(), r.addEventListener("click", () => {
+			performance.now() - ae > 600 && L();
 		});
 		let o = 0, s = !1;
 		i.addEventListener("pointerdown", (e) => {
-			I = !0, o = e.clientY, s = e.target.closest(".sh-h") != null;
+			ie = !0, o = e.clientY, s = e.target.closest(".sh-h") != null;
 		}), i.addEventListener("pointerup", (e) => {
-			I = !1, s && e.clientY - o > 70 && ae(), s = !1;
+			ie = !1, s && e.clientY - o > 70 && L(), s = !1;
 		}), i.addEventListener("pointercancel", () => {
-			I = !1, s = !1;
+			ie = !1, s = !1;
 		}), i.addEventListener("click", (e) => {
-			if (performance.now() - re < 600) return;
+			if (performance.now() - ae < 600) return;
 			let t = e.target.closest("[data-act]");
-			t && !t.disabled && Te(t.dataset.act, t.dataset.arg ?? "", t);
+			t && !t.disabled && De(t.dataset.act, t.dataset.arg ?? "", t);
 		});
 		let c = document.createElement("div");
-		F = {
+		I = {
 			kind: e,
 			arg: t,
 			tab: n ?? "adopt",
 			el: a,
 			body: c
-		}, L(), M(), e === "log" && (S.farm.s.logSeenAt = S.farm.now(), ee()), e === "seeds" && S.farm.s.onboard === 0 && (S.farm.s.onboard = 1, S.farm.emit({ type: "change" })), Fe();
+		}, R(), P(), e === "log" && (w.farm.s.logSeenAt = w.farm.now(), ne()), e === "seeds" && w.farm.s.onboard === 0 && (w.farm.s.onboard = 1, w.farm.emit({ type: "change" })), Le();
 	}
-	D(setInterval(() => {
-		let e = m.querySelector(".dbg-perf");
-		if (!e || !S) return;
-		let t = S.view.fps();
+	k(setInterval(() => {
+		let e = g.querySelector(".dbg-perf");
+		if (!e || !w) return;
+		let t = w.view.fps();
 		e.textContent = `FPS ${t.fps} · DC ${t.dc}`;
 	}, 500));
-	function ae(e = !1) {
-		F && (F.el.remove(), F = null, I = !1, ye = null, M(), e || (S.cue("sfx.close"), Fe()));
+	function L(e = !1) {
+		I && (I.el.remove(), I = null, ie = !1, xe = null, P(), e || (w.cue("sfx.close"), Le()));
 	}
-	function oe(e, t, n) {
-		let r = !!S.farm.wallet?.enabled, i = n === "coin" ? `<div class="stat"><img src="${WG("coin")}" alt=""><span>${S.farm.s.points}</span></div>` : n === "harv" && !r ? `<div class="stat harv"><span class="vico">🎟️</span><span>${S.farm.s.harvest}</span></div>` : "";
+	function se(e, t, n) {
+		let r = !!w.farm.wallet?.enabled, i = n === "coin" ? `<div class="stat"><img src="${WG("coin")}" alt=""><span>${w.farm.s.points}</span></div>` : n === "harv" && !r ? `<div class="stat harv"><span class="vico">🎟️</span><span>${w.farm.s.harvest}</span></div>` : "";
 		return `<div class="sh-h"><img src="${e}" alt=""><h2>${$(t)}</h2>${i}<button class="xbtn" data-act="close" aria-label="${$(X("a11y.close"))}">✕</button></div>`;
 	}
-	function L() {
-		if (!F) return;
-		let e = F, t = e.el.querySelector(".sheet"), n = t.querySelector(".sh-b")?.scrollTop ?? 0, r = "";
+	function R() {
+		if (!I) return;
+		let e = I, t = e.el.querySelector(".sheet"), n = t.querySelector(".sh-b")?.scrollTop ?? 0, r = "";
 		switch (e.kind) {
 			case "seeds":
-				r = oe(IG("ui/seeds.webp"), X("seed.title"), "coin") + `<div class="sh-b" data-mp-scroll><div class="group">${ce()}</div></div>`;
+				r = se(IG("ui/seeds.webp"), X("seed.title"), "coin") + `<div class="sh-b" data-mp-scroll><div class="group">${le()}</div></div>`;
 				break;
 			case "ranch":
 			case "pond":
-				r = oe(e.kind === "ranch" ? IG("ui/animals.webp") : IG("ui/fish.webp"), X(e.kind === "ranch" ? "shop.ranch" : "shop.pond"), "coin") + se(e.kind) + `<div class="sh-b" data-mp-scroll><div class="group">${e.tab === "mine" ? de(e.kind) : le(e.kind)}</div></div>`;
+				r = se(e.kind === "ranch" ? IG("ui/animals.webp") : IG("ui/fish.webp"), X(e.kind === "ranch" ? "shop.ranch" : "shop.pond"), "coin") + ce(e.kind) + `<div class="sh-b" data-mp-scroll><div class="group">${e.tab === "mine" ? fe(e.kind) : ue(e.kind)}</div></div>`;
 				break;
 			case "animal": {
-				let t = S.farm.animal(Number(e.arg));
+				let t = w.farm.animal(Number(e.arg));
 				if (!t) {
-					ae();
+					L();
 					return;
 				}
-				r = oe(IG(`animals/${t.kind}.webp`), xW(t.kind)) + `<div class="sh-b">${R(t.uid)}</div>`;
+				r = se(IG(`animals/${t.kind}.webp`), xW(t.kind)) + `<div class="sh-b">${me(t.uid)}</div>`;
 				break;
 			}
 			case "market":
-				r = oe(IG("ui/market.webp"), X("market.title"), "harv") + `<div class="sh-b" data-mp-scroll>${me()}</div>`;
+				r = se(IG("ui/market.webp"), X("market.title"), "harv") + `<div class="sh-b" data-mp-scroll>${ge()}</div>`;
 				break;
 			case "bag":
-				r = oe(IG("ui/bag.webp"), X("bag.title")) + `<div class="sh-b" data-mp-scroll>${he()}</div>`;
+				r = se(IG("ui/bag.webp"), X("bag.title")) + `<div class="sh-b" data-mp-scroll>${_e()}</div>`;
 				break;
 			case "harvest":
-				r = ge(Number(e.arg));
+				r = ve(Number(e.arg));
 				break;
 			case "log":
-				r = oe(IG("ui/log.webp"), X("log.title")) + `<div class="sh-b" data-mp-scroll><div class="group">${be()}</div></div>`;
+				r = se(IG("ui/log.webp"), X("log.title")) + `<div class="sh-b" data-mp-scroll><div class="group">${Se()}</div></div>`;
 				break;
 			case "settings":
-				r = oe(IG("ui/gear.webp"), X("settings.title")) + `<div class="sh-b" data-mp-scroll>${Se()}</div>`;
+				r = se(IG("ui/gear.webp"), X("settings.title")) + `<div class="sh-b" data-mp-scroll>${z()}</div>`;
 				break;
 			case "dbg":
-				r = oe(IG("ui/gear.webp"), X("dbg.title")) + `<div class="sh-b">${z()}</div>`;
+				r = se(IG("ui/gear.webp"), X("dbg.title")) + `<div class="sh-b">${Te()}</div>`;
 				break;
-			case "fishing": r = oe(IG("ui/fish.webp"), X("fishing.title")) + `<div class="sh-b" data-mp-scroll>${_e()}</div>`;
+			case "fishing": r = se(IG("ui/fish.webp"), X("fishing.title")) + `<div class="sh-b" data-mp-scroll>${ye()}</div>`;
 		}
 		t.innerHTML = r;
 		let i = t.querySelector(".sh-b");
-		i && (i.scrollTop = n), e.kind === "settings" && Ce(t);
+		i && (i.scrollTop = n), e.kind === "settings" && we(t);
 	}
-	let se = (e) => `<div class="tabs"><button class="tab ${F.tab === "mine" ? "" : "on"}" data-act="tab" data-arg="adopt">${$(X("tab.adopt"))}</button><button class="tab ${F.tab === "mine" ? "on" : ""}" data-act="tab" data-arg="mine">${$(X("tab.mine", {
-		n: S.farm.zoneCount(e),
-		m: S.farm.zoneCap(e)
+	let ce = (e) => `<div class="tabs"><button class="tab ${I.tab === "mine" ? "" : "on"}" data-act="tab" data-arg="adopt">${$(X("tab.adopt"))}</button><button class="tab ${I.tab === "mine" ? "on" : ""}" data-act="tab" data-arg="mine">${$(X("tab.mine", {
+		n: w.farm.zoneCount(e),
+		m: w.farm.zoneCap(e)
 	}))}</button></div>`;
-	function ce() {
-		let e = S.farm.level.level;
+	function le() {
+		let e = w.farm.level.level;
 		return MU.map((t) => {
-			let n = S.farm.canPlant(t.id), r = n === "level" ? `<button class="btn w" disabled>${$(X("btn.lockLv", { n: t.level }))}</button>` : n === "points" ? `<button class="btn w" disabled>${$(X("btn.noPoints"))}</button>` : `<button class="btn y" data-act="pick" data-arg="${t.id}" id="pick-${t.id}">${$(X("btn.pick"))}</button>`;
+			let n = w.farm.canPlant(t.id), r = n === "level" ? `<button class="btn w" disabled>${$(X("btn.lockLv", { n: t.level }))}</button>` : n === "points" ? `<button class="btn w" disabled>${$(X("btn.noPoints"))}</button>` : `<button class="btn y" data-act="pick" data-arg="${t.id}" id="pick-${t.id}">${$(X("btn.pick"))}</button>`;
 			return `<div class="item ${t.level > e ? "off" : ""}"><img class="thumb" src="${GG(t.id)}" alt=""><div class="info"><b>${$(xW(t.id))}</b>
         <span class="s">${$(X("seed.info", {
 				t: qG(t.growMin),
 				n: t.times
 			}))}</span>
         <div class="tags">${t.perennial ? `<span class="tg g">${$(X("seed.tree"))}</span>` : ""}<span class="tg c">${$(X("seed.price", { n: t.seed }))}</span><span class="tg h">${$(X("seed.cap", { n: GU(t) }))}</span></div></div>${r}</div>`;
-		}).join("") + ue();
+		}).join("") + de();
 	}
-	function le(e) {
-		let t = S.farm.level.level;
+	function ue(e) {
+		let t = w.farm.level.level;
 		return NU.filter((t) => t.zone === e).map((e) => {
-			let n = S.farm.canAdopt(e.id), r = S.farm.speciesCap(e.id), i = S.farm.speciesCount(e.id), a = n === "level" ? `<button class="btn w" disabled>${$(X("btn.lockLv", { n: e.level }))}</button>` : n === "species" ? `<button class="btn w capped" aria-disabled="true" data-act="adoptcap" data-arg="${e.id}" id="adopt-${e.id}" style="opacity:.55;filter:grayscale(.6)">${$(X("adopt.capped", {
+			let n = w.farm.canAdopt(e.id), r = w.farm.speciesCap(e.id), i = w.farm.speciesCount(e.id), a = n === "level" ? `<button class="btn w" disabled>${$(X("btn.lockLv", { n: e.level }))}</button>` : n === "species" ? `<button class="btn w capped" aria-disabled="true" data-act="adoptcap" data-arg="${e.id}" id="adopt-${e.id}" style="opacity:.55;filter:grayscale(.6)">${$(X("adopt.capped", {
 				h: i,
 				n: r
 			}))}</button>` : n === "full" ? `<button class="btn w" disabled>${$(X("adopt.full"))}</button>` : n === "points" ? `<button class="btn w" disabled>${$(X("btn.noPoints"))}</button>` : `<button class="btn p" data-act="adopt" data-arg="${e.id}" id="adopt-${e.id}">${$(X("btn.adopt"))}</button>`, o = e.ward ? `<span class="ward">${$(X("ward." + e.id, { p: Math.round(e.ward.p * 100) }))}</span>` : e.id === "yulong" ? `<span class="ward">${$(X("ward.yulong"))}</span>` : "";
@@ -44459,11 +44495,11 @@ function XG(e) {
         <div class="tags"><span class="tg c">${$(X("adopt.cost", { n: e.cost }))}</span><span class="tg h">${$(X("seed.cap", { n: KU(e) }))}</span><span class="tg ${i >= r ? "d" : "g"}">${$(X("adopt.capTag", { n: r }))} · ${i}/${r}</span></div></div>${a}</div>`;
 		}).join("");
 	}
-	function ue() {
-		let e = S.farm.s.wutong, t = S.farm.canBuyWutong(), n = S.farm.level.level, r = -1, i = "";
-		e ? (r = eW(Math.max(0, S.farm.now() - e.plantedAt)), i = X("tree.stage" + r), i += r < 2 ? " · " + X("tree.next", {
+	function de() {
+		let e = w.farm.s.wutong, t = w.farm.canBuyWutong(), n = w.farm.level.level, r = -1, i = "";
+		e ? (r = eW(Math.max(0, w.farm.now() - e.plantedAt)), i = X("tree.stage" + r), i += r < 2 ? " · " + X("tree.next", {
 			k: X("tree.stage" + (r + 1)),
-			t: EW($U[r + 1] * EU - (S.farm.now() - e.plantedAt))
+			t: EW($U[r + 1] * EU - (w.farm.now() - e.plantedAt))
 		}) : " · ∞") : i = X("adopt.treeInfo", {
 			a: qG($U[1]),
 			b: qG($U[2])
@@ -44473,11 +44509,11 @@ function XG(e) {
       <span class="s">${$(i)}</span><span class="ward">${$(X("ward.wutong"))}</span>
       <div class="tags"><span class="tg g">${$(X("tree.riverTag"))}</span><span class="tg c">${$(X("seed.price", { n: QU }))}</span><span class="tg h">∞</span></div></div>${a}</div>`;
 	}
-	function de(e) {
-		let t = S.farm.s.animals.filter((t) => RU(t.kind).zone === e);
-		return t.length ? t.map((e) => R(e.uid)).join("") : `<div class="empty">${$(X("mine.empty"))}</div>`;
+	function fe(e) {
+		let t = w.farm.s.animals.filter((t) => RU(t.kind).zone === e);
+		return t.length ? t.map((e) => me(e.uid)).join("") : `<div class="empty">${$(X("mine.empty"))}</div>`;
 	}
-	let fe = {
+	let pe = {
 		basking: "☀️",
 		happy: "😊",
 		normal: "😐",
@@ -44488,29 +44524,29 @@ function XG(e) {
 		spent: "🧺",
 		deceased: "🕊️"
 	};
-	function R(e) {
-		let t = S.farm.animal(e), n = S.farm.animalInfo(t), r = n.def, i = "", a = 0;
-		t.dead ? i = X("st.dead") : t.sickSince == null ? t.poopSince == null ? n.mature ? S.farm.isBasking(t) ? (i = X("st.bask", { t: EW((t.baskUntil ?? 0) - S.farm.now()) }), a = 0) : n.spent ? i = X("st.spent") : t.kind === "dog" ? i = S.isSleeping(e) ? X("st.dogSleep") : X("st.patrol") : t.kind === "polarbear" && S.isNapping(e) ? i = X("st.bearSleep") : n.ready > 0 ? i = X("st.ready", { n: n.ready }) : (i = X("st.next", { t: EW(n.nextAt) }) + " · " + (r.permanent ? X("st.leftInf", { n: Math.max(0, r.times - t.rounds) }) : X("st.left", { n: r.times - t.rounds })), a = n.cycleP) : (i = X("st.baby", { t: EW(n.nextAt) }), a = n.growP) : i = X("st.poop") : i = X("st.sick");
+	function me(e) {
+		let t = w.farm.animal(e), n = w.farm.animalInfo(t), r = n.def, i = "", a = 0;
+		t.dead ? i = X("st.dead") : t.sickSince == null ? t.poopSince == null ? n.mature ? w.farm.isBasking(t) ? (i = X("st.bask", { t: EW((t.baskUntil ?? 0) - w.farm.now()) }), a = 0) : n.spent ? i = X("st.spent") : t.kind === "dog" ? i = w.isSleeping(e) ? X("st.dogSleep") : X("st.patrol") : t.kind === "polarbear" && w.isNapping(e) ? i = X("st.bearSleep") : n.ready > 0 ? i = X("st.ready", { n: n.ready }) : (i = X("st.next", { t: EW(n.nextAt) }) + " · " + (r.permanent ? X("st.leftInf", { n: Math.max(0, r.times - t.rounds) }) : X("st.left", { n: r.times - t.rounds })), a = n.cycleP) : (i = X("st.baby", { t: EW(n.nextAt) }), a = n.growP) : i = X("st.poop") : i = X("st.sick");
 		let o = !n.mature && !r.noBaby ? IG(`babies/${t.kind}.webp`) : IG(`animals/${t.kind}.webp`), s = r.zone === "pond" ? t.kind === "turtle" ? X("btn.feedTurtle") : X("btn.feedFish") : X("btn.feed"), c = "", l = "";
-		F.kind !== "animal" && RU(t.kind).zone === "ranch" && !t.dead && n.spent && (l = `<button class="btn y" data-act="balloonpop" data-arg="${e}">${$(X("btn.balloonPop"))}<small>1~2 🧪</small></button>`), t.kind === "peacock" && !t.dead && n.mature && (c = S.displayState(e).displaying ? `<button class="btn w" disabled>🦚 ${$(X("btn.displaying"))}</button>` : `<button class="btn w" id="disp-${e}" data-act="display" data-arg="${e}">🦚 ${$(X("btn.display"))}</button>`);
+		I.kind !== "animal" && RU(t.kind).zone === "ranch" && !t.dead && n.spent && (l = `<button class="btn y" data-act="balloonpop" data-arg="${e}">${$(X("btn.balloonPop"))}<small>1~2 🧪</small></button>`), t.kind === "peacock" && !t.dead && n.mature && (c = w.displayState(e).displaying ? `<button class="btn w" disabled>🦚 ${$(X("btn.displaying"))}</button>` : `<button class="btn w" id="disp-${e}" data-act="display" data-arg="${e}">🦚 ${$(X("btn.display"))}</button>`);
 		let u = "", d = "";
 		if (t.kind === "turtle" && !t.dead) {
-			let n = S.farm.canBask(e);
-			if (u = n === "ok" ? `<button class="btn y" data-act="bask" data-arg="${e}" id="bask-${e}">${$(X("btn.bask"))}</button>` : n === "basking" ? `<button class="btn w" disabled>${$(X("btn.baskOn"))}</button>` : n === "cooldown" ? `<button class="btn w" disabled>${$(X("btn.baskCd", { t: EW(S.farm.baskCooldown(t)) }))}</button>` : `<button class="btn w" disabled>${$(X("btn.baskFull"))}</button>`, n === "ok") {
-				let e = S.farm.baskBoost(t);
+			let n = w.farm.canBask(e);
+			if (u = n === "ok" ? `<button class="btn y" data-act="bask" data-arg="${e}" id="bask-${e}">${$(X("btn.bask"))}</button>` : n === "basking" ? `<button class="btn w" disabled>${$(X("btn.baskOn"))}</button>` : n === "cooldown" ? `<button class="btn w" disabled>${$(X("btn.baskCd", { t: EW(w.farm.baskCooldown(t)) }))}</button>` : `<button class="btn w" disabled>${$(X("btn.baskFull"))}</button>`, n === "ok") {
+				let e = w.farm.baskBoost(t);
 				d = `<span class="s">${$(e > 0 ? X("bask.tip", { t: EW(e) }) : X("bask.tipSpent"))}</span>`;
 			}
 		}
 		let f = t.dead ? `<button class="btn r" data-act="goodbye" data-arg="${e}">${$(X("btn.goodbye"))}</button>` : `${t.sickSince == null ? "" : `<button class="btn g" data-act="disinfect" data-arg="${e}">${$(X("btn.disinfect"))}</button>`}${t.poopSince == null ? "" : `<button class="btn g" data-act="cleanup" data-arg="${e}">${$(X("btn.cleanup"))}</button>`}<button class="btn w" data-act="feed" data-arg="${e}" id="feed-${e}">${$(s)}</button>${u}${c}${l}<button class="btn w" data-act="pet" data-arg="${e}">${$(X("btn.pet"))}</button>${n.ready > 0 ? `<button class="btn y" data-act="collect" data-arg="${e}">${$(X("btn.collect"))} <small>+${n.ready} ×4</small></button>` : ""}`;
-		return `<div class="item"><img class="thumb" src="${o}" alt=""><div class="info"><b>${$(xW(t.kind))} ${fe[n.mood] ?? ""} ${t.sickSince == null ? "" : "<span class=\"tg d\">🤒</span>"}</b>
+		return `<div class="item"><img class="thumb" src="${o}" alt=""><div class="info"><b>${$(xW(t.kind))} ${pe[n.mood] ?? ""} ${t.sickSince == null ? "" : "<span class=\"tg d\">🤒</span>"}</b>
       <span class="s">${$(i)}</span>${d}${a > 0 ? `<div class="prog"><i style="width:${Math.round(a * 100)}%"></i></div>` : ""}<div class="acts">${f}</div></div></div>`;
 	}
-	function pe(e) {
-		let t = S.farm.history(e, 7), n = zU[e], r = n * .5, i = n * 1.02, a = t.map((e, n) => `${(n / (t.length - 1) * 104 + 3).toFixed(1)},${(31 - (e - r) / (i - r) * 28).toFixed(1)}`), o = a[a.length - 1].split(",");
+	function he(e) {
+		let t = w.farm.history(e, 7), n = zU[e], r = n * .5, i = n * 1.02, a = t.map((e, n) => `${(n / (t.length - 1) * 104 + 3).toFixed(1)},${(31 - (e - r) / (i - r) * 28).toFixed(1)}`), o = a[a.length - 1].split(",");
 		return `<svg width="110" height="34" viewBox="0 0 110 34" aria-label="${$(X("market.7d"))}"><line x1="0" x2="110" y1="${(31 - (n - r) / (i - r) * 28).toFixed(1)}" y2="${(31 - (n - r) / (i - r) * 28).toFixed(1)}" stroke="${Q.border}" stroke-dasharray="3 3" stroke-width="1"/><polyline points="${a.join(" ")}" fill="none" stroke="${Q.harvest}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="${o[0]}" cy="${o[1]}" r="4" fill="${Q.accent}" stroke="${Q.text}" stroke-width="1.5"/></svg>`;
 	}
-	function me() {
-		let e = S.farm, t = e.marketIndex(), n = t >= e.marketIndexYesterday(), r = `<div class="idx"><span>${$(X("market.index", {
+	function ge() {
+		let e = w.farm, t = e.marketIndex(), n = t >= e.marketIndexYesterday(), r = `<div class="idx"><span>${$(X("market.index", {
 			q: X(t >= 95 ? "market.good" : "market.ok"),
 			a: n ? "↑" : "↓",
 			n: Math.round(t)
@@ -44524,19 +44560,19 @@ function XG(e) {
 			}))} · ${$(X("market.price", {
 				p: KG(r),
 				u: c
-			}))}</span><span class="s">${$(X("market.quota", { n: e.remainingQuota(t) }))}</span></div>${pe(t)}
+			}))}</span><span class="s">${$(X("market.quota", { n: e.remainingQuota(t) }))}</span></div>${he(t)}
         <div class="acts" style="width:100%">${l(a, X("market.sell1", { u: c }), "w", "sell1-" + t)}${l(o, X("market.sellHalf"), "w", "sellh-" + t)}${l(s, X("market.sellAll"), "g", "sella-" + t)}</div></div>`;
 		}).join("") + "</div>", r + `<div class="tip">${$(X("market.tip"))}</div>`) : r + `<div class="empty">${$(X("market.empty"))}</div><div class="tip">${$(X("market.tip"))}</div>`;
 	}
-	function he() {
-		let e = S.farm, t = Object.keys(e.s.bag).filter((t) => e.s.bag[t] > 0);
+	function _e() {
+		let e = w.farm, t = Object.keys(e.s.bag).filter((t) => e.s.bag[t] > 0);
 		return t.length ? `<div class="grid">${t.map((t) => `<button class="cell" ${t in zU ? `data-act="toMarket" data-arg="${t}"` : "data-act=\"noop\""}><img src="${WG(t)}" alt=""><span>${$(SW(t))}</span><span class="n">×${e.s.bag[t]}</span></button>`).join("")}</div>${(e.s.bag.fertilizer ?? 0) > 0 ? `<div class="tip">💩 ${$(SW("fertilizer"))}：${$(X("bag.fert"))}</div>` : ""}` : `<div class="empty">${$(X("bag.empty"))}</div>`;
 	}
-	function ge(e) {
-		let t = S.farm.s.plots[e]?.crop;
-		if (!t) return setTimeout(() => ae(), 0), "";
-		let n = LU(t.id), r = S.farm.priceNow(n.item);
-		return oe(GG(t.id), `${xW(t.id)} · ${X("plot.ready")}`) + `<div class="sh-b"><div class="big2">
+	function ve(e) {
+		let t = w.farm.s.plots[e]?.crop;
+		if (!t) return setTimeout(() => L(), 0), "";
+		let n = LU(t.id), r = w.farm.priceNow(n.item);
+		return se(GG(t.id), `${xW(t.id)} · ${X("plot.ready")}`) + `<div class="sh-b"><div class="big2">
       <button class="btn b" data-act="hstore" data-arg="${e}" id="hstore">${$(X("harvest.store"))}<small>${$(X("harvest.storeSub"))}</small></button>
       <button class="btn g" data-act="hsell" data-arg="${e}" id="hsell">${$(X("harvest.sell"))}<small>${$(X("harvest.sellSub", {
 			p: KG(r),
@@ -44544,40 +44580,40 @@ function XG(e) {
 		}))}</small></button></div>
       <div class="tip" style="text-align:center">${$(X("harvest.note"))}</div></div>`;
 	}
-	function _e() {
-		let e = S.fishCost(), t = S.fishingActive(), n = "<div class=\"row\" style=\"margin:2px 0 6px\"><button class=\"btn b\" data-act=\"startfishing\"" + (!t && S.farm.s.points >= e ? ">" : " disabled>") + $(X("fishing.cast", { n: e })) + (t ? "<small>" + $(X("fishing.casting")) + "</small>" : "") + "</button></div>";
+	function ye() {
+		let e = w.fishCost(), t = w.fishingActive(), n = "<div class=\"row\" style=\"margin:2px 0 6px\"><button class=\"btn b\" data-act=\"startfishing\"" + (!t && w.farm.s.points >= e ? ">" : " disabled>") + $(X("fishing.cast", { n: e })) + (t ? "<small>" + $(X("fishing.casting")) + "</small>" : "") + "</button></div>";
 		return n += "<div class=\"tip\">" + $(X("fishing.desc", { n: e })) + "</div>", n += "<div class=\"tip\">" + $(X("fishing.odds")) + "</div>", n;
 	}
-	let ve = null, ye = null;
-	function be() {
-		let e = S.farm.s.log.filter((e) => e.ev === !0);
+	let be = null, xe = null;
+	function Se() {
+		let e = w.farm.s.log.filter((e) => e.ev === !0);
 		return e.length ? e.map((e) => {
 			let t = new Date(e.t);
 			return `<div class="log"><time>${UG(t.getHours())}:${UG(t.getMinutes())}</time><span>${$(TW(e.k, e.p))}</span></div>`;
 		}).join("") : `<div class="empty">${$(X("log.empty"))}</div>`;
 	}
-	function xe() {
+	function Ce() {
 		let e = yW();
 		return `<div class="langs">${Object.keys(gW).map((t) => `<button class="lang" lang="${t === "zh" ? "zh-Hans" : t}" data-lang="${t}" aria-pressed="${t === e}">${$(gW[t]["lang." + t])}</button>`).join("")}</div>`;
 	}
-	function Se() {
-		return `<div class="group"><div class="set" style="flex-direction:column;align-items:stretch;padding:12px 16px"><label>${$(X("settings.lang"))}</label>${xe()}</div></div>
+	function z() {
+		return `<div class="group"><div class="set" style="flex-direction:column;align-items:stretch;padding:12px 16px"><label>${$(X("settings.lang"))}</label>${Ce()}</div></div>
       <div class="group">
-        <div class="set"><label for="vm">${$(X("settings.music"))}</label><input id="vm" type="range" min="0" max="1" step="0.05" value="${O.music}"></div>
-        <div class="set"><label for="vs">${$(X("settings.sfx"))}</label><input id="vs" type="range" min="0" max="1" step="0.05" value="${O.sfx}"></div>
-        <div class="set"><label id="muteLbl">${$(X("settings.mute"))}</label><button class="sw" role="switch" aria-labelledby="muteLbl" aria-checked="${k}" data-act="mute" id="muteSw"></button></div>
+        <div class="set"><label for="vm">${$(X("settings.music"))}</label><input id="vm" type="range" min="0" max="1" step="0.05" value="${A.music}"></div>
+        <div class="set"><label for="vs">${$(X("settings.sfx"))}</label><input id="vs" type="range" min="0" max="1" step="0.05" value="${A.sfx}"></div>
+        <div class="set"><label id="muteLbl">${$(X("settings.mute"))}</label><button class="sw" role="switch" aria-labelledby="muteLbl" aria-checked="${j}" data-act="mute" id="muteSw"></button></div>
       </div>
       <div class="set2"><button class="btn w" data-act="replay">${$(X("settings.replay"))}</button><button class="btn w" data-act="opendbg" id="openDbg">${$(X("dbg.title"))}</button></div>`;
 	}
-	function Ce(t) {
-		we(t), t.querySelector("#vm").addEventListener("input", (t) => {
-			O.music = Number(t.target.value), e.setVolumes(O);
+	function we(t) {
+		Ee(t), t.querySelector("#vm").addEventListener("input", (t) => {
+			A.music = Number(t.target.value), e.setVolumes(A);
 		}), t.querySelector("#vs").addEventListener("input", (t) => {
-			O.sfx = Number(t.target.value), e.setVolumes(O);
+			A.sfx = Number(t.target.value), e.setVolumes(A);
 		});
 	}
-	function z() {
-		let e = S.view, t = e.debugWx ?? "auto", n = e.debugHour == null ? "auto" : String(Math.round(e.debugHour)), r = X(t === "auto" ? "dbg.auto" : "weather." + t), i = n === "auto" ? X("dbg.auto") : `${n}:00`, a = e.debugSleep, o = X(a === "auto" ? "dbg.auto" : a === "sleep" ? "dbg.sleepAll" : "dbg.wakeAll");
+	function Te() {
+		let e = w.view, t = e.debugWx ?? "auto", n = e.debugHour == null ? "auto" : String(Math.round(e.debugHour)), r = X(t === "auto" ? "dbg.auto" : "weather." + t), i = n === "auto" ? X("dbg.auto") : `${n}:00`, a = e.debugSleep, o = X(a === "auto" ? "dbg.auto" : a === "sleep" ? "dbg.sleepAll" : "dbg.wakeAll");
 		return `<div class="dbg-perf" style="font-size:13px;color:#6C6C70;text-align:center;font-variant-numeric:tabular-nums">FPS -- · DC --</div><div class="group">${[
 			[
 				"dbg.pest",
@@ -44625,36 +44661,36 @@ function XG(e) {
         <span class="dbg-cur" style="color:#8E8E93;font-size:15px">${t === "weather" ? $(r) : t === "hour" ? $(i) : t === "sleep" ? $(o) : ""} ›</span>
       </button>`).join("")}</div>`;
 	}
-	function we(t) {
+	function Ee(t) {
 		t.querySelectorAll("[data-lang]").forEach((t) => t.addEventListener("click", () => {
 			e.setLang(t.dataset.lang, !0);
 		}));
 	}
-	function Te(t, n, r) {
-		let i = S.farm;
+	function De(t, n, r) {
+		let i = w.farm;
 		switch (t) {
 			case "close":
-				S.cue("sfx.tap"), ae();
+				w.cue("sfx.tap"), L();
 				return;
 			case "tab":
-				S.cue("sfx.tap"), F.tab = n, L();
+				w.cue("sfx.tap"), I.tab = n, R();
 				return;
 			case "pick": {
-				S.cue("sfx.tap");
-				let e = ye;
-				if (ye = null, e != null) {
-					if (S.farm.plant(e, n)) {
-						ae();
+				w.cue("sfx.tap");
+				let e = xe;
+				if (xe = null, e != null) {
+					if (w.farm.plant(e, n)) {
+						L();
 						return;
 					}
-					ye = e, L();
+					xe = e, R();
 					return;
 				}
-				S.selectSeed(n), ae(), ne(), S.scrollToZone("field");
+				w.selectSeed(n), L(), F(), w.scrollToZone("field");
 				return;
 			}
 			case "wutongbuy":
-				i.buyWutong() ? (ae(), S.scrollToZone("field")) : L();
+				i.buyWutong() ? (L(), w.scrollToZone("field")) : R();
 				return;
 			case "adoptcap":
 				i.adopt(n);
@@ -44662,135 +44698,135 @@ function XG(e) {
 			case "adopt":
 				if (i.adopt(n)) {
 					let e = RU(n).zone;
-					ae(), S.scrollToZone(e === "ranch" ? "ranch" : "pond");
-				} else L();
+					L(), w.scrollToZone(e === "ranch" ? "ranch" : "pond");
+				} else R();
 				return;
 			case "feed": {
 				let e = Number(n), t = i.animal(e), r = !!t && RU(t.kind).zone === "pond";
-				i.feed(e) && r ? (ae(), S.scrollToZone("pond")) : L();
+				i.feed(e) && r ? (L(), w.scrollToZone("pond")) : R();
 				return;
 			}
 			case "pet":
-				i.pet(Number(n)), L();
+				i.pet(Number(n)), R();
 				return;
 			case "startfishing":
-				ve && S.startFishing(ve.x, ve.y) ? ae() : L();
+				be && w.startFishing(be.x, be.y) ? L() : R();
 				return;
 			case "bask": {
 				let e = Number(n);
-				i.bask(e) ? (ae(), S.scrollToZone("pond")) : L();
+				i.bask(e) ? (L(), w.scrollToZone("pond")) : R();
 				return;
 			}
 			case "display": {
 				let e = Number(n);
-				S.display(e) ? (ae(), S.scrollToZone("ranch")) : L();
+				w.display(e) ? (L(), w.scrollToZone("ranch")) : R();
 				return;
 			}
 			case "collect":
-				i.collect(Number(n)), L();
+				i.collect(Number(n)), R();
 				return;
 			case "balloonpop":
-				i.popBalloon(Number(n)) && (S.cue("sfx.pop"), i.emit({ type: "change" })), L();
+				i.popBalloon(Number(n)) && (w.cue("sfx.pop"), i.emit({ type: "change" })), R();
 				return;
 			case "disinfect": {
 				let e = i.disinfect(Number(n));
-				e > 0 && (S.cue("sfx.spray"), Ee(X("toast.disinfect", { n: e }))), L();
+				e > 0 && (w.cue("sfx.spray"), B(X("toast.disinfect", { n: e }))), R();
 				return;
 			}
 			case "cleanup":
-				i.cleanPoop(Number(n)), L();
+				i.cleanPoop(Number(n)), R();
 				return;
 			case "goodbye":
-				i.goodbye(Number(n)), S.cue("sfx.tap"), L();
+				i.goodbye(Number(n)), w.cue("sfx.tap"), R();
 				return;
 			case "sell": {
 				let [e, t] = n.split(":"), a = i.sell(e, Number(t));
-				a.count > 0 && (Ee(X("toast.sold", {
+				a.count > 0 && (B(X("toast.sold", {
 					n: a.count,
 					u: CW(e),
 					e: a.earned
-				})), ke(r, WG("harvest"), "host")), L();
+				})), je(r, WG("harvest"), "host")), R();
 				return;
 			}
 			case "toMarket":
-				S.cue("sfx.tap"), ie("market");
+				w.cue("sfx.tap"), oe("market");
 				return;
 			case "hstore":
 			case "hsell": {
 				let e = Number(n);
-				ae(!0), i.harvest(e, t === "hsell" ? "sell" : "store"), Fe();
+				L(!0), i.harvest(e, t === "hsell" ? "sell" : "store"), Le();
 				return;
 			}
 			case "opendbg":
-				ie("dbg");
+				oe("dbg");
 				return;
 			case "mute":
-				k = !k, e.setMuted(k), L();
+				j = !j, e.setMuted(j), R();
 				return;
 			case "replay":
-				i.s.onboard = 0, i.emit({ type: "change" }), ae(), Fe();
+				i.s.onboard = 0, i.emit({ type: "change" }), L(), Le();
 				return;
 			case "dbg_pest":
-				S.cue("sfx.tap"), i.debugPest() || Ee(X("dbg.pestNone"));
+				w.cue("sfx.tap"), i.debugPest() || B(X("dbg.pestNone"));
 				return;
 			case "dbg_dry":
-				S.cue("sfx.tap"), i.debugDry() || Ee(X("dbg.dryNone"));
+				w.cue("sfx.tap"), i.debugDry() || B(X("dbg.dryNone"));
 				return;
 			case "dbg_sick":
-				S.cue("sfx.tap"), i.debugSick() || Ee(X("dbg.sickNone"));
+				w.cue("sfx.tap"), i.debugSick() || B(X("dbg.sickNone"));
 				return;
 			case "dbg_poop":
-				S.cue("sfx.tap"), i.debugPoop() <= 0 && Ee(X("dbg.poopNone"));
+				w.cue("sfx.tap"), i.debugPoop() <= 0 && B(X("dbg.poopNone"));
 				return;
 			case "dbg_weather":
-				S.cue("sfx.tap");
+				w.cue("sfx.tap");
 				{
-					let e = S.view.debugWx, t = "sun";
-					e === "sun" ? t = "cloud" : e === "cloud" ? t = "rain" : e === "rain" && (t = null), S.view.debugWx = t, L();
+					let e = w.view.debugWx, t = "sun";
+					e === "sun" ? t = "cloud" : e === "cloud" ? t = "rain" : e === "rain" && (t = null), w.view.debugWx = t, R();
 				}
 				return;
 			case "dbg_hour":
-				S.cue("sfx.tap");
+				w.cue("sfx.tap");
 				{
-					let e = S.view.debugHour, t = [
+					let e = w.view.debugHour, t = [
 						0,
 						6,
 						12,
 						18,
 						21
 					], n = e == null ? -1 : t.findIndex((t) => Math.abs(t - e) < 1), r = n < 0 ? 0 : n + 1 < t.length ? t[n + 1] : null;
-					S.view.debugHour = r, L();
+					w.view.debugHour = r, R();
 				}
 				return;
 			case "dbg_leap":
-				S.cue("sfx.tap"), S.view.forceLeap();
+				w.cue("sfx.tap"), w.view.forceLeap();
 				return;
 			case "dbg_sleep":
-				S.cue("sfx.tap");
+				w.cue("sfx.tap");
 				{
-					let e = S.view.debugSleep;
-					S.view.debugSleep = e === "auto" ? "sleep" : e === "sleep" ? "wake" : "auto", L();
+					let e = w.view.debugSleep;
+					w.view.debugSleep = e === "auto" ? "sleep" : e === "sleep" ? "wake" : "auto", R();
 				}
 				return;
 		}
 	}
-	function Ee(e) {
+	function B(e) {
 		let t = document.createElement("div");
-		for (t.className = "toast", t.textContent = e, p.appendChild(t); p.children.length > 2;) p.firstElementChild.remove();
+		for (t.className = "toast", t.textContent = e, h.appendChild(t); h.children.length > 2;) h.firstElementChild.remove();
 		setTimeout(() => t.remove(), 2500);
 	}
-	let De = null, B = 0;
-	function Oe(e, t, n, r) {
-		De?.remove(), clearTimeout(B);
+	let Oe = null, V = 0;
+	function ke(e, t, n, r) {
+		Oe?.remove(), clearTimeout(V);
 		let i = document.createElement("div");
 		i.className = "cap";
 		let a = n === "pest" || n === "disease" || n === "weather_bad", o = "";
-		o = t <= 0 ? `<div class="m">${$(X("ev.wither"))}</div>` : `<div class="m"><img src="${WG(e)}" alt="">+${t}</div>`, t > 0 && n !== "none" && n !== "wither" && (o += `<div class="e">${$(X("ev." + n, { pct: a ? Math.round(t / 4 * 100) : 100 }))}</div>`), r > 0 && (o += `<div class="hv">+${r} 🎟️</div>`), i.innerHTML = o, h.appendChild(i), De = i, B = window.setTimeout(() => {
-			i.remove(), De === i && (De = null);
+		o = t <= 0 ? `<div class="m">${$(X("ev.wither"))}</div>` : `<div class="m"><img src="${WG(e)}" alt="">+${t}</div>`, t > 0 && n !== "none" && n !== "wither" && (o += `<div class="e">${$(X("ev." + n, { pct: a ? Math.round(t / 4 * 100) : 100 }))}</div>`), r > 0 && (o += `<div class="hv">+${r} 🎟️</div>`), i.innerHTML = o, _.appendChild(i), Oe = i, V = window.setTimeout(() => {
+			i.remove(), Oe === i && (Oe = null);
 		}, 1600);
 	}
-	function V(e, t, n) {
-		let r = s.getBoundingClientRect(), i = 0, a = 0;
+	function Ae(e, t, n) {
+		let r = l.getBoundingClientRect(), i = 0, a = 0;
 		if (n === "host") i = r.left + r.width / 2, a = r.top - 20;
 		else {
 			let e = document.getElementById(n);
@@ -44800,75 +44836,75 @@ function XG(e) {
 		}
 		let o = document.createElement("img");
 		o.className = "fly", o.src = e, o.alt = "";
-		let c = t.x - r.left - 20, l = t.y - r.top - 20;
-		o.style.left = c + "px", o.style.top = l + "px", h.appendChild(o);
-		let u = i - r.left - 20 - c, d = a - r.top - 20 - l;
+		let s = t.x - r.left - 20, c = t.y - r.top - 20;
+		o.style.left = s + "px", o.style.top = c + "px", _.appendChild(o);
+		let u = i - r.left - 20 - s, d = a - r.top - 20 - c;
 		requestAnimationFrame(() => requestAnimationFrame(() => {
 			o.style.transform = `translate(${u}px,${d}px) scale(.6)`, o.style.opacity = "0.4";
 		})), setTimeout(() => {
-			o.remove(), n !== "host" && te(n);
+			o.remove(), n !== "host" && re(n);
 		}, 600);
 	}
-	function ke(e, t, n) {
+	function je(e, t, n) {
 		let r = e.getBoundingClientRect();
-		V(t, {
+		Ae(t, {
 			x: r.left + r.width / 2,
 			y: r.top + r.height / 2
 		}, n);
 	}
-	function Ae(e, t) {
+	function Me(e, t) {
 		let n = document.createElement("div");
 		n.style.cssText = "position:absolute;inset:0;pointer-events:auto";
 		let r = t.map((e) => xW(e)).join("、");
-		n.innerHTML = `<div class="scrim"></div><div class="modal" role="dialog"><img class="hero" src="${IG("ui/hat.webp")}" alt=""><h3>${$(X("level.title", { n: e }))}</h3>${r ? `<p>${$(X("level.unlocked", { list: r }))}</p>` : ""}<p>💩 ${$(X("level.gift"))}</p><button class="btn y" data-x="1">${$(X("btn.gotIt"))}</button></div>`, h.appendChild(n);
+		n.innerHTML = `<div class="scrim"></div><div class="modal" role="dialog"><img class="hero" src="${IG("ui/hat.webp")}" alt=""><h3>${$(X("level.title", { n: e }))}</h3>${r ? `<p>${$(X("level.unlocked", { list: r }))}</p>` : ""}<p>💩 ${$(X("level.gift"))}</p><button class="btn y" data-x="1">${$(X("btn.gotIt"))}</button></div>`, _.appendChild(n);
 		let i = () => n.remove();
 		n.querySelector("[data-x]").addEventListener("click", i), n.querySelector(".scrim").addEventListener("click", i);
 	}
-	function je(e) {
-		if (!S) return;
-		let t = S.farm;
+	function Ne(e) {
+		if (!w) return;
+		let t = w.farm;
 		switch (e.type) {
 			case "change":
-				ee(), F && !I && F.kind !== "harvest" && L();
+				ne(), I && !ie && I.kind !== "harvest" && R();
 				break;
 			case "toast":
-				Ee(X(e.k, {
+				B(X(e.k, {
 					...e.p ?? {},
 					c: typeof e.p?.c == "string" ? xW(e.p.c) : ""
 				}));
 				break;
 			case "harvested": {
-				Oe(e.item, e.amount, e.kind, e.earned);
-				let n = S.plotScreen(e.plot);
-				e.amount > 0 && (e.mode === "sell" && e.earned > 0 ? V(WG("harvest"), n, "host") : V(WG(e.item), n, "rail-bag"), e.mode === "store" && Ee(X("toast.stored", { q: wW(e.item, e.amount) }))), t.s.onboard < 3 && (t.s.onboard = 3, t.emit({ type: "change" }), Ee(X("coach.done")), Fe());
+				ke(e.item, e.amount, e.kind, e.earned);
+				let n = w.plotScreen(e.plot);
+				e.amount > 0 && (e.mode === "sell" && e.earned > 0 ? Ae(WG("harvest"), n, "host") : Ae(WG(e.item), n, "rail-bag"), e.mode === "store" && B(X("toast.stored", { q: wW(e.item, e.amount) }))), t.s.onboard < 3 && (t.s.onboard = 3, t.emit({ type: "change" }), B(X("coach.done")), Le());
 				break;
 			}
 			case "collected": {
-				Oe(e.item, e.amount, e.kind, 0);
-				let n = S.view.animals.get(e.uid);
-				if (n && e.amount > 0 && V(WG(e.item), S.view.toScreen(n.x, n.y - n.height()), "rail-bag"), e.warded) {
+				ke(e.item, e.amount, e.kind, 0);
+				let n = w.view.animals.get(e.uid);
+				if (n && e.amount > 0 && Ae(WG(e.item), w.view.toScreen(n.x, n.y - n.height()), "rail-bag"), e.warded) {
 					let n = t.animal(e.uid);
-					Ee(X("toast.warded", { c: n ? xW(n.kind) : "" }));
+					B(X("toast.warded", { c: n ? xW(n.kind) : "" }));
 				}
 				break;
 			}
 			case "planted": {
-				t.s.onboard < 2 && (t.s.onboard = 2, t.emit({ type: "change" }), Fe());
-				let e = S.selectedSeed;
-				e && !t.wallet.canAfford(LU(e).seed) && (S.selectSeed(null), ne());
+				t.s.onboard < 2 && (t.s.onboard = 2, t.emit({ type: "change" }), Le());
+				let e = w.selectedSeed;
+				e && !t.wallet.canAfford(LU(e).seed) && (w.selectSeed(null), F());
 				break;
 			}
 			case "levelup":
-				Ae(e.level, e.unlocked);
+				Me(e.level, e.unlocked);
 				break;
 			case "sick": {
 				let n = t.animal(e.uid);
-				n && Ee(X("toast.sick", { c: xW(n.kind) }));
+				n && B(X("toast.sick", { c: xW(n.kind) }));
 				break;
 			}
 			case "bask": {
 				let n = t.animal(e.uid);
-				n && Ee(e.boost > 0 ? X("toast.basked", {
+				n && B(e.boost > 0 ? X("toast.basked", {
 					c: xW(n.kind),
 					t: EW(e.boost)
 				}) : X("toast.baskedJust", { c: xW(n.kind) }));
@@ -44876,32 +44912,32 @@ function XG(e) {
 			}
 		}
 	}
-	let Me = null, Ne = null, Pe = !1;
-	function Fe() {
-		if (Me?.remove(), Me = null, Ne?.remove(), Ne = null, !S || Pe) return;
-		let e = S.farm.s.onboard;
+	let Pe = null, Fe = null, Ie = !1;
+	function Le() {
+		if (Pe?.remove(), Pe = null, Fe?.remove(), Fe = null, !w || Ie) return;
+		let e = w.farm.s.onboard;
 		if (e >= 3) return;
-		if (_) {
-			_ = !1, v(), setTimeout(() => {
-				S.relayout(), Fe();
+		if (y) {
+			y = !1, b(), setTimeout(() => {
+				w.relayout(), Le();
 			}, 340);
 			return;
 		}
 		let t = "", n = null, r = !1;
-		if (e === 0 ? (t = X("coach.1"), r = !0) : e === 1 ? (t = X("coach.2"), F?.kind === "seeds" ? n = document.getElementById("pick-radish") : !F && !S.selectedSeed && (n = document.getElementById("rail-seeds"))) : e === 2 && (t = X("coach.3")), F && F.kind !== "seeds") return;
-		Me = document.createElement("div"), Me.className = "coach", Me.innerHTML = `<div>${$(t)}</div><div class="acts"><button class="btn w" data-c="skip">${$(X("btn.skip"))}</button>${r ? `<button class="btn y" data-c="ok">${$(X("btn.gotIt"))}</button>` : ""}</div>`;
-		let i = d.getBoundingClientRect().top - s.getBoundingClientRect().top;
-		if (F ? Me.style.top = "128px" : Me.style.top = Math.max(130, i - 230) + "px", h.appendChild(Me), Me.querySelector("[data-c=skip]").addEventListener("click", () => {
-			S.farm.s.onboard = 3, S.farm.emit({ type: "change" }), Fe();
-		}), Me.querySelector("[data-c=ok]")?.addEventListener("click", () => {
-			S.farm.s.onboard = 1, S.farm.emit({ type: "change" }), Fe();
+		if (e === 0 ? (t = X("coach.1"), r = !0) : e === 1 ? (t = X("coach.2"), I?.kind === "seeds" ? n = document.getElementById("pick-radish") : !I && !w.selectedSeed && (n = document.getElementById("rail-seeds"))) : e === 2 && (t = X("coach.3")), I && I.kind !== "seeds") return;
+		Pe = document.createElement("div"), Pe.className = "coach", Pe.innerHTML = `<div>${$(t)}</div><div class="acts"><button class="btn w" data-c="skip">${$(X("btn.skip"))}</button>${r ? `<button class="btn y" data-c="ok">${$(X("btn.gotIt"))}</button>` : ""}</div>`;
+		let i = p.getBoundingClientRect().top - l.getBoundingClientRect().top;
+		if (I ? Pe.style.top = "128px" : Pe.style.top = Math.max(130, i - 230) + "px", _.appendChild(Pe), Pe.querySelector("[data-c=skip]").addEventListener("click", () => {
+			w.farm.s.onboard = 3, w.farm.emit({ type: "change" }), Le();
+		}), Pe.querySelector("[data-c=ok]")?.addEventListener("click", () => {
+			w.farm.s.onboard = 1, w.farm.emit({ type: "change" }), Le();
 		}), n) {
-			let e = s.getBoundingClientRect(), t = n.getBoundingClientRect();
-			Ne = document.createElement("div"), Ne.className = "ring", Ne.style.cssText = `left:${t.left - e.left - 6}px;top:${t.top - e.top - 6}px;width:${t.width + 12}px;height:${t.height + 12}px`, h.appendChild(Ne);
+			let e = l.getBoundingClientRect(), t = n.getBoundingClientRect();
+			Fe = document.createElement("div"), Fe.className = "ring", Fe.style.cssText = `left:${t.left - e.left - 6}px;top:${t.top - e.top - 6}px;width:${t.width + 12}px;height:${t.height + 12}px`, _.appendChild(Fe);
 		}
 	}
-	function Ie() {
-		let e = S.farm, t = e.now(), n = e.s.plots.filter((e) => e.crop && !e.crop.dead && !e.crop.old && t >= e.crop.readyAt).length, r = e.s.animals.filter((t) => e.animalInfo(t).ready > 0).length, i = e.s.totalHarvests === 0 && e.s.animals.length === 0 && e.s.plots.every((e) => !e.crop), a = document.createElement("div");
+	function Re() {
+		let e = w.farm, t = e.now(), n = e.s.plots.filter((e) => e.crop && !e.crop.dead && !e.crop.old && t >= e.crop.readyAt).length, r = e.s.animals.filter((t) => e.animalInfo(t).ready > 0).length, i = e.s.totalHarvests === 0 && e.s.animals.length === 0 && e.s.plots.every((e) => !e.crop), a = document.createElement("div");
 		a.style.cssText = "position:absolute;inset:0;pointer-events:auto";
 		let o = () => {
 			a.innerHTML = `<div class="scrim"></div><div class="modal" role="dialog"><img class="hero" src="${GG("carrot")}" alt=""><h1>${$(X("title"))}</h1>
@@ -44909,54 +44945,54 @@ function XG(e) {
 				n,
 				m: r
 			}))}</p>
-        ${xe()}<button class="btn g" id="enterBtn" style="min-width:180px;font-size:18px">${$(X("start.enter"))}</button></div>`, we(a), a.querySelector("#enterBtn").addEventListener("click", () => {
-				S.cue("sfx.tap"), a.remove(), Pe = !1, Fe();
+        ${Ce()}<button class="btn g" id="enterBtn" style="min-width:180px;font-size:18px">${$(X("start.enter"))}</button></div>`, Ee(a), a.querySelector("#enterBtn").addEventListener("click", () => {
+				w.cue("sfx.tap"), a.remove(), Ie = !1, Le();
 			});
 		};
-		o(), Le = o, Pe = !0, h.appendChild(a);
+		o(), ze = o, Ie = !0, _.appendChild(a);
 	}
-	let Le = null;
-	e.ui.event = je, e.ui.harvestPrompt = (e) => ie("harvest", e), e.ui.needSeed = () => {
-		Ee(X("toast.pickSeed")), ie("seeds");
+	let ze = null;
+	e.ui.event = Ne, e.ui.harvestPrompt = (e) => oe("harvest", e), e.ui.needSeed = () => {
+		B(X("toast.pickSeed")), oe("seeds");
 	}, e.ui.openSeedsForPlot = (e) => {
-		ie("seeds"), ye = e;
-	}, e.ui.animalTap = (e) => ie("animal", e), e.ui.zoneTap = (e) => ie(e, void 0, "adopt"), e.ui.creekTap = (e, t) => {
-		ve = {
+		oe("seeds"), xe = e;
+	}, e.ui.animalTap = (e) => oe("animal", e), e.ui.zoneTap = (e) => oe(e, void 0, "adopt"), e.ui.creekTap = (e, t) => {
+		be = {
 			x: e,
 			y: t
-		}, ie("fishing");
+		}, oe("fishing");
 	}, e.onLang(() => {
-		S && (C(), j(), ee(), ne(), b(), F && L(), Pe && Le && Le(), Fe());
+		w && (T(), N(), ne(), F(), S(), I && R(), Ie && ze && ze(), Le());
 	});
-	function Re() {
-		C(), j(), ee(), b(), S.relayout(), Ie();
+	function Be() {
+		T(), N(), ne(), S(), w.relayout(), Re();
 		{
 			let e = new URLSearchParams(location.search), t = e.get("tod"), n = e.get("wx"), r = t != null && t !== "" && !Number.isNaN(Number(t)), i = n === "rain" || n === "cloud" || n === "sun", a = () => {
-				if (Pe) {
+				if (Ie) {
 					setTimeout(a, 700);
 					return;
 				}
 				let e = [];
-				r && e.push(X("debug.previewTod", { h: t })), i && e.push(X("debug.previewWx", { w: X("weather." + n) })), Ee(e.join(" · "));
+				r && e.push(X("debug.previewTod", { h: t })), i && e.push(X("debug.previewWx", { w: X("weather." + n) })), B(e.join(" · "));
 			};
 			(r || i) && setTimeout(a, 600);
 		}
-		D(setInterval(() => {
-			ee(), F && !I && [
+		k(setInterval(() => {
+			ne(), I && !ie && [
 				"ranch",
 				"pond",
 				"animal",
 				"market"
-			].includes(F.kind) && L();
+			].includes(I.kind) && R();
 		}, 1e3)), n || window.addEventListener("resize", () => {
-			S.relayout(), Fe();
+			w.relayout(), Le();
 		});
 	}
 	JG = () => {
-		for (let e of E) clearInterval(e);
-		E.length = 0;
+		for (let e of O) clearInterval(e);
+		O.length = 0;
 		try {
-			c?.disconnect();
+			u?.disconnect();
 		} catch {}
 		try {
 			a.remove();
@@ -45254,7 +45290,7 @@ async function oK() {
 	});
 	function M() {
 		let e = n.screen.width, t = n.screen.height, r = $G.layout(), i = r.colW || Math.min(e, Math.max(360, Math.min(600, t * .62)));
-		w.layout(e, t, Math.min(e, i), r.top, r.bottom);
+		w.layout(e, t, Math.min(e, i), r.top, r.bottom, !r.wide);
 	}
 	f = !0, M();
 	let N = () => {
@@ -45279,25 +45315,25 @@ async function oK() {
 			} catch {}
 			P = null;
 		}
-	}, ne = null, F = null, I = !1, re = null, ie = () => {
+	}, ne = null, re = null, F = !1, I = null, ie = () => {
 		let e = w.hour, t = e >= 21 || e < 5;
-		re !== null && t !== re && gK("sfx.nightchime"), re = t;
+		I !== null && t !== I && gK("sfx.nightchime"), I = t;
 		let n = w.debugWx ?? C.weather(), r = t ? "night" : n === "rain" ? "rain" : n === "cloud" ? "cloud" : e >= 17.5 && e < 19.5 ? "evening" : "light";
 		if (r !== ne && iK && aK && (ne = r, iK.setMusicState(r, { eventId: `music:${r}:${mK++}` })), iK && aK) {
-			if (t && !F && !I) I = !0, (async () => {
+			if (t && !re && !F) F = !0, (async () => {
 				try {
-					F = (await iK.playCue("amb.night", { eventId: `night-amb:${mK++}` })).instanceId ?? null;
+					re = (await iK.playCue("amb.night", { eventId: `night-amb:${mK++}` })).instanceId ?? null;
 				} catch {
-					F = null;
+					re = null;
 				} finally {
-					I = !1;
+					F = !1;
 				}
 			})();
-			else if (!t && F) {
+			else if (!t && re) {
 				try {
-					iK.stop(F);
+					iK.stop(re);
 				} catch {}
-				F = null;
+				re = null;
 			}
 		}
 	};
@@ -45582,7 +45618,7 @@ async function oK() {
 			power: .5
 		}), L(e.y) && gK("sfx.bask");
 	};
-	let L = (e) => e > w.scrollY - 50 && e < w.scrollY + n.screen.height / w.scale + 50, se = n.canvas, ce = null, le = 0, ue = 0, de = !1, fe = HU.cost, R = {
+	let L = (e) => e > w.scrollY - 50 && e < w.scrollY + n.screen.height / w.scale + 50, se = n.canvas, R = null, ce = 0, le = 0, ue = !1, de = HU.cost, fe = {
 		active: !1,
 		x: 0,
 		y: 0,
@@ -45594,23 +45630,23 @@ async function oK() {
 		return HU.fallback;
 	}
 	function he(e, t) {
-		if (R.active) return $G.event({
+		if (fe.active) return $G.event({
 			type: "toast",
 			k: "fishing.casting"
 		}), !1;
-		if (!C.pay(fe, "溪边钓鱼")) return !1;
+		if (!C.pay(de, "溪边钓鱼")) return !1;
 		pe += 1;
 		let n = rW("fish-wait|" + Date.now() + "|" + pe);
-		return R.active = !0, R.x = e, R.y = t, R.resolveAt = C.now() + 3e3 + Math.floor(n * 4200), w.showBobber(e, t), gK("sfx.cast"), !0;
+		return fe.active = !0, fe.x = e, fe.y = t, fe.resolveAt = C.now() + 3e3 + Math.floor(n * 4200), w.showBobber(e, t), gK("sfx.cast"), !0;
 	}
 	function ge() {
-		R.active = !1, w.hideBobber();
+		fe.active = !1, w.hideBobber();
 		let e = me();
 		if (e === "fail") C.logEvent("log.fishingFail"), $G.event({
 			type: "toast",
 			k: "fishing.fail",
-			p: { n: fe }
-		}), gK("sfx.bad"), w.spawnRipple(R.x, R.y, 16);
+			p: { n: de }
+		}), gK("sfx.bad"), w.spawnRipple(fe.x, fe.y, 16);
 		else {
 			let { item: t, n } = HU.catch[e];
 			C.s.bag[t] = (C.s.bag[t] || 0) + n, C.logEvent("log.fishingCatch", { c: e }), C.emit({ type: "change" }), gK("sfx.catch"), $G.event({
@@ -45620,32 +45656,32 @@ async function oK() {
 					c: e,
 					n
 				}
-			}), w.spawnRipple(R.x, R.y, 22), w.spawnRipple(R.x, R.y, 14), w.playCatch(R.x, R.y);
+			}), w.spawnRipple(fe.x, fe.y, 22), w.spawnRipple(fe.x, fe.y, 14), w.playCatch(fe.x, fe.y);
 		}
 	}
 	se.addEventListener("pointerdown", (e) => {
-		vK(), ce = {
+		vK(), R = {
 			x: e.clientX,
 			y: e.clientY,
 			t: performance.now(),
 			id: e.pointerId
-		}, le = e.clientY, ue = performance.now(), de = !1, w.vel = 0;
+		}, ce = e.clientY, le = performance.now(), ue = !1, w.vel = 0;
 		try {
 			se.setPointerCapture(e.pointerId);
 		} catch {}
 	}), se.addEventListener("pointermove", (e) => {
-		if (ce && e.pointerId === ce.id && (!de && Math.hypot(e.clientX - ce.x, e.clientY - ce.y) > 8 && (de = !0, w.dragging = !0), de)) {
-			let t = performance.now(), n = e.clientY - le, r = w.scrollY - n / w.scale, i = w.maxScroll();
+		if (R && e.pointerId === R.id && (!ue && Math.hypot(e.clientX - R.x, e.clientY - R.y) > 8 && (ue = !0, w.dragging = !0), ue)) {
+			let t = performance.now(), n = e.clientY - ce, r = w.scrollY - n / w.scale, i = w.maxScroll();
 			(r < 0 || r > i) && (r = w.scrollY - n / w.scale * .35), w.scrollY = r;
-			let a = Math.max(1, t - ue);
-			w.vel = w.vel * .6 + -n / w.scale / (a / 1e3) * .4, le = e.clientY, ue = t;
+			let a = Math.max(1, t - le);
+			w.vel = w.vel * .6 + -n / w.scale / (a / 1e3) * .4, ce = e.clientY, le = t;
 		}
 	}), se.addEventListener("pointerup", (e) => {
-		if (!ce || e.pointerId !== ce.id) return;
+		if (!R || e.pointerId !== R.id) return;
 		let t = se.getBoundingClientRect();
-		de || _e(e.clientX - t.left, e.clientY - t.top), performance.now() - ue > 80 && (w.vel = 0), w.dragging = !1, ce = null;
+		ue || _e(e.clientX - t.left, e.clientY - t.top), performance.now() - le > 80 && (w.vel = 0), w.dragging = !1, R = null;
 	}), se.addEventListener("pointercancel", (e) => {
-		ce && e.pointerId === ce.id && (w.dragging = !1, ce = null);
+		R && e.pointerId === R.id && (w.dragging = !1, R = null);
 	}), se.addEventListener("wheel", (e) => {
 		w.scrollY = Math.max(0, Math.min(w.maxScroll(), w.scrollY + e.deltaY / w.scale)), w.vel = 0, e.preventDefault();
 	}, { passive: !1 }), se.addEventListener("touchstart", (e) => e.preventDefault(), { passive: !1 });
@@ -45696,7 +45732,7 @@ async function oK() {
 				_K(e.kind), w.wakeAnimal(r.uid), w.hopAnimal(r.uid), $G.animalTap(r.uid);
 				return;
 			}
-			r.type === "zone" ? (gK("sfx.tap"), $G.zoneTap(r.zone)) : r.type === "creek" && (gK("sfx.tap"), R.active ? $G.event({
+			r.type === "zone" ? (gK("sfx.tap"), $G.zoneTap(r.zone)) : r.type === "creek" && (gK("sfx.tap"), fe.active ? $G.event({
 				type: "toast",
 				k: "fishing.casting"
 			}) : $G.creekTap(r.x, r.y));
@@ -45739,7 +45775,7 @@ async function oK() {
 		let t = Math.min(e.deltaMS / 1e3, .066);
 		w.perf.fps = w.perf.fps * .92 + (t > 0 ? 1 / t : 60) * .08;
 		let n = t * j.update(t);
-		ye += t, ye > .5 && (ye = 0, C.tick(), te(), ie()), w.syncAnimals(), R.active && C.now() >= R.resolveAt && ge(), w.update(n, !!xe.selectedSeed);
+		ye += t, ye > .5 && (ye = 0, C.tick(), te(), ie()), w.syncAnimals(), fe.active && C.now() >= fe.resolveAt && ge(), w.update(n, !!xe.selectedSeed);
 	};
 	n.ticker.add(be);
 	let xe = {
@@ -45792,10 +45828,10 @@ async function oK() {
 			return he(e, t);
 		},
 		fishingActive() {
-			return R.active;
+			return fe.active;
 		},
 		fishCost() {
-			return fe;
+			return de;
 		},
 		display(e) {
 			return w.displayPeacock(e);
@@ -45825,7 +45861,7 @@ async function oK() {
 				soundUnlocked: aK,
 				soundReady: !!iK,
 				musicState: ne,
-				nightAmb: !!F,
+				nightAmb: !!re,
 				rainAmb: !!P,
 				muted: TK.muted,
 				points: C.s.points,
@@ -46134,7 +46170,7 @@ var RK = {
 	name: "云边小农场",
 	emoji: "🌾",
 	tabLabel: "农场",
-	version: "1.1.4",
+	version: "1.1.6",
 	minHostApi: 4,
 	coin: {
 		id: "cloudfarm-harvest",

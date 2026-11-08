@@ -4,6 +4,7 @@ import { useApp } from '@/store/useApp'
 import { GameMarket } from './GameStore'
 import type { GameManifestV2 } from '@/games/plugin'
 import { CATALOG_URL, catalogConfigured } from '@/games/catalogUrl'
+import { LOCAL_GAMES } from '@/games/localGames'
 
 /* ============================================================
    设置 → 游戏：**一款游戏只出现一次**（2026-11-08）
@@ -56,7 +57,9 @@ describe('设置 → 游戏：一款游戏只出现一次', () => {
 
   /* 「更新」这条链是 2026-11-07 补的：只给「设为当前」的话，发一版修好的包，
      装过旧版的机器永远看不到它。合并成一张表之后这条链要跟着活下来。 */
-  const CLOUDFARM_VERSION = '1.1.4' // 与 localGames.ts 一致
+  /* ★ 别写死版本号：`localGames.ts` 是构建时算出来的，手抄一份必然有一天走散
+     （1.1.4 → 1.1.6 那次就是，红了但原因是测试自己过期）。这里直接读清单。 */
+  const CLOUDFARM_VERSION = LOCAL_GAMES.find((g) => g.id === 'cloudfarm')!.version
   const oldCloudfarm: GameManifestV2 = {
     id: 'cloudfarm',
     name: '云边小农场',

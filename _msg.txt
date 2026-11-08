@@ -1,0 +1,7 @@
+chore: 云边小农场升 1.1.6（平板横屏舞台 + 左侧竖栏）；版本断言改读清单
+
+- `public/games/cloudfarm` 换成 1.1.6 产物（bundle sha256 13378cd5…，4,496,555 字节），
+  `public/games/index.json` 跟着改；`localGames.ts` 由 `make-local-catalog.mjs` 重算。
+- `GameMarket.singleList.test.tsx` 里的 `CLOUDFARM_VERSION` 从写死的 '1.1.4'
+  改成 `LOCAL_GAMES.find(...)`：清单是构建时算的，手抄一份必然有一天走散
+  （这次就是它自己过期红的，看着像产品坏了）。
