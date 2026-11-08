@@ -23,7 +23,6 @@ import { SnapshotSection } from './SnapshotSection'
 import { fetchVerifiedCatalog } from '../../games/install'
 import { catalogPublicKeyRaw } from '../../games/catalogKey'
 import { CATALOG_URL, catalogConfigured } from '../../games/catalogUrl'
-import type { CatalogGame } from '../../games/verify'
 
 /**
  * 我的游戏 —— 手机应用市场那种形态（2026-10-24 用户要求）。
@@ -60,23 +59,49 @@ import type { CatalogGame } from '../../games/verify'
  * `md:items-center md:p-6` + `md:max-w-2xl`；遮罩必须是 `fixed inset-0`
  * （父级一加 padding，`absolute` 就会缩进，四周露出一圈没盖住的地方）。
  *
- * ## 安装仍然是**同一条链**
+ * ## 安装：一颗按钮，两条路（2026-11-08）
  *
- * 这里只调用 `installLocalGame`（`store/useApp.ts`），校验/落库一行都没动。
+ * 行上那颗按钮先走生产路径 `installFromCatalog`（验签目录 + 验 SHA-256），
+ * 拿不到再退回 `installLocalGame`（随包发、哈希烧在 `localGames.ts` 里）。
+ * 校验和落库都在 store 里，这一层只负责挑路。
  * `data-local-*` 这几个锚点是 e2e 在用的，**不能改名字**。
  */
 
 /** 一次「装」的状态，列表和详情共用，避免两处各写一套（连点会装两遍） */
 function useInstall() {
   const installLocalGame = useApp((s) => s.installLocalGame)
+  const installFromCatalog = useApp((s) => s.installFromCatalog)
   const pushToast = useApp((s) => s.pushToast)
   const [installingId, setInstallingId] = useState<string | null>(null)
 
+  /*
+    ★ 2026-11-08 家长：「上面不是已经有游戏列表吗，没下载就是没下载的状态呀。」
+
+    ⇒ 「从服务器下载」那一块并进这张表，行上那颗按钮就是**下载**：
+      先走生产路径 `installFromCatalog`（验签目录 → 验 SHA-256 → 才执行），
+      拿不到再用随包发的本地包（`localGames.ts` 里烧着的 SHA-256）。
+
+    为什么还留着本地包这条路：这 App 是离线优先的（APK / 没网都是常态），
+    两条路**门槛同一份**（拥有判定都在 store 里），谁也不会绕过校验。
+    只有「目录没配 / 没网 / 验签失败」才落到本地包，toast 里会写明走了备用路。
+  */
   const install = async (id: string) => {
     if (installingId) return
     setInstallingId(id)
     try {
-      const res = await installLocalGame(id)
+      let res: { ok: boolean; message: string } | null = null
+      if (catalogConfigured()) {
+        res = await installFromCatalog(CATALOG_URL, id)
+      }
+      if (!res?.ok) {
+        const local = await installLocalGame(id)
+        /* 服务器那条的失败原因（没网 / 目录里没有 / 验签失败）家长看不懂，
+           但也不能吞掉 —— 本地包成功时补一句「用的哪个包」，出事时能对得上。 */
+        res = {
+          ok: local.ok,
+          message: local.ok ? `${local.message}（用 App 自带的包）` : local.message,
+        }
+      }
       pushToast({
         kind: res.ok ? 'success' : 'warn',
         title: res.ok ? '装好了' : '没装成',
@@ -96,18 +121,24 @@ function InstallAction({
   gateOpen,
   installingId,
   onInstall,
+  target,
   size = 'sm',
 }: {
   id: string
   gateOpen: boolean
   installingId: string | null
   onInstall: (id: string) => void
+  /** 该装哪一版：目录里有就用目录的（可能有新包），否则用随包发的 */
+  target?: string
   size?: 'xs' | 'sm' | 'lg'
 }) {
   const installedGames = useApp((s) => s.installedGames)
   const local = LOCAL_GAMES.find((g) => g.id === id)
   const installed = installedGames[id]
-  const upToDate = !!installed && !!local && installed.version === local.version
+  const want = target ?? local?.version
+  /* 判据用 `hasUpdate` 而不是 `!==`：目录回滚时（目录 1.0.0、机器 1.0.2）
+     不能劝人「更新」，那会把人降级还显示成功。 */
+  const upToDate = !!installed && !!want && !hasUpdate(want, installed.version)
   // 下载来的包不许占用内置 id（`installFromCatalog` 也会拒），这里直接把按钮拿掉
   const clashes = !!gameById(id)
 
@@ -147,7 +178,7 @@ function InstallAction({
         pad
       }
     >
-      {installingId === id ? '正在装…' : installed ? '更新' : '安装'}
+      {installingId === id ? '正在下载…' : installed ? '更新' : '下载'}
     </button>
   )
 }
@@ -338,6 +369,30 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
   const ownedGameIds = useApp((s) => s.ownedGameIds)
   const wishOrders = useApp((s) => s.wishOrders)
 
+  /*
+    目录里的版本号（id → version）。
+
+    ★ **拉不到就退回本地版本，列表照常渲染** —— 这张表是「我的游戏」的控制台，
+      不能因为一次网络抖动整张空掉。原来那块「从服务器下载」就是为了隔离这个
+      失败模式才单独开一块的；现在并进来之后，隔离点变成「只有『有没有新版』
+      这一条信息会缺」，而不是整张表。
+  */
+  const [catalogVer, setCatalogVer] = useState<Record<string, string> | null>(null)
+  useEffect(() => {
+    if (!catalogConfigured()) return
+    let alive = true
+    fetchVerifiedCatalog({ catalogUrl: CATALOG_URL, publicKeyRaw: catalogPublicKeyRaw() })
+      .then((cat) => {
+        if (alive) setCatalogVer(Object.fromEntries(cat.games.map((g) => [g.id, g.version])))
+      })
+      .catch(() => {
+        /* 静默：目录没配 / 没网 / 验签失败，都只意味着「不知道有没有新版」 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
   // 内置在前（农场是首款），插件按 `storefront.ts` 的书写顺序跟在后面。
   // 分组顺序由 `GAME_KIND_ORDER` 定，空分类不渲染。
   const rows: MarketRow[] = [
@@ -456,7 +511,9 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                   /* ---------- 插件：可装 / 已装 / 当前 ---------- */
                   const { local, g } = row
                   const installed = installedGames[local.id]
-                  const upToDate = !!installed && installed.version === local.version
+                  /* 该装哪一版：目录里有就用目录的（服务器可能有新包），否则随包发的那版 */
+                  const target = catalogVer?.[local.id] ?? local.version
+                  const upToDate = !!installed && !hasUpdate(target, installed.version)
                   const isCurrent = activeGameId === local.id
                   // 只有装过才谈得上「参数异常」—— 没装时没有 manifest 可校验
                   const issue = installed ? !!checkPluginEconomy(installed.economy) : false
@@ -469,7 +526,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                       upToDateId={upToDate ? local.id : undefined}
                       icon={<RowIcon id={g.id} tint={g.tint} />}
                       name={g.name}
-                      note={`v${local.version}`}
+                      note={`v${target}`}
                       subtitle={g.pitch}
                       /*
                         行上只留「适龄 · 一次多久」。**体积不放这儿** ——
@@ -503,6 +560,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                             gateOpen={gateOpen}
                             installingId={installingId}
                             onInstall={install}
+                            target={target}
                             size="xs"
                           />
                         ) : (
@@ -529,8 +587,6 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
             </section>
           )
         })}
-
-        <RemoteGames gateOpen={gateOpen} />
       </Card>
 
       {detailId && (
@@ -547,6 +603,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
           id={detailId}
           gateOpen={gateOpen}
           owned={ownedSet.has(detailId)}
+          targetVersion={catalogVer?.[detailId]}
           onClose={() => setDetailId(null)}
         />
       )}
@@ -561,12 +618,15 @@ function GameDetailSheet({
   id,
   gateOpen,
   owned,
+  targetVersion,
   onClose,
 }: {
   id: string
   gateOpen: boolean
   /** 已拥有（含兑换码 / 心愿兑换 / 已装包三种来源，由 `GameMarket` 统一算） */
   owned: boolean
+  /** 目录里的版本；拉不到就是 undefined（退回随包发的版本） */
+  targetVersion?: string
   onClose: () => void
 }) {
   const { install, installingId } = useInstall()
@@ -605,6 +665,7 @@ function GameDetailSheet({
             g={g}
             gateOpen={gateOpen}
             owned={owned}
+            targetVersion={targetVersion}
             installingId={installingId}
             onInstall={install}
             onClose={onClose}
@@ -619,6 +680,7 @@ function DetailView({
   g,
   gateOpen,
   owned,
+  targetVersion,
   installingId,
   onInstall,
   onClose,
@@ -626,6 +688,7 @@ function DetailView({
   g: StorefrontEntry
   gateOpen: boolean
   owned: boolean
+  targetVersion?: string
   installingId: string | null
   onInstall: (id: string) => void
   onClose: () => void
@@ -687,6 +750,7 @@ function DetailView({
               gateOpen={gateOpen}
               installingId={installingId}
               onInstall={onInstall}
+              target={targetVersion}
               size="lg"
             />
           ) : (
@@ -906,207 +970,5 @@ function GameIcon({ g, size = 'md' }: { g: StorefrontEntry; size?: 'md' | 'lg' }
     >
       <GameIconArt id={g.id} tint={g.tint} className="h-full w-full" />
     </span>
-  )
-}
-
-/* ============================================================
-   ①.5 从服务器下载（远端目录）
-   ============================================================ */
-
-/**
- * 「从服务器下载」—— 目录里那些**不随包发**的游戏。
- *
- * ## 为什么单独一块，不混进上面那张表
- *
- * 上面那张表是**本地已知**的游戏（内置 + `public/games/` 随包发），数据来自
- * 编译期的 `STOREFRONT`，永远在。这里的数据来自**网络 + 签名**，加载失败是
- * 常态之一（没网 / 目录没配 / 签名不对）。混进去的话，一次网络抖动就会让
- * 「我的游戏」整张表空掉 —— 那是两件完全不同的事，不该共享一个失败模式。
- *
- * ## 三条判据
- *
- *  - 目录没配（`catalogConfigured()` 为 false）⇒ **整块不渲染**。
- *    不摆一个点了必然失败的按钮（本项目最忌讳界面承诺它做不到的事）。
- *  - 目录拉不到 / 签名不对 ⇒ 只说一句错，**不自动重试**：
- *    签名错重试一万次还是错，而重试会让家长以为在慢慢加载。
- *  - 「下载」只在**已拥有**时出现 —— 和 `installLocalGame` 同一道门槛
- *    （门槛在 store 里，这里只是不摆按钮，见 `installFromCatalog` 的注释）。
- */
-function RemoteGames({ gateOpen }: { gateOpen: boolean }) {
-  const installedGames = useApp((s) => s.installedGames)
-  const ownedGameIds = useApp((s) => s.ownedGameIds)
-  const wishOrders = useApp((s) => s.wishOrders)
-  const activeGameId = useApp((s) => s.activeGameId)
-  const setActiveGame = useApp((s) => s.setActiveGame)
-  const installFromCatalog = useApp((s) => s.installFromCatalog)
-
-  const [games, setGames] = useState<CatalogGame[] | null>(null)
-  const [error, setError] = useState('')
-  const [busyId, setBusyId] = useState('')
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
-
-  useEffect(() => {
-    if (!catalogConfigured()) return
-    let alive = true
-    ;(async () => {
-      try {
-        const cat = await fetchVerifiedCatalog({
-          catalogUrl: CATALOG_URL,
-          publicKeyRaw: catalogPublicKeyRaw(),
-        })
-        if (alive) setGames(cat.games)
-      } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e))
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  if (!catalogConfigured()) return null
-
-  /* 和上面那张表**同一口径**（`ownedSetFor`）。两处各写一份迟早走散 */
-  const ownedSet = ownedSetFor(isOnlineMode, ownedGameIds, installedGames, wishOrders)
-
-  /*
-    2026-11-07 家长：「未拥有的游戏不要显示在上面。」—— 这条对这块同样成立。
-    这块的用途是「已经拥有、还没下载」，列一堆点不开的只会让家长以为自己买过。
-    和 `visibleRows` 三条例外一致：已拥有 / 装过 / 当前在用。
-  */
-  const shown = (games ?? []).filter(
-    (g) => ownedSet.has(g.id) || !!installedGames[g.id] || activeGameId === g.id,
-  )
-
-  /* 目录拉到了、但一款都不该显示 ⇒ **整块不渲染**。
-     摆一个空标题（或一句「服务器上暂时没有」）比不摆更糟：家长会以为
-     自己的游戏丢了。 */
-  if (games && shown.length === 0) return null
-
-  async function download(id: string) {
-    if (busyId || !gateOpen) return
-    setBusyId(id)
-    setMsg(null)
-    try {
-      const r = await installFromCatalog(CATALOG_URL, id)
-      setMsg({ ok: r.ok, text: r.message ?? (r.ok ? '装好了' : '没装成') })
-    } finally {
-      setBusyId('')
-    }
-  }
-
-  return (
-    <section className="mt-5 border-t border-ink-100 pt-4" data-remote-section>
-      <h3 className="text-[13px] font-extrabold text-ink-700">从服务器下载</h3>
-      <p className="mt-1 text-[11px] leading-snug text-ink-500">
-        这些游戏不随 App 一起发，点「下载」才会装上。装之前会验签名、核对哈希。
-      </p>
-
-      {error && (
-        <p data-remote-error className="mt-2 text-[11px] font-bold leading-snug text-berry-500">
-          目录没拉下来：{error}
-        </p>
-      )}
-
-      {!error && games === null && (
-        <p className="mt-2 text-[11px] text-ink-400">正在看有哪些…</p>
-      )}
-
-      {!!shown.length && (
-        <ul className="mt-2">
-          {shown.map((g) => {
-            const installed = installedGames[g.id]
-            const isCurrent = activeGameId === g.id
-            const owned = ownedSet.has(g.id)
-            const kb = g.size ? ` · ${(g.size / 1024).toFixed(0)} KB` : ''
-            return (
-              <li
-                key={g.id}
-                data-remote-row={g.id}
-                className="flex items-center gap-3 border-t border-ink-100 py-2.5 first:border-t-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="truncate font-display text-[14px] font-extrabold text-ink-900">
-                      {g.name}
-                    </span>
-                    <span className="shrink-0 text-[10px] font-bold text-ink-300">
-                      v{g.version}
-                      {kb}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-[11px] leading-snug text-ink-500">
-                    {installed
-                      ? hasUpdate(g.version, installed.version)
-                        ? `已装 v${installed.version} · 有新版本 v${g.version}`
-                        : `已装 v${installed.version}`
-                      : owned
-                        ? '已拥有 · 还没下载'
-                        : '未拥有'}
-                  </p>
-                </div>
-                <div className="shrink-0">
-                  {installed ? (
-                    /*
-                      2026-11-07：已装**旧版**时原来只给「设为当前」——
-                      也就是说发一版修好的 v1.0.2，装过 v1.0.0 的机器永远看不到它，
-                      只能卸载重装（而这块还没有卸载入口）。「更新」这条链是必须的。
-                      判据用 `hasUpdate` 而不是 `!==`：目录回滚时（目录 1.0.0、
-                      机器 1.0.2）不能劝人「更新」，那会把人降级还显示成功。
-                    */
-                    hasUpdate(g.version, installed.version) ? (
-                      <button
-                        disabled={!gateOpen || !!busyId}
-                        data-remote-update={g.id}
-                        onClick={() => void download(g.id)}
-                        className={PILL_SOFT}
-                      >
-                        {busyId === g.id ? '正在更新…' : `更新到 v${g.version}`}
-                      </button>
-                    ) : isCurrent ? (
-                      <span className={PILL_MUTE}>当前</span>
-                    ) : (
-                      <button
-                        disabled={!gateOpen}
-                        data-remote-set-current={g.id}
-                        onClick={() => void setActiveGame(g.id)}
-                        className={PILL_SOFT}
-                      >
-                        设为当前
-                      </button>
-                    )
-                  ) : owned ? (
-                    <button
-                      disabled={!gateOpen || !!busyId}
-                      data-remote-install={g.id}
-                      onClick={() => void download(g.id)}
-                      className={PILL_SOFT}
-                    >
-                      {busyId === g.id ? '正在装…' : '下载'}
-                    </button>
-                  ) : (
-                    <span className={PILL_MUTE} data-remote-need-own={g.id}>
-                      未拥有
-                    </span>
-                  )}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      {msg && (
-        <p
-          data-remote-msg
-          className={
-            'mt-2 text-[11px] font-bold leading-snug ' +
-            (msg.ok ? 'text-grass-600' : 'text-berry-500')
-          }
-        >
-          {msg.text}
-        </p>
-      )}
-    </section>
   )
 }
