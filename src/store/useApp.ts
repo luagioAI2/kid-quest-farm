@@ -389,7 +389,7 @@ interface AppState {
    * @param opts.skipPull 在线版里跳过「拉服务端」这一步 ——
    *   农场动作刚提交完时用：本地已经是新的了，再拉一次纯属浪费一个往返。
    */
-  refresh: (opts?: { skipPull?: boolean }) => Promise<void>
+  refresh: (opts?: { skipPull?: boolean; light?: boolean }) => Promise<void>
   /**
    * 把「家长设置」重新读进 store。
    *
@@ -1523,7 +1523,7 @@ async function onlineAddTask(get: () => AppState, input: NewTaskInput): Promise<
     get().pushToast(writeFailToast(r.error, '这条任务'))
     return null
   }
-  await get().refresh()
+  await get().refresh({ light: true })
   return (await db.tasks.get(srvId('task', r.data.id))) ?? null
 }
 
@@ -1549,7 +1549,7 @@ async function onlineUpdateTask(
     get().pushToast(writeFailToast(r.error, '这次修改'))
     return
   }
-  await get().refresh()
+  await get().refresh({ light: true })
 }
 
 /** 删任务（服务端是归档，不是真删） */
@@ -1559,7 +1559,7 @@ async function onlineDeleteTask(get: () => AppState, id: string): Promise<void> 
     get().pushToast(writeFailToast(r.error, '这次删除'))
     return
   }
-  await get().refresh()
+  await get().refresh({ light: true })
 }
 
 /** 计时三兄弟：开始 / 暂停 / 继续，只有一个请求的差别 */
@@ -1573,7 +1573,7 @@ async function onlineTimer(
     get().pushToast(writeFailToast(r.error, '这次计时'))
     return
   }
-  await get().refresh()
+  await get().refresh({ light: true })
 }
 
 /**
@@ -1605,7 +1605,7 @@ async function onlineSubmitInstance(
       detail: '他们确认后积分就到账咯',
       emoji: '📮',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return 0
   }
 
@@ -1618,10 +1618,10 @@ async function onlineSubmitInstance(
       detail: '让爸爸妈妈在「待确认」里点一下就好',
       emoji: '📮',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return 0
   }
-  await get().refresh()
+  await get().refresh({ light: true })
   return rev.data.earned_points ?? 0
 }
 
@@ -1637,7 +1637,7 @@ async function onlineReviewInstance(
     get().pushToast(writeFailToast(r.error, approve ? '这次确认' : '这次打回'))
     return 0
   }
-  await get().refresh()
+  await get().refresh({ light: true })
   return r.data.earned_points ?? 0
 }
 
@@ -1648,7 +1648,7 @@ async function onlineSkipInstance(get: () => AppState, instanceId: string): Prom
     get().pushToast(writeFailToast(r.error, '这次放弃'))
     return
   }
-  await get().refresh()
+  await get().refresh({ light: true })
 }
 
 /**
@@ -1667,7 +1667,7 @@ async function onlineDoCheckIn(
     get().pushToast(writeFailToast(r.error, '这次签到'))
     return { gained: 0, bonus: 0 }
   }
-  await get().refresh()
+  await get().refresh({ light: true })
   // 服务端给的 `points` 已经把阶梯奖励算进去了，所以 bonus 记 0，避免重复显示
   return { gained: r.data.points ?? 0, bonus: 0 }
 }
@@ -2073,18 +2073,18 @@ async function runFarmCommit<T>(
       get().pushToast(writeFailToast(pushed.error, '刚才那一下'))
     }
     // 冲突要重拉（拿别人的 rev）；网络失败也重拉一次，尽量回到服务端那份
-    await get().refresh()
+    await get().refresh({ light: true })
     return failValue
   }
 
-  await get().refresh()
+  await get().refresh({ light: true })
   return result
 }
 
 async function doRefresh(
   set: (partial: Partial<AppState>) => void,
   get: () => AppState,
-  opts: { skipPull?: boolean } = {},
+  opts: { skipPull?: boolean; light?: boolean } = {},
 ): Promise<void> {
   const { settings } = get()
   const today = currentDayKey(settings.dayStartHour)
@@ -2111,11 +2111,21 @@ async function doRefresh(
       }
     }
 
-    const pulled = await pullFromServer()
-    if (!pulled.ok) console.warn('[sync] 拉取失败，本次用本地数据：', pulled.reason)
-    /* 农场是整块 JSON，单独一个接口。失败不抛：没网就用本地这份 */
-    const farmPulled = await pullFarm()
-    if (farmPulled === 'failed') console.warn('[sync] 农场没拉到，本次用本地这份')
+    /* ★ 这两趟并发（2026-11-08）：任务/流水/商城那一组和农场整块 JSON
+       写的是**不同的表**，谁都不读谁的结果 —— 串着等只是白多一趟 RTT。
+       （手机 Wi-Fi 单趟 30~40ms；冷启动时这一趟正好压在最前面。）
+       ★ 各自的失败口径不变：都只 warn，不抛 —— 没网也要能进 App。 */
+    const [pulled] = await Promise.all([
+      pullFromServer({ light: opts.light }).then((r) => {
+        if (!r.ok) console.warn('[sync] 拉取失败，本次用本地数据：', r.reason)
+        return r
+      }),
+      /* 农场是整块 JSON，单独一个接口。失败不抛：没网就用本地这份 */
+      pullFarm().then((r) => {
+        if (r === 'failed') console.warn('[sync] 农场没拉到，本次用本地这份')
+        return r
+      }),
+    ])
 
     if (pulled.ok) {
       const at = Date.now()
@@ -2900,7 +2910,7 @@ export const useApp = create<AppState>((set, get) => ({
       const inst = makeInstance(task, currentDayKey(get().settings.dayStartHour), get().settings.dayStartHour)
       if (inst) await db.taskInstances.put(inst)
     }
-    await get().refresh()
+    await get().refresh({ light: true })
     return task
   },
 
@@ -2915,7 +2925,7 @@ export const useApp = create<AppState>((set, get) => ({
     const task = await db.tasks.get(id)
     if (task) await syncLiveInstances(task, currentDayKey(get().settings.dayStartHour), now)
 
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   setTaskArchived: async (id, archived) => {
@@ -2923,7 +2933,7 @@ export const useApp = create<AppState>((set, get) => ({
     // 软隐藏：只翻一个标志位。任务底下的实例、签到记录、账本**一律不动** ——
     // 硬删会把这些连坐带走，而家长想要的通常只是「别让孩子看见」。
     await db.tasks.update(id, { archived, updatedAt: Date.now() })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   deleteTask: async (id) => {
@@ -2934,7 +2944,7 @@ export const useApp = create<AppState>((set, get) => ({
       await db.checkIns.where('taskId').equals(id).delete()
       await db.checkInProgress.where('taskId').equals(id).delete()
     })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /* ================= 任务实例 ================= */
@@ -2944,7 +2954,7 @@ export const useApp = create<AppState>((set, get) => ({
     const inst = await db.taskInstances.get(instanceId)
     if (!inst || inst.status !== 'pending') return
     await db.taskInstances.update(instanceId, { startedAt: Date.now(), updatedAt: Date.now() })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /**
@@ -2964,7 +2974,7 @@ export const useApp = create<AppState>((set, get) => ({
     const now = Date.now()
     await db.taskInstances.update(instanceId, { pausedAt: now, updatedAt: now })
     get().pushToast({ kind: 'info', title: '计时暂停了', detail: '休息一下，回来点「继续」', emoji: '⏸️' })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /**
@@ -2988,7 +2998,7 @@ export const useApp = create<AppState>((set, get) => ({
       updatedAt: now,
     })
     get().pushToast({ kind: 'success', title: '接着计时啦', emoji: '▶️' })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /**
@@ -3050,7 +3060,7 @@ export const useApp = create<AppState>((set, get) => ({
         detail: '他们确认后积分就到账咯',
         emoji: '📮',
       })
-      await get().refresh()
+      await get().refresh({ light: true })
       return 0
     }
 
@@ -3103,7 +3113,7 @@ export const useApp = create<AppState>((set, get) => ({
       detail: note || undefined,
       emoji: '🔁',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   giveUpInstance: async (instanceId) => {
@@ -3121,7 +3131,7 @@ export const useApp = create<AppState>((set, get) => ({
       settledAt: Date.now(),
       updatedAt: Date.now(),
     })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /* ================= 签到 ================= */
@@ -3182,12 +3192,12 @@ export const useApp = create<AppState>((set, get) => ({
         detail: '他们确认后积分就到账咯',
         emoji: '📮',
       })
-      await get().refresh()
+      await get().refresh({ light: true })
       return { gained: 0, bonus: 0 }
     }
 
     const r = await grantCheckIn(get, task, progress, today, pk)
-    await get().refresh()
+    await get().refresh({ light: true })
     return r
   },
 
@@ -3213,7 +3223,7 @@ export const useApp = create<AppState>((set, get) => ({
 
     progress.pendingDays = (progress.pendingDays ?? []).filter((d) => d !== date)
     const r = await grantCheckIn(get, task, progress, date, periodKey)
-    await get().refresh()
+    await get().refresh({ light: true })
     return r.gained + r.bonus
   },
 
@@ -3230,7 +3240,7 @@ export const useApp = create<AppState>((set, get) => ({
     progress.updatedAt = Date.now()
     await db.checkInProgress.put(progress)
     get().pushToast({ kind: 'info', title: '已让孩子重新签到', emoji: '🔁' })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   claimCheckInTier: async (taskId, days) => {
@@ -3263,7 +3273,7 @@ export const useApp = create<AppState>((set, get) => ({
     // 阶梯里的道具也归「设置 → 道具掉落」管（家长 2026-09-30 定：
     // 道具全由开关管，一处例外都不留）。积分照发，只停道具。
     if (tier.itemId && get().settings.itemDropsEnabled) await addItem(tier.itemId, 1)
-    await get().refresh()
+    await get().refresh({ light: true })
     return tier.points
   },
 
@@ -3346,7 +3356,7 @@ export const useApp = create<AppState>((set, get) => ({
       get().pushToast({ kind: 'info', title: '刚刚已经记过一次啦', emoji: '✅' })
       return 0
     }
-    await get().refresh()
+    await get().refresh({ light: true })
     return get().submitInstance(inst.id, actualMinutes, quality)
   },
 
@@ -3400,7 +3410,7 @@ export const useApp = create<AppState>((set, get) => ({
       detail: `${def.growMinutes} 分钟后就能收啦`,
       emoji: def.emoji,
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
@@ -3591,7 +3601,7 @@ export const useApp = create<AppState>((set, get) => ({
       })
     }
 
-    await get().refresh()
+    await get().refresh({ light: true })
     return earned
   },
 
@@ -3615,7 +3625,7 @@ export const useApp = create<AppState>((set, get) => ({
     })
     await savePlots(plots.map((p) => (p.index === plotIndex ? { ...p, unlocked: true } : p)))
     get().pushToast({ kind: 'success', title: '新地块开好啦！', emoji: '🌱' })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
@@ -3653,7 +3663,7 @@ export const useApp = create<AppState>((set, get) => ({
     )
     await savePlots(nextPlots)
     get().pushToast({ kind: 'success', title: '施肥啦，长得更快了', emoji: '✨' })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   buyAnimal: async (animalId, name) => {
@@ -3691,7 +3701,7 @@ export const useApp = create<AppState>((set, get) => ({
       detail: `${def.matureMinutes} 分钟后长大`,
       emoji: def.babyEmoji,
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
@@ -3748,7 +3758,7 @@ export const useApp = create<AppState>((set, get) => ({
       detail: def ? `心情变好了，会尽快产出${def.produceItemName}` : undefined,
       emoji: wasSick ? '💚' : '😋',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
@@ -3829,7 +3839,7 @@ export const useApp = create<AppState>((set, get) => ({
       detail: roll.event?.message ?? '去市场卖掉就能换兑换券啦',
       emoji: gained > 0 ? def.produceEmoji : '🪹',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return gained
   },
 
@@ -3863,7 +3873,7 @@ export const useApp = create<AppState>((set, get) => ({
       title: wasSick ? `${a.name} 好起来了！` : `${a.name} 好开心！`,
       emoji: def?.emoji ?? '🐑',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
@@ -3873,7 +3883,7 @@ export const useApp = create<AppState>((set, get) => ({
       return runFarmCommit(get, 'removeAnimal', () => get().removeAnimal(animalId), undefined)
     }
     await db.animals.delete(animalId)
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /* ---------------- 农场市场 ---------------- */
@@ -4022,7 +4032,7 @@ export const useApp = create<AppState>((set, get) => ({
         emoji: '🎫',
       })
     }
-    await get().refresh()
+    await get().refresh({ light: true })
     return total
   },
 

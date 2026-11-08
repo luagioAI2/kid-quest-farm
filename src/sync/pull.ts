@@ -119,7 +119,9 @@ async function clearSrvRows(
  *
  * @param opts.pageSize 流水拉多少条（服务端分页；默认 200，够积分页显示）
  */
-export async function pullFromServer(opts: { pageSize?: number } = {}): Promise<PullResult> {
+export async function pullFromServer(
+  opts: { pageSize?: number; light?: boolean } = {},
+): Promise<PullResult> {
   if (!isOnlineMode) return { ok: true, reason: 'local' }
   if (!getToken()) return { ok: false, reason: 'no-session' }
   return pullOnce(opts)
@@ -131,7 +133,9 @@ export async function pullFromServer(opts: { pageSize?: number } = {}): Promise<
  * 单独导出是为了能单测：`isOnlineMode` 是构建期常量，测试里改不动它；
  * 而「拉取会不会把本地数据弄丢」这件事必须被验证，不能只靠肉眼。
  */
-export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullResult> {
+export async function pullOnce(opts: { pageSize?: number; light?: boolean } = {}): Promise<PullResult> {
+  /* 轻量刷新：动作刚改完的那几张表之外，一个接口都不打（见调用方注释）。 */
+  const light = opts.light === true
   /* 在外面声明：失败那条路也要把它带回去（`switched` 已经生效了，
      哪怕后面网络挂了，缓存也已经清干净）。 */
   let adopt: AdoptResult | undefined
@@ -153,35 +157,52 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
       listTasks(false),
       walletInfo().catch(() => null), // 钱包挂了不该拖垮任务板
     ])
+    /* ★ 这一组**互相独立**（谁都不读谁的结果），所以一次性并发出去。
+       以前是一条一条 `await`，14 个请求里有 6 个排成一列 —— 局域网上每趟只要
+       3~5ms，看不出差别；手机走 Wi-Fi 时每趟 RTT 30~40ms，光排队就多等 200ms+
+       （2026-11-08 实测：冷启动 14 个 API、串行合计 419ms、到 ready 831ms）。
+       ★ 敢并发的依据：每一趟的结果只写进**自己那几张表**，落库那一步仍然在下面
+         同一个 `db.transaction` 里按原顺序做。
+       ★ 仍然放在 `board()` 那一组**之后**：任务板会懒生成今天的实例，
+         `b.instances` 才是实例的真相。 */
+    /* ★ light 模式（动作后的轻刷新）：只有流水照拉 —— 余额和兑换券都从它算；
+       其余四样给 null，下面每一块都有 `!light` 守卫，所以**一个字都不会动**
+       那几张表（不然「先清后写」会把兑换品清空）。 */
+    const ledgerP = pullLedger(opts.pageSize).catch(() => null)
+    const restP = light
+      ? Promise.resolve([null, null, null, null, null] as const)
+      : Promise.all([
+          /* 兑换商城：商品和记录各一次。
+             ★ 两个都用 `catch(() => null)`：商城挂了不该让「今天的任务」也拉不下来 ——
+               孩子打开 App 是要做任务的，不是来逛商城的。
+             ★ 商品用 `raw: true`：默认那套过滤是**给孩子看**的口径
+               （换过的一次性商品、缺货的都不返回），拿它当数据源，
+               家长管理页里那些商品会凭空消失 —— 见 `api/redeem.ts` 的注释。 */
+          listRedeemRows({ includeArchived: true, raw: true }).catch(() => null),
+          pullRedeemRecords().catch(() => null),
+          /* 心愿商城：商品列表（只为拿「本家庭开不开放 + 券价」）+ 心愿单。
+             ★ 商品列表用 `include_archived: true`：家长可能给一件后来下架的商品
+               定过价，只拉在架的话那条定价就没了，孩子那单会退回「爸妈还没定价」。
+             ★ 心愿单用 `asParent: true`：收货信息在孩子视角是脱敏的
+               （手机 `****1234`、详细地址为空），家长那一屏要能发货。
+               同一台设备、同一个账号，不为此多开一个接口。
+             ★ 两个都 `catch(() => null)`：心愿挂了不该让今天的任务也拉不下来。 */
+          listWishItems({ includeArchived: true }).catch(() => null),
+          pullWishOrders().catch(() => null),
+          /* 游戏币余额：只为一件事 —— 把服务端那个数镜像进 `gameKv['__coin']`，
+             因为 `host.gameCoinBalance()` 读的是 Dexie（插件每帧都可能调）。
+             ★ 它自己已经把异常收成 `null`（`pullCoinBalances`），失败不影响别的。 */
+          pullCoinBalances(),
+        ])
     /* 流水要**翻页拉全**，不能只要第一页。
        ★ 服务端 `Paginator` 的每页上限 200，而「本地余额 = 流水求和」——
          只拉第一页的话，老账号的余额会**凭空少一截**（少的是第一页之外那些
          早期的大额入账），界面上看不出任何异常。2026-11-02 实测踩到：
          账号攒到第 33 条流水后，本地余额比服务端少 124。 */
-    const ledger = await pullLedger(opts.pageSize).catch(() => null)
-    /* 兑换商城：商品和记录各一次。
-       ★ 两个都用 `catch(() => null)`：商城挂了不该让「今天的任务」也拉不下来 ——
-         孩子打开 App 是要做任务的，不是来逛商城的。
-       ★ 商品用 `raw: true`：默认那套过滤是**给孩子看**的口径
-         （换过的一次性商品、缺货的都不返回），拿它当数据源，
-         家长管理页里那些商品会凭空消失 —— 见 `api/redeem.ts` 的注释。 */
-    const redeemRows = await listRedeemRows({ includeArchived: true, raw: true }).catch(
-      () => null,
-    )
-    const redeemRecs = await pullRedeemRecords().catch(() => null)
-    /* 心愿商城：商品列表（只为拿「本家庭开不开放 + 券价」）+ 心愿单。
-       ★ 商品列表用 `include_archived: true`：家长可能给一件后来下架的商品
-         定过价，只拉在架的话那条定价就没了，孩子那单会退回「爸妈还没定价」。
-       ★ 心愿单用 `asParent: true`：收货信息在孩子视角是脱敏的
-         （手机 `****1234`、详细地址为空），家长那一屏要能发货。
-         同一台设备、同一个账号，不为此多开一个接口。
-       ★ 两个都 `catch(() => null)`：心愿挂了不该让今天的任务也拉不下来。 */
-    const wishList = await listWishItems({ includeArchived: true }).catch(() => null)
-    const wishOrders = await pullWishOrders().catch(() => null)
-    /* 游戏币余额：只为一件事 —— 把服务端那个数镜像进 `gameKv['__coin']`，
-       因为 `host.gameCoinBalance()` 读的是 Dexie（插件每帧都可能调）。
-       ★ 它自己已经把异常收成 `null`（`pullCoinBalances`），失败不影响别的。 */
-    const coinBals = await pullCoinBalances()
+    const [ledger, [redeemRows, redeemRecs, wishList, wishOrders, coinBals]] = await Promise.all([
+      ledgerP,
+      restP,
+    ])
 
     const taskRows = tasks.list.map(mapTask)
     const instRows = b.instances.map(mapInstance)
@@ -247,7 +268,7 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
           if (harvestRows.length) await db.harvestLedger.bulkPut(harvestRows)
         }
 
-        if (redeemRows !== null) {
+        if (!light && redeemRows !== null) {
           /* ★ 兑换商品这张表在在线版里**整张清掉**，不是只清 `srv_` 行。
              理由和别的表不同：兑换品的 id 就是服务端给的那个字符串（没有前缀），
              没法从 id 上分辨「这行是不是云端来的」。而在线版里这张表**只可能**
@@ -258,12 +279,12 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
           if (itemRows.length) await db.redeemItems.bulkPut(itemRows)
         }
 
-        if (redeemRecs !== null) {
+        if (!light && redeemRecs !== null) {
           await clearSrvRows('redeemRecords', SRV_REDEEM_RECORD_PREFIX)
           if (recRows.length) await db.redeemRecords.bulkPut(recRows)
         }
 
-        if (wishList !== null) {
+        if (!light && wishList !== null) {
           /* ★ 定价表**整张清掉**，理由和兑换品表一样：主键 `itemId` 是
              服务端给的字符串（没有前缀），分不出「这行是不是云端来的」。
              而在线版里这张表**只可能**有云端数据 —— 播种在在线模式下
@@ -273,7 +294,7 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
           if (offerRows.length) await db.wishOffers.bulkPut(offerRows)
         }
 
-        if (wishOrders !== null) {
+        if (!light && wishOrders !== null) {
           await clearSrvRows('wishOrders', SRV_WISH_ORDER_PREFIX)
           if (wishRows.length) await db.wishOrders.bulkPut(wishRows)
         }
@@ -284,7 +305,7 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
            比服务端多，而且**没有任何地方会报错**。
            为什么敢整表清：在线版里 `__coin` 只可能是镜像（写接口全是写穿，
            播种在在线模式下一个字节都不写）。 */
-        if (coinBals !== null) {
+        if (!light && coinBals !== null) {
           await clearGameCoinMirrors()
           for (const c of coinBals) await mirrorGameCoinBalance(c.game_id, c.balance)
         }
@@ -306,17 +327,19 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
        ★ 不 `catch` 到 `null` 就完事：`pullSettings` 自己把「云端为空」和
          「读失败」分开了 —— 前者要把本机推上去，后者必须什么都不做。 */
     let settingsStatus: PullSettingsStatus | undefined
-    try {
-      settingsStatus = await pullSettings(await loadSettings())
-    } catch (e) {
-      console.warn('[sync] 家长设置没拉到：', (e as { message?: string })?.message)
+    if (!light) {
+      try {
+        settingsStatus = await pullSettings(await loadSettings())
+      } catch (e) {
+        console.warn('[sync] 家长设置没拉到：', (e as { message?: string })?.message)
+      }
     }
 
     /* 外链缓存：**放在大事务外面**。它只写 `meta` 一个键，和上面那些表无关；
        写失败最多是「这次没更新」，不该连累任务和积分。
        ⚠️ 只在**拉取成功**时写（`wishList !== null`）：拉失败还照写不误的话，
          本地那份会被清成空 —— 孩子那颗「去购买」就凭空消失了。 */
-    if (wishList !== null) {
+    if (!light && wishList !== null) {
       try {
         await saveWishBuyLinks(buyLinks)
       } catch (e) {
@@ -325,7 +348,9 @@ export async function pullOnce(opts: { pageSize?: number } = {}): Promise<PullRe
     }
 
     const kv = { keys: 0, failed: 0 }
-    const installed = await listInstalledBundles()
+    /* 存档只在完整刷新时拉：动作改不到插件存档（插件自己写穿），
+       而这段是「每装一款游戏就多一个请求」。 */
+    const installed = light ? [] : await listInstalledBundles()
     for (const g of installed) {
       try {
         const r = await pullGameKv(g.gameId)
