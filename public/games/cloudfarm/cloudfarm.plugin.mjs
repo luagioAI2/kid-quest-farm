@@ -39925,6 +39925,8 @@ var gW = class {
 		"a11y.settings": "设置",
 		"a11y.hideBars": "收起上下栏",
 		"a11y.showBars": "展开上下栏",
+		"side.log": "日志",
+		"side.settings": "设置",
 		"a11y.mute": "静音开关",
 		"a11y.cancelSeed": "取消播种",
 		"seed.title": "种子商店",
@@ -40296,6 +40298,8 @@ var gW = class {
 		"a11y.settings": "Settings",
 		"a11y.hideBars": "Hide bars",
 		"a11y.showBars": "Show bars",
+		"side.log": "Log",
+		"side.settings": "Settings",
 		"a11y.mute": "Mute on/off",
 		"a11y.cancelSeed": "Stop planting",
 		"seed.title": "Seed Shop",
@@ -40666,6 +40670,8 @@ var gW = class {
 		"a11y.settings": "設定",
 		"a11y.hideBars": "バーをしまう",
 		"a11y.showBars": "バーを出す",
+		"side.log": "ログ",
+		"side.settings": "設定",
 		"a11y.mute": "ミュート切替",
 		"a11y.cancelSeed": "植えるのをやめる",
 		"seed.title": "種屋さん",
@@ -43981,7 +43987,10 @@ html[lang=ja] #ui{font-family:${OG}}
      分区胶囊带 margin:0 auto，两枚按钮一让开它就自动居中。 */
 #ui .side{position:absolute;top:0;bottom:0;right:12px;display:none;flex-direction:column;justify-content:center;gap:8px;pointer-events:none;transition:transform .32s cubic-bezier(.2,.9,.3,1),opacity .25s}
 #ui.wide .side{display:flex}
-#ui.wide .side .iconbtn{width:100%;height:58px;border-radius:18px;background:rgba(255,252,245,.74);border:1px solid rgba(255,255,255,.72);box-shadow:${kG};pointer-events:auto}
+/* 顶栏里只要图标（横向一行放不下字）；宽屏右侧竖排时跟左栏一样「图标 + 两个字」。 */
+#ui .slb{display:none}
+#ui.wide .side .iconbtn{width:100%;height:62px;flex-direction:column;gap:3px;border-radius:18px;background:rgba(255,252,245,.74);border:1px solid rgba(255,255,255,.72);box-shadow:${kG};pointer-events:auto}
+#ui.wide .side .slb{display:block;font-size:11px;font-weight:800;line-height:1.1;color:${Z.text}}
 #ui.wide .side .iconbtn .ic{width:28px;height:28px}
 #ui.bars-off .side{transform:translateX(calc(100% + 18px));opacity:0;pointer-events:none}
 /* ---- 收起状态 ---- */
@@ -44273,8 +44282,8 @@ function ZG(e) {
           <button data-zone="ranch" role="tab">${Q(Y("hud.ranch"))}</button><button data-zone="field" role="tab">${Q(Y("hud.field"))}</button><button data-zone="pond" role="tab">${Q(Y("hud.pond"))}</button>
           <i class="ssep"></i><button class="fold" id="foldBtn" aria-label="${Q(Y("a11y.hideBars"))}" title="${Q(Y("a11y.hideBars"))}">${HG}</button>
         </div>
-        <button class="iconbtn" id="logBtn" aria-label="${Q(Y("a11y.log"))}">${IG("log", 22)}<i class="dot" id="logDot" hidden></i></button>
-        <button class="iconbtn" id="setBtn" aria-label="${Q(Y("a11y.settings"))}">${IG("gear", 22)}</button>
+        <button class="iconbtn" id="logBtn" aria-label="${Q(Y("a11y.log"))}">${IG("log", 22)}<i class="dot" id="logDot" hidden></i><span class="slb">${Q(Y("side.log"))}</span></button>
+        <button class="iconbtn" id="setBtn" aria-label="${Q(Y("a11y.settings"))}">${IG("gear", 22)}<span class="slb">${Q(Y("side.settings"))}</span></button>
       </div>`, h.classList.add("tv-a"), h.querySelector("#foldBtn").addEventListener("click", () => S(!0)), E = h.querySelector("#logBtn"), D = h.querySelector("#setBtn"), E.addEventListener("click", () => {
 			T.cue("sfx.tap"), ue("log");
 		}), D.addEventListener("click", () => {
@@ -46186,7 +46195,7 @@ var RK = {
 	name: "云边小农场",
 	emoji: "🌾",
 	tabLabel: "农场",
-	version: "1.1.7",
+	version: "1.1.8",
 	minHostApi: 4,
 	coin: {
 		id: "cloudfarm-harvest",
