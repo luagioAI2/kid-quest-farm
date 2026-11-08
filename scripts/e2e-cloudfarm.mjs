@@ -314,11 +314,14 @@ console.log('【⓪ 基线】')
    ============================================================ */
 console.log('\n【① 安装：设置 → 游戏 → 游戏市场 → 安装】')
 {
+  /* ★★ 顺序不能反：**先预置拥有，再打开设置页**。
+     2026-10-30 起「没拥有不能装」；2026-11-07 起「未拥有的游戏在列表里根本不出现」
+     ⇒ 先开页面的话列表是**空的**，`waitFor('[data-local-row]', 8000)` 必然超时，
+     报出来是「设置页上没有游戏列表（游戏市场那张卡没渲染？）」——
+     而下一句 `grantGame` 之后行立刻就出现了。这条假红骗了整整一轮。 */
+  await grantGame(page, GAME_ID)
   const err = await openGameStore()
   check('打开「设置 → 游戏 → 游戏市场」并过了家长密码', err === null, err ?? '')
-
-  /* 2026-10-30 起「没拥有不能装」—— 先预置拥有，否则下面找不到安装按钮 */
-  await grantGame(page, GAME_ID)
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
     if (!li) return null

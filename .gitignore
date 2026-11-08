@@ -123,3 +123,6 @@ scripts/__*.mjs
 .env.*
 !.env.example
 dist-probe/
+
+# 提交信息临时文件（用 git commit -F 时生成，别入库）
+_msg.txt
