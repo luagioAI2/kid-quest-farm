@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import { useApp } from '@/store/useApp'
 import { GameMarket } from './GameStore'
+import type { GameManifestV2 } from '@/games/plugin'
 import { CATALOG_URL, catalogConfigured } from '@/games/catalogUrl'
 
 /* ============================================================
@@ -51,5 +52,33 @@ describe('设置 → 游戏：一款游戏只出现一次', () => {
 
     // 同一款游戏只许出现一行（两处能改，就一定会走散）
     expect(document.querySelectorAll('[data-local-row="cloudfarm"]').length).toBe(1)
+  })
+
+  /* 「更新」这条链是 2026-11-07 补的：只给「设为当前」的话，发一版修好的包，
+     装过旧版的机器永远看不到它。合并成一张表之后这条链要跟着活下来。 */
+  const CLOUDFARM_VERSION = '1.1.4' // 与 localGames.ts 一致
+  const oldCloudfarm: GameManifestV2 = {
+    id: 'cloudfarm',
+    name: '云边小农场',
+    emoji: '🌾',
+    tabLabel: '云边',
+    version: '1.1.0',
+    minHostApi: 1,
+    coin: { id: 'cf_coin', name: '麦粒', emoji: '🌾' },
+    economy: { playCost: 10, expectedPayout: 6, capPerPrize: 30, voucherPerCoin: 1 },
+  }
+
+  it('★ 装的是旧版：按钮写「更新」，版本号写「旧 → 新」', () => {
+    useApp.setState({ ownedGameIds: ['cloudfarm'], installedGames: { cloudfarm: oldCloudfarm } })
+    render(<GameMarket gateOpen />)
+
+    const btn = document.querySelector('[data-local-install="cloudfarm"]') as HTMLButtonElement | null
+    expect(btn, '旧版也要有升级入口').toBeTruthy()
+    expect(btn!.textContent, '按钮说的是「更新」而不是「下载」').toContain('更新')
+
+    const row = document.querySelector('[data-local-row="cloudfarm"]') as HTMLElement
+    expect(row.textContent, '只写目标版本会让人以为装的就是那一版').toContain(
+      `v1.1.0 → v${CLOUDFARM_VERSION}`,
+    )
   })
 })

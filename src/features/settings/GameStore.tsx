@@ -526,7 +526,16 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                       upToDateId={upToDate ? local.id : undefined}
                       icon={<RowIcon id={g.id} tint={g.tint} />}
                       name={g.name}
-                      note={`v${target}`}
+                      /*
+                        装了旧版时写「旧 → 新」。只写目标版本的话，家长会以为
+                        装的就是那一版（原来是「已装 v1.0.0 · 有新版本 v1.0.2」，
+                        一行塞不下；箭头是同一个意思，占一半地方）。
+                      */
+                      note={
+                        installed && hasUpdate(target, installed.version)
+                          ? `v${installed.version} → v${target}`
+                          : `v${target}`
+                      }
                       subtitle={g.pitch}
                       /*
                         行上只留「适龄 · 一次多久」。**体积不放这儿** ——
