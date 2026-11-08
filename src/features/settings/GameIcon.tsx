@@ -148,6 +148,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   guardshift: Guardshift,
   hoopsneak: Hoopsneak,
   doodlederby: Doodlederby,
+  farmlord: Farmlord,
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -218,6 +219,32 @@ function CloudFarm({ deep }: { deep: string }) {
       <path d="M20.5 12 32 4.5 43.5 12Z" fill="#D9553F" />
       <rect x="30" y="17.5" width="4.6" height="6.5" fill="#D9553F" />
       <rect x="30.4" y="7.6" width="3.2" height="3" fill="#FFD9A0" />
+    </g>
+  )
+}
+
+/** 我是一个农场主：一根胡萝卜 + 一段篱笆（偷菜农场的招牌画面） */
+function Farmlord({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 土垄：压在下沿，和云边小农场那条绿丘分开 */}
+      <path d="M0 50c10-6 22-6 32-2s22 1 32-2v18H0Z" fill={deep} opacity=".55" />
+
+      {/* 篱笆：两根桩 + 一根横杆 */}
+      <g fill="#F6E6C8">
+        <rect x="5.5" y="29" width="4" height="21" rx="1.6" />
+        <rect x="16" y="34" width="4" height="16" rx="1.6" />
+        <rect x="4.5" y="35.4" width="17.5" height="3.4" rx="1.7" />
+      </g>
+
+      {/* 胡萝卜：先画暗面再画亮面，否则是一块平橘色 */}
+      <path d="M44 21.5c5.2 0 9.3 4.1 9.3 8.9 0 6.2-6.8 15.4-9.3 17.9-2.5-2.5-9.3-11.7-9.3-17.9 0-4.8 4.1-8.9 9.3-8.9Z" fill="#F08A3C" />
+      <path d="M47.8 23.6c3.5 1.1 5.5 3.7 5.5 6.8 0 4.8-4.6 11.8-7.2 15.1 1.5-4.6 3.7-9.8 3.7-13.9 0-3.3-.9-5.8-2-8Z" fill="#D96F26" opacity=".65" />
+
+      {/* 缨：三片叶子，深浅错开 */}
+      <path d="M44 21.5c-1-4.2-3.5-6.9-6.7-8.4 2.7 3.1 4 5.7 4.2 9Z" fill="#5FA83C" />
+      <path d="M44 21.5c1.7-4.2 4.8-6.5 8.4-7.1-3.4 2.7-5.5 5-6.1 8Z" fill="#7BC24A" />
+      <path d="M44 21.5c0-4.6 1.5-7.8 3.6-9.9-1.3 3.8-1.7 6.7-1.1 9.9Z" fill="#4E9330" />
     </g>
   )
 }

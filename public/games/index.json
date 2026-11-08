@@ -146,6 +146,13 @@
       "version": "1.0.0",
       "file": "doodlederby/doodlederby.plugin.mjs",
       "assetBase": "doodlederby/"
+    },
+    {
+      "id": "farmlord",
+      "name": "我是一个农场主",
+      "version": "1.0.1",
+      "file": "farmlord/farmlord.plugin.mjs",
+      "assetBase": "farmlord/"
     }
   ]
 }

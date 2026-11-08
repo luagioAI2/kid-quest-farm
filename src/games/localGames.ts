@@ -221,6 +221,15 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "sha256": "2a93a0c34852d6401622278c5180920a057b121b1e4dd5ce72a7aeb0ead0c95b",
     "bytes": 4421556,
     "assetBase": "/games/doodlederby/"
+  },
+  {
+    "id": "farmlord",
+    "name": "我是一个农场主",
+    "version": "1.0.1",
+    "url": "/games/farmlord/farmlord.plugin.mjs",
+    "sha256": "7cc4e3fc4dd7f290568020d2ec0e373f3d190d31d5f6c88bfd67914b3492c2c8",
+    "bytes": 7830,
+    "assetBase": "/games/farmlord/"
   }
 ]
 

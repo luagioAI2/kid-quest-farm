@@ -238,6 +238,18 @@ PLAN = [
         ("screenshots/store-3.png", "3"),
         ("screenshots/store-4.png", "4"),
     ]),
+    # 2026-11-08 新增（扒自 MakePlay 的 Harvest Heist，本地化成「我是一个农场主」）。
+    # 源图由 `task-games/farmlord/_store-shots.mjs` 拍（DPR 2，420×880）。
+    # 顺序：农场长什么样 → 商店种子 → 商店动物 → 邻居（能去别人家偷菜）。
+    # ⚠️ 第 1 张必须**先把地种上**：全新档是 6 块秃地，拍出来像一张背景图。
+    # ⚠️ 商店页签是**开关** —— 点已经选中的那个会把弹层关掉，
+    #    第一次就是这么拍成农场的（脚本里现在只在没选中时才点）。
+    ("farmlord", "farmlord", [
+        ("screenshots/store-1-farm.png", "1"),
+        ("screenshots/store-2-shop-seeds.png", "2"),
+        ("screenshots/store-3-shop-animals.png", "3"),
+        ("screenshots/store-4-neighbors.png", "4"),
+    ]),
 ]
 
 WIDTH = 360
