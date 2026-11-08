@@ -381,6 +381,8 @@ await waitForApp(page)
 }
 
 let pointsAfterPlant = 0
+/* ③ 卖出的券数：④ 退出之后要拿它去核顶栏那个数字（全屏时顶栏是收掉的） */
+let vouchersSold = 0
 {
   check('点了底部那一格', await clickSel(`[data-tour="tab-${GAME_ID}"]`))
   check('宿主给插件开出了容器（`data-plugin-host`）', await waitFor(`[data-plugin-host="${GAME_ID}"]`, 20000))
@@ -465,12 +467,19 @@ let pointsAfterPlant = 0
     /none/.test(shape.barBg) && shape.barShadow === 'none',
     `bg=${shape.barBg} shadow=${shape.barShadow}`,
   )
-  // 反过来：宿主顶栏必须**真的**在显示兑换券（否则孩子哪儿都看不到这个数）
-  const hostVoucher = await page.evaluate(() => {
-    const el = document.querySelector('header [aria-label^="兑换券"]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : null
-  })
-  check('★ 宿主顶栏显示兑换券（插件当值时也在）', hostVoucher !== null, hostVoucher ?? '(顶栏没有兑换券)')
+  /*
+   * ★ 2026-11-09 起游戏那一格是**全屏**：顶栏和底栏都收掉了，最上面只留一条
+   *   「退出游戏」。所以这里不再找 header（它本来就不该在），改判「真的收掉了」；
+   *   兑换券那个数字挪到 ④ 退出之后再验。
+   */
+  const chrome = await page.evaluate(() => ({
+    header: !!document.querySelector('header'),
+    nav: !!document.querySelector('nav'),
+    exit: !!document.querySelector('[data-tour="exit-game"]'),
+  }))
+  check('★ 全屏：App 顶栏收掉了（游戏多出约 56px）', chrome.header === false)
+  check('★ 全屏：底栏也收掉了（不会误点「心愿」）', chrome.nav === false)
+  check('★ 全屏：留了「退出游戏」这个出口', chrome.exit === true)
   // 留一张图给走查（`screenshots/` 才是要留的，这里进 scratch）
   await page.screenshot({ path: join(OUT, `${VIEWPORT}-host.png`) })
 
@@ -551,18 +560,10 @@ console.log('\n【③ 收成 → 卖出 → 兑换券】')
   )
   /*
    * ★ 光看 store 不够：孩子看到的是**顶栏那个数**。
-   *   `hostApi.mintVoucher` 里有 `deps.refresh()`（got > 0 时），这条断言就是钉住它 ——
-   *   漏了 refresh 的话 store 会变、顶栏不动，而所有 store 断言照样绿。
+   *   但全屏时顶栏是收掉的 ⇒ 这条挪到 ④ 退出之后验（那时读到的仍是刚卖出来的数，
+   *   `hostApi.mintVoucher` 漏了 `deps.refresh()` 一样会被抓到）。
    */
-  const headAfter = await page.evaluate(() => {
-    const el = document.querySelector('header [aria-label^="兑换券"]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : null
-  })
-  check(
-    '★ 卖出后宿主顶栏的兑换券数字跟着变了',
-    headAfter !== null && headAfter.includes(String(afterSell.vouchers)),
-    `${headAfter ?? '(没有)'}（余额 ${afterSell.vouchers}）`,
-  )
+  vouchersSold = afterSell.vouchers
   check(
     '卖出**没有**把积分加回来',
     afterSell.balance === pointsAfterPlant,
@@ -588,9 +589,9 @@ console.log('\n【③ 收成 → 卖出 → 兑换券】')
       底栏里根本没有 `tab-farm` 那一格。要「切走」只能点别的栏（任务 / 兑换 / 积分）。
       第一版就是点了 `tab-farm` ⇒ 三条连带红，看着像 unmount 没跑。
    ============================================================ */
-console.log('\n【④ 切到「任务」栏 → 插件卸载】')
+console.log('\n【④ 点「退出游戏」→ 插件卸载】')
 {
-  check('点底栏「任务」那一格', await clickSel('[data-tour="tab-tasks"]'))
+  check('点「退出游戏」', await clickSel('[data-tour="exit-game"]'))
   await wait(1200)
   const gone = await page
     .waitForFunction(() => !window.__farm, { timeout: 10000 })
@@ -601,6 +602,30 @@ console.log('\n【④ 切到「任务」栏 → 插件卸载】')
     GAME_ID,
   )
   check('宿主容器也收掉了', box === false)
+
+  /*
+   * 退出之后才看顶栏 —— 全屏那一屏里它是故意不渲染的。
+   * 顺带钉住「退出 = 回任务页」这个语义：底栏那一格必须是选中态。
+   */
+  const back = await page.evaluate(() => ({
+    header: !!document.querySelector('header'),
+    nav: !!document.querySelector('nav'),
+    exit: !!document.querySelector('[data-tour="exit-game"]'),
+    voucher: (() => {
+      const el = document.querySelector('header [aria-label^="兑换券"]')
+      return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : null
+    })(),
+    onTasks: document.querySelector('[data-tour="tab-tasks"]')?.getAttribute('aria-current') === 'page',
+  }))
+  check('退出后顶栏回来了', back.header === true)
+  check('退出后底栏回来了', back.nav === true)
+  check('退出后「退出游戏」跟着收掉', back.exit === false)
+  check('★ 退出回到「任务」页（那一格是选中态）', back.onTasks === true)
+  check(
+    '★ 顶栏兑换券显示的就是刚卖出来的数',
+    !!back.voucher && back.voucher.includes(String(vouchersSold)),
+    `${back.voucher ?? '(没有)'}（卖出 ${vouchersSold}）`,
+  )
 
   const after = await snap()
   check(

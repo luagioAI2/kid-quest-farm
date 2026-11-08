@@ -24,6 +24,7 @@ import { gameById } from './games/registry'
 import { CURRENCY } from './domain/currency'
 import { pageFor } from './games/pages'
 import { PluginGameHost } from './games/PluginGameHost'
+import { ExitGameBar } from './features/game/ExitGameBar'
 import { GamePlayGate } from './features/game/GamePlayGate'
 import './features/farm/farm.css'
 
@@ -107,6 +108,20 @@ export default function App() {
   const activePlugin = useApp((s) => s.installedGames[activeGameId])
 
   const [tab, setTab] = useState<TabKey>('tasks')
+  /**
+   * 游戏那一格**全屏**：进游戏就把 App 的顶栏和底栏收掉，只在顶上留一条
+   * 「退出游戏」（`ExitGameBar`）。理由：
+   *
+   *   ① 游戏是唯一「要沉浸」的页面，顶栏底栏加起来约 128px，
+   *      手机上占掉近 1/6 屏、平板横屏上更亏（云边小农场本来就嫌画面矮）。
+   *   ② 底栏 4 格里有 3 格是「离开游戏」，真正需要的只有「回去」这一个动作
+   *      —— 换成一条明确的「退出游戏」比一排格子更清楚，也不会误点到「心愿」。
+   *
+   * ⚠️ 离开游戏必须点「退出游戏」（`data-tour="exit-game"`）——
+   *    底栏在这一屏**不存在**，走查脚本里凡是「切到游戏再点底栏」的写法都要改。
+   * ⚠️ 退出后回「任务」页（App 的首页），不是回游戏 —— 那正是这一下的语义。
+   */
+  const inGame = tab === 'game'
   const [showSettings, setShowSettings] = useState(false)
   /**
    * 设置页打开时落在哪一栏。默认「孩子」。
@@ -499,6 +514,7 @@ export default function App() {
               内容再收进 `page-col`。原来顶栏和内容一起被 `max-w-2xl` 卡住，
               在 iPad 上会变成「中间悬着一条 672px 的横条」，两边各空一大块。
               同理，底部导航也改成通栏。 */}
+          {!inGame && (
           <header className="sticky top-0 z-30 border-b border-ink-900/10 bg-paper/95 backdrop-blur">
             {/* `pl-safe pr-safe` 是 calc(env(...) + 1rem)，正好等于原来的 px-4，
                 但横屏刘海屏上会多让出安全区。横屏时刘海就在顶栏左右两端，
@@ -620,12 +636,16 @@ export default function App() {
               </button>
             </div>
           </header>
+          )}
 
           {/*
             「现在连不上服务器」的横幅。**放在 header 和 main 之间**：
             它是全局状态，不属于任何一个 tab —— 挂在某个页面里的话，
             孩子切到别的页面就看不到，正好在那一刻误以为数据是新的。
           */}
+          {/* 全屏时唯一的一条 App 界面：退出游戏 */}
+          {inGame && <ExitGameBar onExit={() => setTab('tasks')} />}
+
           <SyncBanner />
 
           <main key={tab} className="flex flex-1 flex-col anim-fade-in">
@@ -671,6 +691,7 @@ export default function App() {
           {/* 底部导航：同样通栏 + `page-col` 收内容（理由见顶栏注释）。
               底栏保留在底部而不是改成侧边栏 —— 孩子两手握平板时，
               拇指够得着底边，够不着侧边中段。 */}
+          {!inGame && (
           <nav className="sticky bottom-0 z-30 border-t border-ink-900/10 bg-paper/95 backdrop-blur">
             <div className="page-col flex items-stretch justify-center gap-1 px-2 py-2 pb-safe">
               {tabs.map((t) => {
@@ -700,6 +721,7 @@ export default function App() {
               })}
             </div>
           </nav>
+          )}
         </>
       )}
 

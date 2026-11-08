@@ -416,7 +416,12 @@ console.log(`\n【⑥ 点开第 1 题：积分必须 -${PLAY_COST}，券一分�
 console.log('\n【⑦ 对局中切走：卸载要真的跑，存档要落盘】')
 {
   const before = await snap()
-  check('点「任务」那一格（切走游戏）', await clickSel('[data-tour="tab-tasks"]'))
+  /*
+   * ★ 2026-11-09 起游戏那一格**全屏**：底栏根本不渲染，只有一个「退出游戏」。
+   *   这一句原来点的是 `tab-tasks` —— 那一格现在不存在，会报「没点着」，
+   *   而真正的原因不是卸载坏了。
+   */
+  check('点「退出游戏」（切走游戏）', await clickSel('[data-tour="exit-game"]'))
   await wait(1800)
 
   const gone = await page.evaluate(() => ({

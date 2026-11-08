@@ -1422,6 +1422,9 @@ try {
     window.__kqf__.getState().updateSettings({ gameDailyMinutes: 0, gameClock: undefined }),
   )
   await wait(300)
+  /* 游戏那一格是全屏的（2026-11-09）：底栏不在，得先点「退出游戏」回任务页 */
+  await page.evaluate(() => document.querySelector('[data-tour="exit-game"]')?.click())
+  await wait(400)
   await page.evaluate(() => document.querySelector('[data-tour="tab-tasks"]')?.click())
   await wait(600)
 

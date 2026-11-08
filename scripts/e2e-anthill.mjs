@@ -435,7 +435,12 @@ console.log('\n【⑤ 切走：卸载要真的跑，存档要落盘】')
    * 要切走只能点别的固定格 —— 这里点「任务」。
    * 判据写错的表现是「卸载没跑」，而其实是**根本没切走**。
    */
-  check('点「任务」那一格（切走游戏）', await clickSel('[data-tour="tab-tasks"]'))
+  /*
+   * ★ 2026-11-09 起游戏那一格**全屏**：底栏根本不渲染，只有一个「退出游戏」。
+   *   这一句原来点的是 `tab-tasks` —— 那一格现在不存在，会报「没点着」，
+   *   而真正的原因不是卸载坏了。
+   */
+  check('点「退出游戏」（切走游戏）', await clickSel('[data-tour="exit-game"]'))
   await wait(1500)
 
   const gone = await page.evaluate(() => ({
