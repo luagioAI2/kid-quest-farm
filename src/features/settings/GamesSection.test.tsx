@@ -179,16 +179,27 @@ describe('设置 → 游戏：未拥有的不显示', () => {
     expect(dlg!.querySelector(`[data-local-install="${GAME}"]`)).toBeTruthy()
   })
 
-  it('★ 表底说明指向「兑换」，不写「在那里用券换」', () => {
-    // 心愿商城**不收钱**（`WishPage` 只把人送到兑换，见 `jumpToRedeem`）。
-    // 旧文案写「在那里用兑换券换」⇒ 家长照着去心愿页找付款按钮，只会看到「去兑换换」。
+  it('★ 表底那几句说明和「有兑换码？」入口都已经删掉', () => {
+    /*
+      2026-11-07 家长：「表里只有已经拥有的游戏。想要别的：……卸载在「详情」
+      最下面 —— 会把存档一起删掉。🎟️ 有兑换码？  这些不需要。」
+      ⇒ 整块删掉（说明 + 输码入口）。
+
+      这条从「说明里要写『兑换』」翻过来，是因为**那一整段不存在了**：
+      还按原文案断言的话，删掉之后它红在一个和被测行为无关的地方，
+      而报错只会说「expected undefined to be truthy」。
+
+      ⚠️ 别再往回加：这一屏是控制台，不是介绍页 —— 同一张卡 2026-11-07
+         已经因为同样的理由删过两段说明（见 `GameStore.tsx` 的注释）。
+         输码现在只剩「心愿 → 商品详情 / 家长定价页」一条路。
+    */
     useApp.setState({ ownedGameIds: [], installedGames: {} })
     render(<GamesSection gateOpen />)
-    const p = [...document.querySelectorAll('p')].find((x) =>
-      /只有已经拥有/.test(x.textContent ?? ''),
-    )
-    expect(p).toBeTruthy()
-    expect(p!.textContent).toMatch(/兑换/)
-    expect(p!.textContent).not.toMatch(/在那里/)
+    expect(
+      [...document.querySelectorAll('p')].some((x) => /只有已经拥有/.test(x.textContent ?? '')),
+      '表底那段说明不该再有',
+    ).toBe(false)
+    expect(document.querySelector('[data-code-open]'), '设置里不该再有输码入口').toBeNull()
+    expect(document.querySelector('[data-code-box]')).toBeNull()
   })
 })

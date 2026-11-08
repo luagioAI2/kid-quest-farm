@@ -71,12 +71,10 @@ describe('心愿商城：数字商品兑换之后', () => {
 
     render(<WishPage />)
     expect(await screen.findByText('已放进游戏柜'), '盲盒 hero 的说法').toBeTruthy()
-    /* 2026-10-29 改了：已拥有的游戏盒子**整张不显示**了（家长：
-       「兑换了就有了，不需要再兑换，不需要显示在能换什么」）。
-       原来这里断言它写「已经有了」—— 那张卡换不了、也没有任何可做的动作，
-       只是占位置。现在它直接不在列表里，改由底部那句计数解释。 */
-    expect(screen.queryByText('已经有了'), '已拥有的游戏盒子不该再列出来').toBeNull()
-    expect(screen.getByText(/1 款游戏你已经换到了/), '藏了要说一句').toBeTruthy()
+    /* 2026-11-08 改口：已拥有的游戏盒子**照样列出来**，标「已拥有」
+       （家长：「心愿可以显示 已拥有」）。2026-10-29 那一版是整张藏掉。 */
+    expect(screen.getByText('收租公寓'), '已经拥有的也要显示').toBeTruthy()
+    expect(screen.queryByText(/款游戏你已经换到了/), '不再藏了，也就没有这句补丁').toBeNull()
     expect(
       screen.queryByText('等爸妈确认'),
       '孩子已经拿到游戏了，「等爸妈确认」是在描述一个不存在的步骤',
@@ -288,8 +286,8 @@ describe('心愿：家长怎么处理「已告诉爸爸妈妈」', () => {
    ⚠️ 只藏**游戏盒子**，不藏盲盒：盲盒不是「拥有」，是「开完了」，
       它上面那句「这些游戏你都有啦」本身是信息。
    ============================================================ */
-describe('心愿商城：已经换到的游戏不再列出来', () => {
-  it('★ 拥有之后那张卡消失，底部说明有 1 款', async () => {
+describe('心愿商城：已经拥有的游戏照样列出来，只是标「已拥有」', () => {
+  it('★ 拥有之后那张卡还在，角标和按钮都是「已拥有」、按钮点不动', async () => {
     await db.wishOrders.put(
       committedOrder({
         id: 'wo_owned',
@@ -304,15 +302,51 @@ describe('心愿商城：已经换到的游戏不再列出来', () => {
 
     render(<WishPage />)
     await screen.findByText('心愿商城')
-    expect(screen.queryByText('收租公寓'), '已经拥有的游戏不该在列表里').toBeNull()
-    expect(screen.getByText(/1 款游戏你已经换到了/), '藏了要说一句').toBeTruthy()
+
+    const card = document.querySelector('[data-wish-id="wish-game-renttower"]') as HTMLElement
+    expect(card, '已经拥有的游戏也要在列表里（2026-11-08 家长改口）').toBeTruthy()
+    const btn = card.querySelector('[data-wish-action]') as HTMLButtonElement
+    expect(btn.getAttribute('data-wish-action'), '状态是「已拥有」这一档').toBe('owned')
+    expect(btn.textContent).toContain('已拥有')
+    expect(btn.disabled, '已拥有就不能再点（点了也没得换）').toBe(true)
+    // 都拥有了，再摆「去激活」就是在卖一件已经在柜子里的东西
+    expect(card.querySelector('[data-wish-activate]')).toBeNull()
   })
 
-  it('对照组：没拥有的游戏照旧在列表里', async () => {
+
+  it('★ 已拥有的详情里不摆「定价」（定了也永远换不了）', async () => {
+    await db.wishOrders.put(
+      committedOrder({
+        id: 'wo_owned2',
+        itemId: 'wish-game-renttower',
+        itemName: '收租公寓',
+        itemEmoji: '🏢',
+        kind: 'gamebox',
+        openedGameId: 'renttower',
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
     render(<WishPage />)
     await screen.findByText('心愿商城')
-    expect(screen.getByText('收租公寓'), '没换到的游戏不该被藏').toBeTruthy()
-    expect(screen.queryByText(/款游戏你已经换到了/), '一款都没换过就别摆这句').toBeNull()
+    const card = document.querySelector('[data-wish-id="wish-game-renttower"]') as HTMLElement
+    await user.click(card.querySelector('button') as HTMLElement)
+
+    /* 这一单是「兑换到手」的，详情走「已经放进你的游戏柜了」那条分支；
+       激活码 / 后台授予来的没有单子，才走「这个游戏你已经有了」。 */
+    expect(await screen.findByText(/已经放进你的游戏柜了/)).toBeTruthy()
+    expect(
+      screen.queryByRole('button', { name: '定价' }),
+      '已经拥有的商品不该再摆定价 —— 卡片永远写着「已拥有」，那个价换不了',
+    ).toBeNull()
+  })
+
+  it('对照组：没拥有的照旧是「我想要」', async () => {
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+    const card = document.querySelector('[data-wish-id="wish-game-renttower"]') as HTMLElement
+    expect(card.querySelector('[data-wish-action]')?.getAttribute('data-wish-action')).toBe('want')
   })
 })
 
@@ -444,7 +478,8 @@ describe('心愿商城：分类', () => {
 
    改动之前这一页**只有「定券价」**：想花钱买的家长无处可去
    （游戏类商品的 `buyUrl` 一个都没有），拿到卡也没有输码的地方，
-   得自己摸到「设置 → 游戏 → 有兑换码」。所以两块都摆到家长眼前。
+   得自己摸到「设置 → 游戏 → 有兑换码」（那个入口 2026-11-07 已删，
+   现在这里就是家长唯一的输码处）。所以两块都摆到家长眼前。
 
    ⚠️ 同时钉住一个容易写错的分叉：已交付的数字商品**不能**再说
    「去商店购买」—— 给游戏补上 `buyUrl` 之后，那句差点变成
@@ -588,7 +623,9 @@ describe('心愿：卡片「去激活」弹框', () => {
     ).toBeNull()
   })
 
-  it('★ 保护开着：先要家长密码，输入框不摆给孩子', async () => {
+  /* 30s：2026-11-08 起心愿列表**不再过滤已拥有的**，一屏要多渲染 20 多张卡，
+     并行跑（vitest 同时开 6 个 jsdom）时这两条十几下点击的用例会摸到 15s 的边。 */
+  it('★ 保护开着：先要家长密码，输入框不摆给孩子', { timeout: 30000 }, async () => {
     await useApp.getState().updateSettings({ protectParentActions: true, parentPin: '1234' })
     await openActivate()
 
@@ -1057,7 +1094,7 @@ describe('心愿：家长密码是一个弹框，不是铺在页面里的键盘'
     ).toBeNull()
   })
 
-  it('★ 点锁按钮才弹框；输错不放行，输对了真按钮才出现', async () => {
+  it('★ 点锁按钮才弹框；输错不放行，输对了真按钮才出现', { timeout: 30000 }, async () => {
     const user = await openPhysicalCommitted()
 
     await user.click(document.querySelector('[data-parent-lock]') as HTMLElement)

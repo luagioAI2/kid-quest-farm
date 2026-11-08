@@ -9,7 +9,8 @@ import { toServerShip, type ShipDraft } from '../domain/wishShip'
 
    ① **兑换码**（`redeemWishCode`）—— 本地版和在线版都在用。
       家长在淘宝/天猫/京东买游戏，卖家会发一串 6 位激活码（没有实体卡）。
-      输进「设置 / 游戏 / 有兑换码？」或心愿商城的商品详情页 →
+      输进心愿商城的商品详情页 / 家长定价页（`features/wish/CodeRedeemBlock.tsx`）→
+      （`设置 / 游戏 / 有兑换码？` 那个入口 2026-11-07 按家长要求删了）
       服务端验码并**直接授予游戏**。
 
       ⚠️ 这个接口是**写操作**，而且不可撤销：

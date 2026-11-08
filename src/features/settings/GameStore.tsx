@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useApp } from '../../store/useApp'
 import { Card } from './ui'
 import { Portal } from '../../components/Portal'
@@ -16,6 +16,7 @@ import { GAMES, gameById, type GameDef } from '../../games/registry'
 import { formatSize } from '../../games/size'
 import { checkPluginEconomy, vouchersPerPlay } from '../../domain/pluginEconomy'
 import { ownedSetFor } from '../../domain/ownership'
+import { hasUpdate } from '../../games/version'
 import { isOnlineMode } from '../../sync/pull'
 import { GameIconArt } from './GameIcon'
 import { SnapshotSection } from './SnapshotSection'
@@ -512,8 +513,10 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                              那颗药丸是 `PILL_MUTE`（`span`，不可点），而它坐在
                              **动作列**里、外面还裹着 `pointer-events-auto` ——
                              整行别处都能点进详情，唯独这块点下去什么都不发生。
-                             写着「去…」就一定会有人去点。它现在只陈述状态，
-                             「怎么解锁」交给表格底下那两句（那里才是能照着做的地方）。 */
+                             写着「去…」就一定会有人去点。它现在只陈述状态 ——
+                             这一屏也不再说「怎么解锁」：家长 2026-11-07 要求
+                             把表格底下那几句说明连同「有兑换码？」一起删掉，
+                             解锁只剩「心愿 → 那件商品 → 爸妈定价页」一条路。 */
                           <span className={PILL_MUTE} data-local-need-own={local.id}>
                             未拥有
                           </span>
@@ -527,23 +530,7 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
           )
         })}
 
-        <p className="mt-4 text-[11px] leading-snug text-ink-500">
-          {/* ⚠️ 这一句必须留着：表里只列**已拥有**的游戏（2026-11-07 起），
-              默认一款都没有 —— 不说一句「去哪儿弄」，家长只会觉得游戏全丢了、
-              连个入口都没有。
-
-              ⚠️ 别写成「在那里用兑换券换」：**心愿商城不收钱**
-              （`WishPage` 那一页只把人送到兑换，见 `jumpToRedeem` 的注释；
-              家长 10-29 原话「不需要去心愿商城换，心愿商城只是标明心愿的」）。
-              照着旧文案去心愿页找付款按钮，找到的只有「去兑换换」。 */}
-          表里只有已经拥有的游戏。想要别的：让孩子在「心愿」里说要哪款、你定价之后到「兑换」里换；
-          兑换码可以直接输在下面，换完会顺手装好。
-          装之前会核对包的内容（本地包对内置哈希）。卸载在「详情」最下面 —— 会把存档一起删掉。
-        </p>
-
         <RemoteGames gateOpen={gateOpen} />
-
-        <CodeRedeem gateOpen={gateOpen} />
       </Card>
 
       {detailId && (
@@ -564,116 +551,6 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
         />
       )}
     </>
-  )
-}
-
-/* ============================================================
-   ①.5 兑换码（spec §6 的 P2）
-   ============================================================ */
-
-/**
- * 「有兑换码？」—— 输 6 位码，把那一款游戏解锁并装好。
- *
- * ## 为什么放在这张卡里，而不是孩子端
- *
- * 码是**付款凭证**。这个 App 里一切跟钱有关的动作都在家长栏后面
- * （`gateOpen`），这里跟着同一条规矩。孩子想自己输，家长开着闸门就行。
- *
- * ## 为什么不用弹层
- *
- * 弹层要 Portal 到 `document.body`（外壳有隐式层叠上下文，z-index 没用），
- * 还要处理 Esc / 焦点陷阱 / 点背景关闭 —— 为一个输入框付这些代价不值。
- * 展开成一行就够了，而且家长栏本来就是竖着滚的。
- *
- * ## 文案
- *
- * **不写「一次性」**。防重只在这台设备上成立（没有账号、没有服务器），
- * 写「一次性」就是界面承诺了它做不到的事。
- */
-function CodeRedeem({ gateOpen }: { gateOpen: boolean }) {
-  const redeemGameCode = useApp((s) => s.redeemGameCode)
-  const [open, setOpen] = useState(false)
-  const [code, setCode] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    if (busy || !gateOpen) return
-    setBusy(true)
-    try {
-      const r = await redeemGameCode(code)
-      setMsg({ ok: r.ok, text: r.message })
-      // 成功才清空 —— 失败时留着刚敲的码，好对着改一位
-      if (r.ok) setCode('')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        data-code-open
-        disabled={!gateOpen}
-        onClick={() => setOpen(true)}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink-300 bg-white/60 py-2 text-[12.5px] font-bold text-ink-600 disabled:opacity-50"
-      >
-        🎟️ 有兑换码？
-      </button>
-    )
-  }
-
-  return (
-    <form onSubmit={submit} data-code-box className="mt-3 rounded-xl border border-ink-200 bg-white p-3">
-      <label htmlFor="game-code" className="text-[12.5px] font-bold text-ink-700">
-        把卡片上的 6 位码输进来
-      </label>
-      <p className="mt-0.5 text-[11px] leading-snug text-ink-500">
-        字母不区分大小写，中间那一横不用输。兑换成功后那一款会直接装好，也一直算「已拥有」。
-      </p>
-
-      <div className="mt-2 flex gap-2">
-        <input
-          id="game-code"
-          data-code-input
-          value={code}
-          onChange={(ev) => setCode(ev.target.value)}
-          // 手机键盘默认小写、码是大写 —— 归一化在 store 里做。
-          // 别用 `text-transform` 去「改正」显示：那样用户看不到自己敲了什么。
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          inputMode="text"
-          maxLength={8}
-          placeholder="ABC-DEF"
-          className="min-w-0 flex-1 rounded-lg border border-ink-200 px-3 py-2 font-mono text-[15px] uppercase tracking-[0.18em] text-ink-800 outline-none focus:border-grass-400"
-        />
-        <button
-          type="submit"
-          data-code-submit
-          disabled={busy || !gateOpen || code.trim().length === 0}
-          className="shrink-0 rounded-lg bg-grass-500 px-4 py-2 text-[13px] font-extrabold text-white disabled:opacity-50"
-        >
-          {busy ? '兑换中…' : '兑换'}
-        </button>
-      </div>
-
-      {msg && (
-        <p
-          data-code-msg
-          data-code-ok={msg.ok ? '1' : '0'}
-          className={`mt-2 text-[12px] font-bold ${msg.ok ? 'text-grass-600' : 'text-berry-500'}`}
-        >
-          {msg.text}
-        </p>
-      )}
-
-      <p className="mt-2 text-[11px] leading-snug text-ink-400">
-        同一个码在这台手机上只能兑换一次。设备里只留哈希，不留明文。
-      </p>
-    </form>
   )
 }
 
@@ -1033,7 +910,7 @@ function GameIcon({ g, size = 'md' }: { g: StorefrontEntry; size?: 'md' | 'lg' }
 }
 
 /* ============================================================
-   ①.6 从服务器下载（远端目录）
+   ①.5 从服务器下载（远端目录）
    ============================================================ */
 
 /**
@@ -1160,7 +1037,9 @@ function RemoteGames({ gateOpen }: { gateOpen: boolean }) {
                   </div>
                   <p className="mt-0.5 text-[11px] leading-snug text-ink-500">
                     {installed
-                      ? `已装 v${installed.version}`
+                      ? hasUpdate(g.version, installed.version)
+                        ? `已装 v${installed.version} · 有新版本 v${g.version}`
+                        : `已装 v${installed.version}`
                       : owned
                         ? '已拥有 · 还没下载'
                         : '未拥有'}
@@ -1168,7 +1047,23 @@ function RemoteGames({ gateOpen }: { gateOpen: boolean }) {
                 </div>
                 <div className="shrink-0">
                   {installed ? (
-                    isCurrent ? (
+                    /*
+                      2026-11-07：已装**旧版**时原来只给「设为当前」——
+                      也就是说发一版修好的 v1.0.2，装过 v1.0.0 的机器永远看不到它，
+                      只能卸载重装（而这块还没有卸载入口）。「更新」这条链是必须的。
+                      判据用 `hasUpdate` 而不是 `!==`：目录回滚时（目录 1.0.0、
+                      机器 1.0.2）不能劝人「更新」，那会把人降级还显示成功。
+                    */
+                    hasUpdate(g.version, installed.version) ? (
+                      <button
+                        disabled={!gateOpen || !!busyId}
+                        data-remote-update={g.id}
+                        onClick={() => void download(g.id)}
+                        className={PILL_SOFT}
+                      >
+                        {busyId === g.id ? '正在更新…' : `更新到 v${g.version}`}
+                      </button>
+                    ) : isCurrent ? (
                       <span className={PILL_MUTE}>当前</span>
                     ) : (
                       <button
