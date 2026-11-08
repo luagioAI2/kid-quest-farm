@@ -58,6 +58,18 @@ if (!Array.isArray(index.games)) {
   process.exit(2)
 }
 
+/** 递归累加一个目录里所有文件的字节数（跳过 `.DS_Store` 这类） */
+function dirBytes(dir) {
+  let n = 0
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (ent.name === '.DS_Store' || ent.name === 'Thumbs.db') continue
+    const p = path.join(dir, ent.name)
+    if (ent.isDirectory()) n += dirBytes(p)
+    else if (ent.isFile()) n += fs.statSync(p).size
+  }
+  return n
+}
+
 /** 站点根相对路径（正斜杠）。Windows 上 path.join 会给反斜杠，浏览器不认。 */
 const sitePath = (rel) => '/games/' + rel.split(path.sep).join('/').replace(/^\/+/, '')
 
@@ -90,6 +102,16 @@ for (const g of index.games) {
     process.exit(2)
   }
 
+  /*
+   * 这一款**一共要占多少空间**（入口 + 资源）。
+   *
+   * 为什么要单独算：`bytes` 只是入口 `.plugin.mjs` 的大小，而详情页那颗
+   * 「8 KB」的角标读起来就是「这个游戏 8 KB」。资源不内联的游戏
+   * （`main.js` 在旁边的这种）会显示成 8 KB —— 实际 7.4 MB，家长下载前
+   * 看到的数字是错的。`bytes` 保持原样不动（哈希校验、老断言都指着它）。
+   */
+  const totalBytes = dirBytes(assetAbs) + (path.resolve(abs).startsWith(path.resolve(assetAbs)) ? 0 : buf.byteLength)
+
   rows.push({
     id: g.id,
     name: g.name,
@@ -97,6 +119,7 @@ for (const g of index.games) {
     url: sitePath(g.file),
     sha256,
     bytes: buf.byteLength,
+    totalBytes,
     assetBase: sitePath(assetRel.endsWith('/') ? assetRel : assetRel + '/'),
   })
 }
@@ -130,7 +153,10 @@ export interface LocalGameEntry {
   /** 站点绝对路径（\`/games/<id>/<包>\`），dev / preview / Capacitor 都一样 */
   url: string
   sha256: string
+  /** 入口文件（\`.plugin.mjs\`）的字节数 —— 校验用，不是「这个游戏多大」 */
   bytes: number
+  /** 入口 + 资源的合计字节数。界面上显示「多大」用这个 */
+  totalBytes: number
   /** 资源根，以 \`/\` 结尾 */
   assetBase: string
 }

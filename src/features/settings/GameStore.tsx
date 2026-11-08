@@ -672,7 +672,7 @@ function DetailView({
             <div className="mt-2 flex flex-wrap gap-1.5">
               <Chip>{g.age}</Chip>
               <Chip>{g.session}</Chip>
-              {local && <Chip>{formatSize(local.bytes)}</Chip>}
+              {local && <Chip>{formatSize(local.totalBytes || local.bytes)}</Chip>}
             </div>
           </div>
         </div>

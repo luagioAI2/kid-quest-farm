@@ -1041,7 +1041,7 @@ function DetailView({
             <div className="mt-2 flex flex-wrap gap-1.5">
               <Meta>{gameEntry.age}</Meta>
               <Meta>{gameEntry.session}</Meta>
-              {localGame && <Meta>{formatSize(localGame.bytes)}</Meta>}
+              {localGame && <Meta>{formatSize(localGame.totalBytes || localGame.bytes)}</Meta>}
             </div>
           </div>
         </div>
