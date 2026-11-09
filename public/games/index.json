@@ -122,7 +122,7 @@
     {
       "id": "redbutton",
       "name": "别按红按钮",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "file": "redbutton/redbutton.plugin.mjs",
       "assetBase": "redbutton/"
     },

@@ -209,11 +209,11 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
   {
     "id": "redbutton",
     "name": "别按红按钮",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "url": "/games/redbutton/redbutton.plugin.mjs",
-    "sha256": "2a1cbab20d281e2af7d49a5d49dea4a213a55d3395834067b542347d67f31369",
+    "sha256": "1dd42d9d714da52be9b50c734c8a3295ddbd529c2e79230d637e10c582be113e",
     "bytes": 1117038,
-    "totalBytes": 2840442,
+    "totalBytes": 2842106,
     "assetBase": "/games/redbutton/"
   },
   {
