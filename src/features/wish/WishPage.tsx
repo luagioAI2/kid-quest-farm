@@ -445,44 +445,6 @@ function ListView({
   const blindbox = items.find((i) => i.id === WISH_BLINDBOX_ID)
   const rest = items.filter((i) => i.id !== WISH_BLINDBOX_ID)
 
-  /**
-   * 「全部」里**按「是不是数字商品」分两段**（2026-11-10）。
-   *
-   * 用户原话：「心愿商城里 礼品 ITEM，游戏 和 其他的 风格太像了。
-   * 能否很明显区分出来。」
-   *
-   * 光把游戏卡换个样子还不够 —— 21 款游戏排在实物后面（`sortOrder` 100+），
-   * 孩子得滚两三屏才撞见它们，中间没有任何「换类了」的信号。
-   * 所以再给两条分组标题：上面「🎁 想要的礼物 · 爸妈下单寄到家」，
-   * 下面「🎮 游戏 · 装上就能玩」。
-   *
-   * ⚠️ **只在「全部」分**。点进「游戏」或「玩具」那一档时整屏本来就是一类，
-   *    再挂一条标题就是纯噪音。
-   * ⚠️ 分段**不改变顺序**：实物在前、游戏在后，和 `compareWishItem` 的
-   *    `sortOrder`（实物 20~26 / 游戏 100+）一致。别顺手把游戏提到前面 ——
-   *    那会把「接商家」的实物全压到屏幕外（见 `wishCatalog.ts` 的注释）。
-   * ⚠️ `blindbox` 也算数字商品：5 连开那款是「开出游戏并装上」，
-   *    不是寄到家的盒子。
-   */
-  const groups = useMemo(() => {
-    if (filter) return [{ key: filter as string, title: '', hint: '', items: rest }]
-    const digital = (i: WishItem) => i.kind === 'gamebox' || i.kind === 'blindbox'
-    return [
-      {
-        key: 'gift',
-        title: '🎁 想要的礼物',
-        hint: '爸妈下单寄到家',
-        items: rest.filter((i) => !digital(i)),
-      },
-      {
-        key: 'game',
-        title: '🎮 游戏',
-        hint: '装上就能玩',
-        items: rest.filter(digital),
-      },
-    ].filter((g) => g.items.length > 0)
-  }, [filter, rest])
-
   const chips: { key: WishFilter; label: string }[] = [
     { key: null, label: '全部' },
     ...(Object.keys(WISH_KIND_META) as (keyof typeof WISH_KIND_META)[]).map((k) => ({
@@ -556,36 +518,19 @@ function ListView({
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          {groups.map((g) => (
-            <div key={g.key} className="col-span-2 space-y-2">
-              {g.title && (
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="font-display text-[13px] font-extrabold text-ink-900">
-                    {g.title}
-                  </span>
-                  <span className="shrink-0 text-[10.5px] font-bold text-ink-400">{g.hint}</span>
-                  <span className="h-px flex-1 bg-ink-900/10" />
-                </div>
-              )}
-              {/* 内层才是真正的两列栅格：分组标题必须通栏，
-                  所以外层这个 grid 只是拿来当纵向容器的。 */}
-              <div className="grid grid-cols-2 gap-3">
-                {g.items.map((item) => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    offer={offerOf(item.id)}
-                    order={activeOrderOf(item.id)}
-                    owned={owned}
-                    vouchers={vouchers}
-                    points={points}
-                    onOpen={() => onOpen(item.id)}
-                    onActivate={() => onActivate(item.id)}
-                    onWant={() => onWant(item.id)}
-                  />
-                ))}
-              </div>
-            </div>
+          {rest.map((item) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              offer={offerOf(item.id)}
+              order={activeOrderOf(item.id)}
+              owned={owned}
+              vouchers={vouchers}
+              points={points}
+              onOpen={() => onOpen(item.id)}
+              onActivate={() => onActivate(item.id)}
+              onWant={() => onWant(item.id)}
+            />
           ))}
         </div>
 
@@ -787,24 +732,9 @@ function ItemCard({
   onWant: () => void
 }) {
   const alreadyOwned = item.kind === 'gamebox' && !!item.gameId && owned.has(item.gameId)
-  const entry = gameEntryOf(item)
-  /**
-   * 这是**一款游戏**（不是实物礼物）。
-   *
-   * 封面版式、类型行、按钮区三处都按它分叉 —— 所以判据只能有一个，
-   * 别在下面各处再写 `item.kind === 'gamebox'`：改一处忘一处，
-   * 卡片就会出现「深色封面 + 实物文案」这种半吊子。
-   */
+  /** 这是**一款游戏**（不是实物礼物）—— 只用来决定封面要不要挂那条蓝丝带。 */
   const isGame = item.kind === 'gamebox'
-  /**
-   * **数字商品**：游戏盒子 + 盲盒。
-   *
-   * 封面「深色屏幕」按这个分，不按 `isGame`：盲盒也是「开出游戏并装上」，
-   * 不是寄到家的盒子。只给游戏换封面的话，「🎮 游戏」那一区里会混着一张
-   * 浅色礼物盒卡（5 连开），一眼看过去像放错了地方。
-   * 规则就一句话：**数字的 = 深色屏幕，实物的 = 浅色插画**。
-   */
-  const isDigital = isGame || item.kind === 'blindbox'
+  const entry = gameEntryOf(item)
   /** 「可兑换」= 把人送到「兑换」那一格（这一页不扣币，见上面 hero 的注释） */
   const jumpToRedeem = useApp((s) => s.jumpToRedeem)
 
@@ -859,12 +789,7 @@ function ItemCard({
       data-wish-card
       data-wish-id={item.id}
       data-wish-kind={item.kind}
-      className={
-        'flex h-full flex-col rounded-3xl bg-white p-1.5 shadow-flat' +
-        /* 游戏卡多一圈描边：光靠封面变深，在白底页面上边界还是容易糊
-           （卡片本身就是白的，深色块四周会「漏」出去）。 */
-        (isDigital ? ' ring-2 ring-ink-900/15' : '')
-      }
+      className="flex h-full flex-col rounded-3xl bg-white p-1.5 shadow-flat"
     >
       {/* ★ 根节点从 `<button>` 换成 `<div>`：底下要再放两颗按钮，
           button 嵌 button 是非法 HTML，而且点击会被外层吃掉。 */}
@@ -873,65 +798,52 @@ function ItemCard({
         onClick={onOpen}
         className="flex flex-1 flex-col text-left active:opacity-90"
       >
-        {/* ★★ 2026-11-10 用户：「心愿商城里礼品 ITEM，游戏和其他的风格太像了，
-            能否很明显区分出来。」
-
-            原来两类卡是**同一套版式**：浅色 tint 底 + 4:3 满幅插画 + 名字 + 一行
-            10.5px 灰字写「游戏 / 玩具」。游戏用的 `GameIconArt` 和实物的
-            `wish-*.svg` 又都是同一支手绘风格 ⇒ 摆在一个 grid 里根本分不出来。
-
-            现在游戏封面换成「**设备屏幕**」：暖深色 `ink-900`（#33281e，不是冷黑）
-            做机身，画面内缩一圈当屏幕，再压一条 1px 高光当反光。
-            一眼就是「这里放的是个能点开玩的东西」，而实物仍是浅色插画卡。 */}
         <span
           className={
             'relative mb-1.5 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl ' +
-            (isDigital ? 'bg-ink-900' : TINT_BG[item.tint])
+            TINT_BG[item.tint]
           }
         >
           {/* 顺序是「插画 → 游戏手绘图标 → emoji」：插画母版就是 4:3，
               正好铺满这块底；另外两个都只是兜底 */}
-          {isDigital ? (
-            /* 游戏：画面缩进 7% 当屏幕，外面那圈就是机身 */
-            <span className="absolute inset-[7%] overflow-hidden rounded-[10px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.22)]">
-              <WishArt
-                itemId={item.id}
-                emoji={item.emoji}
-                className="h-full w-full object-cover"
-                emojiClassName="text-3xl"
-                fallback={
-                  entry ? (
-                    <GameIconArt
-                      id={entry.id}
-                      tint={entry.tint}
-                      wide
-                      className="h-full w-full"
-                    />
-                  ) : undefined
-                }
-              />
-            </span>
-          ) : (
-            <WishArt
-              itemId={item.id}
-              emoji={item.emoji}
-              className="h-full w-full object-contain"
-              emojiClassName="text-3xl"
-              fallback={
-                entry ? (
-                  <GameIconArt
-                    id={entry.id}
-                    tint={entry.tint}
-                    wide
-                    className="h-full w-full"
-                  />
-                ) : undefined
-              }
-            />
-          )}
+          <WishArt
+            itemId={item.id}
+            emoji={item.emoji}
+            className="h-full w-full object-contain"
+            emojiClassName="text-3xl"
+            fallback={
+              entry ? (
+                <GameIconArt
+                  id={entry.id}
+                  tint={entry.tint}
+                  wide
+                  className="h-full w-full"
+                />
+              ) : undefined
+            }
+          />
           {badge && (
             <span className="absolute left-1.5 top-1.5 rounded-full bg-white/85 px-1.5 py-[3px] text-[10px] font-extrabold leading-none text-ink-600">
               {badge}
+            </span>
+          )}
+          {/* ★ 2026-11-10：游戏卡加一条**角落丝带**，只做标记，不动别的版式。
+              之前试过换深色机身 + 紫色类型行 + 分组标题，用户判「太丑」已整体还原；
+              这里只保留最轻的一层：一条 sky 蓝斜丝带，写明「游戏」。
+              ⚠️ 丝带放在封面这一层（`overflow-hidden rounded-2xl`）里，
+                 靠外层裁切自动收角；自己别再算圆角。
+              ⚠️ 只有 `gamebox` 有。盲盒那款是顶部的 hero 卡（另有「优先」标），
+                 不在这个栅格里，别给它加第二条。
+              ⚠️ `pointer-events-none`：丝带盖在封面上，不能挡掉点开详情的点击。 */}
+          {isGame && (
+            <span
+              data-wish-ribbon="game"
+              aria-hidden
+              className="pointer-events-none absolute right-0 top-0 h-[52px] w-[52px] overflow-hidden"
+            >
+              <span className="absolute right-[-21px] top-[12px] w-[74px] rotate-45 bg-sky-500 py-[2px] text-center text-[9.5px] font-extrabold leading-[1.35] tracking-[0.08em] text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]">
+                游戏
+              </span>
             </span>
           )}
         </span>
@@ -940,34 +852,15 @@ function ItemCard({
         <span className="line-clamp-2 min-h-[2.4em] px-0.5 font-display text-[12.5px] font-extrabold leading-[1.2] text-ink-900">
           {item.name}
         </span>
-        {/* ★ 2026-11-10：类型行也分开写。
-            游戏是「数字的、装上就能玩」，实物是「要爸妈下单寄到家」——
-            这一句是**两类东西最本质的差别**，比任何图标都直白。
-            ⚠️ 两边的 `leading` 必须写同一个值（`leading-[1.15]`）。
-               第一版只在游戏那一行写了，结果游戏卡比实物卡**矮 4px**
-               （10.5px 字号默认行高 1.5 ⇒ 15.75px，收紧后 12px）。
-               同一行里等高看不出来，两段上下摞在一起就是「游戏区整体矮一截」。
-            `data-wish-type` 给走查脚本读，别让它靠 `innerText` 猜行。 */}
-        {isDigital ? (
-          <span
-            data-wish-type={isGame ? 'game' : 'blindbox'}
-            className="mt-0.5 flex items-center gap-1 truncate px-0.5 text-[10.5px] font-extrabold leading-[1.15] text-grape-500"
-          >
-            <span aria-hidden>{isGame ? '🎮' : '🎁'}</span>
-            <span className="shrink-0">{isGame ? '游戏' : '盲盒'}</span>
-            <span className="truncate font-bold text-ink-400">
-              · {isGame ? '装上就能玩' : '开出游戏就能玩'}
-            </span>
-          </span>
-        ) : (
-          <span
-            data-wish-type={item.kind}
-            className="mt-0.5 block truncate px-0.5 text-[10.5px] font-bold leading-[1.15] text-ink-400"
-          >
-            {WISH_KIND_META[item.kind].label}
-            {item.partnerName ? ` · ${item.partnerName}` : ''}
-          </span>
-        )}
+        {/* `data-wish-type` 只是走查锚点（不加任何样式）：
+            没有它，脚本只能靠 `innerText` 猜哪一行是类型行。 */}
+        <span
+          data-wish-type={item.kind}
+          className="mt-0.5 truncate px-0.5 text-[10.5px] font-bold text-ink-400"
+        >
+          {WISH_KIND_META[item.kind].label}
+          {item.partnerName ? ` · ${item.partnerName}` : ''}
+        </span>
         {/* ★ 第四轮：没定价就空着这一行，不再写「等定价」那类话。
             家长审核时直接定价，孩子这一侧没有这一步。
             固定高度 = 和已定价的卡等高（_probe-wish-card-qa.mjs 量 tailGap）。 */}
