@@ -153,6 +153,13 @@
       "version": "1.0.1",
       "file": "farmlord/farmlord.plugin.mjs",
       "assetBase": "farmlord/"
+    },
+    {
+      "id": "fall2048",
+      "name": "下落的2048",
+      "version": "1.0.2",
+      "file": "fall2048/fall2048.plugin.mjs",
+      "assetBase": "fall2048/"
     }
   ]
 }

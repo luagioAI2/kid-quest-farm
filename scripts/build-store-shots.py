@@ -250,6 +250,19 @@ PLAN = [
         ("screenshots/store-3-shop-animals.png", "3"),
         ("screenshots/store-4-neighbors.png", "4"),
     ]),
+    # 2026-11-09 新增（扒自 MakePlay 的 `v/29`，本地化成「下落的2048」）。
+    # 源图由 `task-games/fall2048/scripts/store-shots.mjs` 拍（DPR 2，390×844）。
+    # 顺序：首页 → 对局（井里已经有半箱）→ 扭蛋抽到皮肤 → 升级商店。
+    # ⚠️ 第 2 张必须**先热身一局再重开**：称号是游戏内的一次性收藏品，名字还是原版的
+    #    「多巴胺小鬼」系列，而「获得称号！」那条提示正好压在井口 ⇒ 第一局会把它带进图里。
+    # ⚠️ 第 2 张的判据是**分数 ≥ 220**，不是「点了几下」：合成是随机的，
+    #    固定点 6 下会拍出「8 分」那张，看起来像刚点开还没玩。
+    ("fall2048", "fall2048", [
+        ("screenshots/store-1-title.png", "1"),
+        ("screenshots/store-2-play.png", "2"),
+        ("screenshots/store-3-gacha.png", "3"),
+        ("screenshots/store-4-shop.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

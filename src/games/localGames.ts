@@ -255,6 +255,16 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "bytes": 7830,
     "totalBytes": 7358255,
     "assetBase": "/games/farmlord/"
+  },
+  {
+    "id": "fall2048",
+    "name": "下落的2048",
+    "version": "1.0.2",
+    "url": "/games/fall2048/fall2048.plugin.mjs",
+    "sha256": "48777148c0c581fa2e2c309b351cab1e74d71e0e144cb1b68ffaae17bd658c8d",
+    "bytes": 2089344,
+    "totalBytes": 4914367,
+    "assetBase": "/games/fall2048/"
   }
 ]
 

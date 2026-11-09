@@ -149,6 +149,43 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   hoopsneak: Hoopsneak,
   doodlederby: Doodlederby,
   farmlord: Farmlord,
+  fall2048: Fall2048,
+}
+
+/**
+ * 下落的2048：三块数字砖斜着往下掉，右下角撞出一朵小火花。
+ *
+ * 只画砖、不画数字 —— 64px 的格子里写「512」是一团糊，家长看不出那是什么。
+ * 配色取原版方块表的粉 / 绿 / 蓝三档，和游戏里第一屏能对得上。
+ */
+function Fall2048({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 落地阴影：偏右下，和另外三块的下落方向一致 */}
+      <ellipse cx="35" cy="56.5" rx="18" ry="4" fill={deep} opacity=".3" />
+
+      {/* 最上面那块：粉（原版 2 号色） */}
+      <rect x="14" y="11" width="17" height="17" rx="4.4" fill="#FF6FB5" />
+      <rect x="14" y="11" width="17" height="17" rx="4.4" fill="none" stroke="#FFFFFF" strokeWidth="1.4" opacity=".55" />
+
+      {/* 中间那块：绿（原版 8 号色），错开半格 */}
+      <rect x="27.5" y="24" width="17" height="17" rx="4.4" fill="#3BE07A" />
+      <rect x="27.5" y="24" width="17" height="17" rx="4.4" fill="none" stroke="#FFFFFF" strokeWidth="1.4" opacity=".5" />
+
+      {/* 最下面那块：蓝（原版 512 号色），压在最前 */}
+      <rect x="19" y="38" width="19" height="19" rx="5" fill="#3D7BFF" />
+      <rect x="19" y="38" width="19" height="19" rx="5" fill="none" stroke="#FFFFFF" strokeWidth="1.6" opacity=".6" />
+      {/* 高光：统一从左上打过来 */}
+      <rect x="22.4" y="41.2" width="7.6" height="3.4" rx="1.7" fill="#FFFFFF" opacity=".38" />
+
+      {/* 合并火花：四道短线，压在右下角，避开三块砖 */}
+      <g stroke="#FFD23F" strokeWidth="2.1" strokeLinecap="round">
+        <path d="M43.5 45.5l4.2-1.6" />
+        <path d="M44.6 50.6l4.4.8" />
+        <path d="M41.6 40.4l1.6-4.2" />
+      </g>
+    </g>
+  )
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
