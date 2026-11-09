@@ -259,11 +259,11 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
   {
     "id": "fall2048",
     "name": "下落的2048",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "url": "/games/fall2048/fall2048.plugin.mjs",
-    "sha256": "48777148c0c581fa2e2c309b351cab1e74d71e0e144cb1b68ffaae17bd658c8d",
+    "sha256": "605aa926d1bb7044349c7e2c65cb8be0c75536b89d3434ca6407ea2d1cbc050c",
     "bytes": 2089344,
-    "totalBytes": 4914367,
+    "totalBytes": 4915152,
     "assetBase": "/games/fall2048/"
   }
 ]

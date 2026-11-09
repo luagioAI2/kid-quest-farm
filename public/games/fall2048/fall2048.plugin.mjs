@@ -15531,7 +15531,7 @@ var jo = 1, Mo = {
 	name: "下落的2048",
 	emoji: "🔢",
 	tabLabel: "2048",
-	version: "1.0.2",
+	version: "1.0.3",
 	minHostApi: 3,
 	coin: {
 		id: "tile",
