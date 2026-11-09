@@ -59,11 +59,11 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
   {
     "id": "cloudfarm",
     "name": "云边小农场",
-    "version": "1.1.8",
+    "version": "1.1.9",
     "url": "/games/cloudfarm/cloudfarm.plugin.mjs",
-    "sha256": "4ea8a0d9c4ab9101582385ed97b800460780446e0d9033aa3a6c6ea4963decab",
-    "bytes": 4498403,
-    "totalBytes": 14796702,
+    "sha256": "184b6c160d462624e5efce07d42233c8d16d87d2e2355e36b05488a0891940ab",
+    "bytes": 4498405,
+    "totalBytes": 14796704,
     "assetBase": "/games/cloudfarm/"
   },
   {

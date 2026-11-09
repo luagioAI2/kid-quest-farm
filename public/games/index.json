@@ -17,7 +17,7 @@
     {
       "id": "cloudfarm",
       "name": "云边小农场",
-      "version": "1.1.8",
+      "version": "1.1.9",
       "file": "cloudfarm/cloudfarm.plugin.mjs",
       "assetBase": "cloudfarm/"
     },

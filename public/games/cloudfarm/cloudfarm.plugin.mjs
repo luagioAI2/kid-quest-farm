@@ -37985,7 +37985,7 @@ async function EU({ manifestUrl: e = "./sound.manifest.json", baseUrl: t, audioC
 	});
 	return TU(d), d;
 }
-var DU = 6e3, OU = 1440, kU = .55, AU = .22, jU = .006, MU = [
+var DU = 6e4, OU = 1440, kU = .55, AU = .22, jU = .006, MU = [
 	0,
 	0,
 	0,
@@ -39102,8 +39102,8 @@ var pW = class {
 		return t - e.bornAt - e.pausedMs - n - r;
 	}
 	animalInfo(e, t = this.now()) {
-		let n = zU(e.kind), r = n.id !== "mythcat" && this.s.animals.some((e) => e.kind === "mythcat" && !e.dead && this.effAge(e, t) >= zU("mythcat").matureMin * 6e3), i = n.matureMin * DU, a = n.intervalMin * DU * (r ? .95 : 1), o = this.effAge(e, t), s = o >= i, c = s ? Math.min(n.times, Math.floor((o - i) / a)) : 0, l = Math.max(0, c - e.rounds), u = !n.permanent && e.rounds >= n.times, d = s && !u ? i + (c + 1) * a - o : i - o, f = t - e.lastFedAt > 720 * DU, p;
-		p = e.dead ? "deceased" : e.sickSince == null ? e.poopSince == null ? e.baskUntil != null && t < e.baskUntil ? "basking" : u ? "spent" : f ? "hungry" : e.rounds >= n.times - 1 && n.times > 1 ? "old" : t - e.lastFedAt < 216e4 ? "happy" : "normal" : "poop" : "sick";
+		let n = zU(e.kind), r = n.id !== "mythcat" && this.s.animals.some((e) => e.kind === "mythcat" && !e.dead && this.effAge(e, t) >= zU("mythcat").matureMin * 6e4), i = n.matureMin * DU, a = n.intervalMin * DU * (r ? .95 : 1), o = this.effAge(e, t), s = o >= i, c = s ? Math.min(n.times, Math.floor((o - i) / a)) : 0, l = Math.max(0, c - e.rounds), u = !n.permanent && e.rounds >= n.times, d = s && !u ? i + (c + 1) * a - o : i - o, f = t - e.lastFedAt > 720 * DU, p;
+		p = e.dead ? "deceased" : e.sickSince == null ? e.poopSince == null ? e.baskUntil != null && t < e.baskUntil ? "basking" : u ? "spent" : f ? "hungry" : e.rounds >= n.times - 1 && n.times > 1 ? "old" : t - e.lastFedAt < 216e5 ? "happy" : "normal" : "poop" : "sick";
 		let m = Math.min(1, o / i), h = s && !u ? 1 - Math.max(0, d) / a : 0;
 		return {
 			def: n,
@@ -39390,7 +39390,7 @@ var pW = class {
 									plot: i
 								}), t = !0;
 							}
-							for (; !a.pest && (a.pestCheckedUntil ?? e) + 6e4 <= e;) {
+							for (; !a.pest && (a.pestCheckedUntil ?? e) + 6e5 <= e;) {
 								let n = 10 * DU, r = (a.pestCheckedUntil ?? e) + n;
 								if (a.pestCheckedUntil = r, iW(`pest|${i}|${a.plantedAt}|${r}`) < .09) {
 									a.pest = !0, a.pestAt = r, this.log("log.pestNow", { c: a.id }), this.emit({
@@ -39421,7 +39421,7 @@ var pW = class {
 				type: "poop",
 				uid: n.uid
 			}), t = !0);
-			n.sickSince != null && n.lastFedAt < n.sickSince && e - n.sickSince > 432e4 && (iW(`${n.uid}|death|${n.sickSince}`) < .3 ? (n.dead = !0, this.log("log.died", { c: n.kind }), this.emit({
+			n.sickSince != null && n.lastFedAt < n.sickSince && e - n.sickSince > 432e5 && (iW(`${n.uid}|death|${n.sickSince}`) < .3 ? (n.dead = !0, this.log("log.died", { c: n.kind }), this.emit({
 				type: "died",
 				uid: n.uid
 			}), t = !0) : n.lastFedAt = n.sickSince);
@@ -40020,7 +40020,7 @@ var gW = class {
 		"start.back": "欢迎回来！",
 		"coach.1": "🪙 积分就是 App 里的积分——做任务、打卡就能赚。买种子、开新地、领动物，花的都是它。",
 		"coach.2": "点「种子」，选小萝卜，再点一块空地种下。",
-		"coach.3": "小萝卜 12 秒就熟。点成熟的地，选「当场卖掉」，收成会换成 🎟️ 兑换券！",
+		"coach.3": "小萝卜 2 分钟就熟。点成熟的地，选「当场卖掉」，收成会换成 🎟️ 兑换券！",
 		"coach.done": "太棒了！🎟️ 兑换券到手，攒够就能去兑换商城换奖品。",
 		"btn.gotIt": "知道了",
 		"btn.skip": "跳过引导",
@@ -40392,7 +40392,7 @@ var gW = class {
 		"start.back": "Welcome back!",
 		"coach.1": "🪙 Points are the App's points — earn them with quests and check-ins. Seeds, plots and animals are paid with them.",
 		"coach.2": "Tap Seeds, choose Radish, then tap an empty plot.",
-		"coach.3": "Radish ripens in 12 s. Tap it and choose Sell now — the harvest turns into 🎟️ vouchers!",
+		"coach.3": "Radish ripens in 2 min. Tap it and choose Sell now — the harvest turns into 🎟️ vouchers!",
 		"coach.done": "Great! Vouchers are yours — save them up for the reward shop.",
 		"btn.gotIt": "Got it",
 		"btn.skip": "Skip guide",
@@ -40764,7 +40764,7 @@ var gW = class {
 		"start.back": "おかえり！",
 		"coach.1": "🪙 ポイントはアプリのポイント。クエストやチェックインで貯まるよ。種・畑・動物はこれで買うんだ。",
 		"coach.2": "「種」→ラディッシュを選んで、空いた畑をタップ。",
-		"coach.3": "ラディッシュは12秒で実るよ。タップして「今すぐ売る」と 🎟️ 交換券になるよ！",
+		"coach.3": "ラディッシュは2分で実るよ。タップして「今すぐ売る」と 🎟️ 交換券になるよ！",
 		"coach.done": "やったね！🎟️ 交換券ゲット。ためて交換ショップで賞品と交換しよう。",
 		"btn.gotIt": "わかった",
 		"btn.skip": "スキップ",
@@ -46195,7 +46195,7 @@ var RK = {
 	name: "云边小农场",
 	emoji: "🌾",
 	tabLabel: "农场",
-	version: "1.1.8",
+	version: "1.1.9",
 	minHostApi: 4,
 	coin: {
 		id: "cloudfarm-harvest",
