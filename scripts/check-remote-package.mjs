@@ -45,7 +45,10 @@ try {
   const cat = await (await fetch(`${ORIGIN}/api/game/catalog`)).json()
   const g = (cat.games ?? []).find((x) => x.id === ID)
   ok(`目录里有 ${ID}`, !!g)
-  if (!g) throw new Error('目录里没有这款')
+  if (!g) {
+    console.log(`\n结果：1 条失败（目录 ${cat.games?.length ?? 0} 款里没有 ${ID}）`)
+    process.exit(1)
+  }
 
   ok('目录里同一 id 只有一条', (cat.games ?? []).filter((x) => x.id === ID).length === 1)
   console.log(`  · 版本 ${g.version} · size ${g.size}`)
@@ -59,7 +62,8 @@ try {
   const mres = await fetch(base + 'assets/manifest.json')
   if (mres.status !== 200) {
     // 软提示：缺清单不等于装不上，但发布方就少了一道「逐个资源校验」
-    warn(`没有 assets/manifest.json（${mres.status}）：资源没法逐个校验`)
+    // 资源全内联进 .mjs 的游戏（cellguard / claw3d）本来就没有 assets/，这条可忽略
+    warn(`没有 assets/manifest.json（${mres.status}）：资源没法逐个校验（资源全内联的可忽略）`)
   } else {
     const m = await mres.json()
     const list = Array.isArray(m.assets) ? m.assets : null
