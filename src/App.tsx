@@ -764,7 +764,7 @@ export default function App() {
         prefillMobile={loginPrefill}
       />
 
-      <ToastHost toasts={toasts} onDismiss={dismissToast} />
+      <ToastHost toasts={toasts} onDismiss={dismissToast} fullscreen={inGame} />
     </div>
   )
 }
@@ -774,9 +774,21 @@ export default function App() {
 function ToastHost({
   toasts,
   onDismiss,
+  fullscreen = false,
 }: {
   toasts: { id: string; kind: string; title: string; detail?: string; emoji?: string }[]
   onDismiss: (id: string) => void
+  /**
+   * 游戏全屏时往下让一段。
+   *
+   * 顶栏收掉之后，提示条原来落的位置（`top-3`）正好压在游戏自己的顶栏上 ——
+   * 云边小农场那里是「Lv. 徽章 + 牧场/田地/鱼塘」那一排，是全屏里唯一的交互控件。
+   * 让出的高度是**量出来的**（`scripts/_probe-toast-fullscreen.mjs`，1024×768 与 390×844
+   * 两个尺寸一致）：退出条 8~34、游戏顶栏 46~94 ⇒ 取 100（顶栏底 + 6 间隙）。
+   * 84 那版是拍脑袋算的，实测压住 10px。
+   * `env(safe-area-inset-top)` 由退出条自己吃掉，这里补上同样的量。
+   */
+  fullscreen?: boolean
 }) {
   const tone: Record<string, string> = {
     success: 'bg-grass-300',
@@ -785,7 +797,10 @@ function ToastHost({
     warn: 'bg-berry-200',
   }
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex flex-col items-center gap-2 px-4">
+    <div
+      className="pointer-events-none fixed inset-x-0 z-50 flex flex-col items-center gap-2 px-4"
+      style={fullscreen ? { top: 'calc(env(safe-area-inset-top) + 100px)' } : { top: 12 }}
+    >
       {toasts.map((t) => (
         <button
           key={t.id}
