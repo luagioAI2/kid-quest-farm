@@ -1,0 +1,61 @@
+{
+ "schema": "makeplay.sprite-anim/1",
+ "name": "shiba-ear",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "01ac6e2ba1e4afeac1df6ecbbca2d3db581be03ce0818fd0076e002e999e548b",
+   "size": 125163
+  },
+  {
+   "path": "sheet.png",
+   "sha256": "4878eb7f0bbca053eecd8dff275f5200c1d21f3fd42860c29384f8e0bcb5cb99",
+   "size": 998980
+  }
+ ],
+ "action_id": "ear_twitch",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 256,
+  "h": 256,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.82
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 5
+ },
+ "qa": {
+  "seam_union_mae": 5.86,
+  "still_mae": null,
+  "bg_worst": 0.0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "despill_exact": 0,
+  "despill_keylike": 0,
+  "despill_dirty": 0,
+  "mirror_mismatch_px": 0,
+  "event_source": "timing",
+  "event_amplitude": 0.003
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 1960380380,
+  "attempt": 1,
+  "source_frames": 33
+ }
+}

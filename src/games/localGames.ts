@@ -265,6 +265,16 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "bytes": 2089344,
     "totalBytes": 4915152,
     "assetBase": "/games/fall2048/"
+  },
+  {
+    "id": "inudoku",
+    "name": "犬独",
+    "version": "1.0.1",
+    "url": "/games/inudoku/inudoku.plugin.mjs",
+    "sha256": "e363ea80e44fb7cf2ab93c26395caf8e56358af30a51e324625f72e83ad1bb31",
+    "bytes": 4343702,
+    "totalBytes": 9955970,
+    "assetBase": "/games/inudoku/"
   }
 ]
 

@@ -150,6 +150,7 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   doodlederby: Doodlederby,
   farmlord: Farmlord,
   fall2048: Fall2048,
+  inudoku: Inudoku,
 }
 
 /**
@@ -184,6 +185,67 @@ function Fall2048({ deep }: { deep: string }) {
         <path d="M44.6 50.6l4.4.8" />
         <path d="M41.6 40.4l1.6-4.2" />
       </g>
+    </g>
+  )
+}
+
+/**
+ * 犬独：一块按颜色分块的格子，中间蹲着一只垂耳小狗。
+ *
+ * 不画「每行每列各一只」的完整棋盘 —— 64px 里塞四只狗只会糊成一片色块。
+ * 取第一眼能认出的两样东西：**垂耳狗头** + **它占住的那一格**。
+ * 棋盘用暖白而不是纯白：底色是 `sun`（金），纯白会把这块金色压成脏黄。
+ */
+function Inudoku({ deep }: { deep: string }) {
+  return (
+    <g>
+      <ellipse cx="32" cy="57" rx="17" ry="3.6" fill={deep} opacity=".3" />
+
+      {/* 棋盘：暖白 + 一圈浅描边，才有「纸」的厚度 */}
+      <rect x="8.5" y="11" width="47" height="41" rx="6.5" fill="#FFFBF0" />
+      <rect
+        x="8.5"
+        y="11"
+        width="47"
+        height="41"
+        rx="6.5"
+        fill="none"
+        stroke={deep}
+        strokeWidth="1.1"
+        opacity=".35"
+      />
+
+      {/* 分块线：3 竖 2 横。压得很轻 —— 重了就变成「井字棋」 */}
+      <g stroke={deep} strokeWidth="1" opacity=".2">
+        <path d="M24.2 11v41" />
+        <path d="M39.8 11v41" />
+        <path d="M8.5 25h47" />
+        <path d="M8.5 38h47" />
+      </g>
+
+      {/* 耳朵在后：两片下垂的圆角块，比脸暗一档 */}
+      <ellipse cx="19.2" cy="33.2" rx="4.4" ry="7.6" fill="#8A5A38" transform="rotate(-18 19.2 33.2)" />
+      <ellipse cx="44.8" cy="33.2" rx="4.4" ry="7.6" fill="#8A5A38" transform="rotate(18 44.8 33.2)" />
+
+      {/* 脸 */}
+      <ellipse cx="32" cy="33.4" rx="12.2" ry="11.2" fill="#F6E3BE" />
+      <ellipse
+        cx="32"
+        cy="33.4"
+        rx="12.2"
+        ry="11.2"
+        fill="none"
+        stroke="#C9A167"
+        strokeWidth="1"
+        opacity=".65"
+      />
+
+      {/* 眼睛 + 鼻子；高光统一从左上打过来 */}
+      <ellipse cx="27.6" cy="31.4" rx="1.7" ry="1.9" fill="#4A3423" />
+      <ellipse cx="36.4" cy="31.4" rx="1.7" ry="1.9" fill="#4A3423" />
+      <ellipse cx="32" cy="36.8" rx="2.2" ry="1.7" fill="#4A3423" />
+      <ellipse cx="27.1" cy="30.6" rx=".55" ry=".6" fill="#FFFFFF" opacity=".85" />
+      <ellipse cx="35.9" cy="30.6" rx=".55" ry=".6" fill="#FFFFFF" opacity=".85" />
     </g>
   )
 }

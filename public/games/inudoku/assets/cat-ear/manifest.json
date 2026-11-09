@@ -1,0 +1,61 @@
+{
+ "schema": "makeplay.sprite-anim/2",
+ "name": "cat-ear",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "23d91b50170615b33ad6785f1928fd2cb74e9e8d65621b3644eab827ddc2f830",
+   "size": 199145
+  }
+ ],
+ "action_id": "ear_twitch",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 256,
+  "h": 256,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "pages": [
+  "sheet.png"
+ ],
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.9665
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": null
+ },
+ "qa": {
+  "seam_union_mae": 8.86,
+  "still_mae": null,
+  "bg_worst": 0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "matte_first_iou": 0.9949,
+  "alpha_semi_share": 0.0181,
+  "mirror_mismatch_px": 0,
+  "holes_filled_px_max": 5,
+  "event_source": "none"
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 143119062,
+  "attempt": 1,
+  "backdrop": "white",
+  "matting": "matanyone2",
+  "frame_scale": 1,
+  "fit": null
+ }
+}

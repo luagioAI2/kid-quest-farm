@@ -160,6 +160,13 @@
       "version": "1.0.3",
       "file": "fall2048/fall2048.plugin.mjs",
       "assetBase": "fall2048/"
+    },
+    {
+      "id": "inudoku",
+      "name": "犬独",
+      "version": "1.0.1",
+      "file": "inudoku/inudoku.plugin.mjs",
+      "assetBase": "inudoku/"
     }
   ]
 }

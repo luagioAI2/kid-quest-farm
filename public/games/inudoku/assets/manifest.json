@@ -1,0 +1,170 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 32,
+  "bytes": 1734283
+ },
+ "assets": [
+  {
+   "file": "achievements/adv_all_16.webp",
+   "bytes": 8808,
+   "sha256": "0806a0e2b08fffd01e51181fff6c861ab103776667eccdb9b75cb6506fa2ab32"
+  },
+  {
+   "file": "achievements/adv_bone_all.webp",
+   "bytes": 8890,
+   "sha256": "5d69b64600eacc3ca468b7b8431afd70f410962e067d034481e147ad11c0012a"
+  },
+  {
+   "file": "achievements/adv_double_all.webp",
+   "bytes": 10620,
+   "sha256": "53c535f4629544d0406305110e2df1ce109ee8237840b0655f6fa9433842e974"
+  },
+  {
+   "file": "achievements/adv_first_clear.webp",
+   "bytes": 7750,
+   "sha256": "d2e1f5f627d33327058b9b12b779c14e1a2b62ac64bb672af548e4509e57580d"
+  },
+  {
+   "file": "achievements/all_cleared.webp",
+   "bytes": 10868,
+   "sha256": "2cb3aa8e734ba5196a5b77cfdbe0395a48ccab0de3d3505432513c44c80173b4"
+  },
+  {
+   "file": "achievements/clear_12x12.webp",
+   "bytes": 14808,
+   "sha256": "981ffe2937af8d6b8b8ac30cf59452f0eb3bc822c1ebd7bb36afbc78322365f8"
+  },
+  {
+   "file": "achievements/first_clear.webp",
+   "bytes": 12048,
+   "sha256": "2e539a2237217328586506484fa6db3a70e9d18a54cd01cae54e7153e355f1e3"
+  },
+  {
+   "file": "achievements/no_mistake.webp",
+   "bytes": 13428,
+   "sha256": "dbd1697569345d7f18ba78c3f421ff4e7012ecfff3a38f4a4455fe9f355f2772"
+  },
+  {
+   "file": "achievements/nohint_clear.webp",
+   "bytes": 11720,
+   "sha256": "568e4fcf248caff5c79acb0edb19d5e5b4471d41b9f89501631bad56c69473ad"
+  },
+  {
+   "file": "achievements/secret_cat.webp",
+   "bytes": 11230,
+   "sha256": "26b51a6630c8ef8bfb4b60540427817b6f1dd7ab3b743596863629b81ebc5424"
+  },
+  {
+   "file": "achievements/sizes_9.webp",
+   "bytes": 9824,
+   "sha256": "435fbd03be8fd350d0f881bb6ed6e29a0d0d1af56709bb9515e65a5e43f8e650"
+  },
+  {
+   "file": "achievements/skin_first.webp",
+   "bytes": 9034,
+   "sha256": "2b333a26ef2d1bd24a4faa1f6d3037f7edaee794abe872fdf85b90b0e9786aed"
+  },
+  {
+   "file": "cat-ear/sheet.webp",
+   "bytes": 174344,
+   "sha256": "d672d59f3675a16527b4506da2460d1183e3c21f338cd44f9dd2df6a51f14708"
+  },
+  {
+   "file": "dachshund-ear/sheet.webp",
+   "bytes": 103942,
+   "sha256": "7782f81fd596b02d07de7d46371dd7262afd4d933398da79fcff5c98ae738da1"
+  },
+  {
+   "file": "doberman-ear/sheet.webp",
+   "bytes": 142640,
+   "sha256": "0a43bf2f88b5d8b50e620303c420bd0ae6e4c3d6661cfe41a9eb37c06f5ecf35"
+  },
+  {
+   "file": "dogs/cat.webp",
+   "bytes": 50302,
+   "sha256": "c34973ac1e25f01b7079487855887c46abc5c3b7c4341faa01f0bd2c3c47a5d5"
+  },
+  {
+   "file": "dogs/dachshund.webp",
+   "bytes": 36436,
+   "sha256": "75236e3759ee124079ad6d337229a3f376c79658880b98f3003736ec61660c84"
+  },
+  {
+   "file": "dogs/doberman.webp",
+   "bytes": 31728,
+   "sha256": "939b5a1a9e149284cb952d90f987a7f777d1d6894d43b7d5b4f5220ee286314c"
+  },
+  {
+   "file": "dogs/maltese.webp",
+   "bytes": 28730,
+   "sha256": "844dd0c484723d3b7ca14bea3f1690bf6e8e40c0637bd527ceeae7ccb87deea4"
+  },
+  {
+   "file": "dogs/poodle.webp",
+   "bytes": 37596,
+   "sha256": "30625831c27e9cc5f00572ec9c47a8a1228065095ce3d59b3152fd749ec73bf5"
+  },
+  {
+   "file": "dogs/pug.webp",
+   "bytes": 39504,
+   "sha256": "70588f17c2e0c2d883794a18172916afdcd8273fdd305afde531ca2277ac4e34"
+  },
+  {
+   "file": "dogs/schnauzer.webp",
+   "bytes": 43500,
+   "sha256": "370a280050a3b470c3830075349a73ccab4b94b95d4db218cabd06128781639c"
+  },
+  {
+   "file": "dogs/shiba.webp",
+   "bytes": 40294,
+   "sha256": "71269416ef67fd28253fa035e761d42c0fabc86162a0a2c4707233d86da489ae"
+  },
+  {
+   "file": "lib/kenney-new-platformer/tiles/hud_heart.webp",
+   "bytes": 848,
+   "sha256": "179bd29031261e0107e7b0999a9dc49d411de1b9471c8407926d20b51e3c12a8"
+  },
+  {
+   "file": "maltese-ear/sheet.webp",
+   "bytes": 92090,
+   "sha256": "097366be4a037f0353ede3eeded546c1068ec8efd35a31655c4203a3ce49b423"
+  },
+  {
+   "file": "paper.webp",
+   "bytes": 68628,
+   "sha256": "b54fbf8ff72c215b338b7d2784795a4f5d74525855c9f9dd454334752414a478"
+  },
+  {
+   "file": "pencil-tile.webp",
+   "bytes": 147472,
+   "sha256": "094795add0cba92aad2725cadb3116c377d7e26250f13c88858ddbb48cb6bcf0"
+  },
+  {
+   "file": "poodle-ear/sheet.webp",
+   "bytes": 104664,
+   "sha256": "420a2ba063fbf5a8f8d4a7b52d00b463dd894de603179777d2a88f6a3e33166f"
+  },
+  {
+   "file": "pug-ear/sheet.webp",
+   "bytes": 142936,
+   "sha256": "62fa398c0268eafd489adf7b59fe3c619076cc28171021447e157c12a3c4c5c1"
+  },
+  {
+   "file": "schnauzer-ear/sheet.webp",
+   "bytes": 164508,
+   "sha256": "619309bdaae2b90179df8b2dc6f4e9658a9e76e1f287f6d4a6a653703bf73516"
+  },
+  {
+   "file": "shiba-ear/sheet.webp",
+   "bytes": 152690,
+   "sha256": "0fbe49de353c1247a2a659735abd439809a6720f22809a9950a7cf540b549cbd"
+  },
+  {
+   "file": "ui/icon_coin_selected.svg",
+   "bytes": 2403,
+   "sha256": "0361d00ce4b1cb591c555e97414089c98018e803ca2d15ef41eadacbb049e828"
+  }
+ ]
+}

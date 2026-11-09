@@ -263,6 +263,18 @@ PLAN = [
         ("screenshots/store-3-gacha.png", "3"),
         ("screenshots/store-4-shop.png", "4"),
     ]),
+    # 2026-11-09 新增（扒自 MakePlay 的 `v/29`，本地化成「犬独」）。
+    # 源图由 `task-games/inudoku/scripts/store-shots.mjs` 拍（DPR 2，390×844）。
+    # 顺序：标题 → 对局（落了 3 只狗）→ 皮肤面板 → 设置（BGM 列表）。
+    # ⚠️ 第 2 张只落 3 只、**不落满**：第 1 关 4×4 只需要 4 只，落满就通关弹结算，
+    #    棋盘会被结算弹窗盖住。而且每落一只都要重新点「放小狗」—— 原版放对一只
+    #    之后会自动切回「笔记」模式，不切回去后面几下全是画叉。
+    ("inudoku", "inudoku", [
+        ("screenshots/store-1-title.png", "1"),
+        ("screenshots/store-2-play.png", "2"),
+        ("screenshots/store-3-breeds.png", "3"),
+        ("screenshots/store-4-settings.png", "4"),
+    ]),
 ]
 
 WIDTH = 360
