@@ -252,23 +252,26 @@ try {
   )
 
   /**
-   * 六步：4 步讲底部 tab（给孩子）+ 2 步讲顶栏按钮（给家长）。
+   * 七步：5 步讲底栏四格 + 顶栏 🪙（给孩子）+ 2 步讲顶栏按钮（给家长）。
    * 后两步是 2026-09-21 用户报「缺乏家长审核和家长设置的引导」之后补的。
+   *
+   * ⚠️ 2026-11-10 重做之后有两条变化，都在这段里：
+   *   · 「游戏」那一步**不再切 tab**（`tab === 'game'` 是全屏，顶栏底栏全没了，
+   *     那一刻没有任何 tab 可指）—— 它停在任务页、只高亮底栏那一格。
+   *   · 目标选择器**一律从气泡上的 `data-tour-anchor` 读**（组件自己写的），
+   *     不再按 `k` 拼 `tab-${k}` / `header-${k}`：游戏那一格的锚点是
+   *     `tab-<当前游戏 id>`（默认 `tab-farm`），拼不出来。
    */
-  const restSteps = ['farm', 'redeem', 'points', 'review', 'settings']
+  const restSteps = ['game', 'redeem', 'wish', 'points', 'review', 'settings']
   for (let n = 0; n < restSteps.length; n++) {
     const k = restSteps[n]
-    /* 目标在**顶栏**的那几步。
-       ⚠️ 2026-11-05 起 `points` 也在这里：底栏那格「积分」删掉了，
-       明细改从顶栏那颗 🪙 点开（`header-points`）。漏改这一条的症状很具体 ——
-       `[data-tour="tab-points"]` 永远等不到，`waitStable` 超时后返回 null，
-       整段静默跳过（假绿）。 */
-    const isHeader = k === 'points' || k === 'review' || k === 'settings'
-    const targetSel = isHeader ? `[data-tour="header-${k}"]` : `[data-tour="tab-${k}"]`
     /* ⚠️ **点之前**先量一次几何，作为 `waitStable` 的「必须和它不一样」基准。
        少了这一步，「旧布局还稳稳待着、新布局还没算出来」的窗口会被判成
        「已稳定」，然后拿着上一步的坐标去断言 —— 见 `waitStable` 的注释。 */
-    const prevSig = (await holeVs(targetSel))?.sig ?? null
+    const curAnchor = await page.evaluate(
+      () => document.querySelector('[data-tour-bubble]')?.getAttribute('data-tour-anchor') ?? '',
+    )
+    const prevSig = (await holeVs(`[data-tour="${curAnchor}"]`))?.sig ?? null
 
     await clickByText('下一步')
 
@@ -287,21 +290,42 @@ try {
       // 超时不当成「环境问题跳过」—— 直接判红（本项目最忌讳的假通过）
       switched = false
     }
-    const h = await waitStable(targetSel, prevSig)
-    check(`导览第 ${n + 2} 步切到「${k}」`, switched)
+    const anchor = await page.evaluate(
+      () => document.querySelector('[data-tour-bubble]')?.getAttribute('data-tour-anchor') ?? '',
+    )
+    const targetSel = anchor ? `[data-tour="${anchor}"]` : ''
+    const h = targetSel ? await waitStable(targetSel, prevSig) : null
+    check(`导览第 ${n + 2} 步切到「${k}」`, switched && !!anchor, `anchor=${anchor || '(空)'}`)
 
-    // 最后两步的目标在**顶栏**：气泡必须翻到下方、且不能跑出屏幕。
+    /* 高亮框必须真的套住锚点 —— 否则孩子看到的只是一块压暗的屏幕。 */
+    check(
+      `第 ${n + 2} 步「${k}」的高亮框套住 ${anchor}`,
+      !!h && h.covers,
+      h ? `covers=${h.covers}` : '没找到挖洞层 / 锚点',
+    )
+
+    // 目标在**顶栏**的那几步：气泡必须翻到下方、且不能跑出屏幕。
     // 沿用「往上」那套算出来的是 `bottom: 视口高 + 6`，气泡会被推出屏幕下沿 ——
     // 而且 DOM 查询照样找得到它，只有量位置才发现得了。
-    if (isHeader) {
+    if (anchor.startsWith('header-')) {
       check(
-        `第 ${n + 2} 步「${k}」的高亮框套住顶栏按钮，气泡在它下方且没跑出屏幕`,
-        !!h && h.covers && h.bubbleBelow && h.bubbleOnScreen,
-        h
-          ? `covers=${h.covers} bubbleBelow=${h.bubbleBelow} bubbleOnScreen=${h.bubbleOnScreen}`
-          : '没找到挖洞层',
+        `第 ${n + 2} 步「${k}」的气泡在顶栏按钮下方且没跑出屏幕`,
+        !!h && h.bubbleBelow && h.bubbleOnScreen,
+        h ? `bubbleBelow=${h.bubbleBelow} bubbleOnScreen=${h.bubbleOnScreen}` : '没找到挖洞层',
       )
     }
+
+    /* ★ 导览**任何一步都不许待在全屏游戏里**：那一刻 App 收掉顶栏和底栏，
+       没有任何 tab 可指（2026-11-09 的全屏改动踩的就是这个）。 */
+    const shell = await page.evaluate(() => ({
+      nav: document.querySelectorAll('nav [data-tour]').length,
+      header: !!document.querySelector('header'),
+    }))
+    check(
+      `第 ${n + 2} 步「${k}」仍在页面外壳里（顶栏 + 底栏 4 格）`,
+      shell.header && shell.nav === 4,
+      `header=${shell.header} nav=${shell.nav}`,
+    )
   }
 
   await clickByText('知道啦')
@@ -351,6 +375,26 @@ try {
     await new Promise((r) => setTimeout(r, 900))
     const txt = await page.evaluate(() => document.body.innerText)
     check(`Tab「${t}」渲染`, txt.length > 30, `${txt.replace(/\s+/g, ' ').slice(0, 60)}…`)
+
+    /* ★ 游戏那一格是**全屏**的：进去之后 header / nav 都不渲染，
+       只留左上角「退出游戏」。不退出来的话，下面每一格都点不到、
+       顶栏每一条都量成 -1 —— 一次假红连锁（2026-11-10 修）。
+       判据用锚点，不认文案。 */
+    const exited = await page.evaluate(() => {
+      const btn = document.querySelector('[data-tour="exit-game"]')
+      if (!btn) return null
+      btn.click()
+      return true
+    })
+    if (exited) {
+      await new Promise((r) => setTimeout(r, 700))
+      const back = await page.evaluate(() => ({
+        nav: document.querySelectorAll('nav [data-tour]').length,
+        exit: !!document.querySelector('[data-tour="exit-game"]'),
+      }))
+      check(`Tab「${t}」是全屏的，退出后回到外壳`, back.nav === 4 && !back.exit,
+        `nav=${back.nav} exit=${back.exit}`)
+    }
   }
 
   /* ---------- 3. 横向溢出检测 ---------- */
@@ -1155,20 +1199,6 @@ try {
     glyphCount.coupon === 0,
     `正文里 ${COUPON.emoji} x${glyphCount.coupon}`,
   )
-  // 反向保证：顶栏那两个确实还在（否则上面两条可以靠「把顶栏也删了」蒙过去）
-  const headerCurrencies = await page.evaluate(
-    (names) =>
-      [...document.querySelectorAll('header [aria-label]')]
-        .map((el) => el.getAttribute('aria-label') ?? '')
-        .filter((l) => names.some((n) => l.startsWith(n))),
-    [POINTS.name, COUPON.name],
-  )
-  check(
-    `全局顶栏仍然显示${POINTS.name}和${COUPON.name}（上面两条不是因为顶栏被删才通过的）`,
-    headerCurrencies.length === 2,
-    headerCurrencies.join(' / ') || '顶栏里一个都没找到',
-  )
-
   // 打开种子商店
   const shopOpened = await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find(
@@ -1411,6 +1441,37 @@ try {
     await st().updateSettings({ farmEventsEnabled: true })
     await st().updateSettings({ farmClock: { ...st().settings.farmClock, timeScale: 1 } })
   })
+
+  /* ★ 2026-11-10：农场 / 市场那几段都在**全屏**的游戏页里（顶栏按设计不渲染）。
+     进第 6 段之前先点左上角「退出游戏」回到外壳 ——
+     不退的话，下面「顶栏有家长确认入口」这类断言会全部假红。
+     顺便在这里补上「顶栏那两颗币确实还在」的反向保证：
+     前面「农场正文里没有 🪙/🎫」不能被「把顶栏也删了」蒙过去。 */
+  await page.evaluate(() => {
+    document.querySelector('[data-tour="exit-game"]')?.click()
+  })
+  await new Promise((r) => setTimeout(r, 800))
+  const shellBack = await page.evaluate(() => ({
+    nav: document.querySelectorAll('nav [data-tour]').length,
+    header: !!document.querySelector('header'),
+  }))
+  check(
+    '从农场退出来之后回到外壳（顶栏 + 底栏 4 格）',
+    shellBack.header && shellBack.nav === 4,
+    `header=${shellBack.header} nav=${shellBack.nav}`,
+  )
+  const headerCurrencies = await page.evaluate(
+    (names) =>
+      [...document.querySelectorAll('header [aria-label]')]
+        .map((el) => el.getAttribute('aria-label') ?? '')
+        .filter((l) => names.some((n) => l.startsWith(n))),
+    [POINTS.name, COUPON.name],
+  )
+  check(
+    `全局顶栏仍然显示${POINTS.name}和${COUPON.name}（上面两条不是因为顶栏被删才通过的）`,
+    headerCurrencies.length === 2,
+    headerCurrencies.join(' / ') || '顶栏里一个都没找到',
+  )
 
   /* ---------- 6. 家长确认：必须要求密码，且输对后能进入打分 ---------- */
   // 先设密码 + 造一个待审实例，否则队列是空的，测不出解锁效果
@@ -2198,16 +2259,42 @@ try {
     b?.click()
   })
   await new Promise((r) => setTimeout(r, 700))
-  for (const [name, label] of [['tasks', '任务'], ['farm', '农场'], ['redeem', '兑换'], ['points', '积分']]) {
-    await page.evaluate((l) => {
+  /* 点底栏某一格。游戏那格是全屏的，点完要退出来，否则下一格不存在。 */
+  const clickTab = async (label) => {
+    const hit = await page.evaluate((l) => {
       const b = [...document.querySelectorAll('button')].find(
         (x) => x.innerText.trim().split('\n').pop().trim() === l,
       )
-      b?.click()
+      if (!b) return false
+      b.click()
+      return true
     }, label)
     await new Promise((r) => setTimeout(r, 1100))
-    await page.screenshot({ path: `screenshots/${name}.png` })
+    return hit
   }
+  const leaveGame = async () => {
+    const hit = await page.evaluate(() => {
+      const b = document.querySelector('[data-tour="exit-game"]')
+      if (!b) return false
+      b.click()
+      return true
+    })
+    if (hit) await new Promise((r) => setTimeout(r, 800))
+    return hit
+  }
+
+  for (const [name, label] of [['tasks', '任务'], ['farm', '农场'], ['redeem', '兑换']]) {
+    await clickTab(label)
+    await page.screenshot({ path: `screenshots/${name}.png` })
+    await leaveGame()
+  }
+  /* 积分：底栏没有这一格，走顶栏那颗 🪙。拍完用面板自己的「返回」关掉，
+     不然下面 9c 要找的 ⚙️ 会被这层弹层挡住。 */
+  await page.evaluate(() => document.querySelector('[data-tour="header-points"]')?.click())
+  await new Promise((r) => setTimeout(r, 900))
+  await page.screenshot({ path: 'screenshots/points.png' })
+  await page.evaluate(() => document.querySelector('button[aria-label="返回"]')?.click())
+  await new Promise((r) => setTimeout(r, 700))
   check('截图已保存', true, 'screenshots/{tasks,farm,redeem,points}.png')
 
   /* ---------- 9. 备份里不带「这台设备的东西」 ---------- */
@@ -2394,6 +2481,20 @@ try {
       hasDanger: /清空全部数据/.test(document.body.innerText),
       hasGate: /数据操作需要密码/.test(document.body.innerText),
     }))
+
+    /* ★ 2026-11-10：键盘现在**点出来**（`ParentLockButton` → `setPinOpen(true)`），
+       不再铺在页面里。少了这一下，后面按数字会找不到按钮。 */
+    const gateOpened = await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find((x) =>
+        x.innerText.includes('爸妈：输密码'),
+      )
+      if (!b) return false
+      b.click()
+      return true
+    })
+    steps.push({ label: '打开密码键盘', ok: gateOpened })
+    if (!gateOpened) return { steps, stuck: '打开密码键盘', locked }
+    await new Promise((r) => setTimeout(r, 800))
 
     // 过密码门：从 store 读当前的，别写死 0000
     const pin = await page.evaluate(() => window.__kqf__.getState().settings.parentPin ?? '')

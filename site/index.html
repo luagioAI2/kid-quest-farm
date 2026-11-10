@@ -135,7 +135,7 @@
               "家长审核与质量打分",
               "农场经营：12 块地、15 种作物、8 种动物",
               "市场行情波动与背包待售",
-              "积分与丰收币双账本",
+              "积分与兑换券双账本",
               "兑换愿望清单与参考汇率",
               "全量数据导出与恢复",
               "完全离线可用，无广告无内购"
@@ -158,7 +158,7 @@
                 "name": "需要联网吗？要注册账号吗？",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "都不需要。小任务农场是单机应用，所有数据存在你自己的设备上，不注册、不登录、不联网也能完整使用。飞机上、没 WiFi 的爷爷奶奶家都能照常玩。"
+                  "text": "看用哪个版本。单机版（安卓安装包）不需要联网、也不需要账号，数据全在设备上，飞机上、没 WiFi 的爷爷奶奶家都能照常玩。在线版（网页版）需要一个账号：手机号登录，或者先开游客账号之后再绑定，数据跟着账号走，换手机登录就回来。"
                 }
               },
               {
@@ -166,7 +166,7 @@
                 "name": "孩子的数据会被上传吗？",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "不会。应用没有任何服务端，也没有第三方统计和广告 SDK。任务、积分、农场记录全部保存在本机的浏览器数据库里，只有通过「导出备份」你才能把数据拿出来。"
+                  "text": "看用哪个版本。单机版没有服务端，任务、积分、农场记录全部保存在本机，只有「导出备份」能把数据拿出来。在线版会把任务、积分、农场进度同步到我们自己的服务器，这样换设备不丢。两个版本都没有第三方统计和广告 SDK。"
                 }
               },
               {
@@ -203,10 +203,10 @@
               },
               {
                 "@type": "Question",
-                "name": "农场里的「丰收币」是什么？",
+                "name": "农场里的「兑换券」是什么？",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "丰收币是卖出农产品后得到的第二种货币，和积分是两本独立的账。它只能用来兑换愿望，不能换回积分、也不能买种子和土地。这样设计是为了避免出现「种地→赚钱→买更多地→赚更多钱」的无限循环。"
+                  "text": "兑换券是卖出农产品后得到的第二种货币，和积分是两本独立的账。它只能用来兑换愿望，不能换回积分、也不能买种子和土地。这样设计是为了避免出现「种地→赚钱→买更多地→赚更多钱」的无限循环。"
                 }
               }
             ]
@@ -372,9 +372,11 @@
         </button>
 
         <nav class="nav__links" id="navlinks" aria-label="主导航">
+          <a class="nav__link" href="#versions">两种用法</a>
           <a class="nav__link" href="#why">功能介绍</a>
           <a class="nav__link" href="#how">使用流程</a>
           <a class="nav__link" href="#money">农场里的取舍</a>
+          <a class="nav__link" href="#games">游戏与心愿</a>
           <a class="nav__link" href="#shots">界面预览</a>
           <a class="nav__link" href="#parents">给家长</a>
           <a class="nav__link" href="#faq">常见问题</a>
@@ -389,7 +391,7 @@
         <div class="wrap">
           <div class="hero__grid">
             <div>
-              <p class="eyebrow">6–14 岁 · 完全离线 · 不用注册</p>
+              <p class="eyebrow">6–14 岁 · 单机版 / 在线版 · 无广告</p>
 
               <h1 class="h1 hero__title">完成小任务，<br /><em>经营大农场</em></h1>
 
@@ -399,7 +401,7 @@
                    也是家长说「像传销」的主要来源。现在只陈述功能。 -->
               <p class="hero__lead">
                 作业、家务、阅读，都可以设成带时长的任务。孩子做完提交，家长确认后拿到积分，
-                再用积分在农场里种地、收获、换想要的东西。
+                再用积分在农场里种地、收获，或者在心愿商城里许愿、在兑换里换家里的奖励。
               </p>
 
               <!-- 机制压成一行。每一步各自成一个 flex item，
@@ -407,23 +409,25 @@
               <p class="hero__flow">
                 <span>领任务</span><i>→</i><span>计时完成</span><i>→</i><span>家长确认</span
                 ><i>→</i><span>积分到账</span><i>→</i><span>种地养动物</span><i>→</i
-                ><span>兑换愿望</span>
+                ><span>兑换 / 许愿</span>
               </p>
 
               <!-- 家长最先要确认的四件事。去掉了 emoji，统一成绿色对勾 -->
               <ul class="hero__trust">
                 <li>无广告</li>
                 <li>无内购</li>
-                <li>数据只存本机</li>
-                <li>不联网也能玩</li>
+                <li>无第三方统计</li>
+                <li>单机版可离线</li>
               </ul>
 
               <div class="hero__cta">
                 <div class="btn-row">
-                  <a class="btn btn--lg" href="#download">下载安卓版</a>
-                  <a class="btn btn--lg btn--ghost" href="app/">在线体验</a>
+                  <a class="btn btn--lg" href="app/">在线体验</a>
+                  <a class="btn btn--lg btn--ghost" href="#download">获取安装包</a>
                 </div>
-                <p class="hero__note">免费 · 不用注册 · 安装包约 5.5 MB · 安卓 7.0 及以上</p>
+                <p class="hero__note">
+                  免费 · 无广告 · 在线版打开即用 · 单机版安装包请私聊作者
+                </p>
               </div>
             </div>
 
@@ -458,7 +462,7 @@
                已整块删除（同时删掉了 main.js 里的数字滚动和对应的 CSS）。
                ⚠️ 这条注释里**故意不写那几个数字**：闸门（scripts/check-site.mjs）
                扫的是「数字 + 空格 + 种作物 / 种动物」这个形状，
-               写连了它会把注释也算成一处声明，于是每次改内容都要来改注释。 -->
+               写连了它会把注释也算成一处声明，于是每次改内容都要来改注释。
                农场里有多少东西，交给「界面预览」的截图去说。
 
                ⚠️ 那条数据条当时把作物写成了 8，其实 `CROPS` 一直是 12 条。
@@ -757,6 +761,96 @@
               <path d="M1036 306v4M1048 306v4" stroke="#d9743f" stroke-width="2.4" stroke-linecap="round" />
             </g>
           </svg>
+        </div>
+      </section>
+
+      <!-- ================= 两种用法 ================= -->
+      <!-- 2026-11-10：应用现在有两种用法，官网必须说清「数据在哪、要不要账号」。
+           单机版 = 安卓安装包，纯本地；在线版 = 网页，账号 + 云端存档 + 心愿商城。
+           切换只影响下面这两块（.ver-panel），页面其它地方不跟着变 ——
+           默认显示在线版，因为它是点开就能用的那个。 -->
+      <section class="section section--tight" id="versions">
+        <div class="wrap">
+          <div class="section-head section-head--center reveal">
+            <p class="eyebrow">两种用法</p>
+            <h2 class="h2">单机版，或者在线版</h2>
+            <p class="lead">
+              两种都能用，区别只有一件事：数据放在哪。单机版全部留在设备里；
+              在线版跟着账号走，换手机不丢。
+            </p>
+          </div>
+
+          <div class="ver-switch reveal" role="tablist" aria-label="选择版本">
+            <button class="ver-switch__btn" type="button" role="tab" data-ver-btn="local" aria-selected="false">
+              单机版
+            </button>
+            <button class="ver-switch__btn" type="button" role="tab" data-ver-btn="online" aria-selected="true">
+              在线版
+            </button>
+          </div>
+
+          <article class="card ver-panel" data-ver="online">
+            <span class="ver-panel__tag">在线版</span>
+            <h3 class="ver-panel__title">账号登录，数据跟着走</h3>
+            <dl class="ver-facts">
+              <div>
+                <dt>数据</dt>
+                <dd>存在你自己的账号下，换手机登录就回来</dd>
+              </div>
+              <div>
+                <dt>联网</dt>
+                <dd>需要联网（第一次登录要连上服务器）</dd>
+              </div>
+              <div>
+                <dt>账号</dt>
+                <dd>手机号登录；也可以先用游客账号，之后再绑定</dd>
+              </div>
+              <div>
+                <dt>新游戏</dt>
+                <dd>「设置 → 游戏」里下载、更新、卸载，不用重装 App</dd>
+              </div>
+              <div>
+                <dt>心愿商城</dt>
+                <dd>有 —— 孩子许愿、家长定价</dd>
+              </div>
+            </dl>
+            <div class="btn-row">
+              <a class="btn btn--grass" href="app/">立即打开网页版</a>
+            </div>
+            <p class="ver-panel__note">
+              用浏览器打开即用，手机上可以「添加到主屏幕」，从桌面图标进入。
+            </p>
+          </article>
+
+          <article class="card ver-panel" data-ver="local">
+            <span class="ver-panel__tag">单机版</span>
+            <h3 class="ver-panel__title">装到手机上，数据只在这台设备里</h3>
+            <dl class="ver-facts">
+              <div>
+                <dt>数据</dt>
+                <dd>全部存在设备本地，我们这边没有副本</dd>
+              </div>
+              <div>
+                <dt>联网</dt>
+                <dd>不需要。飞机上、没 WiFi 的爷爷奶奶家都能照常玩</dd>
+              </div>
+              <div>
+                <dt>账号</dt>
+                <dd>没有账号，也没有登录</dd>
+              </div>
+              <div>
+                <dt>新游戏</dt>
+                <dd>随安装包一起装好，不需要下载</dd>
+              </div>
+              <div>
+                <dt>备份</dt>
+                <dd>可以「导出备份」存成一个 JSON 文件，换设备时导入恢复</dd>
+              </div>
+            </dl>
+            <p class="dl__note">
+              安装包没有公开下载地址，<strong>私聊作者获取</strong>。
+            </p>
+          </article>
         </div>
       </section>
 
@@ -1112,6 +1206,140 @@
         </div>
       </section>
 
+      <!-- ================= 心愿商城 ================= -->
+      <!-- 2026-11-10：心愿商城是底部第 4 格，官网一直没讲。
+           口径按用户要求：只写「许愿 + 家长定价」，**不展开成交在淘宝/京东** ——
+           官网不写成电商页。 -->
+      <section class="section" id="wish">
+        <div class="wrap">
+          <div class="section-head section-head--center reveal">
+            <p class="eyebrow">心愿商城</p>
+            <h2 class="h2">想要的，先许个愿</h2>
+            <p class="lead">
+              孩子看到想要的东西，可以在心愿商城里许愿。家长看到之后自己定价 ——
+              要多少积分、什么时候可以换 —— 孩子攒够了再点兑换。
+            </p>
+          </div>
+
+          <div class="pillars pillars--three">
+            <article class="card card--hover pillar reveal">
+              <div class="ico"><svg class="icon" aria-hidden="true"><use href="#i-gift" /></svg></div>
+              <h3 class="pillar__title">孩子许愿</h3>
+              <p class="pillar__desc">
+                在心愿商城里挑中一样东西，点「我想要」。这条心愿会挂在那里，家长一打开就看得到。
+              </p>
+              <ul class="pillar__list">
+                <li>许愿不花积分，也不用等家长在线</li>
+                <li>已经拥有的游戏会标成「已拥有」，不会重复许</li>
+              </ul>
+            </article>
+
+            <article class="card card--hover pillar reveal">
+              <div class="ico"><svg class="icon" aria-hidden="true"><use href="#i-tag" /></svg></div>
+              <h3 class="pillar__title">家长定价</h3>
+              <p class="pillar__desc">
+                家长决定这件东西值多少积分。定完价，心愿才真正变成可以兑换的目标。
+              </p>
+              <ul class="pillar__list">
+                <li>定价权在家长手里，孩子改不了</li>
+                <li>还没定价的心愿，孩子那边不会显示价格</li>
+              </ul>
+            </article>
+
+            <article class="card card--hover pillar reveal">
+              <div class="ico"><svg class="icon" aria-hidden="true"><use href="#i-coin" /></svg></div>
+              <h3 class="pillar__title">攒够再换</h3>
+              <p class="pillar__desc">
+                卡片上直接写「还差多少分」。差多少、够不够，一眼就看得出来。
+              </p>
+              <ul class="pillar__list">
+                <li>差多少写在卡片上，不用自己算</li>
+                <li>定价的时候能先看一遍：这个价换下来，券和积分各出多少</li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="dl-note reveal">
+            <strong>和「兑换」的区别：</strong>兑换是家里自己加的奖励 —— 零食、出去玩、多玩一会儿平板；
+            心愿是外面看到的东西，家长定完价才生效。两格并排放在底部导航上，不是父子页。
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 游戏 ================= -->
+      <section class="section section--paper" id="games">
+        <div class="wrap">
+          <div class="section-head reveal">
+            <p class="eyebrow">不只是农场</p>
+            <h2 class="h2">游戏可以换，也可以更新</h2>
+            <p class="lead">
+              农场是第一款，也是默认那一款。装上别的游戏之后，底部导航那一格会跟着换成它 ——
+              图标、名字、内容全都变。
+            </p>
+          </div>
+
+          <div class="money money--stack">
+            <div class="money__list">
+              <article class="money__item reveal">
+                <div class="ico ico--sm">
+                  <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
+                </div>
+                <div>
+                  <h3>进游戏是全屏的</h3>
+                  <p>
+                    玩的时候顶栏和底栏都会收起来，只留左上角一条「退出游戏」。玩完点它就回到任务页。
+                  </p>
+                </div>
+              </article>
+
+              <article class="money__item reveal">
+                <div class="ico ico--sm">
+                  <svg class="icon" aria-hidden="true"><use href="#i-tablet" /></svg>
+                </div>
+                <div>
+                  <h3>一款游戏占一格</h3>
+                  <p>
+                    底部导航第二格永远显示「当前正在玩的游戏」。想换回来，在设置里把当前游戏改回去。
+                  </p>
+                </div>
+              </article>
+
+              <article class="money__item reveal">
+                <div class="ico ico--sm">
+                  <svg class="icon" aria-hidden="true"><use href="#i-drive" /></svg>
+                </div>
+                <div>
+                  <h3>新游戏在设置里装</h3>
+                  <p>
+                    「设置 → 游戏」是一张表：没装的写「下载」，装过的写「已装」，有新版的直接给「更新」。
+                  </p>
+                </div>
+              </article>
+
+              <article class="money__item reveal">
+                <div class="ico ico--sm">
+                  <svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg>
+                </div>
+                <div>
+                  <h3>每个游戏有自己的存档</h3>
+                  <p>
+                    卸载会把那一款游戏的存档一起删掉，别的游戏不受影响。装之前会先核对包的内容。
+                  </p>
+                </div>
+              </article>
+            </div>
+
+            <div class="band reveal">
+              <div class="band__title">单机版和在线版的区别</div>
+              <div class="band__hint">
+                单机版的游戏随安装包一起装好，不需要下载；在线版才有「下载 / 更新」，
+                新游戏上架之后不用重装 App。
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ================= 界面预览 ================= -->
       <section class="section section--paper" id="shots">
         <div class="wrap">
@@ -1196,10 +1424,10 @@
                   width="390"
                   height="844"
                   loading="lazy"
-                  alt="兑换页：愿望清单，每件商品显示所需积分，以及先花丰收币再花积分的付款明细"
+                  alt="兑换页：愿望清单，每件商品显示所需积分，以及先花兑换券再花积分的付款明细"
                 />
               </div>
-              <figcaption><b>兑换</b>积分和丰收币，一起付</figcaption>
+              <figcaption><b>兑换</b>积分和兑换券，一起付</figcaption>
             </figure>
 
             <figure class="shot reveal">
@@ -1239,7 +1467,8 @@
               <p class="eyebrow">给家长</p>
               <h2 class="h2">家长能管到的部分</h2>
               <p class="lead">
-                应用是单机的：没有服务端、没有账号、没有统计和广告 SDK。
+                单机版是纯本地的：没有服务端、没有账号、没有统计和广告 SDK。
+                在线版才有账号（手机号或游客），数据同步到我们自己的服务器。
               </p>
 
               <ul class="check-list">
@@ -1272,10 +1501,11 @@
                     <svg class="icon" aria-hidden="true"><use href="#i-drive" /></svg>
                   </div>
                   <div>
-                    <h3>数据只存在本机</h3>
+                    <h3>数据在你手里</h3>
                     <p>
-                      任务、积分、背包、农场全部存在设备本地。可以「导出备份」存成 JSON 文件，
-                      换设备时导入恢复。
+                      单机版的任务、积分、背包、农场全部存在设备本地；在线版存在你自己的账号下。
+                      两种都能「导出备份」存成 JSON 留一份底稿；换设备时，单机版用导入恢复，
+                      在线版登录就回来。
                     </p>
                   </div>
                 </li>
@@ -1317,7 +1547,9 @@
           <div class="section-head section-head--center reveal">
             <p class="eyebrow">下载与体验</p>
             <h2 class="h2">安卓 APK、网页版、iPhone</h2>
-            <p class="lead">不用注册，也不用付费。想先看看，直接点「在线体验」。</p>
+            <p class="lead">
+              想先试试，直接用浏览器打开在线版；单机版安装包请私聊作者获取。
+            </p>
           </div>
 
           <div class="dl-grid">
@@ -1328,21 +1560,21 @@
                 </div>
                 <div>
                   <div class="dl__name">安卓版 APK</div>
-                  <div class="dl__meta">v1.0.0 · 约 5.5 MB · 免费</div>
+                  <div class="dl__meta">v1.1.0 · 约 5.5 MB · 免费</div>
                 </div>
               </div>
               <p class="dl__desc">
-                直接下载安装包，装到手机上就是一个独立 App。音效和震动在安卓端最完整，
-                完全离线可用。
+                装到手机上就是一个独立 App。音效和震动在安卓端最完整，完全离线可用，
+                数据只在这台设备里。
               </p>
               <ul class="dl__specs">
                 <li>系统要求：Android 7.0 及以上</li>
                 <li>权限：不需要联网、通讯录、相机等任何权限</li>
                 <li>安装：下载后允许「安装未知来源应用」即可</li>
               </ul>
-              <a class="btn btn--grass btn--block" href="download/kid-quest-farm.apk" download>
-                下载 APK
-              </a>
+              <p class="dl__note">
+                安装包没有公开下载地址，<strong>私聊作者获取</strong>。
+              </p>
             </article>
 
             <article class="dl reveal">
@@ -1356,13 +1588,13 @@
                 </div>
               </div>
               <p class="dl__desc">
-                用手机或电脑的浏览器直接打开就能用，数据存在浏览器本地。
-                手机上可以「添加到主屏幕」，从桌面图标进入。
+                用手机或电脑的浏览器直接打开，账号登录，数据同步到服务器 ——
+                换设备只要重新登录。心愿商城和游戏下载都在这一版里。
               </p>
               <ul class="dl__specs">
                 <li>手机：Chrome / Edge / Safari / 夸克 等现代浏览器</li>
                 <li>电脑：Chrome / Edge / Firefox / Safari</li>
-                <li>提示：换浏览器或清理数据前，记得先导出备份</li>
+                <li>提示：换设备只要重新登录，数据跟着账号走</li>
               </ul>
               <a class="btn btn--block" href="app/">立即打开网页版</a>
             </article>
@@ -1390,9 +1622,9 @@
           </div>
 
           <div class="dl-note reveal">
-            <strong>数据存在哪？</strong>全部存在你自己的设备里，我们这边没有副本。
-            应用没有任何服务端接口，也没有第三方统计或广告 SDK。
-            唯一的例外是你主动点「导出备份」——那会把数据存成一个文件交到你手上。
+            <strong>数据存在哪？</strong>单机版全部存在你自己的设备里，我们这边没有副本；
+            在线版存在你自己的账号下，登录就同步回来。两种版本都没有第三方统计或广告 SDK，
+            也都能「导出备份」存成一个文件交到你手上。
           </div>
         </div>
       </section>
@@ -1422,8 +1654,12 @@
               <summary>需要联网吗？要注册账号吗？</summary>
               <div class="faq__body">
                 <p>
-                  <strong>都不需要。</strong>小任务农场是单机应用，所有数据存在你自己的设备上，
-                  不注册、不登录、不联网也能完整使用。飞机上、没 WiFi 的爷爷奶奶家都能照常玩。
+                  <strong>看用哪个版本。</strong>单机版（安卓安装包）不需要联网、也不需要账号，
+                  数据全在设备上，飞机上、没 WiFi 的爷爷奶奶家都能照常玩。
+                </p>
+                <p>
+                  在线版（网页版）需要一个账号：可以用手机号登录，也可以先开一个游客账号，
+                  之后再绑定。数据跟着账号走，换手机登录就回来。
                 </p>
               </div>
             </details>
@@ -1432,10 +1668,22 @@
               <summary>孩子的数据会被上传吗？</summary>
               <div class="faq__body">
                 <p>
-                  不会。应用没有任何服务端，也没有第三方统计和广告 SDK。任务、积分、农场记录
-                  全部保存在本机的浏览器数据库里。
+                  单机版不会 —— 它没有任何服务端，任务、积分、农场记录全部保存在本机。
                 </p>
-                <p>只有你主动点「导出备份」，数据才会变成一个文件交到你手上。</p>
+                <p>
+                  在线版会把任务、积分、农场进度同步到我们自己的服务器，这样才能换设备不丢。
+                  两种版本都没有第三方统计和广告 SDK；在线版也可以随时「导出备份」。
+                </p>
+              </div>
+            </details>
+
+            <details class="reveal">
+              <summary>心愿商城的东西是谁发货？</summary>
+              <div class="faq__body">
+                <p>
+                  心愿商城里的商品由合作商家提供。孩子在 App 里许愿，家长看到后自己定价；
+                  要不要买、什么时候买，都由家长决定，App 里不收款。
+                </p>
               </div>
             </details>
 
@@ -1465,10 +1713,15 @@
               <summary>换手机或换浏览器，数据会丢吗？</summary>
               <div class="faq__body">
                 <p>
-                  可以用「导出备份」把全部数据（任务、实例、积分流水、背包、农场、设置）
-                  存成一个 JSON 文件，在新设备上用「导入备份」恢复，接着玩。
+                  <strong>在线版不会</strong>：数据在账号里，新设备登录就回来。
+                  单机版的数据只在这台设备上，换设备要靠「导出备份」——
+                  把任务、积分流水、背包、农场、设置打包成一个 JSON 文件，
+                  在新设备上用「导入备份」恢复，接着玩。
                 </p>
-                <p>建议每隔一段时间导出一次，尤其是准备换设备或清理浏览器数据之前。</p>
+                <p>
+                  单机版建议每隔一段时间导出一次，尤其是准备换设备或清理浏览器数据之前；
+                  清理浏览器数据会把网页版的本地缓存一起清掉，所以别只留一份在本机。
+                </p>
               </div>
             </details>
 
@@ -1487,10 +1740,10 @@
             </details>
 
             <details class="reveal">
-              <summary>农场里的「丰收币」是什么？为什么不直接给积分？</summary>
+              <summary>农场里的「兑换券」是什么？为什么不直接给积分？</summary>
               <div class="faq__body">
                 <p>
-                  丰收币是卖出农产品后得到的第二种货币，和积分是<strong>两本独立的账</strong>。
+                  兑换券是卖出农产品后得到的第二种货币，和积分是<strong>两本独立的账</strong>。
                 </p>
                 <p>
                   它只能用来兑换愿望，不能换回积分，也不能买种子和土地。这样设计是为了避免出现
@@ -1507,11 +1760,11 @@
         <div class="wrap">
           <div class="final-cta reveal">
             <div class="final-cta__glow" aria-hidden="true"></div>
-            <h2 class="h2">装好之后，第一份任务清单已经在那里了</h2>
-            <p>免费、无广告、不用注册；不合适直接卸载，数据都在你自己手机上。</p>
+            <h2 class="h2">打开就能用，第一份任务清单已经在那里了</h2>
+            <p>免费、无广告。在线版用浏览器打开就能试；单机版的安装包私聊作者获取。</p>
             <div class="btn-row">
-              <a class="btn btn--lg" href="download/kid-quest-farm.apk" download>下载安卓版</a>
-              <a class="btn btn--lg btn--ghost" href="app/">先在线试试</a>
+              <a class="btn btn--lg" href="app/">在线体验</a>
+              <a class="btn btn--lg btn--ghost" href="#download">获取安装包</a>
             </div>
           </div>
         </div>
@@ -1538,8 +1791,8 @@
               </span>
             </a>
             <p>
-              一个给 6–14 岁孩子的「每日任务 + 积分 + 农场经营」激励应用。
-              单机运行，数据全部存在本机，无广告、无内购。
+              一个给 6–14 岁孩子的「每日任务 + 积分 + 游戏」激励应用。
+              单机版数据只在本机，在线版跟着账号走；无广告、无内购。
             </p>
           </div>
 
@@ -1549,6 +1802,8 @@
               <li><a href="#why">功能介绍</a></li>
               <li><a href="#how">使用流程</a></li>
               <li><a href="#money">农场里的取舍</a></li>
+              <li><a href="#wish">心愿商城</a></li>
+              <li><a href="#games">游戏</a></li>
               <li><a href="#shots">界面预览</a></li>
             </ul>
           </div>
@@ -1556,8 +1811,8 @@
           <div>
             <h3>下载</h3>
             <ul class="footer__list">
-              <li><a href="download/kid-quest-farm.apk" download>安卓版 APK</a></li>
-              <li><a href="app/">网页版</a></li>
+              <li><a href="#download">安卓版安装包</a></li>
+              <li><a href="app/">网页版（在线版）</a></li>
               <li><a href="#download">iPhone / iPad</a></li>
               <li><a href="#faq">常见问题</a></li>
             </ul>

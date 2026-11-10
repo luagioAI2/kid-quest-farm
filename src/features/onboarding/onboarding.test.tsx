@@ -1,6 +1,6 @@
 /**
  * 回归测试：新手引导（家长设置向导 + 功能导览）。
- * 功能导览是 6 步：前 4 步讲底部四个 tab（给孩子），
+ * 功能导览是 7 步：前 5 步讲底栏四格 + 顶栏那颗 🪙（给孩子），
  * 后 2 步讲顶栏的「家长确认」和「设置」（给家长，2026-09-21 补）。
  *
  * 这一组里**最值钱的是「重看模式没有密码步骤」那一条**，它守的是一个安全洞：
@@ -18,8 +18,19 @@
  * 这条断言照样是绿的，等于没测。所以第 1 条是**对照组**：
  * 同样的查询手法，在首次引导里**必须**查得到密码页。
  * 两条一起看，才说明「replay 没有密码页」是真的因为它被拿掉了。
+ *
+ * ------------------------------------------------------------
+ * 2026-11-10 重做导览之后，这里多守一条**结构性**的东西：
+ *
+ *   `onStepChange` **一次都不许收到 `'game'`**。
+ *
+ * 游戏那一格是全屏的（App 收掉顶栏和底栏），导览一旦切进去就没有任何
+ * `data-tour` 元素可指，挖洞层不渲染、整屏还被拦截层压着 —— 孩子看到的
+ * 是一张指不到任何东西的卡片。这一步在类型层面已经堵了（`TourTabKey`
+ * 里没有 `'game'`），但类型挡不住「有人把 setTab 直接接到别处」，
+ * 所以再在行为上钉一条。
  */
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppSettings } from '@/domain/types'
@@ -134,8 +145,8 @@ describe('家长设置向导', () => {
    给孩子的功能导览
    ============================================================ */
 
-describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
-  it('跟着走六步：四步给孩子、两步给家长；最后一步收尾', async () => {
+describe('功能导览（5 步给孩子 + 2 步给家长）', () => {
+  it('跟着走七步：五步给孩子、两步给家长；最后一步收尾', async () => {
     const user = userEvent.setup()
     const onFinish = vi.fn()
     const onStepChange = vi.fn()
@@ -143,17 +154,24 @@ describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
 
     expect(onStepChange).toHaveBeenLastCalledWith('tasks')
     expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-bubble', 'tasks')
-    expect(screen.getByText('1 / 6')).toBeInTheDocument()
+    expect(screen.getByText('1 / 7')).toBeInTheDocument()
 
+    /* ⚠️ 「游戏」这一步**故意停在任务页**（`tab: 'tasks'`）。
+       2026-11-09 起 `tab === 'game'` 是全屏的：App 会收掉顶栏和底栏，
+       只留一条「退出游戏」，那一刻 `[data-tour="tab-farm"]` 根本不存在
+       ⇒ 挖洞层不渲染、整屏被拦截层压着。见 ChildTour 文件头第 1 条。 */
     await user.click(screen.getByRole('button', { name: '下一步' }))
-    // ⚠️ 2026-10-14 插件化之后这一步的 `tab` 是 `'game'`（底部那一格叫「游戏」，
-    // 内容跟着当前游戏走），但**高亮锚点仍然是 `tab-farm`** —— 农场是首款且
-    // 默认拥有，那一格的 `data-tour` 就是 `tab-<当前游戏 id>`。
-    // 锚点见下面 `data-tour-root` 那条断言，别把它一起改成 `tab-game`。
-    expect(onStepChange).toHaveBeenLastCalledWith('game')
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-bubble', 'game')
+    expect(onStepChange).toHaveBeenLastCalledWith('tasks')
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
     expect(onStepChange).toHaveBeenLastCalledWith('redeem')
+
+    // 2026-10-28 加的「心愿」：和兑换并列，不是它的子页
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-bubble', 'wish')
+    expect(onStepChange).toHaveBeenLastCalledWith('wish')
+    expect(screen.getByText('4 / 7')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
     // ⚠️ 2026-11-05：底栏那格「积分」删掉了，明细改从顶栏那颗 🪙 点开
@@ -161,7 +179,7 @@ describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
     // 顶栏每个 tab 都在，写 `'points'` 会切到一页根本不渲染的空白。
     expect(onStepChange).toHaveBeenLastCalledWith('tasks')
     expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-bubble', 'points')
-    expect(screen.getByText('4 / 6')).toBeInTheDocument()
+    expect(screen.getByText('5 / 7')).toBeInTheDocument()
 
     // ---- 后两步是给家长的：回到「任务」页，讲顶栏那两个按钮 ----
     // （顶栏按钮哪个 tab 都在，但背景停在任务页才讲得通，见 ChildTour 文件头）
@@ -171,19 +189,24 @@ describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
     expect(screen.getByRole('dialog')).toHaveAttribute('data-tour-bubble', 'settings')
-    expect(screen.getByText('6 / 6')).toBeInTheDocument()
+    expect(screen.getByText('7 / 7')).toBeInTheDocument()
 
     // 最后一步没有「下一步」了，换成「知道啦」
     expect(screen.queryByRole('button', { name: '下一步' })).toBeNull()
     await user.click(screen.getByRole('button', { name: '知道啦' }))
 
     expect(onFinish).toHaveBeenCalledTimes(1)
+
+    /* ★ 全程一次都没让 App 切进「游戏」—— 这是 2026-11-10 那条结构性约束。
+       用「调用参数里有没有 'game'」判，不数调用次数（次数会随步数变）。 */
+    const keys = onStepChange.mock.calls.map((c) => c[0])
+    expect(keys).not.toContain('game')
   })
 
   /**
    * 家长那两步必须**自己**说明是给家长看的。
    *
-   * 为什么值得单独一条：导览是连续的一条流，第 5 步开始画面没有任何变化
+   * 为什么值得单独一条：导览是连续的一条流，第 6 步开始画面没有任何变化
    * （顶栏本来就一直在），拿手机的人会以为「还是给孩子看的东西」而划过去。
    * 所以气泡上那个「给家长」小标是这两步唯一的身份提示，掉了就等于没加。
    *
@@ -197,14 +220,14 @@ describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
     const hasParentBadge = () => screen.queryByText('给家长') !== null
 
     expect(hasParentBadge()).toBe(false) // 第 1 步：任务（给孩子）
-    for (let n = 0; n < 3; n++) await user.click(screen.getByRole('button', { name: '下一步' }))
-    expect(hasParentBadge()).toBe(false) // 第 4 步：积分（给孩子）
+    for (let n = 0; n < 4; n++) await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(hasParentBadge()).toBe(false) // 第 5 步：积分（给孩子）
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
-    expect(hasParentBadge()).toBe(true) // 第 5 步：家长确认
+    expect(hasParentBadge()).toBe(true) // 第 6 步：家长确认
 
     await user.click(screen.getByRole('button', { name: '下一步' }))
-    expect(hasParentBadge()).toBe(true) // 第 6 步：设置
+    expect(hasParentBadge()).toBe(true) // 第 7 步：设置
   })
 
   it('「跳过」直接收尾', async () => {
@@ -271,85 +294,48 @@ describe('功能导览（4 步给孩子 + 2 步给家长）', () => {
 })
 
 /* ============================================================
-   当前游戏不是农场时，「农场」那一步必须消失
+   「游戏」那一步的锚点跟着当前游戏走
    ------------------------------------------------------------
-   游戏那一格的 `data-tour` 是 `tab-<当前游戏 id>`（App.tsx）。孩子把当前游戏
-   换成插件包之后，`tab-farm` 就找不到了 —— `measure()` 拿到 `null`，而挖洞层是
-   `{rect && …}`：结果是**不压暗**、气泡浮在中间、整屏还被拦截层压着点不动。
-   一张指不到任何东西的卡片。
+   底栏游戏那一格的 `data-tour` 是 `tab-<当前游戏 id>`（App.tsx）。
+   以前这里写死 `tab-farm`，并且「当前游戏不是农场」时**把整步删掉**
+   —— 孩子换了插件游戏就再也看不到「游戏在哪」。
 
-   设置页有「重看新手引导」，所以这不是「只在新装时才可能」的岔路。
+   2026-11-10 改成占位符：`anchor: 'tab-game'` 在渲染时解析成
+   `tab-<当前游戏 id>`，步数恒为 7。判据是气泡上的 `data-tour-anchor`。
    ============================================================ */
-describe('功能导览：当前游戏不是农场时', () => {
-  beforeEach(() => {
-    useApp.setState({ activeGameId: 'cloudfarm' })
-  })
-  // 别的测试按默认（农场）跑，别让这条的副作用漏出去
+describe('功能导览：游戏那一步的锚点', () => {
+  /* ⚠️ 必须包 `act`：RTL 的自动 cleanup 和这里的 afterEach 谁先跑不确定，
+     如果这条先跑，上一条用例的 `ChildTour` 还挂着 —— 它订阅了 `useApp`，
+     在 act 外面收到更新就会刷一屏警告（虽然不影响结果，但会淹掉真问题）。 */
   afterEach(() => {
-    useApp.setState({ activeGameId: 'farm' })
+    act(() => useApp.setState({ activeGameId: 'farm' }))
   })
 
-  it('★ 少一步：只剩五步，全程不出现 farm', async () => {
+  it('★ 换成插件游戏：仍然是 7 步，锚点跟着变成 tab-cloudfarm', async () => {
+    act(() => useApp.setState({ activeGameId: 'cloudfarm' }))
     const user = userEvent.setup()
     render(<ChildTour onFinish={() => {}} onStepChange={() => {}} />)
-    expect(screen.getByText('1 / 5')).toBeInTheDocument()
 
-    const seen: string[] = []
-    for (let n = 0; n < 5; n++) {
-      seen.push(screen.getByRole('dialog').getAttribute('data-tour-bubble') ?? '')
-      const next = screen.queryByRole('button', { name: '下一步' })
-      if (!next) break
-      await user.click(next)
-    }
-    expect(seen).toEqual(['tasks', 'redeem', 'points', 'review', 'settings'])
+    expect(screen.getByText('1 / 7')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+
+    const bubble = screen.getByRole('dialog')
+    expect(bubble).toHaveAttribute('data-tour-bubble', 'game')
+    expect(bubble).toHaveAttribute('data-tour-anchor', 'tab-cloudfarm')
+    // 当前不是农场，就不该讲「买种子」
+    expect(bubble.textContent).not.toContain('买种子')
+    expect(bubble.textContent).toContain('退出游戏')
   })
 
-  it('★ 对照组：当前是农场时仍然是六步', () => {
-    // 没有这一条，「1 / 5」也可能是因为步数常量被删错了
-    useApp.setState({ activeGameId: 'farm' })
-    render(<ChildTour onFinish={() => {}} onStepChange={() => {}} />)
-    expect(screen.getByText('1 / 6')).toBeInTheDocument()
-  })
-})
-
-/* ============================================================
-   当前游戏不是农场时，「农场」那一步必须消失
-   ------------------------------------------------------------
-   游戏那一格的 `data-tour` 是 `tab-<当前游戏 id>`（App.tsx）。孩子把当前游戏
-   换成插件包之后，`tab-farm` 就找不到了 —— `measure()` 拿到 `null`，而挖洞层是
-   `{rect && …}`：结果是**不压暗**、气泡浮在中间、整屏还被拦截层压着点不动。
-   一张指不到任何东西的卡片。
-
-   设置页有「重看新手引导」，所以这不是「只在新装时才可能」的岔路。
-   ============================================================ */
-describe('功能导览：当前游戏不是农场时', () => {
-  beforeEach(() => {
-    useApp.setState({ activeGameId: 'cloudfarm' })
-  })
-  // 别的测试按默认（农场）跑，别让这条的副作用漏出去
-  afterEach(() => {
-    useApp.setState({ activeGameId: 'farm' })
-  })
-
-  it('★ 少一步：只剩五步，全程不出现 farm', async () => {
+  it('★ 对照组：当前是农场时讲的是农场那段', async () => {
+    act(() => useApp.setState({ activeGameId: 'farm' }))
     const user = userEvent.setup()
     render(<ChildTour onFinish={() => {}} onStepChange={() => {}} />)
-    expect(screen.getByText('1 / 5')).toBeInTheDocument()
 
-    const seen: string[] = []
-    for (let n = 0; n < 5; n++) {
-      seen.push(screen.getByRole('dialog').getAttribute('data-tour-bubble') ?? '')
-      const next = screen.queryByRole('button', { name: '下一步' })
-      if (!next) break
-      await user.click(next)
-    }
-    expect(seen).toEqual(['tasks', 'redeem', 'points', 'review', 'settings'])
-  })
+    await user.click(screen.getByRole('button', { name: '下一步' }))
 
-  it('★ 对照组：当前是农场时仍然是六步', () => {
-    // 没有这一条，「1 / 5」也可能是因为步数常量被删错了
-    useApp.setState({ activeGameId: 'farm' })
-    render(<ChildTour onFinish={() => {}} onStepChange={() => {}} />)
-    expect(screen.getByText('1 / 6')).toBeInTheDocument()
+    const bubble = screen.getByRole('dialog')
+    expect(bubble).toHaveAttribute('data-tour-anchor', 'tab-farm')
+    expect(bubble.textContent).toContain('买种子')
   })
 })

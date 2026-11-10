@@ -240,6 +240,20 @@ try {
     !!gradleVersion && ldVersion === gradleVersion,
     ldVersion === gradleVersion ? '' : `JSON-LD=${ldVersion} build.gradle=${gradleVersion}`,
   )
+  /* ★ 2026-11-10：下载卡片上那个「v1.1.0」是**第三处**版本号。
+     上一版它停在 v1.0.0，JSON-LD 已经 1.1.0 —— 同一页两个版本号，
+     结构化数据被搜索引擎抓走、卡片上那句给用户看，谁对谁错没人知道。
+     判据只认「v + 版本」，不认整句文案。 */
+  const dlVersion = await page.evaluate(() => {
+    const el = document.querySelector('#download .dl--feature .dl__meta')
+    const m = el ? el.textContent.match(/v(\d+(?:\.\d+)*)/) : null
+    return m ? m[1] : null
+  })
+  check(
+    `下载卡片上的版本号和 build.gradle 一致（${dlVersion ?? '读不到'}）`,
+    !!gradleVersion && dlVersion === gradleVersion,
+    dlVersion === gradleVersion ? '' : `卡片=v${dlVersion} build.gradle=${gradleVersion}`,
+  )
 
   console.log('\n【B】结构完整性')
 
@@ -560,6 +574,28 @@ try {
     }
   }
 
+  /* ---------- 过期币种名（2026-11-10） ----------
+     `currency.ts` 里有一条 `COUPON_WAS_RENAMED_FROM = '丰收币'` —— 那是**改名前**的名字，
+     专门留给「导入老备份」认的。官网却一直写着它（页面上、FAQ、隐私政策、用户协议共 13 处），
+     而 App 里早就叫「兑换券」了：家长照着官网找「丰收币」，界面上找不到。
+     ➜ 旧名字从源码里读，不在脚本里再抄一份（抄的那份过期不会响，见 lib/currency.mjs 文件头）。 */
+  {
+    const curSrc = readFileSync(resolve('src/domain/currency.ts'), 'utf8')
+    const oldName =
+      (curSrc.match(/COUPON_WAS_RENAMED_FROM\s*=\s*'([^']+)'/) ?? [])[1] ?? null
+    const stale = []
+    for (const f of ['index.html', 'privacy.html', 'terms.html']) {
+      const t = readFileSync(resolve(SITE_DIR, f), 'utf8')
+      const hits = oldName ? t.split(oldName).length - 1 : 0
+      if (hits > 0) stale.push(`${f}×${hits}`)
+    }
+    check(
+      `官网不再用旧币种名（${oldName ?? '读不到'}）`,
+      !!oldName && stale.length === 0,
+      !oldName ? '读不到 COUPON_WAS_RENAMED_FROM，闸门失效' : stale.join(' / ') || '',
+    )
+  }
+
   for (const vp of [
     { name: '桌面 1440', width: 1440, height: 960 },
     { name: '平板 834', width: 834, height: 1112 },
@@ -645,6 +681,74 @@ try {
   const menuClosed = await page.evaluate(() => !document.getElementById('nav').classList.contains('is-open'))
   check('Esc 能收起手机端菜单', menuClosed)
 
+  // ---------- 版本切换（单机版 / 在线版，2026-11-10） ----------
+  // 官网现在有两种用法。判据全部走 computedStyle / dataset，不看文案：
+  // 文案一改就会恒真或恒假，这里要的是「哪一块真的显示了」。
+  // ⚠️ 顺便钉住「默认显示在线版」—— JS 没跑起来时也不能让用户只看到「私聊作者」。
+  {
+    const vis = () =>
+      page.evaluate(() => {
+        const on = document.querySelector('.ver-panel[data-ver="online"]')
+        const lo = document.querySelector('.ver-panel[data-ver="local"]')
+        const btns = Array.from(document.querySelectorAll('[data-ver-btn]'))
+        return {
+          html: document.documentElement.dataset.ver ?? '(未设置)',
+          online: on ? getComputedStyle(on).display !== 'none' : false,
+          local: lo ? getComputedStyle(lo).display !== 'none' : false,
+          sel: btns.filter((b) => b.getAttribute('aria-selected') === 'true').map((b) => b.dataset.verBtn),
+          count: btns.length,
+        }
+      })
+
+    let st = await vis()
+    check('版本切换：两个按钮都在', st.count === 2, `count=${st.count}`)
+    check(
+      '版本切换：默认显示在线版（JS 没跑也显示它）',
+      st.online && !st.local && st.sel.join() === 'online',
+      JSON.stringify(st),
+    )
+
+    await page.click('[data-ver-btn="local"]')
+    await wait(220)
+    st = await vis()
+    check(
+      '版本切换：点「单机版」换成单机版面板',
+      st.html === 'local' && st.local && !st.online && st.sel.join() === 'local',
+      JSON.stringify(st),
+    )
+    await page.screenshot({ path: `${OUT}/ver-local.png` })
+
+    await page.reload({ waitUntil: 'networkidle2', timeout: 60000 })
+    await wait(320)
+    st = await vis()
+    check('版本切换：刷新后还记得选的是单机版', st.html === 'local' && st.local, JSON.stringify(st))
+
+    await page.click('[data-ver-btn="online"]')
+    await wait(220)
+    st = await vis()
+    check(
+      '版本切换：能切回在线版',
+      st.html === 'online' && st.online && !st.local && st.sel.join() === 'online',
+      JSON.stringify(st),
+    )
+    await page.screenshot({ path: `${OUT}/ver-online.png` })
+
+    const ovf = await page.evaluate(() => {
+      const on = document.querySelector('.ver-panel[data-ver="online"]')
+      const r = on.getBoundingClientRect()
+      return {
+        right: Math.round(r.right),
+        vw: document.documentElement.clientWidth,
+        scrollW: document.documentElement.scrollWidth,
+      }
+    })
+    check(
+      '版本切换：390 宽下面板不横向溢出',
+      ovf.right <= ovf.vw && ovf.scrollW <= ovf.vw,
+      JSON.stringify(ovf),
+    )
+  }
+
   // 法务页也扫一眼
   for (const f of ['privacy.html', 'terms.html']) {
     const p = await browser.newPage()
@@ -683,10 +787,17 @@ try {
       //    然后报「渲染不出四个 tab」—— 而截图里四个 tab 明明都在。
       text: document.body.innerText,
       title: document.title,
+      // ★ 2026-11-10：底栏现在是 任务 / 游戏(当前游戏名) / 兑换 / 心愿，积分挪到了顶栏。
+      //   所以判据改成**结构**：nav 里正好 4 个 data-tour。
+      //   靠文案凑（「农场」「积分」）会随游戏改名、改版一起烂掉。
+      navTabs: document.querySelectorAll('nav [data-tour]').length,
     }))
     check('网页版能启动（#root 有内容）', app.rootChildren > 0, `#root 子节点 ${app.rootChildren}`)
-    check('网页版渲染出了四个 tab', ['任务', '农场', '兑换', '积分'].every((t) => app.text.includes(t)),
-      app.text.replace(/\s+/g, ' ').slice(-120))
+    check(
+      '网页版底栏是四格',
+      app.navTabs === 4 && ['任务', '兑换', '心愿'].every((t) => app.text.includes(t)),
+      `nav=${app.navTabs} ${app.text.replace(/\s+/g, ' ').slice(-120)}`,
+    )
     check('网页版无 JS 报错', errs.length === 0, errs.slice(0, 3).join(' | '))
     await p.screenshot({ path: `${OUT}/app-web.png` })
     console.log('  网页版首屏 → app-web.png')

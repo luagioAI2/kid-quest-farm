@@ -1705,6 +1705,129 @@ main {
   color: var(--accent-strong);
 }
 
+/* ---------- 22.5 两种用法切换（2026-11-10） ---------- */
+/* 应用现在有单机版和在线版两种用法，官网上要能切换着看。
+   切换只做一件事：改 <html data-ver>，显示哪一块交给下面这几条规则。
+   ⚠️ 默认（没有 data-ver / JS 没跑起来）显示**在线版** —— 它是点开就能用的那个，
+      写反了会让没开 JS 的人看到「私聊作者拿安装包」而没有任何可点的东西。 */
+.ver-switch {
+  display: flex;
+  width: fit-content;
+  margin: 0 auto 24px;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--paper-3);
+  border: 1px solid var(--ink-200);
+}
+.ver-switch__btn {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 9px 22px;
+  border-radius: 999px;
+  background: transparent;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink-600);
+  transition: background-color 0.18s, color 0.18s, box-shadow 0.18s;
+}
+.ver-switch__btn:hover {
+  color: var(--ink-900);
+}
+.ver-switch__btn[aria-selected='true'] {
+  background: #fff;
+  color: var(--ink-900);
+  box-shadow: 0 2px 8px rgb(51 40 30 / 0.12);
+}
+.ver-panel {
+  display: none;
+  max-width: 720px;
+  margin-inline: auto;
+  padding: 26px 26px 22px;
+}
+.ver-panel[data-ver='online'] {
+  display: block;
+}
+html[data-ver='local'] .ver-panel[data-ver='online'] {
+  display: none;
+}
+html[data-ver='local'] .ver-panel[data-ver='local'] {
+  display: block;
+}
+.ver-panel__tag {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--grass-100);
+  color: var(--grass-700);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.ver-panel__title {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink-900);
+}
+.ver-facts {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.ver-facts > div {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--ink-200);
+}
+.ver-facts > div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.ver-facts dt {
+  color: var(--ink-500);
+  font-size: 13px;
+  font-weight: 700;
+}
+.ver-facts dd {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.ver-panel__note {
+  margin: 14px 0 0;
+  color: var(--ink-500);
+  font-size: 13px;
+  line-height: 1.7;
+}
+/* APK 卡片里替代下载按钮的那句话（安装包不公开） */
+.dl__note {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--paper-3);
+  color: var(--ink-700);
+  font-size: 14px;
+  line-height: 1.7;
+}
+@media (max-width: 560px) {
+  .ver-panel {
+    padding: 20px 18px 18px;
+  }
+  .ver-facts > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
 /* ---------- 23. 打印（备案材料有时要打出来） ---------- */
 @media print {
   .nav,
@@ -1723,5 +1846,30 @@ main {
   .faq details {
     box-shadow: none;
     border: 1px solid var(--ink-200);
+  }
+}
+
+/* ---------- 22.6 三段式 / 通栏说明（2026-11-10 走查后补） ---------- */
+/* #wish 只有三张卡。默认 .pillars 是两列 ⇒ 第三张独占一行、右边空一块。
+   三列在 1440 上每张约 380px，正文还是一行 20 字上下，读得动。 */
+.pillars--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* #games 是「左 4 条 + 右一块说明」。说明比列表矮一半，右下会留一个洞。
+   改成 2×2 卡片 + 说明块通栏，整段收成一个方块。 */
+.money--stack {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: clamp(16px, 2.4vw, 24px);
+}
+.money--stack .money__list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 900px) {
+  .pillars--three {
+    grid-template-columns: 1fr;
+  }
+  .money--stack .money__list {
+    grid-template-columns: 1fr;
   }
 }

@@ -226,15 +226,20 @@ try {
 
     await clickByText('下一步')
     await wait(800)
-    await shot('01g-tour-farm')
+    await shot('01g-tour-game')
 
-    // 功能导览一共**六步**：前四步讲底部四个 tab（给孩子），
+    // 功能导览一共**七步**（2026-11-10 重做）：前五步讲底栏四格 + 顶栏 🪙（给孩子），
     // 后两步讲顶栏的「家长确认」和「设置」（给家长，2026-09-21 补）。
     // ⚠️ 新增的那两步**必须**也拍下来 —— 项目硬规矩：
     //    走查图集里看不见的改动 ≈ 没验过（见本文件顶部第 2 条）。
     await clickByText('下一步')
     await wait(800)
     await shot('01h-tour-redeem')
+
+    // 2026-10-28 加的「心愿」：和兑换并列，不是它的子页 —— 导览必须也讲
+    await clickByText('下一步')
+    await wait(800)
+    await shot('01h2-tour-wish')
 
     await clickByText('下一步')
     await wait(800)
@@ -267,7 +272,7 @@ try {
     })
     await wait(700)
 
-    console.log('  引导截图：01b~01k（10 张）')
+    console.log('  引导截图：01b~01k（11 张）')
   } else {
     console.log('  ! 没弹新手引导（profile 里已经有 onboardingDone 标记，这 10 张会缺）')
   }
