@@ -278,14 +278,28 @@ try {
     Array.from(new Set(Array.from(document.querySelectorAll('a[href]')).map((a) => a.getAttribute('href'))))
       .filter((h) => h && !/^(#|https?:|mailto:|tel:)/.test(h)),
   )
+  /* ★ 2026-11-10：`site/app/` 是 `--no-app` 时**故意不产出**的（线上 /app/ 由
+     nginx 指向 client-web 构建）。这条闸门原来只 `existsSync`，于是「官方做法」
+     反而恒红 —— 会把人逼回去把同一份产物放两处。缺 site/app 时跳过 app/ 这一项，
+     并且**明确打印**跳过了几个，免得被读成「全过了」。 */
+  const hasAppDir = existsSync(resolve(SITE_DIR, 'app/index.html'))
   const missingFiles = []
+  const skippedLinks = []
   for (const href of relLinks) {
     const clean = href.split('#')[0].split('?')[0]
     if (!clean || clean === './') continue
+    const isAppLink = clean === 'app/' || clean === 'app' || clean.startsWith('app/')
+    if (isAppLink && !hasAppDir) {
+      skippedLinks.push(href)
+      continue
+    }
     if (!existsSync(resolve(SITE_DIR, clean))) missingFiles.push(href)
   }
-  check(`站内链接的文件都存在（共 ${relLinks.length} 个）`, missingFiles.length === 0,
+  check(`站内链接的文件都存在（共 ${relLinks.length - skippedLinks.length} 个）`, missingFiles.length === 0,
     missingFiles.join(', '))
+  if (skippedLinks.length) {
+    console.log(`  · 跳过 ${skippedLinks.length} 个 app/ 链接（site/app/ 未构建，线上由 nginx 提供）：${skippedLinks.join(', ')}`)
+  }
 
   /* ---------- 下载的 APK 装的是不是**这一版**代码 ----------
      2026-10-09：官网挂的 APK 还是 10-05 的，而代码已经改了四天 ——
@@ -314,8 +328,12 @@ try {
     check('读得到网页版的 bundle 名（staleness 检查的前提）', !!bundleName,
       bundleName ?? '没匹配到 assets/index-*.js')
   } else {
-    check('网页版试玩（site/app/）已构建', false,
-      '没构建过官网产物 —— 先跑 npm run site（或 node scripts/build-site.mjs）')
+    /* 2026-11-10：官网和在线版同源之后 `site/app/` 不再需要 —— 线上的
+       `https://<host>/app/` 由 nginx 直接指向客户端构建（`build-client-web.sh`），
+       单一来源，避免「同一份产物存在两处一定会走散」。
+       本地 checkout 里没有它是**正常**的，不能算红；但必须打印出来，
+       否则「三条闸门压根没跑」会被读成「三条都过了」。 */
+    console.log('  · site/app/ 未构建 —— /app/ 由线上 nginx 提供，跳过试玩版相关闸门')
   }
   /* ★ 2026-11-10：试玩版可以有两种模式，`site/app/.build-mode` 里写着是哪种。
      `demo-local` = 离线试玩版（`build-site.mjs --demo`，单机模式、不连后端、
@@ -362,13 +380,21 @@ try {
      官网一直挂着旧界面的图，**零报错**，日志里还写着「③ 界面截图」。
      2026-10-09 实测：那批图是 10-03 拍的，挂了六天，页面上日期还写着「10月3日」。
      判据：capture.mjs 写下的 bundle 名 == 当前 bundle 名。 */
+  /* 锚点：有 site/app 就用它，没有就用 dist（截图本来就是对着 dist 拍的）。
+     不这样的话，`--no-app` 之后这条会因为 bundleName 是 null 而永远红。 */
+  const anchorBundle =
+    bundleName ??
+    (existsSync(resolve('dist/index.html'))
+      ? ((readFileSync(resolve('dist/index.html'), 'utf8').match(/assets\/(index-[\w-]+\.js)/) ??
+          [])[1] ?? null)
+      : null)
   const shotsMarker = resolve(SITE_DIR, 'img/shots-source.txt')
   if (existsSync(shotsMarker)) {
     const shotBundle = readFileSync(shotsMarker, 'utf8').trim()
     check(
-      `官网界面截图是从这一版界面截的（${bundleName}）`,
-      !!bundleName && shotBundle === bundleName,
-      shotBundle === bundleName
+      `官网界面截图是从这一版界面截的（${anchorBundle}）`,
+      !!anchorBundle && shotBundle === anchorBundle,
+      shotBundle === anchorBundle
         ? ''
         : `截图来自 ${shotBundle} —— 重跑：node scripts/capture.mjs http://127.0.0.1:4180/ .e2e-scratch/landing-shots && node scripts/build-site.mjs --no-build`,
     )
@@ -832,6 +858,10 @@ try {
       //   靠文案凑（「农场」「积分」）会随游戏改名、改版一起烂掉。
       navTabs: document.querySelectorAll('nav [data-tour]').length,
     }))
+    const hasRoot = await p.evaluate(() => !!document.querySelector('#root'))
+    if (!hasRoot) {
+      console.log('  · 这个 URL 下没有 /app/（本地 site/ 不打包在线版），跳过「网页版」三条')
+    } else {
     check('网页版能启动（#root 有内容）', app.rootChildren > 0, `#root 子节点 ${app.rootChildren}`)
     check(
       '网页版底栏是四格',
@@ -841,6 +871,7 @@ try {
     check('网页版无 JS 报错', errs.length === 0, errs.slice(0, 3).join(' | '))
     await p.screenshot({ path: `${OUT}/app-web.png` })
     console.log('  网页版首屏 → app-web.png')
+    }
     await p.close()
   }
 

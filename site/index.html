@@ -10,11 +10,11 @@
             （canonical / og:url / og:image / JSON-LD 里都要换）
          2. 备案号：搜 "京ICP备" 与 "京公网安备"，换成你自己的号
          3. 联系邮箱：搜 "hello@kidquestfarm.cn"
-         4. 安装包：现在**没有公开下载地址**（页面上写的是「私聊作者」），
-            所以 JSON-LD 里故意不放 downloadUrl —— 放了就是一个 404 的
-            structured data。哪天真要放出安装包：跑 bash scripts/build-apk.sh release，
-            再 node scripts/build-site.mjs --no-build（会把包拷进 site/download/），
-            然后把 downloadUrl 加回 JSON-LD。
+         4. 安装包：**在线版 APK 已公开**（/download/kid-quest-farm.apk，约 6.7 MB）。
+            出包流程：TF_APK_NO_GAMES=1 bash scripts/build-apk.sh release
+            → node scripts/build-site.mjs --no-build（把 dist-apk 的包拷进 site/download/）
+            → deploy/tf-vps 的 build.sh 会把 site/download 一起打进包。
+            ⚠️ 单机版（游戏随包、可完全离线）仍然不公开，只私聊作者。
          ========================================================== -->
 
     <!-- ⚠️ 2026-10-03：title / description / keywords / JSON-LD 这一层原来还留着
@@ -113,6 +113,7 @@
             "description": "把作业、家务、阅读变成可计时、可评分的任务，再用积分经营一座会生长的农场。无广告、无内购；单机版离线，在线版云端存档。",
             "url": "https://www.kidquestfarm.cn/",
             "installUrl": "https://www.kidquestfarm.cn/app/",
+            "downloadUrl": "https://www.kidquestfarm.cn/download/kid-quest-farm.apk",
             "image": "https://www.kidquestfarm.cn/img/icon-512.png",
             "screenshot": [
               "https://www.kidquestfarm.cn/img/shot-tasks.png",
@@ -822,11 +823,11 @@
             </div>
             <p class="ver-panel__note">
               用浏览器打开即用，手机上可以「添加到主屏幕」，从桌面图标进入。
-              <!-- 2026-11-10：官网 app/ 里放的是**离线试玩版**（build-site.mjs 的 demo 模式）。
-                   不写这一句，访客点「立即打开网页版」进来会发现「怎么没有登录」——
-                   面板上明明写着「账号登录」，页面上却找不到登录入口。 -->
-              官网这一份是<strong>免注册试玩</strong>（单机模式，数据只存在这台设备的浏览器里）；
-              要账号 + 云端存档的正式在线版，<strong>私聊作者</strong>开通。
+              <!-- 2026-11-10：官网和在线版现在同源（都在这台服务器上），
+                   `app/` 由 nginx 直接指向线上客户端构建 ⇒ 点进来就是真在线版。
+                   之前那句「官网这一份是免注册试玩」是因为当时 app/ 里放的是
+                   单机模式 demo，现在不能留 —— 留着等于把真在线版说成试玩。 -->
+              先开一个游客账号也能直接玩，之后再绑定手机号。
             </p>
           </article>
 
@@ -856,7 +857,8 @@
               </div>
             </dl>
             <p class="dl__note">
-              安装包没有公开下载地址，<strong>私聊作者获取</strong>。
+              单机版没有公开下载地址，<strong>私聊作者获取</strong>。
+              它是另一次构建（游戏随包、可完全离线），体积比官网那个在线版大得多。
             </p>
           </article>
         </div>
@@ -1556,7 +1558,7 @@
             <p class="eyebrow">下载与体验</p>
             <h2 class="h2">安卓 APK、网页版、iPhone</h2>
             <p class="lead">
-              想先试试，直接用浏览器打开在线版；单机版安装包请私聊作者获取。
+              在线版可以直接下安卓安装包，也可以先用浏览器打开；单机版（游戏随包装好）私聊作者获取。
             </p>
           </div>
 
@@ -1568,20 +1570,24 @@
                 </div>
                 <div>
                   <div class="dl__name">安卓版 APK</div>
-                  <div class="dl__meta">v1.1.0 · 约 5.5 MB · 免费</div>
+                  <div class="dl__meta">v1.1.0 · 约 6.7 MB · 免费</div>
                 </div>
               </div>
               <p class="dl__desc">
-                装到手机上就是一个独立 App。音效和震动在安卓端最完整，完全离线可用，
-                数据只在这台设备里。
+                装到手机上就是一个独立 App，和网页版<strong>同一个账号、同一份云端存档</strong>。
+                游戏在「设置 → 游戏」里按需下载，换版本不用重装。
               </p>
               <ul class="dl__specs">
                 <li>系统要求：Android 7.0 及以上</li>
-                <li>权限：不需要联网、通讯录、相机等任何权限</li>
+                <li>联网：需要（账号登录与云端存档；第一次打开要连上服务器）</li>
                 <li>安装：下载后允许「安装未知来源应用」即可</li>
               </ul>
+              <a class="btn btn--block" href="download/kid-quest-farm.apk" download>
+                下载安卓安装包（6.7 MB）
+              </a>
               <p class="dl__note">
-                安装包没有公开下载地址，<strong>私聊作者获取</strong>。
+                不想装 App？直接用浏览器打开<strong>网页版</strong>，功能一样。
+                要「完全离线、游戏随包装好」的单机版，<strong>私聊作者</strong>单独要。
               </p>
             </article>
 
@@ -1819,7 +1825,7 @@
           <div>
             <h3>下载</h3>
             <ul class="footer__list">
-              <li><a href="#download">安卓版安装包</a></li>
+              <li><a href="download/kid-quest-farm.apk" download>安卓版安装包（APK）</a></li>
               <li><a href="app/">网页版（在线版）</a></li>
               <li><a href="#download">iPhone / iPad</a></li>
               <li><a href="#faq">常见问题</a></li>
