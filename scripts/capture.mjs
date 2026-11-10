@@ -272,7 +272,8 @@ try {
     })
     await wait(700)
 
-    console.log('  引导截图：01b~01k（11 张）')
+    // 01b / 01c / 01e + 导览七步（01f~01k，其中 01h2 是新增的心愿）= 10 张
+    console.log('  引导截图：01b~01k（10 张）')
   } else {
     console.log('  ! 没弹新手引导（profile 里已经有 onboardingDone 标记，这 10 张会缺）')
   }
