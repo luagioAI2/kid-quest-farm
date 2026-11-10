@@ -129,6 +129,21 @@ try {
     await wait(500)
   }
 
+  /** 退出全屏的游戏页。不在游戏里时什么也不做（幂等）。
+      ⚠️ 2026-11-09 起 `tab === 'game'` 是整页全屏：顶栏、底栏都不渲染。
+      截图脚本每拍完农场那几屏就得退出来，否则后面每一张都拍成农场页
+      —— 而且**一条都不会报错**（错图比缺图更糟）。 */
+  const leaveGame = async () => {
+    const hit = await page.evaluate(() => {
+      const b = document.querySelector('[data-tour="exit-game"]')
+      if (!b) return false
+      b.click()
+      return true
+    })
+    if (hit) await wait(700)
+    return hit
+  }
+
   /** 种一块地并等它成熟，返回地块下标 */
   const plantMature = async () => {
     const i = await page.evaluate(async () => {
@@ -470,6 +485,12 @@ try {
      ⚠️ 「积分」**不在这个循环里**（2026-11-05）：底栏回到四格，明细改从
      顶栏那颗 🪙 点开。走查见下面 10-points 那一段 —— 那边必须点
      `header-points`，不能再按底栏文字找。 */
+  /* ★ 农场 / 市场那几屏都在全屏的游戏页里，这里必须先退出来再切 tab。
+     不退的后果（2026-11-10 实测）：09-redeem 拍出来是农场、
+     10-points 找不到顶栏 🪙、11-settings 找不到 ⚙️，最后崩在等
+     `[data-market-builtin]` —— 十几张图全错，且没有任何报错。 */
+  await leaveGame()
+
   for (const [label, name] of [
     ['兑换', '09-redeem'],
     // 心愿商城（2026-10-28 新增，P1）。放最后是因为它自己还要往下走两屏
@@ -680,13 +701,17 @@ try {
   await page
     .waitForFunction(() => window.__kqf__.getState().toasts.length === 0, { timeout: 6000 })
     .catch(() => {})
+  /* ⚠️ 2026-11-10：卡片根节点从 `<button>` 换成了 `<div data-wish-id>`（下面还要
+     再放两颗按钮，button 嵌 button 不合法）。所以 `.grid > button` **一个都匹配不到**
+     —— 只会打印一句「跳过」，静默少一张图。改成按 `data-wish-kind` 挑一张游戏卡，
+     再点它里面那颗「打开」按钮。 */
   const gameCard = await page.evaluate(() => {
-    const card = [...document.querySelectorAll('.grid > button')].find((x) =>
-      x.querySelector('svg'),
-    )
+    const card = document.querySelector('[data-wish-kind="gamebox"]')
     if (!card) return null
     card.scrollIntoView({ block: 'center' })
-    card.click()
+    const open = card.querySelector('button')
+    if (!open) return null
+    open.click()
     return card.innerText.split('\n')[0]
   })
   if (gameCard) {
