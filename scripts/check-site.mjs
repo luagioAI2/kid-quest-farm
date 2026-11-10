@@ -636,6 +636,34 @@ try {
       `scrollW=${over.scrollW} clientW=${over.clientW}${over.wide.length ? ' 溢出元素: ' + over.wide.join(', ') : ''}`)
   }
 
+  /* ---------- 同一排卡片的三条线要对齐 ----------
+     2026-11-10 实测：#wish 改成三列之后，三张卡的「虚线分隔线」差 28px、
+     底部留白 30 / 84 / 59 —— 只因为一张卡的说明多一行、另一张的列表少一项。
+     `.pillar` 是 flex column、列表紧跟说明，行数一变就错位；
+     整页截图上看不出来（差得不够显眼），必须**量**。
+     判据三条，任一不成立都说明卡内不是同一套行（修法：subgrid，见 styles.css 22.6）。 */
+  await page.setViewport({ width: 1440, height: 960, deviceScaleFactor: 1 })
+  await wait(300)
+  const wishAlign = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#wish .pillars--three .pillar')]
+    return cards.map((c) => {
+      const r = c.getBoundingClientRect()
+      const l = c.querySelector('.pillar__list')?.getBoundingClientRect()
+      return {
+        h: Math.round(r.height),
+        listTop: l ? Math.round(l.top) : -1,
+        gap: l ? Math.round(r.bottom - l.bottom) : -1,
+      }
+    })
+  })
+  const uniq = (k) => new Set(wishAlign.map((c) => c[k])).size
+  check('心愿三张卡：数量是 3', wishAlign.length === 3, `count=${wishAlign.length}`)
+  check('心愿三张卡：卡片等高', uniq('h') === 1, JSON.stringify(wishAlign.map((c) => c.h)))
+  check('心愿三张卡：虚线分隔线在同一高度', uniq('listTop') === 1,
+    JSON.stringify(wishAlign.map((c) => c.listTop)))
+  check('心愿三张卡：列表底部留白一致', uniq('gap') === 1,
+    JSON.stringify(wishAlign.map((c) => c.gap)))
+
   console.log('\n【D】走查出图')
   await page.setViewport({ width: 1440, height: 960, deviceScaleFactor: 1 })
   await primePage(page)

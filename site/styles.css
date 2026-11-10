@@ -1855,6 +1855,34 @@ html[data-ver='local'] .ver-panel[data-ver='local'] {
 .pillars--three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+/* ★★ 三张卡的行要对齐（2026-11-10 量的）：
+   改三列之前没人量过，实测量出来是这样 ——
+     孩子许愿  虚线顶 697  列表高 105  底部留白 30
+     家长定价  虚线顶 669  列表高  79  底部留白 84
+     攒够再换  虚线顶 669  列表高 105  底部留白 59
+   也就是「说明多一行」的那张卡虚线低 28px，「列表少一项」的那张底部空 54px。
+   `.pillar` 是 flex column、列表 `margin-top:18px` 紧跟说明 ⇒ 说明行数一变就错位；
+   只加 `margin-top:auto` 会更糟（虚线各落一个高度）。
+   ⇒ 用 **subgrid** 把四行（图标 / 标题 / 说明 / 虚线列表）在三个卡之间对齐，
+     列表行高取三者最大 ⇒ 虚线和底部自然同高，且不用写死任何 px。
+   ⚠️ 必须套 `@supports`：不支持的浏览器（iOS 15 及更早）会**丢掉**
+     `grid-template-rows: subgrid` 这一行，而 `.pillar` 已经变成 grid +
+     `grid-row: span 4` ⇒ 撑出四行隐式行，整段直接塌。不支持就退回 flex（现状）。 */
+@supports (grid-template-rows: subgrid) {
+  /* 只在**三列**的时候开：900px 以下退回单列，三张卡各占一整行，
+     横向对齐本来就没有意义，而 `grid-row: span 4` 还会撑出隐式行。 */
+  @media (min-width: 901px) {
+    .pillars--three {
+      grid-template-rows: auto auto auto auto;
+    }
+    .pillars--three .pillar {
+      display: grid;
+      grid-row: span 4;
+      grid-template-rows: subgrid;
+      align-content: start;
+    }
+  }
+}
 /* #games 是「左 4 条 + 右一块说明」。说明比列表矮一半，右下会留一个洞。
    改成 2×2 卡片 + 说明块通栏，整段收成一个方块。 */
 .money--stack {
