@@ -690,6 +690,41 @@ try {
   check('心愿三张卡：列表底部留白一致', uniq('gap') === 1,
     JSON.stringify(wishAlign.map((c) => c.gap)))
 
+  /* ---------- 下载区三张卡：按钮要贴在同一条底线上 ----------
+     2026-11-10：APK 卡加了「下载安卓安装包」按钮之后，按钮下面还留着一段说明，
+     于是三张卡的按钮分别落在 y=589 / 630 / 630 —— 截图上看像「第一张卡没做完」。
+     `.dl__desc` 是 flex:1，所以**谁在最后谁贴底**：说明必须放在按钮上面。
+     判据：三个 `.dl` 的按钮 rect.bottom 一致，且按钮下方留白一致。 */
+  const dlAlign = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#download .dl-grid .dl')]
+    return cards.map((c) => {
+      const r = c.getBoundingClientRect()
+      const b = c.querySelector('.btn')?.getBoundingClientRect()
+      const bb = parseFloat(getComputedStyle(c).borderBottomWidth) || 0
+      const gap = b ? Math.round(r.bottom - b.bottom) : -1
+      return {
+        h: Math.round(r.height),
+        btnBottom: b ? Math.round(b.bottom) : -1,
+        gap,
+        // 主推卡有 2px 描边，会吃掉内边距 ⇒ 直接比 gap 会差 2px（是边框，不是排版错）
+        gapNet: gap < 0 ? -1 : Math.round(gap - bb),
+        bb,
+      }
+    })
+  })
+  const uniqDl = (k) => new Set(dlAlign.map((c) => c[k])).size
+  const spanDl = (k) => {
+    const v = dlAlign.map((c) => c[k])
+    return Math.max(...v) - Math.min(...v)
+  }
+  check('下载区三张卡：数量是 3', dlAlign.length === 3, `count=${dlAlign.length}`)
+  check('下载区三张卡：卡片等高', uniqDl('h') === 1, JSON.stringify(dlAlign.map((c) => c.h)))
+  // 主推卡多 2px 描边 ⇒ 允许 2px 误差；差超过描边宽度就是真的没对齐
+  check('下载区三张卡：按钮在同一条底线上', spanDl('btnBottom') <= 2,
+    JSON.stringify(dlAlign.map((c) => c.btnBottom)) + ` 跨度=${spanDl('btnBottom')}px（描边 ${JSON.stringify(dlAlign.map((c) => c.bb))}）`)
+  check('下载区三张卡：按钮下方留白一致（扣掉描边）', uniqDl('gapNet') === 1,
+    JSON.stringify(dlAlign.map((c) => c.gapNet)))
+
   console.log('\n【D】走查出图')
   await page.setViewport({ width: 1440, height: 960, deviceScaleFactor: 1 })
   await primePage(page)
