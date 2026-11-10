@@ -317,8 +317,20 @@ try {
     check('网页版试玩（site/app/）已构建', false,
       '没构建过官网产物 —— 先跑 npm run site（或 node scripts/build-site.mjs）')
   }
+  /* ★ 2026-11-10：试玩版可以有两种模式，`site/app/.build-mode` 里写着是哪种。
+     `demo-local` = 离线试玩版（`build-site.mjs --demo`，单机模式、不连后端、
+     剔掉了 195MB 的游戏包）；`online` = 连真后端。
+     两种模式的 bundle 名天然不同（VITE_APP_MODE 也是编译期常量），
+     所以**离线试玩版不能拿「APK 里装的是同一份 bundle」这条去卡** ——
+     那不是问题，是两个不同的产物。 */
+  const modePath = resolve(SITE_DIR, 'app/.build-mode')
+  const appMode = existsSync(modePath) ? readFileSync(modePath, 'utf8').trim() : ''
+  const isDemo = appMode === 'demo-local'
+  if (isDemo) {
+    console.log('  · 试玩版是离线版（demo-local）—— 跳过「和 APK 同一份 bundle」那条')
+  }
   const apkPath = resolve(SITE_DIR, 'download/kid-quest-farm.apk')
-  if (bundleName && existsSync(apkPath)) {
+  if (bundleName && !isDemo && existsSync(apkPath)) {
     const apkBytes = readFileSync(apkPath)
     const hit = apkBytes.includes(`assets/public/assets/${bundleName}`)
     check(

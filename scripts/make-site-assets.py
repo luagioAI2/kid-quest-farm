@@ -150,7 +150,11 @@ def build_og():
     x = 76
 
     # --- 顶部小胶囊
-    pill_text = "6–14 岁 · 完全离线 · 不用注册"
+    # ⚠️ 分享卡是**发布物**，上面的话必须和官网首页一致。
+    #    2026-11-10 官网改成「单机版 / 在线版」两套说法之后，
+    #    这里还写着「完全离线 · 不用注册」—— 在线版是要注册的，
+    #    等于用分享卡把用户骗进来。下面三处（胶囊 / 特性 / 底行）一起改。
+    pill_text = "6–14 岁 · 单机版 / 在线版 · 无广告"
     tw = d.textlength(pill_text, font=f_pill)
     d.rounded_rectangle((x, 78, x + tw + 46, 78 + 50), 25, fill=SUN_100)
     d.text((x + 23, 78 + 11), pill_text, font=f_pill, fill=SUN_700)
@@ -170,7 +174,7 @@ def build_og():
     y += 56
 
     # --- 三个特性胶囊
-    chips = ["无广告", "无内购", "数据只存本机"]
+    chips = ["无广告", "无内购", "存档本机 / 云端"]
     cx = x
     for text in chips:
         tw = d.textlength(text, font=f_chip)
@@ -183,7 +187,7 @@ def build_og():
     # --- 底部一行
     d.text(
         (x, H - 74),
-        "安卓 APK · 手机浏览器 · 电脑浏览器   |   免费 · 不用注册",
+        "安卓 APK · 手机浏览器 · 电脑浏览器   |   免费 · 无广告",
         font=f_foot,
         fill=INK_500,
     )
