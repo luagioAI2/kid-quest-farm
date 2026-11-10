@@ -10,7 +10,11 @@
             （canonical / og:url / og:image / JSON-LD 里都要换）
          2. 备案号：搜 "京ICP备" 与 "京公网安备"，换成你自己的号
          3. 联系邮箱：搜 "hello@kidquestfarm.cn"
-         4. 下载链接：若 APK 放在别处，改 href 里的 download/xxx.apk
+         4. 安装包：现在**没有公开下载地址**（页面上写的是「私聊作者」），
+            所以 JSON-LD 里故意不放 downloadUrl —— 放了就是一个 404 的
+            structured data。哪天真要放出安装包：跑 bash scripts/build-apk.sh release，
+            再 node scripts/build-site.mjs --no-build（会把包拷进 site/download/），
+            然后把 downloadUrl 加回 JSON-LD。
          ========================================================== -->
 
     <!-- ⚠️ 2026-10-03：title / description / keywords / JSON-LD 这一层原来还留着
@@ -108,7 +112,6 @@
             "isAccessibleForFree": true,
             "description": "把作业、家务、阅读变成可计时、可评分的任务，再用积分经营一座会生长的农场。无广告、无内购；单机版离线，在线版云端存档。",
             "url": "https://www.kidquestfarm.cn/",
-            "downloadUrl": "https://www.kidquestfarm.cn/download/kid-quest-farm.apk",
             "installUrl": "https://www.kidquestfarm.cn/app/",
             "image": "https://www.kidquestfarm.cn/img/icon-512.png",
             "screenshot": [
