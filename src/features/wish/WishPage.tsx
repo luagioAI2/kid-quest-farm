@@ -906,23 +906,25 @@ function ItemCard({
             再来一行就是同一句话说两遍（用户点名）。`data-wish-type` 锚点留着
             给走查脚本按品类数卡，但 `hidden`：不渲染文字、也不占高度。 */}
         <span data-wish-type={item.kind} hidden />
-        {/* ★ 第四轮：没定价就空着这一行，不再写「等定价」那类话。
-            家长审核时直接定价，孩子这一侧没有这一步。
-            固定高度 = 和已定价的卡等高（_probe-wish-card-qa.mjs 量 tailGap）。 */}
-        <span className="mt-0.5 flex h-[1.15em] items-center px-0.5 text-[11.5px] font-extrabold leading-none text-ink-600">
-          {offer ? (
-            <>
-              🎫 {offer.voucherPrice}
-              {topUp > 0 && (
-                <span className="ml-1 text-[10px] text-grass-700">· 🪙 补 {topUp}</span>
-              )}
-            </>
-          ) : null}
-        </span>
+        {/* ★ 2026-11-11：**没定价就整行不渲染**（原来是个空的 13px 占位）。
+            用户原话：「我想要 是不是应该 往上移一点，因为 家长激活不占位了」——
+            量下来卡片里唯一的死空间就是这行空占位（`h-[1.15em]` ≈ 13px）
+            加上名字区固定两行。删掉它，整行卡片一起矮 13px，按钮跟着上移，
+            同行仍然等高（网格拉伸，`tailGap` 依旧一致）。
+            ⚠️ 有定价的卡照样渲染这一行 —— 混排时那些行的高度由它们决定，
+               没定价的卡被拉高，按钮还是贴底，不会跳。 */}
+        {offer && (
+          <span className="mt-0.5 flex h-[1.15em] items-center px-0.5 text-[11.5px] font-extrabold leading-none text-ink-600">
+            🎫 {offer.voucherPrice}
+            {topUp > 0 && (
+              <span className="ml-1 text-[10px] text-grass-700">· 🪙 补 {topUp}</span>
+            )}
+          </span>
+        )}
       </button>
       {/* ★ 2026-11-11：这里只剩状态按钮（「家长激活」搬到封面右下角）。
           状态按钮 → 「想要」/「已申请」/「可兑换」/「已兑换」/「已拥有」。 */}
-      <div className="mt-1.5 flex flex-col gap-1.5">
+      <div className="mt-1 flex flex-col gap-1.5">
         <button
           type="button"
           data-wish-action={statusKind}
