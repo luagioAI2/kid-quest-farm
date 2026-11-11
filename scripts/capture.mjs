@@ -135,7 +135,7 @@ try {
       —— 而且**一条都不会报错**（错图比缺图更糟）。 */
   const leaveGame = async () => {
     const hit = await page.evaluate(() => {
-      const b = document.querySelector('[data-tour="exit-game"]')
+      const b = document.querySelector('[data-tour="exit-game"], nav [data-tour="tab-tasks"]')
       if (!b) return false
       b.click()
       return true
@@ -1454,7 +1454,7 @@ try {
   )
   await wait(300)
   /* 游戏那一格是全屏的（2026-11-09）：底栏不在，得先点「退出游戏」回任务页 */
-  await page.evaluate(() => document.querySelector('[data-tour="exit-game"]')?.click())
+  await page.evaluate(() => document.querySelector('[data-tour="exit-game"], nav [data-tour="tab-tasks"]')?.click())
   await wait(400)
   await page.evaluate(() => document.querySelector('[data-tour="tab-tasks"]')?.click())
   await wait(600)

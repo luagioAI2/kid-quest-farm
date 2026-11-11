@@ -324,7 +324,15 @@ describe('功能导览：游戏那一步的锚点', () => {
     expect(bubble).toHaveAttribute('data-tour-anchor', 'tab-cloudfarm')
     // 当前不是农场，就不该讲「买种子」
     expect(bubble.textContent).not.toContain('买种子')
-    expect(bubble.textContent).toContain('退出游戏')
+    /* 2026-11-11 游戏页默认不再全屏 ⇒ 文案从「进去是全屏的、点左上角退出游戏」
+       改成「右下角那颗全屏 / 左上角返回 / 右上角胶囊」。
+       断言跟着换成**新交互的两个要点**，别只留一句「能退出」——
+       那样文案写错了（比如又说「进去是全屏的」）也照样绿。 */
+    expect(bubble.textContent).toContain('全屏')
+    expect(bubble.textContent).toContain('返回')
+    expect(bubble.textContent, '游戏页已经默认不全屏了，别再写「进去是全屏的」').not.toContain(
+      '进去是全屏的',
+    )
   })
 
   it('★ 对照组：当前是农场时讲的是农场那段', async () => {

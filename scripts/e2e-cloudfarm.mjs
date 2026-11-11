@@ -468,18 +468,33 @@ let vouchersSold = 0
     `bg=${shape.barBg} shadow=${shape.barShadow}`,
   )
   /*
-   * ★ 2026-11-09 起游戏那一格是**全屏**：顶栏和底栏都收掉了，最上面只留一条
-   *   「退出游戏」。所以这里不再找 header（它本来就不该在），改判「真的收掉了」；
-   *   兑换券那个数字挪到 ④ 退出之后再验。
+   * ★ 2026-11-11 用户改的交互：进游戏页**默认带外壳**（顶栏底栏都在），
+   *   想沉浸要点画面右下角那枚「全屏」。
+   *   所以先验「默认不全屏」，再**主动进全屏**，后面整段都在全屏里跑
+   *   （④ 那一步还是靠右上角胶囊退出，语义没变）。
+   *   兑换券那个数字挪到 ④ 退出之后再验 —— 全屏时顶栏本来就不渲染。
    */
+  const normal = await page.evaluate(() => ({
+    header: !!document.querySelector('header'),
+    nav: !!document.querySelector('nav'),
+    toggle: !!document.querySelector('[data-tour="game-fullscreen"]'),
+  }))
+  check('★ 默认不全屏：顶栏在（游戏页不再是整屏）', normal.header === true)
+  check('★ 默认不全屏：底栏在', normal.nav === true)
+  check('★ 游戏画面右下角有「全屏」键', normal.toggle === true)
+
+  await page.evaluate(() => document.querySelector('[data-tour="game-fullscreen"]')?.click())
+  await wait(700)
   const chrome = await page.evaluate(() => ({
     header: !!document.querySelector('header'),
     nav: !!document.querySelector('nav'),
     exit: !!document.querySelector('[data-tour="exit-game"]'),
+    back: !!document.querySelector('[data-tour="exit-immersive"]'),
   }))
   check('★ 全屏：App 顶栏收掉了（游戏多出约 56px）', chrome.header === false)
   check('★ 全屏：底栏也收掉了（不会误点「心愿」）', chrome.nav === false)
-  check('★ 全屏：留了「退出游戏」这个出口', chrome.exit === true)
+  check('★ 全屏：右上角留了「退出游戏」胶囊', chrome.exit === true)
+  check('★ 全屏：左上角留了「返回」（退出全屏）', chrome.back === true)
   // 留一张图给走查（`screenshots/` 才是要留的，这里进 scratch）
   await page.screenshot({ path: join(OUT, `${VIEWPORT}-host.png`) })
 
@@ -591,7 +606,7 @@ console.log('\n【③ 收成 → 卖出 → 兑换券】')
    ============================================================ */
 console.log('\n【④ 点「退出游戏」→ 插件卸载】')
 {
-  check('点「退出游戏」', await clickSel('[data-tour="exit-game"]'))
+  check('点「退出游戏」', await clickSel('[data-tour="exit-game"], nav [data-tour="tab-tasks"]'))
   await wait(1200)
   const gone = await page
     .waitForFunction(() => !window.__farm, { timeout: 10000 })
@@ -606,11 +621,17 @@ console.log('\n【④ 点「退出游戏」→ 插件卸载】')
   /*
    * 退出之后才看顶栏 —— 全屏那一屏里它是故意不渲染的。
    * 顺带钉住「退出 = 回任务页」这个语义：底栏那一格必须是选中态。
+   *
+   * ⚠️ 2026-11-11：这里原来判 `exit === false`（全屏胶囊收掉了）。
+   *   现在**回到任务页本来就带外壳**，那颗胶囊当然不在 —— 但「不在」也可能
+   *   只是因为它藏在全屏里，所以真正的判据换成「外壳回来了 + 全屏键也不在
+   *   （我们不在游戏页）」，那才说明确实离开了游戏。
    */
   const back = await page.evaluate(() => ({
     header: !!document.querySelector('header'),
     nav: !!document.querySelector('nav'),
     exit: !!document.querySelector('[data-tour="exit-game"]'),
+    toggle: !!document.querySelector('[data-tour="game-fullscreen"]'),
     voucher: (() => {
       const el = document.querySelector('header [aria-label^="兑换券"]')
       return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : null
@@ -619,7 +640,8 @@ console.log('\n【④ 点「退出游戏」→ 插件卸载】')
   }))
   check('退出后顶栏回来了', back.header === true)
   check('退出后底栏回来了', back.nav === true)
-  check('退出后「退出游戏」跟着收掉', back.exit === false)
+  check('退出后「退出游戏」胶囊跟着收掉', back.exit === false)
+  check('退出后「全屏」键也不在（确实离开了游戏页）', back.toggle === false)
   check('★ 退出回到「任务」页（那一格是选中态）', back.onTasks === true)
   check(
     '★ 顶栏兑换券显示的就是刚卖出来的数',

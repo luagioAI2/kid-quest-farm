@@ -360,6 +360,8 @@ try {
      「积分」**不在这里** —— 它是顶栏那颗 🪙，单独在下面第 8 段走查。
      换成「心愿」是因为底栏现在就是这四格；少写一格就等于少测一格。 */
   const tabs = ['任务', '农场', '兑换', '心愿']
+  /** 哪几格带「全屏」键 —— 应该只有游戏那一格（2026-11-11 新交互） */
+  const fullTabs = []
   for (const t of tabs) {
     const clicked = await page.evaluate((label) => {
       // 底部导航按钮内容是 emoji + 换行 + 文字，因此取最后一行比对
@@ -376,26 +378,54 @@ try {
     const txt = await page.evaluate(() => document.body.innerText)
     check(`Tab「${t}」渲染`, txt.length > 30, `${txt.replace(/\s+/g, ' ').slice(0, 60)}…`)
 
-    /* ★ 游戏那一格是**全屏**的：进去之后 header / nav 都不渲染，
-       只留左上角「退出游戏」。不退出来的话，下面每一格都点不到、
-       顶栏每一条都量成 -1 —— 一次假红连锁（2026-11-10 修）。
-       判据用锚点，不认文案。 */
-    const exited = await page.evaluate(() => {
-      const btn = document.querySelector('[data-tour="exit-game"]')
-      if (!btn) return null
-      btn.click()
-      return true
-    })
-    if (exited) {
+    /* ★ 2026-11-11 用户改的交互：游戏页**默认不再全屏**（顶栏底栏都在），
+       想沉浸要点画面右下角那枚「全屏」，进去之后才有左上角返回 / 右上角胶囊。
+       所以这里判两件事：每一格都带外壳；只有游戏那一格有「全屏」键，
+       且全屏往返一次能把外壳收掉再还回来。
+
+       ⚠️ 原来的写法是「点 `exit-game` 退出全屏」—— 那一屏已经不存在了，
+       留着会让 `exit` 恒为 false、断言恒真（**假绿**）。 */
+    const shell = await page.evaluate(() => ({
+      nav: document.querySelectorAll('nav [data-tour]').length,
+      header: !!document.querySelector('header'),
+      full: !!document.querySelector('[data-tour="game-fullscreen"]'),
+    }))
+    check(
+      `Tab「${t}」带外壳（默认不全屏）`,
+      shell.nav === 4 && shell.header === true,
+      `nav=${shell.nav} header=${shell.header}`,
+    )
+    if (shell.full) {
+      fullTabs.push(t)
+      /* 全屏往返：进去 → 外壳收掉、返回 + 胶囊都在 → 左上角返回 → 外壳回来 */
+      await page.evaluate(() => document.querySelector('[data-tour="game-fullscreen"]')?.click())
       await new Promise((r) => setTimeout(r, 700))
-      const back = await page.evaluate(() => ({
-        nav: document.querySelectorAll('nav [data-tour]').length,
+      const inFull = await page.evaluate(() => ({
+        header: !!document.querySelector('header'),
+        nav: !!document.querySelector('nav'),
+        back: !!document.querySelector('[data-tour="exit-immersive"]'),
         exit: !!document.querySelector('[data-tour="exit-game"]'),
       }))
-      check(`Tab「${t}」是全屏的，退出后回到外壳`, back.nav === 4 && !back.exit,
-        `nav=${back.nav} exit=${back.exit}`)
+      check(
+        '点「全屏」后外壳收掉，左上角返回 + 右上角胶囊都在',
+        !inFull.header && !inFull.nav && inFull.back && inFull.exit,
+        JSON.stringify(inFull),
+      )
+      await page.evaluate(() => document.querySelector('[data-tour="exit-immersive"]')?.click())
+      await new Promise((r) => setTimeout(r, 700))
+      const backOut = await page.evaluate(() => ({
+        nav: document.querySelectorAll('nav [data-tour]').length,
+        header: !!document.querySelector('header'),
+        full: !!document.querySelector('[data-tour="game-fullscreen"]'),
+      }))
+      check(
+        '左上角返回后回到外壳（仍停在游戏页，不是被踢走）',
+        backOut.nav === 4 && backOut.header === true && backOut.full === true,
+        JSON.stringify(backOut),
+      )
     }
   }
+  check('只有游戏那一格有「全屏」键', fullTabs.length === 1, fullTabs.join(','))
 
   /* ---------- 3. 横向溢出检测 ---------- */
   await page.evaluate(() => {
@@ -1448,7 +1478,7 @@ try {
      顺便在这里补上「顶栏那两颗币确实还在」的反向保证：
      前面「农场正文里没有 🪙/🎫」不能被「把顶栏也删了」蒙过去。 */
   await page.evaluate(() => {
-    document.querySelector('[data-tour="exit-game"]')?.click()
+    document.querySelector('[data-tour="exit-game"], nav [data-tour="tab-tasks"]')?.click()
   })
   await new Promise((r) => setTimeout(r, 800))
   const shellBack = await page.evaluate(() => ({
@@ -2274,7 +2304,7 @@ try {
   }
   const leaveGame = async () => {
     const hit = await page.evaluate(() => {
-      const b = document.querySelector('[data-tour="exit-game"]')
+      const b = document.querySelector('[data-tour="exit-game"], nav [data-tour="tab-tasks"]')
       if (!b) return false
       b.click()
       return true

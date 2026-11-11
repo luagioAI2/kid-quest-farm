@@ -180,7 +180,7 @@ try {
     if (d.sheet) {
       // 上一步是积分层（已经关掉，背后停在「兑换」），编辑按钮在「任务」tab 上，先切回去
       // （万一前一步停在游戏里，底栏是不渲染的 —— 先退出，`?.` 让不在游戏时是空操作）
-      await page.evaluate(() => document.querySelector('[data-tour="exit-game"]')?.click())
+      await page.evaluate(() => document.querySelector('[data-tour="exit-game"], nav [data-tour="tab-tasks"]')?.click())
       await page.evaluate(() => document.querySelector('[data-tour="tab-tasks"]')?.click())
       await wait(500)
       await page.evaluate(() =>

@@ -1,4 +1,12 @@
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { selectPendingCheckIns, selectPendingReview, useApp } from './store/useApp'
 import { wishesAwaitingReply } from './domain/wish'
 import TaskPage from './features/tasks/TaskPage'
@@ -24,7 +32,7 @@ import { gameById } from './games/registry'
 import { CURRENCY } from './domain/currency'
 import { pageFor } from './games/pages'
 import { PluginGameHost } from './games/PluginGameHost'
-import { ExitGameBar } from './features/game/ExitGameBar'
+import { GameFullscreenButton, ImmersiveGameBar } from './features/game/GameChrome'
 import { GamePlayGate } from './features/game/GamePlayGate'
 import './features/farm/farm.css'
 
@@ -109,19 +117,34 @@ export default function App() {
 
   const [tab, setTab] = useState<TabKey>('tasks')
   /**
-   * 游戏那一格**全屏**：进游戏就把 App 的顶栏和底栏收掉，只在顶上留一条
-   * 「退出游戏」（`ExitGameBar`）。理由：
+   * 游戏页是否**沉浸全屏**。默认 `false` —— 2026-11-11 用户改的模型：
    *
-   *   ① 游戏是唯一「要沉浸」的页面，顶栏底栏加起来约 128px，
-   *      手机上占掉近 1/6 屏、平板横屏上更亏（云边小农场本来就嫌画面矮）。
-   *   ② 底栏 4 格里有 3 格是「离开游戏」，真正需要的只有「回去」这一个动作
-   *      —— 换成一条明确的「退出游戏」比一排格子更清楚，也不会误点到「心愿」。
+   * > 一开始不要全屏，应该有个透明的 全屏按钮，类似于播放器那种，
+   * > 全屏后，退出按钮直接左上角返回就是（在游戏上层 偏玻璃），
+   * > 最后右上角 多一个 微信小程序 退出那种。
    *
-   * ⚠️ 离开游戏必须点「退出游戏」（`data-tour="exit-game"`）——
-   *    底栏在这一屏**不存在**，走查脚本里凡是「切到游戏再点底栏」的写法都要改。
-   * ⚠️ 退出后回「任务」页（App 的首页），不是回游戏 —— 那正是这一下的语义。
+   * 之前是「进游戏就整屏」（顶栏底栏全收），孩子一进游戏就找不到「任务 / 心愿」，
+   * 家长也以为 App 坏了。现在改成**默认带外壳**，想沉浸再点右下角那枚全屏键。
+   *
+   * 两个动作别混：
+   *   · 退出全屏（左上角返回）→ 只是变回带外壳，**还在游戏里**；
+   *   · 退出游戏（右上角胶囊）→ 回任务页，**离开游戏**。
    */
+  const [gameFull, setGameFull] = useState(false)
   const inGame = tab === 'game'
+  /** 只有「在游戏页 + 用户点了全屏」才收外壳。别的地方一律带外壳 */
+  const immersive = inGame && gameFull
+  /**
+   * 切 tab 的唯一入口：**离开游戏页就把全屏状态清掉**。
+   *
+   * 不清的话会留下一个「隐形全屏」：全屏时右上角胶囊 → 回任务页（`gameFull`
+   * 还是 true），下次再点底栏进游戏，画面直接又是整屏 —— 孩子会以为
+   * 「刚才那次返回没生效」。所以在切走的这一下就复位，而不是在渲染时判。
+   */
+  const goTab = useCallback((next: TabKey) => {
+    setTab(next)
+    if (next !== 'game') setGameFull(false)
+  }, [])
   const [showSettings, setShowSettings] = useState(false)
   /**
    * 设置页打开时落在哪一栏。默认「孩子」。
@@ -312,8 +335,10 @@ export default function App() {
    */
   const pendingRedeemItem = useApp((s) => s.pendingRedeemItem)
   useEffect(() => {
-    if (pendingRedeemItem) setTab('redeem')
-  }, [pendingRedeemItem])
+    /* 走 `goTab` 而不是裸 `setTab`：万一是从全屏游戏里跳过来的，
+       全屏状态要跟着复位（见 `goTab` 的注释）。 */
+    if (pendingRedeemItem) goTab('redeem')
+  }, [pendingRedeemItem, goTab])
 
   /**
    * 同上一条通道：心愿页说「去设置看看」时，打开设置页并落到指定栏。
@@ -514,7 +539,7 @@ export default function App() {
               内容再收进 `page-col`。原来顶栏和内容一起被 `max-w-2xl` 卡住，
               在 iPad 上会变成「中间悬着一条 672px 的横条」，两边各空一大块。
               同理，底部导航也改成通栏。 */}
-          {!inGame && (
+          {!immersive && (
           <header className="sticky top-0 z-30 border-b border-ink-900/10 bg-paper/95 backdrop-blur">
             {/* `pl-safe pr-safe` 是 calc(env(...) + 1rem)，正好等于原来的 px-4，
                 但横屏刘海屏上会多让出安全区。横屏时刘海就在顶栏左右两端，
@@ -643,12 +668,21 @@ export default function App() {
             它是全局状态，不属于任何一个 tab —— 挂在某个页面里的话，
             孩子切到别的页面就看不到，正好在那一刻误以为数据是新的。
           */}
-          {/* 全屏时唯一的一条 App 界面：退出游戏 */}
-          {inGame && <ExitGameBar onExit={() => setTab('tasks')} />}
+          {/* 沉浸全屏时唯一的 App 界面：左上角返回（退出全屏）+ 右上角胶囊（退出游戏）。
+              **只在全屏时存在** —— 不全屏时底栏就在，直接点「任务」回去。 */}
+          {immersive && (
+            <ImmersiveGameBar
+              onExitFullscreen={() => setGameFull(false)}
+              onExitGame={() => goTab('tasks')}
+            />
+          )}
 
           <SyncBanner />
 
-          <main key={tab} className="flex flex-1 flex-col anim-fade-in">
+          {/* `relative` 是给「全屏」那枚浮动键当定位父级的（见下面的
+              `GameFullscreenButton`）—— 它必须跟着**游戏那块**走，
+              不能跑到顶栏或底栏上去。 */}
+          <main key={tab} className="relative flex flex-1 flex-col anim-fade-in">
             <ErrorBoundary resetKey={tab}>
               {tab === 'tasks' && <TaskPage />}
               {/*
@@ -686,12 +720,21 @@ export default function App() {
               {tab === 'redeem' && <RedeemPage />}
               {tab === 'wish' && <WishPage />}
             </ErrorBoundary>
+
+            {/* 不全屏时叠在游戏画面右下角的「全屏」键（播放器那种）。
+                **挂在 `main` 里而不是页面里** —— 内置农场和下载来的插件游戏
+                是两套渲染路径，挂在 App 这一层才对两者都生效。
+                ⚠️ 全屏之后它必须消失：那时右下角要留给游戏自己，
+                退出全屏走左上角那颗返回。 */}
+            {inGame && !gameFull && (
+              <GameFullscreenButton onEnter={() => setGameFull(true)} />
+            )}
           </main>
 
           {/* 底部导航：同样通栏 + `page-col` 收内容（理由见顶栏注释）。
               底栏保留在底部而不是改成侧边栏 —— 孩子两手握平板时，
               拇指够得着底边，够不着侧边中段。 */}
-          {!inGame && (
+          {!immersive && (
           <nav className="sticky bottom-0 z-30 border-t border-ink-900/10 bg-paper/95 backdrop-blur">
             <div className="page-col flex items-stretch justify-center gap-1 px-2 py-2 pb-safe">
               {tabs.map((t) => {
@@ -699,7 +742,7 @@ export default function App() {
                 return (
                   <button
                     key={t.key}
-                    onClick={() => setTab(t.key)}
+                    onClick={() => goTab(t.key)}
                     /* 新手导览靠这个属性定位，不靠「第几个 button」（见 ChildTour 注释） */
                     data-tour={t.tour}
                     className={
@@ -741,7 +784,7 @@ export default function App() {
       {wizardMode && (
         <SetupWizard replay={wizardMode === 'replay'} onFinish={finishWizard} />
       )}
-      {tourOpen && <ChildTour onFinish={finishTour} onStepChange={setTab} />}
+      {tourOpen && <ChildTour onFinish={finishTour} onStepChange={goTab} />}
 
       {/* 「保存进度」面板：游客花兑换券被拒、第 3 次启动、点横条，
           三个入口共用这一个（自己 Portal 到 body，所以放在哪一层都行）。 */}
@@ -764,7 +807,7 @@ export default function App() {
         prefillMobile={loginPrefill}
       />
 
-      <ToastHost toasts={toasts} onDismiss={dismissToast} fullscreen={inGame} />
+      <ToastHost toasts={toasts} onDismiss={dismissToast} fullscreen={immersive} />
     </div>
   )
 }

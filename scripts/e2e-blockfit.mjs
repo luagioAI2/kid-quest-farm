@@ -421,7 +421,7 @@ console.log('\n【⑦ 对局中切走：卸载要真的跑，存档要落盘】'
    *   这一句原来点的是 `tab-tasks` —— 那一格现在不存在，会报「没点着」，
    *   而真正的原因不是卸载坏了。
    */
-  check('点「退出游戏」（切走游戏）', await clickSel('[data-tour="exit-game"]'))
+  check('点「退出游戏」（切走游戏）', await clickSel('[data-tour="exit-game"], nav [data-tour="tab-tasks"]'))
   await wait(1800)
 
   const gone = await page.evaluate(() => ({
