@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- 小任务农场 · 官网 sitemap -->
-<!-- ★ REPLACE：把 www.kidquestfarm.cn 换成你自己的域名，并同步修改 lastmod -->
+<!-- ★ 域名是占位：deploy/tf-vps/build.sh 打包时按 SITE_ORIGIN 替换；改完记得更新 lastmod -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>

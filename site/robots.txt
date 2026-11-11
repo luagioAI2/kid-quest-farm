@@ -1,5 +1,5 @@
 # 小任务农场 · 官网 robots.txt
-# ★ REPLACE：把 www.kidquestfarm.cn 换成你自己的域名
+# ★ 域名是占位：deploy/tf-vps/build.sh 打包时按 SITE_ORIGIN 替换
 
 User-agent: *
 Allow: /

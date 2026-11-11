@@ -6,8 +6,10 @@
 
     <!-- ==========================================================
          ★ 上线前必改（4 处，全部搜 "REPLACE" 就能找到）
-         1. 域名：把 https://www.kidquestfarm.cn/ 换成你自己的域名
-            （canonical / og:url / og:image / JSON-LD 里都要换）
+         1. 域名：**不用手改**。这里写的是占位域名 https://www.kidquestfarm.cn，
+            deploy/tf-vps/build.sh 打包时会按 SITE_ORIGIN（缺省读 .env.apk 的
+            VITE_API_BASE）统一替换 canonical / og:url / og:image / JSON-LD / sitemap。
+            换域名只跑 `bash deploy/tf-vps/switch-domain.sh <新域名>`。
          2. 备案号：搜 "京ICP备" 与 "京公网安备"，换成你自己的号
          3. 联系邮箱：搜 "hello@kidquestfarm.cn"
          4. 安装包：**在线版 APK 已公开**（/download/kid-quest-farm.apk，约 6.7 MB）。

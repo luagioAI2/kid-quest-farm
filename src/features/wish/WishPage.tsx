@@ -223,7 +223,7 @@ export default function WishPage() {
   const [view, setView] = useState<WishView>({ kind: 'list' })
   const [filter, setFilter] = useState<WishFilter>(null)
   /**
-   * 列表卡片「去激活」点开的弹框，记的是**从哪件商品点进来的**。
+   * 列表卡片封面右下角「家长激活」点开的弹框，记的是**从哪件商品点进来的**。
    *
    * ★ 必须挂在页面这一层：激活成功 ⇒ `ownedGameIds` 多一款 ⇒ `hiddenOwned`
    * 把那张游戏卡从列表里摘掉。弹框要是长在卡片里，就会跟卡片一起卸载，
@@ -428,7 +428,7 @@ function ListView({
   points: number
   owned: Set<string>
   onOpen: (id: string) => void
-  /** 卡片上「去激活」：交给页面层开弹框，不进详情页 */
+  /** 卡片封面右下角「家长激活」：交给页面层开弹框，不进详情页 */
   onActivate: (id: string) => void
   /** 卡片上「我想要」：直接许愿；已经有单子时按钮自动改成进详情页 */
   onWant: (id: string) => void
@@ -447,7 +447,7 @@ function ListView({
    * 已到手的那些反而无处可见。
    *
    * 卡片本身早就有这一档（`ItemCard` 的 `alreadyOwned`）：封面角标「已拥有」、
-   * 底部按钮「已拥有」灰着不可点、并且**不摆「去激活」**。所以这里只要不过滤。
+   * 底部按钮「已拥有」灰着不可点、并且**封面角上不摆「家长激活」**。所以这里只要不过滤。
    *
    * ⚠️ **兑换页不动**（`wishShelf` 继续过滤已拥有的）—— 那边是「拿券换东西」，
    *    列一堆换不了的东西才是占位置。家长 2026-11-08 明确说兑换那边没问题。
@@ -673,13 +673,30 @@ function BlindBoxHero({
         onClick={onOpen}
         className="flex w-full items-center gap-3 p-3.5 text-left active:opacity-90"
       >
-        <span className="flex h-16 aspect-[4/3] flex-none items-center justify-center overflow-hidden rounded-2xl bg-white shadow-flat">
+        <span className="relative flex h-16 aspect-[4/3] flex-none items-center justify-center overflow-hidden rounded-2xl bg-white shadow-flat">
           <WishArt
             itemId={item.id}
             emoji={item.emoji}
             className="h-full w-full object-contain"
             emojiClassName="text-3xl"
           />
+          {/* ★ 2026-11-11：「家长激活」= 封面右下角的小牌，不再和「我想要」并排。
+              用 `span role=button` 而不是 `<button>`：这块在「点开详情」的
+              `<button>` 里面，嵌套 `<button>` 会被 HTML 解析器提前闭合外层。
+              `stopPropagation` 必须有，否则点它会顺带打开详情页。 */}
+          <span
+            role="button"
+            tabIndex={-1}
+            data-wish-activate
+            aria-label="家长激活"
+            onClick={(e) => {
+              e.stopPropagation()
+              onActivate()
+            }}
+            className="absolute bottom-0 right-0 rounded-tl-xl bg-grass-500/95 px-1.5 py-[3px] text-[9.5px] font-extrabold leading-none text-white shadow-[0_1px_2px_rgba(0,0,0,0.15)] active:btn-press"
+          >
+            🎟️ 家长激活
+          </span>
         </span>
         <span className="min-w-0 flex-1">
           <span className="block font-display text-base font-extrabold text-ink-900">
@@ -695,23 +712,15 @@ function BlindBoxHero({
           </span>
         </span>
       </button>
-      {/* 两颗按钮：去激活 + 状态按钮 */}
-      <div className="flex gap-2 px-3.5 pb-3">
-        <button
-          type="button"
-          data-wish-activate
-          onClick={onActivate}
-          className="flex h-8 flex-1 items-center justify-center gap-1 rounded-xl bg-white/80 text-[12px] font-extrabold text-grass-700 active:btn-press"
-        >
-          🎟️ 去激活
-        </button>
+      {/* ★ 2026-11-11：只剩一颗状态按钮 ——「家长激活」搬到封面右下角了 */}
+      <div className="flex px-3.5 pb-3">
         <button
           type="button"
           data-wish-action={statusKind}
           disabled={statusDisabled}
           onClick={() => void statusAction()}
           className={
-            'flex h-8 flex-1 items-center justify-center gap-1 rounded-xl text-[12px] font-extrabold active:btn-press disabled:opacity-50 ' +
+            'flex h-8 w-full items-center justify-center gap-1 rounded-xl text-[12px] font-extrabold active:btn-press disabled:opacity-50 ' +
             (statusKind === 'redeem'
               ? 'bg-grass-500 text-white'
               : statusKind === 'done'
@@ -865,6 +874,24 @@ function ItemCard({
               {WISH_KIND_META[item.kind].label}
             </span>
           </span>
+          {/* ★ 2026-11-11：家长激活 = 封面右下角的小牌（用户要求别和「我想要」同级）。
+              丝带占右上，它占右下，两个角各管一件事，正文就不用再排一排按钮。
+              同样用 `span role=button`：外层是「点开详情」的 `<button>`。 */}
+          {!alreadyOwned && (
+            <span
+              role="button"
+              tabIndex={-1}
+              data-wish-activate
+              aria-label="家长激活"
+              onClick={(e) => {
+                e.stopPropagation()
+                onActivate()
+              }}
+              className="absolute bottom-1 right-1 rounded-lg bg-grass-500/95 px-1.5 py-[3px] text-[10px] font-extrabold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.18)] active:btn-press"
+            >
+              🎟️ 家长激活
+            </span>
+          )}
         </span>
         {/* 名字固定占两行高度：一行名和两行名混排时，下面「类型 / 价格」
             不会一张卡高一张卡矮。第四轮把行距收紧，整张卡矮一截。 */}
@@ -875,12 +902,10 @@ function ItemCard({
             （实物才有：泡泡玛特 / 小天才 / 玩具仓…；游戏没有 ⇒ 空着）。
             高度写死 `h-[1.15em]`：空着也要占位，否则游戏卡会比实物卡矮一截。
             `data-wish-type` 保留成走查锚点（不加任何样式）。 */}
-        <span
-          data-wish-type={item.kind}
-          className="mt-0.5 h-[1.15em] truncate px-0.5 text-[10.5px] font-bold leading-[1.15em] text-ink-400"
-        >
-          {item.partnerName ?? ''}
-        </span>
+        {/* ★ 2026-11-11：商家名那行删掉 ——「泡泡马特盲盒」上面已经写了泡泡马特，
+            再来一行就是同一句话说两遍（用户点名）。`data-wish-type` 锚点留着
+            给走查脚本按品类数卡，但 `hidden`：不渲染文字、也不占高度。 */}
+        <span data-wish-type={item.kind} hidden />
         {/* ★ 第四轮：没定价就空着这一行，不再写「等定价」那类话。
             家长审核时直接定价，孩子这一侧没有这一步。
             固定高度 = 和已定价的卡等高（_probe-wish-card-qa.mjs 量 tailGap）。 */}
@@ -895,20 +920,9 @@ function ItemCard({
           ) : null}
         </span>
       </button>
-      {/* ★ 2026-11-06：所有类型的卡片都有两颗按钮。
-          「去激活」→ 弹框（输码 / 去购买）；
+      {/* ★ 2026-11-11：这里只剩状态按钮（「家长激活」搬到封面右下角）。
           状态按钮 → 「想要」/「已申请」/「可兑换」/「已兑换」/「已拥有」。 */}
       <div className="mt-1.5 flex flex-col gap-1.5">
-        {!alreadyOwned && (
-          <button
-            type="button"
-            data-wish-activate
-            onClick={onActivate}
-            className="flex h-8 w-full shrink-0 items-center justify-center gap-1 rounded-xl bg-grass-50 text-[12px] font-extrabold text-grass-700 active:btn-press"
-          >
-            🎟️ 去激活
-          </button>
-        )}
         <button
           type="button"
           data-wish-action={statusKind}
@@ -1336,7 +1350,8 @@ function DetailView({
        * 输码入口**不在这一页**（2026-11-06）。
        *
        * 用户原话：「因为我想要、去激活 已经在礼品 item 有了，所以详情里不需要。」
-       * 现在每张卡片底下就有一颗「🎟️ 去激活」，点开是同一个弹框
+       * 现在每张卡片的**封面右下角**有一块「🎟️ 家长激活」小牌（2026-11-11 从
+       * 底部按钮搬上来的），点开是同一个弹框
        * （输码 + 去购买）。详情页再摆一块，等于同一件事两个入口，
        * 而且孩子得先点进详情才知道能输码。
        *
@@ -1757,8 +1772,8 @@ function OfferView({
               这一页整页已经在家长闸门后面，组件自己不再套闸门
               （2026-11-06 起它没有 `gate` 参数了）。
               ⚠️ 第六轮（2026-11-06）起**商品详情页不再有输码块** ——
-              入口只在卡片的「去激活」弹框里，同一件商品摆两个入口
-              孩子会以为要输两次。 */}
+              入口只在卡片封面右下角的「家长激活」弹框里，同一件商品摆两个
+              入口孩子会以为要输两次。 */}
           <CodeRedeemBlock label="有激活码？输一下" onDone={onDone} />
         </div>
       )}

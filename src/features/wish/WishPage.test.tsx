@@ -309,7 +309,7 @@ describe('心愿商城：已经拥有的游戏照样列出来，只是标「已�
     expect(btn.getAttribute('data-wish-action'), '状态是「已拥有」这一档').toBe('owned')
     expect(btn.textContent).toContain('已拥有')
     expect(btn.disabled, '已拥有就不能再点（点了也没得换）').toBe(true)
-    // 都拥有了，再摆「去激活」就是在卖一件已经在柜子里的东西
+    // 都拥有了，再摆「家长激活」就是在卖一件已经在柜子里的东西
     expect(card.querySelector('[data-wish-activate]')).toBeNull()
   })
 
@@ -570,27 +570,27 @@ describe('心愿：游戏类商品能直接买卡 / 输激活码', () => {
 })
 
 /* ============================================================
-   卡片「去激活」弹框（2026-11-06）
+   卡片「家长激活」弹框（2026-11-06）
    ------------------------------------------------------------
    用户原话：「礼品，游戏 和 盲盒 有去激活。点开 弹框有输入激活码，
-   没有激活码可以点去购买。」「因为我想要、去激活 已经在礼品 item 有了，
+   没有激活码可以点去购买。」「因为我想要、家长激活 已经在礼品 item 有了，
    所以详情里不需要。」
 
    所以这一轮把输码口从**详情页**搬到**卡片弹框**：
-     · 三种类型（实物 / 游戏 / 盲盒）卡片底部都有「🎟️ 去激活」；
+     · 三种类型（实物 / 游戏 / 盲盒）卡片底部都有「🎟️ 家长激活」；
      · 弹框里：游戏 / 盲盒有输码区，实物只有「去购买」；
      · 详情页**不再有**输码块 —— 同一件事两个入口，孩子还得先点进详情。
 
    钉六件事：
-     ① 卡片上有「去激活」，详情页里**没有**输码块（反向断言）；
+     ① 卡片上有「家长激活」，详情页里**没有**输码块（反向断言）；
      ② 保护开着时先过家长密码，键盘不直接摆给孩子；
      ③ 成功 → 弹框里说「已经在我的游戏里」，不替孩子切当前；
      ④ 「去设置看看」/「知道了」两条出口；
      ⑤ 失败 → 红字 + 不清空；
      ⑥ 没有激活码时「去购买」是一颗真按钮，不是一句提示。
    ============================================================ */
-describe('心愿：卡片「去激活」弹框', () => {
-  /** 从列表里点开某件商品的「去激活」弹框 */
+describe('心愿：卡片「家长激活」弹框', () => {
+  /** 从列表里点开某件商品的「家长激活」弹框 */
   const openActivate = async (name = '收租公寓') => {
     const user = userEvent.setup()
     render(<WishPage />)
@@ -603,23 +603,23 @@ describe('心愿：卡片「去激活」弹框', () => {
     return { user, card }
   }
 
-  it('★ 卡片上有「去激活」；详情页里**没有**输码块', async () => {
+  it('★ 卡片上有「家长激活」；详情页里**没有**输码块', async () => {
     await useApp.getState().updateSettings({ protectParentActions: false })
     const { user, card } = await openActivate()
 
-    expect(document.querySelector('[data-activate-dialog]'), '点了「去激活」没弹框').toBeTruthy()
+    expect(document.querySelector('[data-activate-dialog]'), '点了「家长激活」没弹框').toBeTruthy()
     expect(document.querySelector('[data-code-input]'), '弹框里没有输码口').toBeTruthy()
 
     await user.click(document.querySelector('[data-activate-close]') as HTMLElement)
     await waitFor(() => expect(document.querySelector('[data-activate-dialog]')).toBeNull())
 
-    /* ★ 反向断言：用户明确说「去激活已经在礼品 item 有了，所以详情里不需要」。
+    /* ★ 反向断言：用户明确说「家长激活已经在礼品 item 有了，所以详情里不需要」。
        只写正向的话，两块都留着照样全绿 —— 而孩子会看到两个入口。 */
     await user.click(card.querySelector('button') as HTMLElement)
     await waitFor(() => expect(document.querySelector('[data-wish-finish]')).toBeNull())
     expect(
       document.querySelector('[data-wish-code]'),
-      '详情页还留着输码块 —— 用户要求删掉（去激活已在卡片上）',
+      '详情页还留着输码块 —— 用户要求删掉（家长激活已在卡片上）',
     ).toBeNull()
   })
 
@@ -776,12 +776,12 @@ describe('心愿：卡片「去激活」弹框', () => {
     await user.click(document.querySelector('[data-activate-close]') as HTMLElement)
   })
 
-  it('★ 盲盒 hero：去激活 + 整块只剩「优先」是圆的', async () => {
+  it('★ 盲盒 hero：家长激活 + 整块只剩「优先」是圆的', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
     const hero = document.querySelector('[data-wish-card="blindbox"]') as HTMLElement
-    expect(hero.querySelector('[data-wish-activate]'), '盲盒没有「去激活」').toBeTruthy()
+    expect(hero.querySelector('[data-wish-activate]'), '盲盒没有「家长激活」').toBeTruthy()
     expect(hero.textContent ?? '').not.toMatch(/有码可输/)
     /* ★ 状态不再是一排小胶囊标签：整块 hero 只剩右上角「优先」是圆的
        （用户 2026-11-05：名字 / 类型 / 标签挤在一起很丑）。 */
@@ -792,7 +792,7 @@ describe('心愿：卡片「去激活」弹框', () => {
     ).toEqual(['优先'])
   })
 
-  it('★ 每颗卡都是「去激活 + 状态」两颗按钮（混排不留白块）', async () => {
+  it('★ 每颗卡都有「家长激活」小牌 + 一颗状态按钮（混排不留白块）', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
 
@@ -802,7 +802,7 @@ describe('心愿：卡片「去激活」弹框', () => {
     expect(cards.length).toBeGreaterThan(5)
     for (const c of cards) {
       const head = (c.textContent ?? '').slice(0, 12)
-      expect(c.querySelectorAll('[data-wish-activate]').length, `${head} 缺「去激活」`).toBe(1)
+      expect(c.querySelectorAll('[data-wish-activate]').length, `${head} 缺「家长激活」`).toBe(1)
       expect(c.querySelectorAll('[data-wish-action]').length, `${head} 缺状态按钮`).toBe(1)
     }
 
@@ -820,6 +820,30 @@ describe('心愿：卡片「去激活」弹框', () => {
       expect(useApp.getState().wishOrders.some((o) => o.itemId === 'wish-dino')).toBe(true),
     )
   })
+
+  /* ★ 2026-11-11 用户原话：「家长激活 还是不要跟 我想要 同级，试试 放到 图片的右下角」。
+     只断言「按钮在」是不够的 —— 把它挪回按钮行照样全绿。
+     判据取**父节点**：激活小牌的父节点是封面，状态按钮的父节点是按钮容器。 */
+  it('★ 家长激活挂在封面角上，不和「我想要」同级', async () => {
+    render(<WishPage />)
+    await screen.findByText('心愿商城')
+
+    const cards = [...document.querySelectorAll('[data-wish-card]')] as HTMLElement[]
+    expect(cards.length).toBeGreaterThan(5)
+    let seen = 0
+    for (const c of cards) {
+      const act = c.querySelector('[data-wish-activate]') as HTMLElement | null
+      if (!act) continue
+      seen++
+      const status = c.querySelector('[data-wish-action]') as HTMLElement
+      expect(act.textContent ?? '', '小牌上写的是家长激活').toMatch(/家长激活/)
+      expect(
+        act.parentElement,
+        '家长激活又回到按钮那一行了 —— 用户要求放封面右下角',
+      ).not.toBe(status.parentElement)
+    }
+    expect(seen, '一张带「家长激活」的卡都没有').toBeGreaterThan(5)
+  })
 })
 
 /* ============================================================
@@ -827,7 +851,7 @@ describe('心愿：卡片「去激活」弹框', () => {
    ------------------------------------------------------------
    用户原话：「为啥会有一个 等妈妈定价。根本不需要吧。因为孩子表达心愿，
    家长审核时直接定价了。游戏 等爸妈定价感觉都不需要。ITEM UI 紧凑一些。
-   可以来个我想要，去激活改成家长激活。」
+   可以来个我想要，家长激活改成家长激活。」
    ============================================================ */
 describe('心愿商城：第四轮卡片口径', () => {
   it('★ 列表里不再出现「等定价」那类话', async () => {
@@ -836,13 +860,13 @@ describe('心愿商城：第四轮卡片口径', () => {
     expect(document.body.textContent ?? '').not.toMatch(/等爸妈定价|等妈妈定价|等他们定价/)
   })
 
-  it('★ 游戏卡和盲盒 hero 都写「去激活」', async () => {
+  it('★ 游戏卡和盲盒 hero 都写「家长激活」', async () => {
     render(<WishPage />)
     await screen.findByText('心愿商城')
     const game = document.querySelector('[data-wish-kind="gamebox"]') as HTMLElement
     const hero = document.querySelector('[data-wish-card="blindbox"]') as HTMLElement
-    expect(game.querySelector('[data-wish-activate]')?.textContent).toMatch(/去激活/)
-    expect(hero.querySelector('[data-wish-activate]')?.textContent).toMatch(/去激活/)
+    expect(game.querySelector('[data-wish-activate]')?.textContent).toMatch(/家长激活/)
+    expect(hero.querySelector('[data-wish-activate]')?.textContent).toMatch(/家长激活/)
   })
 
   it('★ 实物卡点「我想要」直接落一条 wished 单，不跳详情页', async () => {
