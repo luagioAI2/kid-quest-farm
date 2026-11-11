@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/store/useApp'
-import type { WishItem, WishTint } from '@/domain/types'
+import type { WishItem, WishKind, WishTint } from '@/domain/types'
 import {
   WISH_KIND_META,
   blindBoxRemaining,
@@ -105,6 +105,26 @@ const TINT_BG: Record<WishTint, string> = {
   grape: 'bg-grape-100',
   tan: 'bg-tangerine-100',
   berry: 'bg-berry-100',
+}
+
+/**
+ * 封面右上角那条丝带的底色 —— **一个品类一个颜色**（2026-11-11）。
+ *
+ * 为什么用 hex 而不是 `bg-grape-500` 这类类名：项目的调色板只补了
+ * `*-100` / `*-50` 这几档浅色，500 档有一半不存在，写类名会静默不变色
+ * （Tailwind 找不到就是没有，不报错）。这里 7 个值都是量过的实色。
+ *
+ * 配色口径：游戏=天蓝（沿用原来那条）、盲盒=紫、玩具=粉、学习=绿、
+ * 美食=橙、出行=青、其他=灰。都是暖色系/中性色，不做荧光。
+ */
+const RIBBON_BG: Record<WishKind, string> = {
+  gamebox: '#0ea5e9',
+  blindbox: '#8b5cf6',
+  toy: '#ec4899',
+  study: '#22c55e',
+  food: '#f97316',
+  outing: '#14b8a6',
+  collectible: '#64748b',
 }
 
 /**
@@ -732,8 +752,6 @@ function ItemCard({
   onWant: () => void
 }) {
   const alreadyOwned = item.kind === 'gamebox' && !!item.gameId && owned.has(item.gameId)
-  /** 这是**一款游戏**（不是实物礼物）—— 只用来决定封面要不要挂那条蓝丝带。 */
-  const isGame = item.kind === 'gamebox'
   const entry = gameEntryOf(item)
   /** 「可兑换」= 把人送到「兑换」那一格（这一页不扣币，见上面 hero 的注释） */
   const jumpToRedeem = useApp((s) => s.jumpToRedeem)
@@ -827,39 +845,41 @@ function ItemCard({
               {badge}
             </span>
           )}
-          {/* ★ 2026-11-10：游戏卡加一条**角落丝带**，只做标记，不动别的版式。
-              之前试过换深色机身 + 紫色类型行 + 分组标题，用户判「太丑」已整体还原；
-              这里只保留最轻的一层：一条 sky 蓝斜丝带，写明「游戏」。
+          {/* ★ 2026-11-11：**每个品类都挂一条角落丝带**，靠「颜色 + 两个字」区分，
+              卡片正文里就不再重复写类型（原来是「游戏 · 商家」那一行）。
+              之前试过深色机身 + 紫色类型行 + 分组标题，用户判「太丑」已整体还原，
+              现在只保留最轻的一层。
               ⚠️ 丝带放在封面这一层（`overflow-hidden rounded-2xl`）里，
                  靠外层裁切自动收角；自己别再算圆角。
-              ⚠️ 只有 `gamebox` 有。盲盒那款是顶部的 hero 卡（另有「优先」标），
-                 不在这个栅格里，别给它加第二条。
-              ⚠️ `pointer-events-none`：丝带盖在封面上，不能挡掉点开详情的点击。 */}
-          {isGame && (
+              ⚠️ `pointer-events-none`：丝带盖在封面上，不能挡掉点开详情的点击。
+              ⚠️ `data-wish-ribbon` 的值是**品类**（不是布尔），走查脚本按它数每种几张。 */}
+          <span
+            data-wish-ribbon={item.kind}
+            aria-hidden
+            className="pointer-events-none absolute right-0 top-0 h-[52px] w-[52px] overflow-hidden"
+          >
             <span
-              data-wish-ribbon="game"
-              aria-hidden
-              className="pointer-events-none absolute right-0 top-0 h-[52px] w-[52px] overflow-hidden"
+              className="absolute right-[-21px] top-[12px] w-[74px] rotate-45 py-[2px] text-center text-[9.5px] font-extrabold leading-[1.35] tracking-[0.08em] text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+              style={{ background: RIBBON_BG[item.kind] }}
             >
-              <span className="absolute right-[-21px] top-[12px] w-[74px] rotate-45 bg-sky-500 py-[2px] text-center text-[9.5px] font-extrabold leading-[1.35] tracking-[0.08em] text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]">
-                游戏
-              </span>
+              {WISH_KIND_META[item.kind].label}
             </span>
-          )}
+          </span>
         </span>
         {/* 名字固定占两行高度：一行名和两行名混排时，下面「类型 / 价格」
             不会一张卡高一张卡矮。第四轮把行距收紧，整张卡矮一截。 */}
         <span className="line-clamp-2 min-h-[2.4em] px-0.5 font-display text-[12.5px] font-extrabold leading-[1.2] text-ink-900">
           {item.name}
         </span>
-        {/* `data-wish-type` 只是走查锚点（不加任何样式）：
-            没有它，脚本只能靠 `innerText` 猜哪一行是类型行。 */}
+        {/* ★ 2026-11-11：类型名挪到封面丝带上了，这一行**只留商家名**
+            （实物才有：泡泡玛特 / 小天才 / 玩具仓…；游戏没有 ⇒ 空着）。
+            高度写死 `h-[1.15em]`：空着也要占位，否则游戏卡会比实物卡矮一截。
+            `data-wish-type` 保留成走查锚点（不加任何样式）。 */}
         <span
           data-wish-type={item.kind}
-          className="mt-0.5 truncate px-0.5 text-[10.5px] font-bold text-ink-400"
+          className="mt-0.5 h-[1.15em] truncate px-0.5 text-[10.5px] font-bold leading-[1.15em] text-ink-400"
         >
-          {WISH_KIND_META[item.kind].label}
-          {item.partnerName ? ` · ${item.partnerName}` : ''}
+          {item.partnerName ?? ''}
         </span>
         {/* ★ 第四轮：没定价就空着这一行，不再写「等定价」那类话。
             家长审核时直接定价，孩子这一侧没有这一步。
