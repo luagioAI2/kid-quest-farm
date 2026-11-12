@@ -15,6 +15,7 @@ import {
   selectTodayStats,
   useApp,
 } from '@/store/useApp'
+import { CampaignCard } from '@/features/campaign/CampaignCard'
 import { TaskDetail } from './TaskDetail'
 import { TaskEditor } from './TaskEditor'
 import {
@@ -103,6 +104,13 @@ export default function TaskPage() {
         rate={todayStats.rate}
         dateText={`${dateLabel} · ${weekday}`}
       />
+
+      {/* ================= 主线活动 =================
+          摆在今日任务**上面**：它是长期目标，放在下面的话孩子翻两屏才看到，
+          而这一块恰恰是「多做一个任务有什么意义」的答案。
+          ⚠️ 全领完时它自己会 `return null`（见 CampaignCard），
+             不留一张空卡片占位置。 */}
+      <CampaignCard />
 
       {/* ================= 今日任务 ================= */}
       <Section

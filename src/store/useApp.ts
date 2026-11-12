@@ -70,7 +70,9 @@ import {
   savePlots,
   saveQuotaCarry,
   saveSettings,
+  getMeta,
   setGameKv,
+  setMeta,
   spendMall,
   WISH_BUY_LINKS_KEY,
   wipeAll,
@@ -91,6 +93,15 @@ import {
 } from '../domain/wish'
 import { ownedIdsOnline } from '../domain/ownership'
 import { SYNC_LAST_OK_KEY, SYNC_OK, type SyncState } from '../domain/syncState'
+
+/**
+ * 「主线活动领过哪几关」在 `meta` 里的 key。
+ *
+ * 为什么用 `meta` 而不新开一张 Dexie 表：`meta` 就是 key-value，
+ * `wipeAll` 已经会清它、备份天然带上，而**加表要动五处登记**（见 MEMORY）。
+ * 这里面只有几个短 id，没有查询需求。
+ */
+const CAMPAIGN_CLAIMS_KEY = 'campaign.claimed'
 import { fetchOwnedGameIds } from '../online/ownership'
 import { makeHostApi } from '../games/hostApi'
 import { deleteGameKvOnServer } from '../online/kv'
@@ -101,6 +112,16 @@ import { catalogPublicKeyRaw } from '../games/catalogKey'
    ★ 和 `features/settings/GameStore.tsx` 读的**是同一份** —— 兑换和游戏市场
      必须认定同一个目录地址，否则会出现「市场里能装、兑换后装不上」。 */
 import { CATALOG_URL, catalogConfigured } from '../games/catalogUrl'
+import {
+  CAMPAIGN_METRIC_META,
+  CAMPAIGN_STEPS,
+  campaignStatsFrom,
+  campaignSummary,
+  campaignViews,
+  spotlightStep,
+  type CampaignStepView,
+} from '../domain/campaign'
+import { fetchCampaignState, claimCampaignStep as claimCampaignStepApi } from '../api/campaign'
 import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
 import { localGameById } from '../games/localGames'
 import { codeHashOf, gameIdForCode } from '../games/codeLookup'
@@ -366,6 +387,17 @@ interface AppState {
    * 「清单说装了、其实包里没有」或反过来 —— 本项目的老毛病。
    */
   installedGames: Record<string, GameManifestV2>
+  /**
+   * 主线活动里**已经领过**的关卡 id（2026-11-12）。
+   *
+   * 两种模式来源不同：
+   *   · 本地版 —— `meta['campaign.claimed']`（本机，备份会带）；
+   *   · 在线版 —— 服务端 `/api/campaign/state`（**以服务端为准**）。
+   *
+   * ⚠️ 进度**不存**：`domain/campaign.ts` 从 `instances` 和 `harvestLedger`
+   *    现算。存一份进度必然和账本走散（数字最容易被写坏，而且不报错）。
+   */
+  campaignClaims: string[]
 
   todayKey: string
 
@@ -451,6 +483,15 @@ interface AppState {
    *    「市场里能装、兑换后装不上」——而这正是这条注释的由来。
    */
   installGameAuto: (gameId: string) => Promise<{ ok: boolean; message: string }>
+  /**
+   * 领一关主线活动的奖励（送一款游戏）。
+   *
+   * ★ 条件**每次调用都重新算**，不信任界面上那份视图 ——
+   *   界面可能是几分钟前渲染的（那时刚够 5 个，家长随后又打回了一个）。
+   * ★ 在线版由**服务端复核并授游戏**，客户端只管提示与装包；
+   *   本地版记一笔 `mallLedger(source='campaign', delta 0)`，拥有关系才成立。
+   */
+  claimCampaignStep: (stepId: string) => Promise<{ ok: boolean; message: string }>
   /**
    * ⚠️ **没有完整性校验**的安装路径，只给本地走查用（`capture-game-bundle.mjs`
    * 起一个静态目录证明装配管道通）。**不是给用户用的**，也**不许**接进设置页。
@@ -2331,6 +2372,16 @@ async function doRefresh(
    *    「服务端说你一个都没有」，那会让整页游戏瞬间变成未拥有，
    *    而真实原因只是这次没拉到。`null` 会退回上一次那份名单（见下）。
    */
+  /* 主线活动「领过哪几关」。
+     ★ 在线版以服务端为准（拥有关系也在服务端，两边不一致时只能信它）；
+       本地版读 meta。**失败就沿用上一次那份** —— 这里抛会把整个 refresh
+       带崩，任务列表跟着空掉，而用户看到的只是「活动进度不对」。 */
+  const campaignClaims = isOnlineMode
+    ? ((await fetchCampaignState()
+        .then((s) => s.steps.filter((x) => x.claimed).map((x) => x.id))
+        .catch(() => null)) ?? get().campaignClaims)
+    : await getMeta<string[]>(CAMPAIGN_CLAIMS_KEY, [])
+
   const serverOwned = isOnlineMode ? await fetchOwnedGameIds().catch(() => null) : null
   const serverOwnedIds = serverOwned ?? get().serverOwnedGameIds
 
@@ -2358,6 +2409,7 @@ async function doRefresh(
     tasks,
     allTasks,
     instances,
+    campaignClaims,
     ledger,
     harvestLedger,
     mallLedger,
@@ -2804,6 +2856,7 @@ export const useApp = create<AppState>((set, get) => ({
   syncState: SYNC_OK,
   serverOwnedGameIds: null,
   installedGames: {},
+  campaignClaims: [],
   todayKey: appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour),
   toasts: [],
   settleFlash: null,
@@ -4999,6 +5052,58 @@ export const useApp = create<AppState>((set, get) => ({
     return get().installLocalGame(gameId)
   },
 
+  claimCampaignStep: async (stepId) => {
+    const step = CAMPAIGN_STEPS.find((s) => s.id === stepId)
+    if (!step) return { ok: false, message: '没有这一关' }
+
+    // 每次都现算：不信任界面上那份可能是几分钟前的视图
+    const stats = campaignStatsFrom(get().instances, get().harvestLedger)
+    const view = campaignViews(stats, get().campaignClaims).find((v) => v.step.id === stepId)
+    if (!view) return { ok: false, message: '没有这一关' }
+    if (view.state === 'claimed') return { ok: false, message: '这一关已经领过啦' }
+    if (view.state !== 'ready') {
+      const meta = CAMPAIGN_METRIC_META[step.goal.metric]
+      return { ok: false, message: `还差 ${view.shortfall} ${meta.unit}，到了再来领` }
+    }
+
+    const rewardName =
+      gameById(step.reward.gameId)?.name ??
+      localGameById(step.reward.gameId)?.name ??
+      step.reward.name
+
+    if (isOnlineMode) {
+      /* 在线版：服务端复核 + 授游戏。`onlineWrite` 已经把网络失败和业务拒绝
+         分开了 —— 前者可以重试，后者（条件不满足 / 已领过）重试也没用。 */
+      const r = await onlineWrite(() => claimCampaignStepApi(stepId))
+      if (!r.ok) {
+        const t = writeFailToast(r.error, `领取「${rewardName}」`)
+        return { ok: false, message: t.detail ? `${t.title}：${t.detail}` : t.title }
+      }
+    } else {
+      /* 本地版：记一笔 delta 0 的账 ⇒ `purchasedIdsFrom` 就认它。
+         ⚠️ 顺序不能反：先记账再把 step 写进「已领」。反过来的话，账本写失败时
+            这一关会被标成已领，孩子再也领不到。 */
+      await postMall({
+        delta: 0,
+        source: 'campaign',
+        refId: step.reward.gameId,
+        memo: `主线活动：${step.title}`,
+      })
+      const next = [...new Set([...get().campaignClaims, stepId])]
+      await setMeta(CAMPAIGN_CLAIMS_KEY, next)
+      set({ campaignClaims: next })
+    }
+
+    /* 装包（两条路自己挑：先目录、再本地包）。装不上**不算领取失败** ——
+       游戏已经在库里了，「已激活但没装」有出口：设置/游戏里点下载。 */
+    const inst = await get().installGameAuto(step.reward.gameId)
+    await get().refresh()
+    const tail = inst.ok
+      ? '，已经放进游戏柜啦'
+      : `，但没装成功（${inst.message}），去「我的游戏」点安装`
+    return { ok: true, message: `领到了「${rewardName}」${tail}` }
+  },
+
   installLocalGame: async (gameId) => {
     const entry = localGameById(gameId)
     if (!entry) return { ok: false, message: `这个版本里没有本地游戏「${gameId}」` }
@@ -5858,6 +5963,25 @@ export function selectTodayStats(s: AppState) {
  * 不限今天是有意的：孩子昨晚交上来的，家长今早才审，
  * 如果只查今天，那条就会永远卡在 submitted 里没人管。
  */
+/**
+ * 主线活动的完整视图（进度 + 状态 + 主推那一关）。
+ *
+ * ★ 抽成选择器而不是在组件里 `campaignViews(...)`：卡片、详情弹框、
+ *   将来的首页推荐位都要这份数据，各算一遍就会出现「卡片说能领、
+ *   点进弹框说还差 2 个」这种自相矛盾的界面。
+ *
+ * ⚠️ 返回值每次都是**新对象**，所以组件里必须用
+ *   `const v = useApp(selectCampaign)`（zustand 会按引用比较 ⇒ 每次都重渲染）。
+ *   正确写法是 `const claims = useApp((s) => s.campaignClaims)` 这种原始切片，
+ *   再在本组件里 `useMemo` 调这个函数 —— 和 MEMORY 里那条
+ *   「selector 不能返回新对象（React #185）」是同一件事。
+ */
+export function selectCampaign(s: AppState) {
+  const stats = campaignStatsFrom(s.instances, s.harvestLedger)
+  const views: CampaignStepView[] = campaignViews(stats, s.campaignClaims)
+  return { stats, views, ...campaignSummary(views), spotlight: spotlightStep(views) }
+}
+
 export function selectPendingReview(s: AppState): TaskInstance[] {
   return s.instances
     .filter((i) => i.status === 'submitted')

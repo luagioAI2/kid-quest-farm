@@ -557,6 +557,78 @@ try {
     await new Promise((r) => setTimeout(r, 300))
   }, headerProbe.prev)
 
+  /* ---------- 3d. 主线活动卡片（2026-11-12） ----------
+     用户：「添加活动模块，完成 5 个任务免费激活下落的2048，类似主线任务。」
+     这一块摆在任务页顶部，是孩子每天第一眼看到的东西 —— 位置错了
+     （被任务列表推到第二屏）就等于没有。
+
+     ⚠️ 这里只断言「看得见、点得开」。**真的领到**那一步在后面
+        （要先把任务做完，见 3e），别在这里顺手点领取：
+        点了就会改数据，后面「任务结算」那段的基线全乱。 */
+  await page.evaluate(() => document.querySelector('[data-tour="tab-tasks"]')?.click())
+  await sleep(700)
+
+  const camp = await page.evaluate(() => {
+    const card = document.querySelector('[data-tour="campaign-card"]')
+    if (!card) return { found: false }
+    const r = card.getBoundingClientRect()
+    const bar = card.querySelector('[data-campaign-bar]')
+    return {
+      found: true,
+      // 顶端在屏幕上半部分 = 没被任务列表推到下面
+      top: Math.round(r.top),
+      title: card.querySelector('div')?.textContent?.trim() ?? '',
+      progress: card.querySelector('[data-campaign-progress]')?.textContent?.trim() ?? '',
+      percent: bar ? Number(bar.getAttribute('data-campaign-bar')) : -1,
+      // 卡片里有没有按钮：有就说明它自己不是 <button>（否则嵌套不合法）
+      nestedButtons: card.querySelectorAll('button').length,
+      cardTag: card.tagName,
+    }
+  })
+  check('任务页有主线活动卡片', !!camp.found)
+  check(
+    '★ 卡片在第一屏（没被任务列表推到下面）',
+    !!camp.found && camp.top < 700,
+    camp.found ? `top=${camp.top}px` : '没有卡片',
+  )
+  check(
+    '卡片写着第 1 关和还差多少',
+    !!camp.found && camp.progress.includes('还差') && camp.progress.includes('/'),
+    camp.progress,
+  )
+  check(
+    '★ 卡片本身不是 <button>（里面还有按钮，嵌套会被解析器拆开）',
+    !!camp.found && camp.cardTag !== 'BUTTON' && camp.nestedButtons > 0,
+    camp.found ? `${camp.cardTag}，内含 ${camp.nestedButtons} 颗按钮` : '',
+  )
+
+  // 展开全部关卡
+  const campOpened = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+      /全部 \d+ 关/.test(x.textContent ?? ''),
+    )
+    if (!b) return false
+    b.click()
+    return true
+  })
+  await sleep(500)
+  check('能展开「全部 N 关」', campOpened)
+  const steps = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-campaign-step]')].map((e) => ({
+      id: e.getAttribute('data-campaign-step'),
+      state: e.getAttribute('data-campaign-state'),
+    })),
+  )
+  check('四关都在', steps.length === 4, steps.map((s) => s.id).join(','))
+  check(
+    '第 1 关是「进行中」、第 2 关也是「进行中」（还没做任务、也没有券）',
+    steps.filter((s) => s.state === 'doing').length === steps.length,
+    steps.map((s) => `${s.id}=${s.state}`).join(' '),
+  )
+  // 关掉弹层，别挡住后面「任务结算」那段的点击
+  await page.keyboard.press('Escape')
+  await sleep(400)
+
   /* ---------- 4. 任务结算：填用时 → 完成 → 积分入账 ---------- */
   const balanceBefore = await page.evaluate(() => {
     const m = document.body.innerText.match(/🪙\s*(\d+)/)

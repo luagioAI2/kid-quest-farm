@@ -371,6 +371,14 @@ export interface HarvestEntry {
 export type MallSource =
   | 'game_purchase' // 买游戏（负数）
   | 'redemption_code' // 兑换码解锁（**delta 恒为 0**，见 `purchasedIdsFrom`）
+  /**
+   * 主线活动奖励（2026-11-12，**delta 恒为 0**）。
+   *
+   * 和 `redemption_code` 分开记的理由：两者都不花钱，但「码」和「活动」
+   * 在报表上是两件事 —— 混成一个来源，就回答不了「这款游戏是买来的、
+   * 用卡换的，还是做活动送的」。`purchasedIdsFrom` 两个都认。
+   */
+  | 'campaign'
   | 'manual_adjust' // 家长手工调整
 
 /**
