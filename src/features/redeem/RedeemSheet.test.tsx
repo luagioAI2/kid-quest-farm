@@ -44,10 +44,20 @@ async function giveVouchers(n: number) {
 
 /** 家长定价。`closed` 模拟「家长关掉了兑换」 */
 async function priceItem(itemId: string, voucherPrice: number, closed = false) {
+  await priceItemAt(itemId, voucherPrice, Date.now(), closed)
+}
+
+/** 同上，但**指定同意的时间** —— 验「最新的排前面」时必须能控制先后 */
+async function priceItemAt(
+  itemId: string,
+  voucherPrice: number,
+  openedAt: number,
+  closed = false,
+) {
   await db.wishOffers.put({
     itemId,
     voucherPrice,
-    openedAt: Date.now(),
+    openedAt,
     ...(closed ? { closedAt: Date.now() } : {}),
   })
   await useApp.getState().refresh()
@@ -73,6 +83,52 @@ describe('兑换列表：爸妈定好价的心愿', () => {
     expect(screen.queryByText(/心愿商城 · 爸妈开放了/), '不该再另起一块').toBeNull()
     // 也不该长得像「外面来的东西」：付款行和家里那几件一模一样
     expect(within(row).getByText(/付款：/)).toBeTruthy()
+  })
+
+  /* 2026-11-12 用户要求：兑换页里这些「爸妈已经同意」的心愿行，
+     ① 要有丝带标出品类（它们和家里的兑换品混在同一张表，光看名字分不清
+        是盲盒还是玩具，而两者的交付方式完全不同）；
+     ② 按家长同意的时间倒序，最新的排前面。 */
+  it('★ 心愿行挂着品类丝带（丝带上就是品类名）', async () => {
+    /* 用游戏盒子这一条：它的品类没有歧义（`gamebox` → 「游戏」）。
+       ⚠️ 别拿 `wish-popmart`（泡泡玛特盲盒）当判据 —— 它的 `kind` 是
+       `collectible`（实体收藏），名字里那个「盲盒」和数字盲盒
+       （`blindbox` = 开游戏池）不是一回事，按名字猜会写错断言。 */
+    await priceItem('wish-game-renttower', 30)
+
+    render(<RedeemBody />)
+    await ready()
+
+    const row = shopRow('wish-game-renttower')
+    const ribbon = row.querySelector<HTMLElement>('[data-redeem-ribbon]')
+    expect(ribbon, '心愿行没有丝带').toBeTruthy()
+    // 值是**品类**而不是布尔：走查脚本要靠它数「每种几张」
+    expect(ribbon?.getAttribute('data-redeem-ribbon')).toBe('gamebox')
+    expect(ribbon?.textContent).toBe('游戏')
+    // 家里那几件不带丝带 —— 有丝带的才是「外面来的心愿」
+    const familyRibbons = document.querySelectorAll(
+      '[data-shop-row]:not([data-shop-row^="wish-"]) [data-redeem-ribbon]',
+    )
+    expect(familyRibbons.length, '家里的兑换品不该挂心愿丝带').toBe(0)
+  })
+
+  it('★ 最新的排前面：按家长同意的时间倒序', async () => {
+    const t0 = Date.now() - 60_000
+    // 先同意「收租公寓」，一分钟后又同意「泡泡玛特盲盒」
+    await priceItemAt('wish-game-renttower', 30, t0)
+    await priceItemAt('wish-popmart', 30, t0 + 60_000)
+
+    render(<RedeemBody />)
+    await ready()
+
+    const ids = [...document.querySelectorAll('[data-shop-row]')].map((e) =>
+      e.getAttribute('data-shop-row'),
+    )
+    const iPop = ids.indexOf('wish-popmart')
+    const iRent = ids.indexOf('wish-game-renttower')
+    expect(iPop, '两行都该在列表里').toBeGreaterThanOrEqual(0)
+    expect(iRent).toBeGreaterThanOrEqual(0)
+    expect(iPop, '后同意的应该排在先同意的前面').toBeLessThan(iRent)
   })
 
   it('对照组：没定价的心愿不出现（那只是「想要」，不是能换）', async () => {

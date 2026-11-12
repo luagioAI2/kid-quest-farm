@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/store/useApp'
-import type { WishItem, WishKind, WishTint } from '@/domain/types'
+import type { WishItem, WishTint } from '@/domain/types'
 import {
   WISH_KIND_META,
+  WISH_RIBBON_BG,
   blindBoxRemaining,
   blindBoxSoldOut,
   compareWishItem,
@@ -107,25 +108,9 @@ const TINT_BG: Record<WishTint, string> = {
   berry: 'bg-berry-100',
 }
 
-/**
- * 封面右上角那条丝带的底色 —— **一个品类一个颜色**（2026-11-11）。
- *
- * 为什么用 hex 而不是 `bg-grape-500` 这类类名：项目的调色板只补了
- * `*-100` / `*-50` 这几档浅色，500 档有一半不存在，写类名会静默不变色
- * （Tailwind 找不到就是没有，不报错）。这里 7 个值都是量过的实色。
- *
- * 配色口径：游戏=天蓝（沿用原来那条）、盲盒=紫、玩具=粉、学习=绿、
- * 美食=橙、出行=青、其他=灰。都是暖色系/中性色，不做荧光。
- */
-const RIBBON_BG: Record<WishKind, string> = {
-  gamebox: '#0ea5e9',
-  blindbox: '#8b5cf6',
-  toy: '#ec4899',
-  study: '#22c55e',
-  food: '#f97316',
-  outing: '#14b8a6',
-  collectible: '#64748b',
-}
+/* 丝带配色搬到 `domain/wish.ts` 的 `WISH_RIBBON_BG`（2026-11-12）：
+   兑换页里那些「爸妈已经同意」的心愿行也要挂同一套丝带，两处各存一份的话
+   同一个品类会配出两种颜色，而且不会报错。 */
 
 /**
  * 这一单**东西已经给了**没有。
@@ -869,7 +854,7 @@ function ItemCard({
           >
             <span
               className="absolute right-[-21px] top-[12px] w-[74px] rotate-45 py-[2px] text-center text-[9.5px] font-extrabold leading-[1.35] tracking-[0.08em] text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
-              style={{ background: RIBBON_BG[item.kind] }}
+              style={{ background: WISH_RIBBON_BG[item.kind] }}
             >
               {WISH_KIND_META[item.kind].label}
             </span>
