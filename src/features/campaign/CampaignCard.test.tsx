@@ -42,11 +42,17 @@ const done = (n: number): TaskInstance[] =>
 const earn = (n: number): HarvestEntry[] =>
   [{ id: 'h1', delta: n, balanceAfter: n, source: 'farm_harvest', memo: '收成', createdAt: 1 }] as HarvestEntry[]
 
-function seed(opts: { tasks?: number; coupons?: number; claims?: string[] }) {
+function seed(opts: {
+  tasks?: number
+  coupons?: number
+  claims?: string[]
+  serverStats?: { tasksDone: number; couponsEarned: number } | null
+}) {
   useApp.setState({
     instances: done(opts.tasks ?? 0),
     harvestLedger: earn(opts.coupons ?? 0),
     campaignClaims: opts.claims ?? [],
+    campaignServerStats: opts.serverStats ?? null,
   })
 }
 
@@ -105,6 +111,35 @@ describe('领取', () => {
     expect(
       document.querySelector('[data-campaign-step="coupon100"]')!.getAttribute('data-campaign-state'),
     ).toBe('doing')
+  })
+})
+
+describe('在线版：进度以服务端为准', () => {
+  it('★ 本地流水被窗口挤掉（算出来只有 20 张）时，按服务端的 190 张算', async () => {
+    /* 在线版 `pullLedger` 只拉 200 × 10 = 2000 条，老账号早期入账会掉出窗口
+       ⇒ 本地算的累计值偏小。只信本地的话，界面会卡在「还差 80 张」，
+       而服务端早就判定够了 —— 按钮根本不出现，还不报错。 */
+    seed({
+      tasks: 2,
+      coupons: 20,
+      serverStats: { tasksDone: 20, couponsEarned: 190 },
+    })
+    render(<CampaignCard />)
+
+    // 卡片主推的是「第一个可领取的」（这里是第一关，20 个任务早够了）
+    expect(screen.getByText('🎁 领取')).toBeTruthy()
+
+    // 关键判据：券那一关的状态。本地只有 20 张 ⇒ 若只信本地会是 doing；
+    // 按服务端的 190 张算就是 ready。
+    await userEvent.click(screen.getByText(/全部 4 关/))
+    const coupon = document.querySelector('[data-campaign-step="coupon100"]')
+    expect(coupon?.getAttribute('data-campaign-state')).toBe('ready')
+  })
+
+  it('本地版（没有服务端数字）仍然用本地那份', () => {
+    seed({ tasks: 2, coupons: 120 })
+    render(<CampaignCard />)
+    expect(screen.getByText('攒够 100 张兑换券')).toBeTruthy()
   })
 })
 

@@ -38,6 +38,9 @@ export function CampaignCard() {
   const instances = useApp((s) => s.instances)
   const harvestLedger = useApp((s) => s.harvestLedger)
   const claims = useApp((s) => s.campaignClaims)
+  /* 在线版由服务端算进度：本地流水只拉了 2000 条上限，
+     老账号会算少 ⇒ 界面卡在「还差 N」而服务端点不到按钮。 */
+  const serverStats = useApp((s) => s.campaignServerStats)
   const claim = useApp((s) => s.claimCampaignStep)
   const pushToast = useApp((s) => s.pushToast)
 
@@ -45,10 +48,10 @@ export function CampaignCard() {
   const [busy, setBusy] = useState<string | null>(null)
 
   const view = useMemo(() => {
-    const stats = campaignStatsFrom(instances, harvestLedger)
+    const stats = serverStats ?? campaignStatsFrom(instances, harvestLedger)
     const views = campaignViews(stats, claims)
     return { views, ...campaignSummary(views), spotlight: spotlightStep(views) }
-  }, [instances, harvestLedger, claims])
+  }, [instances, harvestLedger, claims, serverStats])
 
   // 全领完了就不占地方：任务页是孩子每天第一眼看到的东西，
   // 一条「没有下一步」的卡片只会把任务列表往下推

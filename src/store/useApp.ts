@@ -398,6 +398,19 @@ interface AppState {
    *    现算。存一份进度必然和账本走散（数字最容易被写坏，而且不报错）。
    */
   campaignClaims: string[]
+  /**
+   * 在线版：**服务端算的**活动进度（`tasks_done` / `coupons_earned`）。
+   * 本地版恒为 `null` —— 那边自己从 `harvestLedger` 算，没有第二份。
+   *
+   * ★ 为什么不能只用本地那份：在线版的流水是 `pullLedger` 拉的，
+   *   上限 200 × 10 = **2000 条**。老账号早期的入账被挤出窗口后，
+   *   客户端算的「累计赚到」会小于服务端 ⇒ 界面停在「还差 N 张」，
+   *   领取按钮不出现，而服务端其实早就判定够了 —— **不报错，只是点不到**。
+   *
+   * ⚠️ 拉取失败时保留上一次的值，不要清成 `null` 退回本地算法：
+   *   那会在断网的一瞬间把进度「往回跳」，孩子会以为白做了。
+   */
+  campaignServerStats: { tasksDone: number; couponsEarned: number } | null
 
   todayKey: string
 
@@ -2376,11 +2389,21 @@ async function doRefresh(
      ★ 在线版以服务端为准（拥有关系也在服务端，两边不一致时只能信它）；
        本地版读 meta。**失败就沿用上一次那份** —— 这里抛会把整个 refresh
        带崩，任务列表跟着空掉，而用户看到的只是「活动进度不对」。 */
-  const campaignClaims = isOnlineMode
-    ? ((await fetchCampaignState()
-        .then((s) => s.steps.filter((x) => x.claimed).map((x) => x.id))
-        .catch(() => null)) ?? get().campaignClaims)
-    : await getMeta<string[]>(CAMPAIGN_CLAIMS_KEY, [])
+  let campaignClaims = await getMeta<string[]>(CAMPAIGN_CLAIMS_KEY, [])
+  let campaignServerStats = get().campaignServerStats
+  if (isOnlineMode) {
+    /* 一次请求同时拿三样：已领的关卡、服务端算的两个指标。
+       ★ 失败就**整份沿用上一次** —— 这里抛会把整个 refresh 带崩，
+         任务列表跟着空掉，而用户看到的只是「活动进度不对」。 */
+    const remote = await fetchCampaignState().catch(() => null)
+    if (remote) {
+      campaignClaims = remote.steps.filter((x) => x.claimed).map((x) => x.id)
+      campaignServerStats = {
+        tasksDone: remote.tasks_done,
+        couponsEarned: remote.coupons_earned,
+      }
+    }
+  }
 
   const serverOwned = isOnlineMode ? await fetchOwnedGameIds().catch(() => null) : null
   const serverOwnedIds = serverOwned ?? get().serverOwnedGameIds
@@ -2410,6 +2433,7 @@ async function doRefresh(
     allTasks,
     instances,
     campaignClaims,
+    campaignServerStats,
     ledger,
     harvestLedger,
     mallLedger,
@@ -2857,6 +2881,7 @@ export const useApp = create<AppState>((set, get) => ({
   serverOwnedGameIds: null,
   installedGames: {},
   campaignClaims: [],
+  campaignServerStats: null,
   todayKey: appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour),
   toasts: [],
   settleFlash: null,
@@ -5056,8 +5081,11 @@ export const useApp = create<AppState>((set, get) => ({
     const step = CAMPAIGN_STEPS.find((s) => s.id === stepId)
     if (!step) return { ok: false, message: '没有这一关' }
 
-    // 每次都现算：不信任界面上那份可能是几分钟前的视图
-    const stats = campaignStatsFrom(get().instances, get().harvestLedger)
+    /* 每次都现算，不信任界面上那份可能是几分钟前的视图。
+       ⚠️ 口径必须和 `selectCampaign` 一致（在线版用服务端那份）——
+          两处用不同算法会出现「卡片说还差 3 张，点了却提示条件不足」。 */
+    const stats =
+      get().campaignServerStats ?? campaignStatsFrom(get().instances, get().harvestLedger)
     const view = campaignViews(stats, get().campaignClaims).find((v) => v.step.id === stepId)
     if (!view) return { ok: false, message: '没有这一关' }
     if (view.state === 'claimed') return { ok: false, message: '这一关已经领过啦' }
@@ -5977,7 +6005,9 @@ export function selectTodayStats(s: AppState) {
  *   「selector 不能返回新对象（React #185）」是同一件事。
  */
 export function selectCampaign(s: AppState) {
-  const stats = campaignStatsFrom(s.instances, s.harvestLedger)
+  /* ★ 在线版优先用服务端算的：本地流水只拉了 2000 条上限，
+     老账号会算少 ⇒ 界面卡在「还差 N」而服务端点不到按钮的事不会发生。 */
+  const stats = s.campaignServerStats ?? campaignStatsFrom(s.instances, s.harvestLedger)
   const views: CampaignStepView[] = campaignViews(stats, s.campaignClaims)
   return { stats, views, ...campaignSummary(views), spotlight: spotlightStep(views) }
 }
