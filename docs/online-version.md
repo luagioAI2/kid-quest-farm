@@ -1293,13 +1293,21 @@ node scripts/_probe-redeem-online.mjs      # 32 条，真连后端
 
 ### 7.11.2 定价在本地是「一个布尔」，不是一张表
 
-服务端**不返回** `opened_at` / `closed_at`，只给一个算好的 `open`。
+服务端**不返回** `closed_at`，只给一个算好的 `open`；`opened_at` 从
+2026-11-12 起**会返回**（「兑换」列表要按家长同意的时间倒序）—— 但**只在
+`open` 为真时带**：关掉的商品不该靠旧时间排在前面。
+
+> 踩过的坑：早期服务端确实两个都不给（当时本地没人读），于是客户端只能
+> `openedAt: 0` ⇒ 线上所有行时间相等 ⇒ 排序**静默退化**成按名字排。
+> 界面上看着「排了」，其实没排。加排序类需求时先确认服务端真的下发了那个字段。
+
 而本地读 `WishOffer` 的每一处（`wishesAwaitingReply` / `wishShelf` /
 `wishExpress` / `wishRedeem`）判的都是「**没有 `closedAt`** 且价 > 0」。
 
 所以 `mapWishOffer` 的规则是：
 
-- `open && voucher_price > 0` → 写一行，**不带 `closedAt`**；
+- `open && voucher_price > 0` → 写一行，**不带 `closedAt`**，但要把
+  `opened_at` 原样带进 `openedAt`（缺字段回 0，老服务端不报错）；
 - 其余（没定过价 / 定过又关了）→ **不写行**。
 
 两种「不写」在界面上是同一个结果：现在不能换，心愿单里那条重新变回「等爸妈回应」。

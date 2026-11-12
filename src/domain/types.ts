@@ -945,6 +945,13 @@ export interface WishOffer {
   voucherPrice: number
   /** 钻石价（测试用）。0 / 不填 = 不卖 */
   diamondPrice?: number
+  /**
+   * 家长定下价格（= 同意兑换）的时刻，Unix 秒。0 / 缺省 = 不知道。
+   *
+   * 2026-11-12 起服务端会下发（`WishItemView.OpenedAt`），「兑换」列表按它倒序。
+   * ⚠️ 在这之前服务端没有这个字段，客户端只能填 0 ⇒ 所有行时间相等 ⇒
+   *    排序静默退化成按名字排（看着「排了」其实没排）。别再把它写死成 0。
+   */
   openedAt: number
   /** 关闭时间。关掉不删行 —— 孩子之前换过的历史还要能解释 */
   closedAt?: number
