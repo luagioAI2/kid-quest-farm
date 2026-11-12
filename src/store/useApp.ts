@@ -6422,49 +6422,77 @@ async function redeemCodeOnServer(
     return { ok: false, message: err?.message || '兑换没成功' }
   }
 
-  const gameId = resp.game_id ?? ''
-  if (!gameId) {
+  /* 一张码可能授多款：盲盒卡（「盲盒 5 连」）就是一张卡换一次 5 连开。
+     ⚠️ 只用 `game_id` 拼清单会**静默漏掉**其余几款：界面上写「已激活：某一款」，
+     而服务端明明授了 5 款 —— 不报错也不崩，只是数字不对。
+     所以优先读 `game_ids`，它缺省时（老服务端）才退回单款。 */
+  const ids =
+    resp.game_ids && resp.game_ids.length > 0
+      ? resp.game_ids
+      : resp.game_id
+        ? [resp.game_id]
+        : []
+  if (ids.length === 0) {
     // 码是真的，但对应的不是游戏卡（券 / 实物）。这一版只处理游戏卡，
     // 照实说「兑换成功」，别硬编一个游戏名出来。
     return { ok: true, message: '兑换成功' }
   }
 
-  const builtin = gameById(gameId)
-  const local = localGameById(gameId)
-  const name = builtin?.name ?? local?.name ?? gameId
   const app = useApp.getState()
+  const nameOf = (id: string) => gameById(id)?.name ?? localGameById(id)?.name ?? id
+  const names = ids.map(nameOf)
 
-  // ① 账本补一笔，让「已拥有」在界面上成立
-  await postMall({
-    delta: 0,
-    source: 'redemption_code',
-    refId: gameId,
-    memo: `兑换码解锁「${name}」`,
-  })
-
-  // ② 插件包真的装下来
-  let note = ''
-  if (local) {
-    const res = await app.installLocalGame(gameId)
-    if (!res.ok) note = `，但没装成功（${res.message}），去「我的游戏」里点安装`
+  // ① 每款补一笔账，让「已拥有」在界面上成立（delta 0：码解锁没花币）
+  for (let i = 0; i < ids.length; i++) {
+    await postMall({
+      delta: 0,
+      source: 'redemption_code',
+      refId: ids[i],
+      memo: `兑换码解锁「${names[i]}」`,
+    })
   }
+
+  // ② 本地有包的真的装下来
+  let failed = 0
+  let firstFailMsg = ''
+  let installedAny = false
+  for (const id of ids) {
+    if (!localGameById(id)) continue
+    const res = await app.installLocalGame(id)
+    if (res.ok) installedAny = true
+    else {
+      failed++
+      if (!firstFailMsg) firstFailMsg = res.message
+    }
+  }
+  const note =
+    failed > 0
+      ? `，但 ${failed} 款没装成功（${firstFailMsg}），去「我的游戏」里点安装`
+      : ''
 
   if (!opts?.silent) {
     app.pushToast({
       kind: 'reward',
-      title: `已激活：${name}`,
+      /* 多款时标题必须是「开出 N 款」—— 逐款念名字会撑爆一行，
+         而且孩子真正关心的是「开了几个」。 */
+      title: ids.length > 1 ? `开出 ${ids.length} 款游戏` : `已激活：${names[0]}`,
       /* ⚠️ 装包失败时**不能**还说「已经放进你的游戏柜啦」——
          标题刚写完「但没装成功」，副标题自相矛盾，家长会以为孩子能玩了。
          2026-11-05 用真码在 http 局域网里走查时一眼看到（非安全上下文没有
          `crypto.subtle`，验签必然失败）。 */
-      detail: note
-        ? '去「我的游戏」里点一下安装'
-        : local
-          ? '已经放进你的游戏柜啦'
-          : '底部导航就能切过去',
+      detail:
+        failed > 0
+          ? '去「我的游戏」里点一下安装'
+          : ids.length > 1
+            ? `${names.join('、')} —— 已经放进你的游戏柜啦`
+            : installedAny
+              ? '已经放进你的游戏柜啦'
+              : '底部导航就能切过去',
       emoji: '🎁',
     })
   }
   await app.refresh()
-  return { ok: true, message: `已激活：${name}${note}`, gameId }
+
+  const summary = ids.length > 1 ? `开出 ${ids.length} 款：${names.join('、')}` : names[0]
+  return { ok: true, message: `已激活 ${summary}${note}`, gameId: ids[0] }
 }

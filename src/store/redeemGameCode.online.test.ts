@@ -128,6 +128,48 @@ describe('兑换码（登录态）：服务端说了算', () => {
     expect(await codeRows()).toHaveLength(1)
   })
 
+  it('★ 盲盒卡（5 连）→ 5 款都补账、都算已拥有，别只认 game_id', async () => {
+    // 服务端对盲盒卡会同时给 `game_id`（第一款，兜老客户端）和 `game_ids`（全部）。
+    // ⚠️ 只读 `game_id` 的后果不报错也不崩：账本只记 1 笔，
+    //    「我的游戏」里少 4 款，而服务端明明授了 5 款。
+    redeem.mockResolvedValue({
+      code: '****234',
+      item_id: 'wish-blindbox-5',
+      unlocked: true,
+      game_id: 'g1',
+      game_ids: ['g1', 'g2', 'g3', 'g4', 'g5'],
+    })
+
+    const r = await useApp.getState().redeemGameCode(CODE)
+
+    expect(r.ok).toBe(true)
+    expect(r.gameId).toBe('g1')
+    // 文案要一眼看出「开了几个」，不是只念第一款
+    expect(r.message).toContain('5 款')
+
+    const rows = await codeRows()
+    expect(rows).toHaveLength(5)
+    expect(rows.map((x) => x.refId).sort()).toEqual(['g1', 'g2', 'g3', 'g4', 'g5'])
+    for (const row of rows) expect(row.delta).toBe(0)
+
+    const owned = useApp.getState().ownedGameIds
+    for (const id of ['g1', 'g2', 'g3', 'g4', 'g5']) expect(owned).toContain(id)
+  })
+
+  it('★ 老服务端只给 game_id（没有 game_ids）→ 仍然按 1 款处理，不能崩', async () => {
+    redeem.mockResolvedValue({
+      code: '****234',
+      item_id: 'wish-game-cloudfarm',
+      unlocked: true,
+      game_id: 'cloudfarm',
+    })
+
+    const r = await useApp.getState().redeemGameCode(CODE)
+
+    expect(r.ok).toBe(true)
+    expect(await codeRows()).toHaveLength(1)
+  })
+
   it('码是真的但不是游戏卡（没有 game_id）→ 只说「兑换成功」，不编游戏名', async () => {
     redeem.mockResolvedValue({
       code: '****234',
