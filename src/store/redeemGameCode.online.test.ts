@@ -41,7 +41,14 @@ async function codeRows() {
 beforeEach(async () => {
   await boot()
   redeem.mockReset()
-  useApp.setState({ installLocalGame: async () => ({ ok: true, message: '' }) })
+  /* 两个安装入口都要替身：
+       · `installLocalGame` —— 老路径（在线版 APK 里必 404）；
+       · `installGameAuto`  —— 现在兑换真正走的那条（先服务器、再本地）。
+     只桩前者的话，测试测的是一条用户早就走不通的路。 */
+  useApp.setState({
+    installLocalGame: async () => ({ ok: true, message: '' }),
+    installGameAuto: async () => ({ ok: true, message: '' }),
+  })
 })
 
 describe('兑换码（登录态）：服务端说了算', () => {
@@ -114,7 +121,9 @@ describe('兑换码（登录态）：服务端说了算', () => {
       unlocked: true,
       game_id: 'cloudfarm',
     })
+    // 兑换走的是 `installGameAuto`（先服务器再本地）⇒ 要桩这个才拦得住
     useApp.setState({
+      installGameAuto: async () => ({ ok: false, message: '下载超时' }),
       installLocalGame: async () => ({ ok: false, message: '下载超时' }),
     })
 
@@ -168,6 +177,37 @@ describe('兑换码（登录态）：服务端说了算', () => {
 
     expect(r.ok).toBe(true)
     expect(await codeRows()).toHaveLength(1)
+  })
+
+  it('★ 兑换后装包走 installGameAuto（先服务器下载），不是只读本地包', async () => {
+    // 在线版没有随包游戏：`installLocalGame` 一定 404。
+    // 兑换若只调它，用户会看到「已激活，但没装成功（读取本地包失败：HTTP 404）」，
+    // 而游戏其实早就到账了 —— 2026-11-12 用户实测就是这么被卡住的。
+    const calls: string[] = []
+    useApp.setState({
+      installLocalGame: async () => {
+        calls.push('local')
+        return { ok: false, message: '读取本地包失败：HTTP 404' }
+      },
+      installGameAuto: async (id: string) => {
+        calls.push('auto:' + id)
+        return { ok: true, message: `已安装「${id}」` }
+      },
+    })
+    redeem.mockResolvedValue({
+      code: '****234',
+      item_id: 'wish-blindbox-5',
+      unlocked: true,
+      game_id: 'g1',
+      game_ids: ['g1', 'g2'],
+    })
+
+    const r = await useApp.getState().redeemGameCode(CODE)
+
+    expect(r.ok).toBe(true)
+    expect(r.message).not.toContain('没装成功')
+    expect(calls).toEqual(['auto:g1', 'auto:g2'])
+    expect(calls).not.toContain('local')
   })
 
   it('码是真的但不是游戏卡（没有 game_id）→ 只说「兑换成功」，不编游戏名', async () => {

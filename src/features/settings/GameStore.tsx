@@ -90,16 +90,31 @@ function useInstall() {
     setInstallingId(id)
     try {
       let res: { ok: boolean; message: string } | null = null
-      if (catalogConfigured()) {
+      /* 先记下「这个包知不知道去哪下载」。
+         ★ 这一条单独判，是因为它的表现和网络故障一模一样（都落到本地包 404），
+           但修法完全不同：一个是重装新版 App，一个是查网络/证书。
+           2026-11-12 用户就被那句 HTTP 404 带偏过一次。 */
+      const canRemote = catalogConfigured()
+      if (canRemote) {
         res = await installFromCatalog(CATALOG_URL, id)
       }
       if (!res?.ok) {
+        const remoteMsg = res?.message ?? ''
         const local = await installLocalGame(id)
-        /* 服务器那条的失败原因（没网 / 目录里没有 / 验签失败）家长看不懂，
-           但也不能吞掉 —— 本地包成功时补一句「用的哪个包」，出事时能对得上。 */
+        /* ★ 两条都失败时必须**两条都写**。
+           原来这里只留本地那条 ⇒ 不管真因是「没网 / 目录里没这款 / 验签失败 /
+           这个地址不是 https」，界面上永远是同一句「读取本地包失败：HTTP 404」，
+           而 404 恰恰是最不可能的那个原因（在线版 APK 本来就不随包发游戏）。
+           2026-11-12 用户就是被这句话带去了错误方向。 */
         res = {
           ok: local.ok,
-          message: local.ok ? `${local.message}（用 App 自带的包）` : local.message,
+          message: local.ok
+            ? `${local.message}（用 App 自带的包）`
+            : !canRemote
+              ? `这个安装包没配下载服务器（只能用自带的包），而自带的包里也没有这款：${local.message} —— 装个新版 App 再试`
+              : remoteMsg
+                ? `服务器下载没成功（${remoteMsg}）；App 自带的包也没有（${local.message}）`
+                : local.message,
         }
       }
       pushToast({

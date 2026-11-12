@@ -97,6 +97,10 @@ import { deleteGameKvOnServer } from '../online/kv'
 import { onlineDataOpRefusal } from '../online/backup'
 import { importBundle, mountBundle } from '../games/loader'
 import { catalogPublicKeyRaw } from '../games/catalogKey'
+/* `installGameAuto` 靠这两个挑路：没配目录（本地版 / 离线包）就直接用随包的本地游戏。
+   ★ 和 `features/settings/GameStore.tsx` 读的**是同一份** —— 兑换和游戏市场
+     必须认定同一个目录地址，否则会出现「市场里能装、兑换后装不上」。 */
+import { CATALOG_URL, catalogConfigured } from '../games/catalogUrl'
 import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
 import { localGameById } from '../games/localGames'
 import { codeHashOf, gameIdForCode } from '../games/codeLookup'
@@ -430,6 +434,23 @@ interface AppState {
     catalogUrl: string,
     gameId: string,
   ) => Promise<{ ok: boolean; message: string }>
+  /**
+   * 装一款游戏，**两条路自己挑**：先远程目录（验签 + SHA-256），拿不到再本地包。
+   *
+   * ## 为什么要有这个（2026-11-12）
+   *
+   * 在线版 APK 是 `TF_APK_NO_GAMES=1` 打的 —— **没有 `public/games`**，
+   * 但 `localGames.ts` 是编译进 JS 的常量，`localGameById()` 照样有值。
+   * 兑换流程原来只调 `installLocalGame` ⇒ 每次都 `读取本地包失败：HTTP 404`，
+   * 而用户其实**已经拥有**这款游戏，只是客户端没去服务器拿包。
+   *
+   * 游戏市场（`GameStore.tsx`）从 2026-11-08 起就是「先目录后本地」，
+   * 只有兑换这条支路漏了 ⇒ 同一个动作在两个入口两种结果。
+   *
+   * ⚠️ 别在调用方各写一份挑路逻辑：写两遍必然有一天走散，症状就是
+   *    「市场里能装、兑换后装不上」——而这正是这条注释的由来。
+   */
+  installGameAuto: (gameId: string) => Promise<{ ok: boolean; message: string }>
   /**
    * ⚠️ **没有完整性校验**的安装路径，只给本地走查用（`capture-game-bundle.mjs`
    * 起一个静态目录证明装配管道通）。**不是给用户用的**，也**不许**接进设置页。
@@ -4870,8 +4891,11 @@ export const useApp = create<AppState>((set, get) => ({
 
     // 插件游戏要真的装包。装不上就把刚写的两行撤掉 ——
     // 否则孩子拿到一句「装包失败」而码已经没了。
+    //
+    // ★ 用 `installGameAuto`：本地版没配目录时会自己落到本地包（行为不变），
+    //   配了目录就先下载 —— 和登录态那条走同一套挑路，别再各写一份。
     if (local) {
-      const res = await get().installLocalGame(gameId)
+      const res = await get().installGameAuto(gameId)
       if (!res.ok) {
         await db.transaction('rw', [db.wishCodes, db.mallLedger], async () => {
           await db.wishCodes.delete(hash)
@@ -4954,6 +4978,25 @@ export const useApp = create<AppState>((set, get) => ({
       name: resolved.game.name,
       version: resolved.game.version,
     })
+  },
+
+  installGameAuto: async (gameId) => {
+    /* 先走生产路径。`catalogConfigured()` 为假（本地版 / 没配目录）就直接落到本地包。
+       ⚠️ 远程失败**不能直接报错**：离线 APK、目录里暂时没有这款、
+          自签证书验签失败……这些场景下随包的本地包才是能用的那一个。 */
+    if (catalogConfigured()) {
+      const remote = await get().installFromCatalog(CATALOG_URL, gameId)
+      if (remote.ok) return remote
+      const local = await get().installLocalGame(gameId)
+      if (local.ok) return local
+      /* 两条都失败：**两条的原因都要说**。只说本地那条（HTTP 404）会让人
+         以为「没网」，而真正的原因可能是目录里没这款。 */
+      return {
+        ok: false,
+        message: `服务器下载没成功（${remote.message}），App 自带的包也没有（${local.message}）`,
+      }
+    }
+    return get().installLocalGame(gameId)
   },
 
   installLocalGame: async (gameId) => {
@@ -6457,8 +6500,10 @@ async function redeemCodeOnServer(
   let firstFailMsg = ''
   let installedAny = false
   for (const id of ids) {
-    if (!localGameById(id)) continue
-    const res = await app.installLocalGame(id)
+    /* ★ 用 `installGameAuto`，不是 `installLocalGame`：
+       在线版没随包发游戏（`TF_APK_NO_GAMES=1`），只读本地包必 404 ——
+       而游戏其实已经在服务端授好了，缺的只是「去服务器把包下载下来」。 */
+    const res = await app.installGameAuto(id)
     if (res.ok) installedAny = true
     else {
       failed++
