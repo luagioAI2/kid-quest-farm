@@ -40,10 +40,26 @@ export class ApiError extends Error {
   /** 服务端 `body.code`；网络层失败用 `NETWORK`（负数，不会和服务端撞） */
   readonly code: number
 
-  constructor(code: number, message: string) {
+  /**
+   * 网络类失败的**具体原因**（「请求超时」「网络断了或证书不对」…）。
+   *
+   * ★ 为什么单独一个字段、而不是拼进 `message`：
+   *   `message` 会被别处直接当正文用（业务错误那里就是「服务端的原话」），
+   *   拼进去会污染那些断言。而 `message` 本身对家长要说得温和，
+   *   原因则是**排查用的**，只有提示条需要。
+   *
+   * ★ 为什么需要它：`isNetwork` 一个标志盖了四种完全不同的故障
+   *   （断网 / 超时 / 证书不匹配 / 返回不是 JSON）。只输出一句
+   *   「连不上服务器」的话，用户报过来我们**什么也推不出来** ——
+   *   2026-11-12 就为这一句话翻了半小时服务器日志。
+   */
+  readonly reason?: string
+
+  constructor(code: number, message: string, reason?: string) {
     super(message)
     this.name = 'ApiError'
     this.code = code
+    this.reason = reason
   }
 
   /** 连不上 / 超时 / 返回的不是 JSON —— 都归这一类 */
@@ -197,9 +213,19 @@ export async function api<T>(
     })
   } catch (e) {
     const name = (e as { name?: string })?.name
+    const raw = (e as { message?: string })?.message ?? ''
+    if (name === 'TimeoutError') {
+      throw new ApiError(NETWORK, '服务器没有响应，请稍后再试', `请求超时（${TIMEOUT_MS / 1000} 秒）`)
+    }
+    /* 浏览器的 `fetch` 抛错时**故意不告诉我们为什么**（安全考虑），
+       只会给一句 `Failed to fetch` / `Load failed`。
+       但**不是**这两种的，就一定是别的问题（比如老 WebView 没有
+       `AbortSignal.timeout`），那种原始 message 反而是线索，留着。 */
+    const opaque = /Failed to fetch|Load failed|NetworkError|network error/i.test(raw)
     throw new ApiError(
       NETWORK,
-      name === 'TimeoutError' ? '服务器没有响应，请稍后再试' : '连不上服务器，请检查网络',
+      '连不上服务器，请检查网络',
+      opaque ? '网络断了，或者证书对不上' : raw.slice(0, 60) || '网络错误',
     )
   }
 
@@ -221,7 +247,11 @@ export async function api<T>(
     payload = (await res.json()) as Resp<T>
   } catch {
     // 网关/代理返回的 HTML 错误页也会走到这里（本地端口被别的服务占着时最常见）
-    throw new ApiError(NETWORK, '服务器返回的不是 JSON，请检查后端地址')
+    throw new ApiError(
+      NETWORK,
+      '服务器返回的不是 JSON，请检查后端地址',
+      `服务器返回异常（HTTP ${res.status}，不是 JSON）`,
+    )
   }
 
   if (payload.code !== 200) {

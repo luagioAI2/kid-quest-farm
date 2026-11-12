@@ -75,6 +75,34 @@ describe('writeFailToast：家长读到的那句话', () => {
     expect(t.emoji).toBeTruthy()
   })
 
+  it('★ 网络问题要带上具体原因 —— 四种故障不能都只说「连不上服务器」', () => {
+    /* 2026-11-12：线上报「点计时开始说连不上服务器」，去翻服务器日志发现
+       **那条请求根本没到**（access log 里没有）。而客户端这一支盖了
+       断网 / 超时 / 证书不对 / 返回不是 JSON 四种，文案却一模一样 ⇒
+       什么也推不出来。所以 `ApiError.reason` 必须透出来。 */
+    const t = writeFailToast(new ApiError(NETWORK, '连不上服务器', '请求超时（12 秒）'), what)
+    expect(t.detail).toContain('请求超时')
+
+    /* 没有 reason 时保持老样子，**不许出现空括号** —— 那比不写更难看 */
+    const plain = writeFailToast(new ApiError(NETWORK, '连不上服务器'), what)
+    expect(plain.detail).not.toContain('（）')
+    expect(plain.detail).toContain('连不上服务器')
+  })
+
+  it('★ 网络问题要带上具体原因 —— 四种故障不能都只说「连不上服务器」', () => {
+    /* 2026-11-12：线上报「点计时开始说连不上服务器」，去翻服务器日志发现
+       **那条请求根本没到**（access log 里没有）。而客户端这一支盖了
+       断网 / 超时 / 证书不对 / 返回不是 JSON 四种，文案却一模一样 ⇒
+       什么也推不出来。所以 `ApiError.reason` 必须透出来。 */
+    const t = writeFailToast(new ApiError(NETWORK, '连不上服务器', '请求超时（12 秒）'), what)
+    expect(t.detail).toContain('请求超时')
+
+    /* 没有 reason 时保持老样子，**不许出现空括号** —— 那比不写更难看 */
+    const plain = writeFailToast(new ApiError(NETWORK, '连不上服务器'), what)
+    expect(plain.detail).not.toContain('（）')
+    expect(plain.detail).toContain('连不上服务器')
+  })
+
   it('★ 登录过期：给出下一步（重新登录），而不是只说失败了', () => {
     const t = writeFailToast(new ApiError(UNAUTHORIZED, '登录已过期'), what)
     expect(t.title).toContain('重新登录')

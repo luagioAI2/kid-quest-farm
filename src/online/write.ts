@@ -29,7 +29,8 @@ export async function onlineWrite<T>(run: () => Promise<T>): Promise<WriteOutcom
 function asApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e
   const msg = (e as { message?: string })?.message
-  return new ApiError(NETWORK, msg || '操作没成功')
+  /* 非 ApiError 说明是**代码自己炸了**（不是网络），原文就是唯一线索，别吞掉 */
+  return new ApiError(NETWORK, msg || '操作没成功', msg ? `客户端异常：${msg.slice(0, 60)}` : undefined)
 }
 
 /** 提示条的形状（和 `store/useApp.ts` 的 `Toast` 兼容，但不 import 它，避免环依赖） */
@@ -48,10 +49,14 @@ export interface FailToast {
  */
 export function writeFailToast(e: ApiError, what: string): FailToast {
   if (e.isNetwork) {
+    /* ★ 带上 `e.reason`：这一支盖了四种故障（断网 / 超时 / 证书不对 /
+       返回不是 JSON），只说「连不上服务器」的话，用户报过来我们推不出任何东西。
+       括号里那句是**排查线索**，不要求家长看懂 —— 他截图发过来就够定位。 */
+    const why = e.reason ? `（${e.reason}）` : ''
     return {
       kind: 'warn',
       title: `${what}没发出去`,
-      detail: '连不上服务器。刚才那一步**没有生效**，网络好了再试一次。',
+      detail: `连不上服务器${why}。刚才那一步**没有生效**，网络好了再试一次。`,
       emoji: '📡',
     }
   }

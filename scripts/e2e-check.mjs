@@ -397,6 +397,35 @@ try {
     )
     if (shell.full) {
       fullTabs.push(t)
+      /* ★★ 全屏键**不许压在游戏自己的动作按钮上**（2026-11-11 实测踩过）：
+         它原来贴右下角 `bottom-2`，压住农场「市场」横向 30/126px = 13.5% 面积
+         ⇒ 点市场的右侧四分之一会误进全屏。那是个主要操作，不是可以牺牲的角落。
+         判据是**矩形求交面积 = 0**，不是「看着没压着」—— 截图看不出来。
+         （本地还有 `_measure-fullscreen-btn.mjs` 能打印百分比，但它不入库，
+           所以这条闸门必须留在这里。） */
+      const overlap = await page.evaluate(() => {
+        const fs = document.querySelector('[data-tour="game-fullscreen"]')
+        if (!fs) return { ok: false, why: '没有全屏键' }
+        const f = fs.getBoundingClientRect()
+        const cand = [...document.querySelectorAll('button, [role="button"]')].filter((e) => {
+          if (e === fs) return false
+          const r = e.getBoundingClientRect()
+          if (r.width < 30 || r.height < 24) return false
+          return /种子|动物|市场|商店|背包|购买/.test((e.textContent || '').trim())
+        })
+        const bad = []
+        for (const e of cand) {
+          const r = e.getBoundingClientRect()
+          const ox = Math.max(0, Math.min(f.right, r.right) - Math.max(f.left, r.left))
+          const oy = Math.max(0, Math.min(f.bottom, r.bottom) - Math.max(f.top, r.top))
+          if (ox * oy > 0) {
+            bad.push((e.textContent || '').trim().slice(0, 6) + ' ' + Math.round(ox) + 'x' + Math.round(oy) + 'px')
+          }
+        }
+        return { ok: bad.length === 0, why: bad.join(' / ') }
+      })
+      check('全屏键没压在游戏的动作按钮上（重叠面积 0）', overlap.ok, overlap.why || '无重叠')
+
       /* 全屏往返：进去 → 外壳收掉、返回 + 胶囊都在 → 左上角返回 → 外壳回来 */
       await page.evaluate(() => document.querySelector('[data-tour="game-fullscreen"]')?.click())
       await new Promise((r) => setTimeout(r, 700))
