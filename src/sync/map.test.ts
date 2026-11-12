@@ -333,7 +333,14 @@ describe('mapWishOffer', () => {
     expect(mapWishOffer({ ...VIEW, open: true, voucher_price: 0 })).toBeNull()
   })
 
-  it('openedAt 填 0：本地没有任何地方读它，填 now 只会每次拉取都造 diff', () => {
+  /* ★ 2026-11-12 改口径：以前这里断言「openedAt 恒 0」——那时本地没人读它，
+     填 now 只会每次拉取都造 diff。现在「兑换」列表按它倒序（爸妈同意的
+     先后），必须原样带出来，否则所有行时间相同、排序静默退化成按名字。 */
+  it('★ openedAt 原样带出来（兑换列表靠它排先后）', () => {
+    expect(mapWishOffer({ ...VIEW, opened_at: 1762900000 })!.openedAt).toBe(1762900000)
+  })
+
+  it('老服务端没这个字段 → 0（不报错，只是排不出来）', () => {
     expect(mapWishOffer(VIEW)!.openedAt).toBe(0)
   })
 })

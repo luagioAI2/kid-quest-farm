@@ -94,6 +94,14 @@ export interface ServerWishItemView {
   voucher_price: number
   /** 是否一次性兑换（服务端返回） */
   one_time?: boolean
+  /**
+   * 家长定下价格（= 同意兑换）的时间，Unix 秒；0 / 缺省 = 没开过。
+   *
+   * 2026-11-12 起服务端真的下发它了 —— 「兑换」列表里那些爸妈同意的商品
+   * 要按这个时间倒序。之前服务端只给算好的 `open`，客户端只能填 0，
+   * 排序会**静默退化成按名字排**。
+   */
+  opened_at?: number
   affordable: boolean
   shortfall: number
   has_order: boolean

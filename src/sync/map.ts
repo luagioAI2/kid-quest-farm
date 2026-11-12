@@ -389,15 +389,16 @@ const WISH_STATUSES: readonly WishStatus[] = [
  * 重新变回「等爸妈回应」。**不能**写成「有行但 `closedAt: 0`」——
  * 那样家长关掉的东西孩子还能换。
  *
- * `openedAt` 填 0：本地没有任何地方读它（只有 `closedAt` 被当布尔用），
- * 填 `Date.now()` 只会让每次拉取都写一份新值，白白制造 diff。
+ * `openedAt`：**2026-11-12 起服务端真的下发了**（`WishItemView.OpenedAt`）。
+ * 之前填 0 是因为本地没有任何地方读它 —— 现在「兑换」列表按它倒序，
+ * 再填 0 就等于没排（所有行时间相同 ⇒ 退化成按名字比），而且界面上看不出来。
  */
 export function mapWishOffer(s: ServerWishItemView): WishOffer | null {
   if (!s.open || s.voucher_price <= 0) return null
   return {
     itemId: s.id,
     voucherPrice: s.voucher_price,
-    openedAt: 0,
+    openedAt: s.opened_at ?? 0,
     oneTime: s.one_time === true,
   }
 }
