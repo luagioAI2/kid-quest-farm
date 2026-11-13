@@ -92,6 +92,7 @@ import {
   wishOwnedSet,
 } from '../domain/wish'
 import { ownedIdsOnline } from '../domain/ownership'
+import { installFailNote } from '../domain/activationMessage'
 import { SYNC_LAST_OK_KEY, SYNC_OK, type SyncState } from '../domain/syncState'
 
 /**
@@ -6757,10 +6758,12 @@ async function redeemCodeOnServer(
       if (!firstFailMsg) firstFailMsg = res.message
     }
   }
-  const note =
-    failed > 0
-      ? `，但 ${failed} 款没装成功（${firstFailMsg}），去「我的游戏」里点安装`
-      : ''
+  /* ★★ 用 `installFailNote` 拼，别在这里手写这句 ——
+     原来这里是 `，但 ${failed} 款没装成功（…）`，而弹框那边 grep 的是
+     `，但没装成功`（中间没数字）⇒ 永远不命中 ⇒ 判成成功、界面说
+     「游戏已经进你的游戏柜了」而包根本没装上（2026-11-13 用户报的
+     「激活没有提示成功 似乎」就是这个）。两个方向现在共用一个文件。 */
+  const note = failed > 0 ? installFailNote(failed, firstFailMsg) : ''
 
   if (!opts?.silent) {
     app.pushToast({

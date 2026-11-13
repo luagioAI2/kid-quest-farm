@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Portal } from '@/components/Portal'
+import { parseActivationMessage } from '@/domain/activationMessage'
 import { useApp } from '@/store/useApp'
 
 /* ============================================================
@@ -183,10 +184,13 @@ export function CodeDonePanel({ done, onClose }: { done: string; onClose: () => 
      包没装好，设成当前也玩不了。store 把那半句拼在 message 里。
      ⚠️ 拼进来的是一整句**带技术原因**的报错（`crypto.subtle` 那一串）。
      整句当标题会在弹框里变成五行报错墙 —— 2026-11-05 走查截图一眼看到。
-     所以拆开：标题只留「已激活：X」，原因单独一行小字。 */
-  const installFailed = done.includes('，但没装成功')
-  const headline = installFailed ? done.split('，但没装成功')[0] : done
-  const reason = installFailed ? (done.match(/（([^）]*)）/) ?? [])[1] ?? '' : ''
+     所以拆开：标题只留「已激活：X」，原因单独一行小字。
+
+     ★★ 2026-11-13 修：原来这里自己写了一版 `done.includes('，但没装成功')`，
+        而 store 拼的是 `，但 1 款没装成功`（**中间有数字**）⇒ `includes` 永远
+        不命中 ⇒ 判成成功 ⇒ 界面上说「游戏已经进你的游戏柜了」，而包根本没装上。
+        现在两个方向共用 `domain/activationMessage.ts`，只改一处两边一起变。 */
+  const { headline, installFailed, reason } = parseActivationMessage(done)
 
   return (
     <Portal>

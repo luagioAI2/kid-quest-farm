@@ -5,6 +5,7 @@ import { db, postHarvest, saveWishBuyLinks } from '@/db/db'
 import { useApp } from '@/store/useApp'
 import { STOREFRONT } from '@/games/storefront'
 import WishPage from './WishPage'
+import { installFailNote } from '@/domain/activationMessage'
 
 /* ⚠️ 找「单开盲盒」那个 hero 按钮时**不能**按 `/游戏盲盒/` 找：
    目录里现在有两款盲盒（单开 / 5 连开），正则会把两个按钮都命中，
@@ -677,6 +678,42 @@ describe('心愿：卡片「家长激活」弹框', () => {
     )
     expect(document.querySelector('[data-code-done]')?.textContent).toContain('设置 → 游戏')
     expect(screen.queryByRole('button', { name: /去玩|切过去|开始玩/ })).toBeNull()
+  })
+
+  it('★★ 装包失败：「提示说反了」的护栏（2026-11-13 用户报的病）', async () => {
+    /* 这是那个 bug 的现场：
+       store 拼的是「，但 1 款没装成功（…）」，而弹框原来 grep「，但没装成功」
+       —— 中间那个数字让 `includes` 永远不命中 ⇒ 判成成功
+       ⇒ 界面写「游戏已经进「我的游戏」了」，可包根本没装上。
+
+       这里用**真正的生成函数**拼文案（不是手写字面量）：
+       只要生产端改了口径，这条会立刻红，而不是等人肉发现界面说反了。 */
+    await useApp.getState().updateSettings({ protectParentActions: false })
+    const failMsg = `已激活 收租公寓${installFailNote(1, '读取本地包失败：HTTP 404')}`
+    useApp.setState({
+      redeemGameCode: vi.fn(async () => ({ ok: true, message: failMsg })),
+    })
+
+    const { user } = await openActivate()
+    await user.type(document.querySelector('[data-code-input]') as HTMLInputElement, 'abc-def')
+    await user.click(document.querySelector('[data-code-submit]') as HTMLElement)
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-code-done-dialog]'), '装包失败也要弹框').toBeTruthy(),
+    )
+
+    const dialogText = document.querySelector('[data-code-done]')?.textContent ?? ''
+
+    // ① 不能再宣称「已经进你的游戏柜了」—— 那就是判反的直接症状
+    expect(dialogText, '说反了：包没装上却说已经进游戏柜').not.toContain('已经进「我的游戏」了')
+    // ② 要明确指路：去我的游戏里点安装
+    expect(dialogText).toContain('去「我的游戏」里点一下安装')
+    // ③ 技术原因不能跑到标题里（标题只留「已激活 X」那一句）
+    const headline = document.querySelector('[data-code-done]')?.firstElementChild?.textContent ?? ''
+    expect(headline).toContain('已激活')
+    expect(headline, '标题里混进了报错').not.toContain('HTTP 404')
+    // ④ 原因单独一行小字，仍然给得到（家长要能拿去排查）
+    expect(document.querySelector('[data-code-reason]')?.textContent).toContain('HTTP 404')
   })
 
   it('★ 「去设置看看」把人送到设置的游戏栏', async () => {
