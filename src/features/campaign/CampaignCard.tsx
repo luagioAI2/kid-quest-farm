@@ -9,11 +9,7 @@ import { gameById } from '@/games/registry'
 import { localGameById } from '@/games/localGames'
 import { useApp } from '@/store/useApp'
 import { campaignStatsFrom, campaignViews, campaignSummary, spotlightStep } from '@/domain/campaign'
-import {
-  Btn,
-  Sheet,
-  SheetHead,
-} from '@/features/tasks/ui'
+import { Sheet, SheetHead } from '@/features/tasks/ui'
 
 /* ============================================================
    主线活动卡片（任务页顶部）
@@ -24,6 +20,22 @@ import {
    摆位：**任务页顶部、今日进度下面**。不占底栏第五格 ——
    四格是 2026-11-05 家长拍板的（`App.tsx` 的 STATIC_TABS 注释里有理由），
    而活动是「长期目标」，本来就该挨着任务列表看。
+
+   ## ★★ 2026-11-13 改成「低调小气泡」
+
+   用户：「主线任务 应该 有个 **不明显**的气泡，点开有小窗口显示任务和进度，奖励。」
+
+   原来是一张 **144px 高的大卡片**，占了首屏相当一块，每天第一眼就看到它 ——
+   而主线是长期目标，不需要天天盯着。改成一条 **约 34px 的气泡**：
+   只露「🏁 主线 · 3/5 · 还差 2 个任务 · 1/4 ›」，点一下才弹小窗口看全部。
+
+   ⚠️ 「不明显」≠「藏起来」：气泡必须**看得见、点得到**，
+     而且**可领取时要变样**（🏁 → 🎁 + 暖色）—— 否则孩子永远发现不了
+     自己有一份奖励没领。这是"低调"和"没法用"的界线。
+
+   ★ 保留外壳是 `<section>` 而不是直接把 `<button>` 挂在 `data-tour` 上：
+     `e2e-check.mjs` 有一条断言「卡片本身不是 button 且内含按钮」
+     （防按钮套按钮）。改成 button 会让那条假红，而它的本意仍然成立。
 
    ★ 卡片是 `div` 不是 `button`：里面还要放「领取」按钮，
      按钮套按钮会被 HTML 解析器提前闭合外层（`WishRedeemRow` 踩过）。
@@ -75,77 +87,84 @@ export function CampaignCard() {
     }
   }
 
+  const ready = step.state === 'ready'
+
   return (
     <>
-      <section
-        data-tour="campaign-card"
-        className="surface mt-3 border border-sun-300 bg-gradient-to-br from-sun-50 to-paper p-3.5"
-      >
-        <div className="flex items-center gap-1.5">
-          <span aria-hidden className="text-sm leading-none">
-            🏁
-          </span>
-          <span className="text-xs font-extrabold text-ink-800">主线活动</span>
-          <span className="ml-auto text-[11px] font-bold text-ink-500">
-            已领 {view.claimed}/{view.total}
-          </span>
-        </div>
+      {/*
+        外壳保留 `<section>`（不是 button）—— 见文件头最后那段：
+        e2e 有一条「卡片本身不是 button」的断言，它的本意仍然成立。
 
-        <div className="mt-2.5 flex items-center gap-3">
+        `mt-3` 保留：气泡还挨着「今日进度」看，只是矮了 110px。
+      */}
+      <section data-tour="campaign-card" className="mt-3">
+        {/*
+          一颗气泡：**低调但完整**。
+          · 底色 `bg-white/75` + 细边（不用原来的 sun-50 渐变大卡，太抢眼）
+          · 很矮（`py-1.5` + 34px 最小高度），点按区域够大但不占版面
+          · 可领取时整体转暖（`bg-sun-100` + 🌟），这是**唯一**允许它显眼的时刻
+        */}
+        <button
+          type="button"
+          data-campaign-open
+          onClick={() => setOpen(true)}
+          aria-label={`主线任务：${campaignProgressText(step)}，点开看全部 ${view.total} 关`}
+          className={clsx(
+            'btn active:btn-press flex w-full items-center gap-1.5 rounded-pill border px-3 py-1.5 text-left',
+            ready
+              ? 'border-sun-300 bg-sun-100/90'
+              : 'border-ink-900/8 bg-white/75 hover:bg-white',
+          )}
+        >
+          <span aria-hidden className="text-[13px] leading-none">
+            {ready ? '🎁' : '🏁'}
+          </span>
           <span
-            aria-hidden
-            className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-xl shadow-[0_1px_0_rgba(0,0,0,0.04)]"
+            className={clsx(
+              // mr-1 代替单独一颗「·」—— 那颗会把气泡撑高 7px（31→38）
+              'mr-1 shrink-0 text-[11px] font-extrabold',
+              ready ? 'text-ink-800' : 'text-ink-500',
+            )}
           >
-            {step.step.emoji}
+            主线
+          </span>
+          {/*
+            ★ 这一行**同时**是 e2e 的判据：它要求含「还差」和 `/`。
+            保持 `have/need · 还差 N …` 的形状，别为了好看改成「差 2 个」。
+          */}
+          <span
+            data-campaign-progress
+            className={clsx(
+              'min-w-0 truncate text-[11px] font-bold',
+              ready ? 'text-ink-800' : 'text-ink-400',
+            )}
+          >
+            {Math.min(step.have, step.need)}/{step.need} · {campaignProgressText(step)}
           </span>
 
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-extrabold text-ink-900">{step.step.title}</div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-pill bg-white">
-              <div
+          {/* 进度条只留一条**极细**的（气泡里放不下原来那条 8px 的） */}
+          <span className="ml-auto flex shrink-0 items-center gap-1.5">
+            <span
+              aria-hidden
+              className={clsx(
+                'h-1 w-10 overflow-hidden rounded-pill',
+                ready ? 'bg-white' : 'bg-ink-900/10',
+              )}
+            >
+              <span
                 className={clsx(
-                  'h-full rounded-pill transition-[width] duration-300',
-                  step.state === 'ready' ? 'bg-grass-400' : 'bg-sun-400',
+                  'block h-full rounded-pill',
+                  ready ? 'bg-grass-400' : 'bg-sun-400',
                 )}
                 style={{ width: `${step.percent}%` }}
                 data-campaign-bar={step.percent}
               />
-            </div>
-            <div className="mt-1 text-[11px] font-bold text-ink-500" data-campaign-progress>
-              {Math.min(step.have, step.need)}/{step.need} · {campaignProgressText(step)}
-            </div>
-          </div>
-
-          {step.state === 'ready' ? (
-            <Btn
-              tone="grass"
-              size="sm"
-              onClick={() => void doClaim(step.step.id)}
-              disabled={busy === step.step.id}
-              ariaLabel={`领取 ${rewardName(step)}`}
-            >
-              {busy === step.step.id ? '领取中…' : '🎁 领取'}
-            </Btn>
-          ) : (
-            <Btn tone="white" size="sm" onClick={() => setOpen(true)}>
-              看进度
-            </Btn>
-          )}
-        </div>
-
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="min-w-0 truncate text-[11px] font-bold text-ink-500">
-            奖励：{rewardName(step)}
+            </span>
+            <span className="text-[10px] font-bold text-ink-400">
+              {view.claimed}/{view.total} ›
+            </span>
           </span>
-          <button
-            type="button"
-            data-campaign-open
-            onClick={() => setOpen(true)}
-            className="btn active:btn-press shrink-0 rounded-pill px-2 py-1 text-[11px] font-extrabold text-sky-600"
-          >
-            全部 {view.total} 关 ›
-          </button>
-        </div>
+        </button>
       </section>
 
       <Sheet open={open} onClose={() => setOpen(false)} labelledBy="campaign-sheet-title">

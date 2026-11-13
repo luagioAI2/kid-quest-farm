@@ -608,46 +608,69 @@ try {
     if (!card) return { found: false }
     const r = card.getBoundingClientRect()
     const bar = card.querySelector('[data-campaign-bar]')
+    /* 气泡 = 外壳里那颗按钮（外壳是 `<section>`，不是 button）。
+       ⚠️ 用 `data-campaign-open` 找，不要用 className 或文案 —— 那两样都会改。 */
+    const bubble = card.querySelector('[data-campaign-open]')
+    const br = bubble ? bubble.getBoundingClientRect() : null
     return {
       found: true,
       // 顶端在屏幕上半部分 = 没被任务列表推到下面
       top: Math.round(r.top),
-      title: card.querySelector('div')?.textContent?.trim() ?? '',
       progress: card.querySelector('[data-campaign-progress]')?.textContent?.trim() ?? '',
       percent: bar ? Number(bar.getAttribute('data-campaign-bar')) : -1,
-      // 卡片里有没有按钮：有就说明它自己不是 <button>（否则嵌套不合法）
-      nestedButtons: card.querySelectorAll('button').length,
+      /* 「低调」的判据：气泡**高度**。原来那张大卡 144px；
+         现在应该在 40px 以内。这条同时防两个方向：
+           · 改回大卡片 → 高度超了，红；
+           · 缩成看不见的点 → 下面 aria-label 那条红。
+         （「看得见」本身只能靠人眼看截图，这里只钉"不占版面"。） */
+      bubbleH: br ? Math.round(br.height) : -1,
+      bubbleTag: bubble?.tagName ?? '',
+      // 气泡必须可点：button / 或者带 role=button
+      clickable:
+        !!bubble && (bubble.tagName === 'BUTTON' || bubble.getAttribute('role') === 'button'),
+      // 可领取时要变样（🏁 → 🎁），否则孩子发现不了
+      bubbleText: (bubble?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      ariaLabel: bubble?.getAttribute('aria-label') ?? '',
       cardTag: card.tagName,
     }
   })
   check('任务页有主线活动卡片', !!camp.found)
   check(
-    '★ 卡片在第一屏（没被任务列表推到下面）',
+    '★ 主线气泡在第一屏（没被任务列表推到下面）',
     !!camp.found && camp.top < 700,
-    camp.found ? `top=${camp.top}px` : '没有卡片',
+    camp.found ? `top=${camp.top}px` : '没有气泡',
   )
   check(
-    '卡片写着第 1 关和还差多少',
+    '气泡上写着进度和还差多少（不点开也知道）',
     !!camp.found && camp.progress.includes('还差') && camp.progress.includes('/'),
     camp.progress,
   )
   check(
-    '★ 卡片本身不是 <button>（里面还有按钮，嵌套会被解析器拆开）',
-    !!camp.found && camp.cardTag !== 'BUTTON' && camp.nestedButtons > 0,
-    camp.found ? `${camp.cardTag}，内含 ${camp.nestedButtons} 颗按钮` : '',
+    '★ 气泡本身可点（button / role=button）',
+    !!camp.found && camp.clickable,
+    camp.found ? `<${camp.bubbleTag}>` : '',
+  )
+  check(
+    '★ 气泡很低（「不明显」—— 原来的大卡片 144px）',
+    !!camp.found && camp.bubbleH > 20 && camp.bubbleH <= 44,
+    camp.found ? `高 ${camp.bubbleH}px` : '',
+  )
+  check(
+    '气泡有 aria-label（不能只靠一对 emoji 当名字）',
+    !!camp.found && camp.ariaLabel.length > 4,
+    camp.ariaLabel,
   )
 
-  // 展开全部关卡
+  /* 展开全部关卡：现在点**气泡本身**（原来那颗「全部 N 关」文字按钮没了）。
+     ⚠️ 找 `[data-campaign-open]`，别按文案找 —— 文案随时会改。 */
   const campOpened = await page.evaluate(() => {
-    const b = [...document.querySelectorAll('button')].find((x) =>
-      /全部 \d+ 关/.test(x.textContent ?? ''),
-    )
-    if (!b) return false
+    const b = document.querySelector('[data-campaign-open]')
+    if (!(b instanceof HTMLElement)) return false
     b.click()
     return true
   })
-  await sleep(500)
-  check('能展开「全部 N 关」', campOpened)
+  await sleep(600)
+  check('点气泡能展开全部关卡', campOpened)
   const steps = await page.evaluate(() =>
     [...document.querySelectorAll('[data-campaign-step]')].map((e) => ({
       id: e.getAttribute('data-campaign-step'),

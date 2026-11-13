@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useApp } from '@/store/useApp'
 import { CampaignCard } from './CampaignCard'
@@ -15,6 +15,16 @@ import type { HarvestEntry, TaskInstance } from '@/domain/types'
      ③ 全领完之后卡片还赖在任务列表顶上，每天推着孩子往后翻。
 
    判据都落在**页面上**（文本 + `data-campaign-*` 锚点），不看内部状态。
+
+   ## ★ 2026-11-13 交互口径变了：大卡片 → 低调小气泡
+
+   用户：「主线任务 应该 有个不明显的气泡，点开有小窗口显示任务和进度，奖励。」
+
+   原来卡片上直接有关卡标题 + 领取按钮，现在这些都在**点开之后**的小窗口里。
+   所以下面每条测试都比以前多一步「先点气泡」。
+
+   ⚠️ 改的时候只准改**操作方式**，不许删断言 —— 上面那五件事是这张卡
+     存在的理由，交互怎么变都得成立。
    ============================================================ */
 
 const done = (n: number): TaskInstance[] =>
@@ -64,13 +74,28 @@ beforeEach(() => {
   })
 })
 
-describe('卡片主推哪一关', () => {
+/** 气泡上那句进度（`have/need · 还差 N …`）——
+ *  气泡是常驻的，所以「主推哪一关」靠它判断。 */
+const bubbleProgress = () =>
+  document.querySelector('[data-campaign-progress]')?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+
+/** 点气泡，等小窗口出来。
+ *  ★ 断言「窗口真的开了」而不是只点一下 ——
+ *    `Sheet` 是懒渲染的，点了没反应时下面的断言会全部变成「找不到元素」，
+ *    报错指向偏，看不出是"没打开"。 */
+async function openSheet() {
+  await userEvent.click(document.querySelector('[data-campaign-open]') as HTMLElement)
+  await waitFor(() => expect(document.querySelector('[data-campaign-step]')).toBeTruthy())
+}
+
+describe('气泡主推哪一关', () => {
   it('任务数不够时推第 1 关，并写清还差几个', () => {
     seed({ tasks: 2 })
     render(<CampaignCard />)
 
-    expect(screen.getByText('先做 5 个任务')).toBeTruthy()
-    expect(document.querySelector('[data-campaign-progress]')!.textContent).toContain('还差 3')
+    // 气泡上就写着「2/5 · 还差 3 个任务」—— 不用点开也知道差多少
+    expect(bubbleProgress()).toContain('2/5')
+    expect(bubbleProgress()).toContain('还差 3')
   })
 
   it('★ 有一关能领就推那一关，不让孩子继续白做任务', () => {
@@ -78,17 +103,38 @@ describe('卡片主推哪一关', () => {
     seed({ tasks: 2, coupons: 120 })
     render(<CampaignCard />)
 
-    expect(screen.getByText('攒够 100 张兑换券')).toBeTruthy()
-    expect(screen.getByText('🎁 领取')).toBeTruthy()
+    // 券那关：100 张就够，已有 120
+    expect(bubbleProgress()).toContain('100/100')
+    expect(bubbleProgress()).toContain('可以领取')
+  })
+
+  it('★ 可领取时气泡要变样（🏁→🎁），否则孩子发现不了有奖励没领', async () => {
+    seed({ tasks: 5 })
+    const { container } = render(<CampaignCard />)
+
+    const bubble = container.querySelector('[data-campaign-open]') as HTMLElement
+    expect(bubble.getAttribute('aria-label')).toContain('可以领取')
+    // 图标从 🏁 换成 🎁
+    expect(bubble.textContent).toContain('🎁')
+    expect(bubble.textContent).not.toContain('🏁')
+  })
+
+  it('★ 默认**不展开**小窗口（气泡的卖点就是不占版面）', () => {
+    seed({ tasks: 2 })
+    render(<CampaignCard />)
+    expect(document.querySelector('[data-campaign-step]')).toBeNull()
   })
 })
 
-describe('领取', () => {
+describe('领取（现在要点开小窗口再领）', () => {
   it('★ 点领取 → 调 store 里那一关（不是别的关），并弹提示', async () => {
     seed({ tasks: 5 })
     render(<CampaignCard />)
 
-    await userEvent.click(screen.getByText('🎁 领取'))
+    await openSheet()
+    /* ★ 点的是**那一关自己的**领取按钮（`data-campaign-claim="first5"`），
+       不是"窗口里第一颗按钮" —— 后者在关卡顺序一变就会领错。 */
+    await userEvent.click(document.querySelector('[data-campaign-claim="first5"]') as HTMLElement)
 
     await waitFor(() => {
       expect(useApp.getState().claimCampaignStep).toHaveBeenCalledWith('first5')
@@ -102,7 +148,7 @@ describe('领取', () => {
     seed({ tasks: 5 })
     render(<CampaignCard />)
 
-    await userEvent.click(screen.getByText(/全部 4 关/))
+    await openSheet()
 
     expect(document.querySelectorAll('[data-campaign-step]')).toHaveLength(4)
     expect(
@@ -111,6 +157,16 @@ describe('领取', () => {
     expect(
       document.querySelector('[data-campaign-step="coupon100"]')!.getAttribute('data-campaign-state'),
     ).toBe('doing')
+  })
+
+  it('小窗口里也说清奖励是什么（用户要「显示任务和进度，奖励」）', async () => {
+    seed({ tasks: 5 })
+    render(<CampaignCard />)
+
+    await openSheet()
+    const first = document.querySelector('[data-campaign-step="first5"]')
+    expect(first?.textContent).toContain('奖励')
+    expect(first?.textContent).toContain('永久拥有')
   })
 })
 
@@ -126,12 +182,14 @@ describe('在线版：进度以服务端为准', () => {
     })
     render(<CampaignCard />)
 
-    // 卡片主推的是「第一个可领取的」（这里是第一关，20 个任务早够了）
-    expect(screen.getByText('🎁 领取')).toBeTruthy()
+    // 气泡主推「第一个可领取的」，这里是第一关（20 个任务早够了）
+    expect(document.querySelector('[data-campaign-open]')?.getAttribute('aria-label')).toContain(
+      '可以领取',
+    )
 
     // 关键判据：券那一关的状态。本地只有 20 张 ⇒ 若只信本地会是 doing；
     // 按服务端的 190 张算就是 ready。
-    await userEvent.click(screen.getByText(/全部 4 关/))
+    await openSheet()
     const coupon = document.querySelector('[data-campaign-step="coupon100"]')
     expect(coupon?.getAttribute('data-campaign-state')).toBe('ready')
   })
@@ -139,7 +197,8 @@ describe('在线版：进度以服务端为准', () => {
   it('本地版（没有服务端数字）仍然用本地那份', () => {
     seed({ tasks: 2, coupons: 120 })
     render(<CampaignCard />)
-    expect(screen.getByText('攒够 100 张兑换券')).toBeTruthy()
+    // 本地算的券够 100 ⇒ 气泡推券那关
+    expect(bubbleProgress()).toContain('100/100')
   })
 })
 
