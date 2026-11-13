@@ -147,13 +147,25 @@ kqf_run "打部署包" bash -c "cd '$DEPLOY' && bash build.sh $BUILD_FLAGS"
 # 客户端 Web 产物（在线版、含线上地址）
 # python 同样是原生 Windows 程序 ⇒ 两个参数都要 Windows 形式
 CODEBUDDY_SAFE_DELETE_ENABLED=0 python - "$RELEASE_WEB_WIN" "$(win_path "$DEPLOY/out")/client-web" <<'PY'
-import shutil, sys
+import os, shutil, sys
+
 src, dst = sys.argv[1], sys.argv[2]
+
+# ★★ 拷的时候就排除 `games/`，**不要**先整份拷再删。
+#    那个目录有 **195MB**（public/games 全量），先拷再删等于白拷一遍 ——
+#    而这台机器的磁盘常年只剩一两 G，Windows 上拷 198MB 还要十几分钟。
+#    在线版客户端本来就不随包发游戏（和服务端 `TF_APK_NO_GAMES` 同一口径）。
+SKIP = {'games'}
+
 shutil.rmtree(dst, ignore_errors=True)
-shutil.copytree(src, dst)
-# 在线版客户端不随包发游戏（和服务端 `TF_APK_NO_GAMES` 同一个口径）
-shutil.rmtree(dst + "/games", ignore_errors=True)
-print("client-web 已铺")
+shutil.copytree(src, dst, ignore=shutil.ignore_patterns(*SKIP))
+
+# 判据：拷完之后那个目录**不该存在**（漏了它 = 包里多 195MB 游戏）
+if os.path.isdir(os.path.join(dst, 'games')):
+    sys.exit('✗ client-web/games 还在 —— 排除没生效，包里会多 195MB')
+
+n = sum(len(f) for _, _, f in os.walk(dst))
+print('client-web 已铺（%d 个文件，已排除 games/）' % n)
 PY
 # APK：官网下载页读的就是这一份
 cp "$APK" "$DEPLOY/out/site/download/kid-quest-farm.apk"
