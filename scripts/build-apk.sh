@@ -316,8 +316,22 @@ if [ "${TF_APK_NO_GAMES:-0}" = "1" ] && [ -d dist/games ]; then
   #      的构建产物，下次 `vite build` 会重新生成，历史副本没有任何价值。
   SKIP="$PROJECT_ROOT/.apk-games-skip"
   rm -rf "$SKIP" 2>/dev/null || true
+  # ★★ `rm -rf` 被安全删除闸门拦下时 `|| true` 会把它吞掉，于是下面
+  #    `mkdir -p` 保留了旧内容、`mv` 因为目标非空而失败：
+  #      mv: cannot move 'dist/games' to '…/games/games': Directory not empty
+  #    而脚本继续跑 ⇒ **打出一个 156MB 带游戏的包**（正是这一步要避免的）。
+  #    2026-11-13 踩到（上一次打包中断留下了残留）。
+  #    ⇒ 目标目录非空就改名让路（改名不算删除，闸门不管）。
+  if [ -e "$SKIP/games" ]; then
+    mv "$SKIP/games" "$SKIP/games-stale-$(date +%H%M%S)" 2>/dev/null || true
+  fi
   mkdir -p "$SKIP"
   mv dist/games "$SKIP/games"
+  # 判据：剔完就**不能**再存在。否则会静默打出一个 156MB 的包。
+  if [ -d dist/games ]; then
+    echo "✗ TF_APK_NO_GAMES=1 但 dist/games 还在 —— 会打出 156MB 的包，停。"
+    exit 1
+  fi
 fi
 
 if [ "$WEB_ONLY" = "1" ]; then
