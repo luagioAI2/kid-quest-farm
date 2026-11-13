@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 # 发布到线上 —— **必须你亲手打一个词**才会动手。
 #
-# 用户 2026-11-13：「能否先让我本地测试完，我确认后再发布到官方。」
+# 用户 2026-11-13 定的流程：
 #
-# 所以发布被拆成两步：
-#   ① `bash scripts/local-test.sh`   —— 本地打一版、起服务，随你试，**不推**
-#   ② `bash scripts/release-official.sh` —— 这个脚本，推之前要你输 `发布`
+#   ① 我改完 → ② `local-test.sh` 起本地站给你试 → ③ **你说"发布"我才动**
+#   → ④ 发布（**默认只发 web**）→ ⑤ APK 发不发由你定，我只是提醒
+#
+# ## ★ 默认不发 APK
+#
+# `web`（网页版 + 官网）是每次必发的；`APK` 是**另一个决定** ——
+# 打一次包要好几分钟、要让所有已装用户重装，不该因为"顺手跑了个发布"就跟着上去。
+#
+# 所以默认**只发 web，完全不碰线上那个 APK 文件**。要连 APK 一起发，
+# 显式加 `--with-apk`。
+#
+# ⚠️ 两者不同步会有一个看得见的后果：官网版本号写 1.2.2、下载拿到的是旧包。
+#    脚本会在结尾把这件事说清楚（不是报错，是提醒你决定）。
 #
 # ## 为什么要输一个词，而不是「按回车继续」
 #
@@ -17,7 +27,8 @@
 #   · 推之前：确认本地那个包是你测过的（比对 sha256，不猜）；
 #   · 推之后：自己的六条路径复测 + 打出回滚命令。
 #
-#   bash scripts/release-official.sh                # 正式发布
+#   bash scripts/release-official.sh                # 发 web（不含 APK）
+#   bash scripts/release-official.sh --with-apk     # web + APK 一起发
 #   bash scripts/release-official.sh --dry-run      # 只走检查，不推
 #   bash scripts/release-official.sh --prepare-only # 把包铺好就停，不推
 set -euo pipefail
@@ -33,10 +44,16 @@ mkdir -p "$KQF_LOG_DIR"
 
 DRY=0
 PREPARE_ONLY=0
-case "${1:-}" in
-  --dry-run) DRY=1 ;;
-  --prepare-only) PREPARE_ONLY=1 ;;
-esac
+WITH_APK=0
+for arg in "${@:-}"; do
+  case "$arg" in
+    --dry-run) DRY=1 ;;
+    --prepare-only) PREPARE_ONLY=1 ;;
+    --with-apk) WITH_APK=1 ;;
+    "") ;;
+    *) echo "✗ 不认识的参数：$arg"; exit 2 ;;
+  esac
+done
 
 DEPLOY="$ROOT/../deploy/tf-vps"
 [ -d "$DEPLOY" ] || kqf_fail "找不到部署目录：$DEPLOY"
@@ -55,9 +72,15 @@ echo "=================================================="
 kqf_plan 5
 kqf_step "确认本地这一版就是你要发的"
 APK="$ROOT/dist-apk/kid-quest-farm-release.apk"
-[ -f "$APK" ] || kqf_fail "dist-apk/ 里没有包 —— 先跑 bash scripts/local-test.sh"
-APK_SHA=$(sha256sum "$APK" | cut -c1-16)
-APK_SIZE=$(du -h "$APK" | cut -f1)
+# APK 只在「这次要发它」时才必须是新的。只发 web 时，旧包不影响本次发布。
+if [ "$WITH_APK" = "1" ]; then
+  [ -f "$APK" ] || kqf_fail "要发 APK，但 dist-apk/ 里没有包 —— 先跑 bash scripts/local-test.sh"
+  APK_SHA=$(sha256sum "$APK" | cut -c1-16)
+  APK_SIZE=$(du -h "$APK" | cut -f1)
+else
+  APK_SHA=""
+  APK_SIZE=""
+fi
 
 # 发布用的客户端产物单独放一个目录：**不读 `dist/`**。
 # `build-site.mjs --demo` 会重建 dist 成单机版，任何中间跑过一次官网构建
@@ -84,7 +107,11 @@ fi
 grep -q "kidfarm.duckdns.org" "$RELEASE_WEB/$CLIENT_BUNDLE" \
   || kqf_fail "客户端产物里没有线上接口地址 —— 这一版发上去会连不上服务器"
 
-kqf_ok "APK      $APK_SIZE  sha $APK_SHA"
+if [ "$WITH_APK" = "1" ]; then
+  kqf_ok "APK      $APK_SIZE  sha $APK_SHA（本次会发）"
+else
+  kqf_ok "APK      本次不发（线上那个包保持原样）"
+fi
 kqf_ok "客户端   $CLIENT_BUNDLE（刚构建）"
 kqf_hint "版本号 $(grep -o 'versionName "[^"]*"' android/app/build.gradle | head -1 | cut -d'"' -f2)"
 
@@ -101,8 +128,12 @@ kqf_step "确认"
 echo ""
 echo "  即将发布："
 echo "    版本     $(grep -o 'versionName "[^"]*"' android/app/build.gradle | head -1 | cut -d'"' -f2)"
-echo "    APK      $APK_SIZE（sha $APK_SHA）"
-echo "    影响     所有线上用户（官网下载 + /app/ 网页版 + 服务端接口）"
+echo "    网页版   /app/ 与官网（会更新）"
+if [ "$WITH_APK" = "1" ]; then
+  echo "    APK      $APK_SIZE（sha $APK_SHA）—— 会更新，已装用户需换包"
+else
+  echo "    APK      **不动**（线上下载仍是现有的包）"
+fi
 echo ""
 echo "  请先确认：本地那个地址上试过了、没问题。"
 echo ""
@@ -167,11 +198,47 @@ if os.path.isdir(os.path.join(dst, 'games')):
 n = sum(len(f) for _, _, f in os.walk(dst))
 print('client-web 已铺（%d 个文件，已排除 games/）' % n)
 PY
-# APK：官网下载页读的就是这一份
-cp "$APK" "$DEPLOY/out/site/download/kid-quest-farm.apk"
-# 判据：部署包里那几样必须是「我刚放进去的」
-[ "$(sha256sum "$DEPLOY/out/site/download/kid-quest-farm.apk" | cut -c1-16)" = "$APK_SHA" ] \
-  || kqf_fail "部署包里的 APK 和本地那份不一致（拷贝没生效）"
+# ---------------------------------------------------------------- APK
+# ★★ 这里有个不显眼的陷阱：`build.sh` 会从 `kid-quest-farm-online/site/download/`
+#    把 APK 拷进 `out/site/download/`。而那个源文件**已经是最新的 1.2.2** ——
+#    也就是说「什么都不做」并不等于「线上 APK 不变」，它会跟着一起更新。
+#
+#    所以两个分支都必须**显式**处理：
+#      · --with-apk  ：用 dist-apk 的新包覆盖（并核对 sha）；
+#      · 默认（不发）：**从线上把当前那个包取回来放回去** —— 这样发上去的
+#        字节和现在一模一样，才是真的「不动」。取不到就拒绝发布
+#        （否则可能把下载链接指向一个我没验证过的包，或者干脆弄丢这个文件）。
+APK_DEST="$DEPLOY/out/site/download/kid-quest-farm.apk"
+if [ "$WITH_APK" = "1" ]; then
+  cp "$APK" "$APK_DEST"
+  [ "$(sha256sum "$APK_DEST" | cut -c1-16)" = "$APK_SHA" ] \
+    || kqf_fail "部署包里的 APK 和本地那份不一致（拷贝没生效）"
+  kqf_ok "APK 已替换成本地那一版（sha $APK_SHA）"
+else
+  LIVE_APK_SHA=$(CODEBUDDY_SAFE_DELETE_ENABLED=0 python - "$APK_DEST" <<'PY'
+import hashlib, os, sys, urllib.request
+dst = sys.argv[1]
+url = 'https://kidfarm.duckdns.org/download/kid-quest-farm.apk'
+try:
+    req = urllib.request.Request(url, headers={'User-Agent': 'kqf-release/1.0'})
+    with urllib.request.urlopen(req, timeout=90) as r:
+        data = r.read()
+except Exception as e:
+    print('ERR:' + str(e))
+    sys.exit(0)
+if len(data) < 100000:
+    print('ERR:线上返回的文件只有 %d 字节，不像一个 APK' % len(data))
+    sys.exit(0)
+os.makedirs(os.path.dirname(dst), exist_ok=True)
+open(dst, 'wb').write(data)
+print(hashlib.sha256(data).hexdigest()[:16])
+PY
+)
+  case "$LIVE_APK_SHA" in
+    ERR:*) kqf_fail "要「不动 APK」，但取不回线上当前那个包（${LIVE_APK_SHA#ERR:}）。要么加 --with-apk 一起发，要么先确认线上下载页正常。" ;;
+  esac
+  kqf_ok "APK 保持线上原样（sha $LIVE_APK_SHA，从线上取回原样放回）"
+fi
 grep -q "kidfarm.duckdns.org" "$DEPLOY"/out/client-web/assets/index-*.js \
   || kqf_fail "部署包里的客户端产物没有线上地址 —— 顺序搞反了（先 build 再拷）"
 kqf_ok "部署包内容核对通过（VERSION $(cat "$DEPLOY/out/VERSION"))"

@@ -5,10 +5,16 @@
 #                  另外打包也需要提示。」
 #
 # 它只做四件事，最后停在那里等你：
-#   ① 类型检查 + 单元测试
+#   ① 类型检查 + 单元测试（`--skip-tests` 跳过，约省 6 分钟）
 #   ② 构建 Web 产物（照**线上接口**构建，和你手机上那一版同一口径）
 #   ③ 打 APK（默认打；`--no-apk` 跳过，只是改 UI 时够用）
 #   ④ 摆一个本地站点 + 起服务，打印地址
+#
+# 常用：
+#   bash scripts/local-test.sh                # 全量（含 APK）
+#   bash scripts/local-test.sh --no-apk       # 只出网页版，快
+#   bash scripts/local-test.sh --skip-tests   # 只构建+起站，几分钟内能点
+#   bash scripts/local-test.sh --skip-build   # 连构建都省，直接起现有 dist（几秒）
 #
 # ⚠️ 它**不会**推服务器。发布是 `release-official.sh`，那一步要你手输「发布」。
 #
@@ -42,10 +48,14 @@ WHITELIST_PORTS="4391 4393 4396 4401 5173 4180"
 
 BUILD_APK=1
 WANT_PORT=""
+SKIP_TESTS=0
+SKIP_BUILD=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-apk) BUILD_APK=0; shift ;;
     --port) WANT_PORT="${2:?--port 后面要跟端口号}"; shift 2 ;;
+    --skip-tests) SKIP_TESTS=1; shift ;;
+    --skip-build) SKIP_TESTS=1; SKIP_BUILD=1; shift ;;
     -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
     *) echo "✗ 不认识的参数：$1"; exit 2 ;;
   esac
@@ -76,7 +86,12 @@ else
   }
 fi
 
-if [ "$BUILD_APK" = "1" ]; then kqf_plan 5; else kqf_plan 4; fi
+# 总步数按实际会走的段算（`--skip-*` 会让步数变，写死就会出现 `[5/4]` 这种）
+KQF_TOTAL_STEPS=2   # 摆站点 + 起服务，这两步永远走
+[ "$SKIP_TESTS" = "1" ] || KQF_TOTAL_STEPS=$((KQF_TOTAL_STEPS + 1))
+[ "$SKIP_BUILD" = "1" ] || KQF_TOTAL_STEPS=$((KQF_TOTAL_STEPS + 1))
+[ "$BUILD_APK" = "1" ] && KQF_TOTAL_STEPS=$((KQF_TOTAL_STEPS + 1))
+kqf_plan "$KQF_TOTAL_STEPS"
 
 echo "=================================================="
 echo " 本地测试版（只在本机，不会发布）"
@@ -85,12 +100,26 @@ echo "  端口   $PORT（在后端 CORS 白名单里）"
 echo "  接口   $API_BASE"
 
 # ---------------------------------------------------------------- ①
+if [ "$SKIP_TESTS" = "1" ]; then
+  echo ""
+  echo "（跳过类型检查与单元测试 —— 这次只是把服务起起来给你点）"
+fi
+if [ "$SKIP_TESTS" != "1" ]; then
 kqf_step "类型检查 + 单元测试"
 # ⚠️ 判据是**退出码**，不是 grep 输出
 kqf_run "lint" npm run lint
 kqf_run "unit" npx vitest run --maxWorkers=3
+fi
 
 # ---------------------------------------------------------------- ②
+if [ "$SKIP_BUILD" = "1" ]; then
+  [ -f dist/index.html ] || kqf_fail "没有 dist/，不能 --skip-build —— 去掉这个参数重跑"
+  BUNDLE=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1 || true)
+  echo ""
+  echo "（跳过构建，复用现有 dist：$BUNDLE）"
+  # 复用也要验：产物必须连线上接口，否则你测的是单机版
+  grep -q "kidfarm.duckdns.org" "dist/$BUNDLE" || kqf_fail "现有 dist 是单机版（没有线上地址）—— 去掉 --skip-build 重新构建"
+else
 kqf_step "构建 Web 产物"
 CODEBUDDY_SAFE_DELETE_ENABLED=0 \
   env VITE_API_BASE="$API_BASE" \
@@ -103,6 +132,7 @@ BUNDLE=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1 || 
 kqf_ok "Web 产物：$BUNDLE"
 # 判据：产物里必须有线上接口地址 —— 否则本地测的是单机版
 grep -q "kidfarm.duckdns.org" "dist/$BUNDLE" || kqf_fail "产物里没有线上接口地址"
+fi
 # 记下来：发布脚本要拿它比对「你测的那版」和「现在源码构建出来的那版」
 printf '%s\n' "$BUNDLE" > "$ROOT/.e2e-scratch/local-test-bundle.txt"
 
