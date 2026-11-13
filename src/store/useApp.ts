@@ -139,7 +139,7 @@ import { HOST_API } from '../games/plugin'
 import type { GameBundle, GameManifestV2, HostApi, MountContext } from '../games/plugin'
 import { hapticLight, playTone, type ToneKind } from '../platform/files'
 import { settleInstance, type SettleParams } from '../domain/settlement'
-import { isOnlineMode, pullFromServer } from '../sync/pull'
+import { APP_MODE, isOnlineMode, pullFromServer } from '../sync/pull'
 import { srvId } from '../sync/map'
 import { onlineWrite, writeFailToast } from '../online/write'
 import {
@@ -6204,6 +6204,8 @@ declare global {
       exportBackup: () => Promise<unknown>
       importBackup: (raw: unknown) => Promise<{ ok: boolean; message: string }>
       version: string
+      /** `'local'` / `'online'` —— e2e 用它拦「跑错了产物」 */
+      appMode: 'local' | 'online'
       /**
        * 目录价格快照。给 E2E 脚本读用 —— 经济数值经常调，
        * 脚本里写死价格会变成"假失败"，所以让测试来问真实数值。
@@ -6348,6 +6350,11 @@ if (typeof window !== 'undefined') {
 
   window.__kqf__ = {
     getState: () => useApp.getState(),
+    /* 这一版是本地版还是在线版（`VITE_APP_MODE`）。
+       ★ 给 e2e / 探针读：`e2e-check.mjs` 是**按本地版写的**，
+         跑在在线版产物上会有二三十条「在线版本来就不该有」的假红
+         （2026-11-13 踩过）。有了这个值，脚本能当场拦住而不是报一堆假失败。 */
+    appMode: APP_MODE,
     exportBackup: () => useApp.getState().exportBackup(),
     importBackup: (raw) => useApp.getState().importBackup(raw),
     version: '1.0.0',

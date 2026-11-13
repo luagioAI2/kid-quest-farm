@@ -10,6 +10,20 @@
  *   - 移动端视口下有无横向溢出
  *
  * 用法：node scripts/e2e-check.mjs [url]
+ *
+ * ## ★★ 必须跑在**本地版**产物上
+ *
+ * 这个脚本按本地版写的（清空数据、从备份恢复、离线农场…全是本地版才有的行为）。
+ * 而 `vite build` 默认产出的是**在线版**（`VITE_APP_MODE` 不设就是 online）——
+ * 跑在在线版上会有二三十条「在线版本来就不该有」的假红，看起来像改坏了功能。
+ *
+ * 正确做法：
+ *
+ *     VITE_APP_MODE=local npm run build -- --outDir dist-e2e --emptyOutDir
+ *     # 用任意静态服务指向 dist-e2e（python -m http.server 即可）
+ *     node scripts/e2e-check.mjs http://127.0.0.1:4392/
+ *
+ * 脚本会在开头**当场拦住**，不会给你一堆假失败。
  */
 import puppeteer from 'puppeteer-core'
 import { existsSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -74,6 +88,27 @@ try {
 
   console.log(`\n打开 ${URL}\n`)
   await page.goto(URL, { waitUntil: 'networkidle2', timeout: 45000 })
+
+  /* ---------- 0. 先确认跑的是**本地版**产物 ----------
+     这个脚本按本地版写的（清空数据 / 从备份恢复 / 离线农场…都是本地版才有的）。
+     跑在在线版上会出现二三十条「在线版本来就不该有」的**假红**，
+     看起来像把功能改坏了 —— 2026-11-13 就这样白查了一轮。
+
+     `window.__kqf__.appMode` 由 store 暴露（构建期常量 `VITE_APP_MODE`）。 */
+  const appMode = await page
+    .waitForFunction(() => window.__kqf__?.appMode ?? null, { timeout: 20000 })
+    .then((h) => h.jsonValue())
+    .catch(() => null)
+  if (appMode !== 'local') {
+    console.error(
+      `\n✗ 这一页是「${appMode ?? '未知'}」版，而本脚本只能跑在**本地版**上。\n` +
+        `  构建方式：\n` +
+        `    VITE_APP_MODE=local npm run build -- --outDir dist-e2e --emptyOutDir\n` +
+        `  再用静态服务指向 dist-e2e（python -m http.server 即可）。\n` +
+        `  （vite build 默认是 online —— 直接拿 dist/ 跑会得到一堆假失败。）\n`,
+    )
+    process.exit(2)
+  }
 
   /* ---------- 1. 启动与渲染 ---------- */
   await page.waitForSelector('#root > *', { timeout: 20000 })
