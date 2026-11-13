@@ -133,3 +133,7 @@ _msg*.txt
 # 打包时临时挪出来的游戏包（在线版不打进 APK）。
 # 只留一份、每次构建前清空；不进仓库。
 .apk-games-skip/
+
+# e2e 专用的**本地版**构建产物（`VITE_APP_MODE=local`）。
+# 构建它只为跑 e2e-check，不进仓库 —— 它有 ~280MB（含 public/games 全量复制）。
+dist-e2e/
