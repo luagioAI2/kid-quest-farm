@@ -556,3 +556,18 @@
 @utility anim-delay-5 {
   animation-delay: 0.46s;
 }
+
+/* 未知长度的进度条（下载时服务端没给 Content-Length）。
+   一条 1/3 宽的色块来回滚 —— 比一条停在 0% 的实心条好：
+   后者看起来像卡死，而这时其实正在下载。 */
+@keyframes kqf-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+@utility indeterminate {
+  animation: kqf-indeterminate 1.2s ease-in-out infinite;
+}

@@ -23,6 +23,11 @@ import { SnapshotSection } from './SnapshotSection'
 import { fetchVerifiedCatalog } from '../../games/install'
 import { catalogPublicKeyRaw } from '../../games/catalogKey'
 import { CATALOG_URL, catalogConfigured } from '../../games/catalogUrl'
+import {
+  barRatio,
+  installButtonText,
+  installProgressText,
+} from '../../domain/installProgress'
 
 /**
  * 我的游戏 —— 手机应用市场那种形态（2026-10-24 用户要求）。
@@ -71,6 +76,9 @@ import { CATALOG_URL, catalogConfigured } from '../../games/catalogUrl'
 function useInstall() {
   const installLocalGame = useApp((s) => s.installLocalGame)
   const installFromCatalog = useApp((s) => s.installFromCatalog)
+  /* 进度只走 store：按钮和行内细进度条各读一次，显示同一个数字。
+     写在组件 state 里会变成「按钮 40%、进度条 0%」。 */
+  const reportProgress = useApp((s) => s.reportInstallProgress)
   const pushToast = useApp((s) => s.pushToast)
   const [installingId, setInstallingId] = useState<string | null>(null)
 
@@ -88,6 +96,7 @@ function useInstall() {
   const install = async (id: string) => {
     if (installingId) return
     setInstallingId(id)
+    reportProgress({ gameId: id, phase: 'catalog', percent: -1, received: 0, total: 0 })
     try {
       let res: { ok: boolean; message: string } | null = null
       /* 先记下「这个包知不知道去哪下载」。
@@ -96,11 +105,11 @@ function useInstall() {
            2026-11-12 用户就被那句 HTTP 404 带偏过一次。 */
       const canRemote = catalogConfigured()
       if (canRemote) {
-        res = await installFromCatalog(CATALOG_URL, id)
+        res = await installFromCatalog(CATALOG_URL, id, reportProgress)
       }
       if (!res?.ok) {
         const remoteMsg = res?.message ?? ''
-        const local = await installLocalGame(id)
+        const local = await installLocalGame(id, reportProgress)
         /* ★ 两条都失败时必须**两条都写**。
            原来这里只留本地那条 ⇒ 不管真因是「没网 / 目录里没这款 / 验签失败 /
            这个地址不是 https」，界面上永远是同一句「读取本地包失败：HTTP 404」，
@@ -125,6 +134,9 @@ function useInstall() {
       })
     } finally {
       setInstallingId(null)
+      /* ★ 一定要清。留着的话那一行会长期显示「下载中 87%」——
+         而装包早就结束了，看起来像卡住。 */
+      reportProgress(null)
     }
   }
   return { install, installingId }
@@ -148,6 +160,9 @@ function InstallAction({
   size?: 'xs' | 'sm' | 'lg'
 }) {
   const installedGames = useApp((s) => s.installedGames)
+  /* 只认"正在装的那一款"的进度 —— store 里只放一条，这里再按 id 对一次，
+     避免上一款收尾时的最后一帧画到这一行上。 */
+  const progress = useApp((s) => (s.installProgress?.gameId === id ? s.installProgress : null))
   const local = LOCAL_GAMES.find((g) => g.id === id)
   const installed = installedGames[id]
   const want = target ?? local?.version
@@ -193,7 +208,15 @@ function InstallAction({
         pad
       }
     >
-      {installingId === id ? '正在下载…' : installed ? '更新' : '下载'}
+      {/* 有进度就报进度（「下载 42%」/「安装中…」），没有才退回笼统的一句。
+          ⚠️ 不能只写「正在下载…」—— 用户明确要的是**看得见进度**。 */}
+      {installingId === id && progress
+        ? installButtonText(progress)
+        : installingId === id
+          ? '正在下载…'
+          : installed
+            ? '更新'
+            : '下载'}
     </button>
   )
 }
@@ -345,6 +368,7 @@ function RowShell({
               {meta}
             </p>
           )}
+          <InstallBar gameId={pluginId} />
         </div>
         <div className="pointer-events-auto shrink-0">{pill}</div>
         {/*
@@ -367,6 +391,40 @@ function RowShell({
         )}
       </div>
     </li>
+  )
+}
+
+/**
+ * 列表行里那条**细进度条**（2026-11-13）。
+ *
+ * 只在"这一行正在装"时出现：平时不渲染（`null`），不占版式 ——
+ * 列表的行高是一行行量过的，凭空多一块会把整列往下推。
+ *
+ * `percent < 0`（总长未知）时不画比例，改用一条来回滚动的条：
+ * 画一条停在 0% 的实心条会让人以为卡死。
+ */
+export function InstallBar({ gameId }: { gameId?: string }) {
+  const progress = useApp((s) => (s.installProgress?.gameId === gameId ? s.installProgress : null))
+  if (!progress) return null
+  const known = progress.percent >= 0
+  const ratio = barRatio(progress)
+  return (
+    <div className="mt-1.5" data-install-bar={gameId}>
+      <div className="h-1 overflow-hidden rounded-pill bg-ink-100">
+        <div
+          className={
+            known
+              ? 'h-full rounded-pill bg-grass-400 transition-[width] duration-200'
+              : 'indeterminate h-full w-1/3 rounded-pill bg-grass-400'
+          }
+          style={known ? { width: `${Math.round(ratio * 100)}%` } : undefined}
+          data-install-bar-fill={known ? Math.round(ratio * 100) : -1}
+        />
+      </div>
+      <div className="mt-0.5 text-[10px] font-bold text-ink-500" data-install-phase={progress.phase}>
+        {installProgressText(progress)}
+      </div>
+    </div>
   )
 }
 

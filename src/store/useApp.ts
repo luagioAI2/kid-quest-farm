@@ -122,6 +122,12 @@ import {
   type CampaignStepView,
 } from '../domain/campaign'
 import { fetchCampaignState, claimCampaignStep as claimCampaignStepApi } from '../api/campaign'
+import {
+  percentOf,
+  type InstallProgress,
+  type InstallProgressReporter,
+} from '../domain/installProgress'
+import { readBodyWithProgress } from '../games/download'
 import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
 import { localGameById } from '../games/localGames'
 import { codeHashOf, gameIdForCode } from '../games/codeLookup'
@@ -388,6 +394,24 @@ interface AppState {
    */
   installedGames: Record<string, GameManifestV2>
   /**
+   * 正在装的那一款走到哪一步（2026-11-13，用户要「像应用商城那样显示进度」）。
+   *
+   * 只放**当前这一款**，不做成 map：同时只会装一款（`installingId` 已经限了），
+   * 而 map 会让「谁负责清掉过期行」变成一个新问题 —— 界面上一行残留的
+   * 60% 进度比没有进度更让人困惑。
+   *
+   * `percent` 为 `-1` 表示**总长未知**（服务端没给 `Content-Length`）：
+   * 那时界面显示「已下载 X MB」，不假装有百分比。
+   */
+  installProgress: InstallProgress | null
+  /**
+   * 更新安装进度。**唯一**的写入口（组件不要自己 `set`，否则两处各造一份）。
+   *
+   * 传 `null` = 收尾清掉。**不清的话那一行会长期显示「下载中 87%」**，
+   * 而装包早就结束了 —— 看起来像卡住。
+   */
+  reportInstallProgress: (p: InstallProgress | null) => void
+  /**
    * 主线活动里**已经领过**的关卡 id（2026-11-12）。
    *
    * 两种模式来源不同：
@@ -464,7 +488,10 @@ interface AppState {
    * ⚠️ 不要因为「本地」就跳过校验：`public/` 里的文件在打包后仍然可以被替换，
    * 跳过校验等于给「换掉 public 里的 js」开了一条执行任意代码的后门。
    */
-  installLocalGame: (gameId: string) => Promise<{ ok: boolean; message: string }>
+  installLocalGame: (
+    gameId: string,
+    onProgress?: InstallProgressReporter,
+  ) => Promise<{ ok: boolean; message: string }>
   /**
    * ★ **生产路径**：从**已签名的游戏目录**装一款游戏（spec §12.4）。
    *
@@ -478,6 +505,7 @@ interface AppState {
   installFromCatalog: (
     catalogUrl: string,
     gameId: string,
+    onProgress?: InstallProgressReporter,
   ) => Promise<{ ok: boolean; message: string }>
   /**
    * 装一款游戏，**两条路自己挑**：先远程目录（验签 + SHA-256），拿不到再本地包。
@@ -495,7 +523,10 @@ interface AppState {
    * ⚠️ 别在调用方各写一份挑路逻辑：写两遍必然有一天走散，症状就是
    *    「市场里能装、兑换后装不上」——而这正是这条注释的由来。
    */
-  installGameAuto: (gameId: string) => Promise<{ ok: boolean; message: string }>
+  installGameAuto: (
+    gameId: string,
+    opts?: { onProgress?: InstallProgressReporter },
+  ) => Promise<{ ok: boolean; message: string }>
   /**
    * 领一关主线活动的奖励（送一款游戏）。
    *
@@ -2880,6 +2911,7 @@ export const useApp = create<AppState>((set, get) => ({
   syncState: SYNC_OK,
   serverOwnedGameIds: null,
   installedGames: {},
+  installProgress: null,
   campaignClaims: [],
   campaignServerStats: null,
   todayKey: appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour),
@@ -5010,7 +5042,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   /* ---- 插件游戏：装配（spec §12.5） ---- */
 
-  installFromCatalog: async (catalogUrl, gameId) => {
+  installFromCatalog: async (catalogUrl, gameId, onProgress) => {
     /* ★ 和 `installLocalGame` **同一道门槛**（2026-10-30 家长：「加门槛，没拥有不能装」）。
      *
      * 这里原来没有 —— 从目录装走的是另一条路，漏了就等于「远端包谁都能装」。
@@ -5022,16 +5054,34 @@ export const useApp = create<AppState>((set, get) => ({
 
     // ① 先把整条校验链跑完（验签 → 解析 → 取包 → 验哈希）。
     //    它会把**任何没验过的东西**拒掉；公钥没配也会在这里抛。
+    /* 阶段一：核对清单（目录 + 签名只有几 KB，没有百分比可言，
+       所以报 `percent: -1`，界面显示「正在核对清单」）。
+       ★ 这里的 `onProgress` 同时被拿去做**下载**进度 —— 只有取包那一步
+         会真的持续回调，前两步各报一次阶段。 */
+    onProgress?.({ gameId, phase: 'catalog', percent: -1, received: 0, total: 0 })
     let resolved: ResolvedGame
     try {
       resolved = await fetchVerifiedGame({
         catalogUrl,
         gameId,
         publicKeyRaw: catalogPublicKeyRaw(),
+        onProgress: (p) =>
+          onProgress?.({
+            gameId,
+            phase: 'download',
+            percent: percentOf(p.received, p.total),
+            received: p.received,
+            total: p.total,
+          }),
       })
     } catch (e) {
       return { ok: false, message: e instanceof Error ? e.message : String(e) }
     }
+
+    /* 阶段三：安装中（执行代码 + 落库）。
+       ⚠️ 这一步没有百分比 —— 它是一瞬间的事，给个假进度条反而让人等。
+         界面显示「安装中…」。 */
+    onProgress?.({ gameId, phase: 'install', percent: -1, received: 0, total: 0 })
 
     // ② 到这里代码才是「签名认过 + 哈希对过」的，可以执行了。
     let bundle: GameBundle
@@ -5058,14 +5108,15 @@ export const useApp = create<AppState>((set, get) => ({
     })
   },
 
-  installGameAuto: async (gameId) => {
+  installGameAuto: async (gameId, opts) => {
     /* 先走生产路径。`catalogConfigured()` 为假（本地版 / 没配目录）就直接落到本地包。
        ⚠️ 远程失败**不能直接报错**：离线 APK、目录里暂时没有这款、
           自签证书验签失败……这些场景下随包的本地包才是能用的那一个。 */
+    const onProgress = opts?.onProgress
     if (catalogConfigured()) {
-      const remote = await get().installFromCatalog(CATALOG_URL, gameId)
+      const remote = await get().installFromCatalog(CATALOG_URL, gameId, onProgress)
       if (remote.ok) return remote
-      const local = await get().installLocalGame(gameId)
+      const local = await get().installLocalGame(gameId, onProgress)
       if (local.ok) return local
       /* 两条都失败：**两条的原因都要说**。只说本地那条（HTTP 404）会让人
          以为「没网」，而真正的原因可能是目录里没这款。 */
@@ -5074,8 +5125,14 @@ export const useApp = create<AppState>((set, get) => ({
         message: `服务器下载没成功（${remote.message}），App 自带的包也没有（${local.message}）`,
       }
     }
-    return get().installLocalGame(gameId)
+    return get().installLocalGame(gameId, onProgress)
   },
+
+  /**
+   * 更新安装进度。**唯一**的写入口 —— 组件不要自己 `set`，否则两个入口
+   * 会各自造一份状态（列表那一行和详情页那颗按钮显示不同的数字）。
+   */
+  reportInstallProgress: (p) => set({ installProgress: p }),
 
   claimCampaignStep: async (stepId) => {
     const step = CAMPAIGN_STEPS.find((s) => s.id === stepId)
@@ -5098,6 +5155,13 @@ export const useApp = create<AppState>((set, get) => ({
       gameById(step.reward.gameId)?.name ??
       localGameById(step.reward.gameId)?.name ??
       step.reward.name
+
+    /* ★ **领之前**记下「这款是否已经有」。
+       领完再查一定是「有」（服务端 `GrantGameWithTx` 是 ON CONFLICT DO NOTHING，
+       本地是记一笔账），那时判不出来 —— 文案就会对孩子撒谎：
+       说「已经放进游戏柜啦」，而他去游戏柜找，没有新东西。
+       判据只用 `ownedGameIds`（两种模式下都是「真拥有」的口径）。 */
+    const alreadyOwned = get().ownedGameIds.includes(step.reward.gameId)
 
     if (isOnlineMode) {
       /* 在线版：服务端复核 + 授游戏。`onlineWrite` 已经把网络失败和业务拒绝
@@ -5122,9 +5186,21 @@ export const useApp = create<AppState>((set, get) => ({
       set({ campaignClaims: next })
     }
 
+    /* 本来就有 ⇒ 不用再装一遍（装了也是同一个包），照实说「这一关过了，
+       这款你早就有」。**不能**说成「领到了新游戏」。 */
+    if (alreadyOwned) {
+      await get().refresh()
+      return {
+        ok: true,
+        message: `这一关过了！「${rewardName}」你本来就有，可以直接玩`,
+      }
+    }
+
     /* 装包（两条路自己挑：先目录、再本地包）。装不上**不算领取失败** ——
        游戏已经在库里了，「已激活但没装」有出口：设置/游戏里点下载。 */
-    const inst = await get().installGameAuto(step.reward.gameId)
+    const inst = await get().installGameAuto(step.reward.gameId, {
+      onProgress: get().reportInstallProgress,
+    })
     await get().refresh()
     const tail = inst.ok
       ? '，已经放进游戏柜啦'
@@ -5132,7 +5208,7 @@ export const useApp = create<AppState>((set, get) => ({
     return { ok: true, message: `领到了「${rewardName}」${tail}` }
   },
 
-  installLocalGame: async (gameId) => {
+  installLocalGame: async (gameId, onProgress) => {
     const entry = localGameById(gameId)
     if (!entry) return { ok: false, message: `这个版本里没有本地游戏「${gameId}」` }
 
@@ -5156,7 +5232,17 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const res = await fetch(entry.url)
       if (!res.ok) return { ok: false, message: `读取本地包失败：HTTP ${res.status}` }
-      bytes = new Uint8Array(await res.arrayBuffer())
+      /* 随包游戏也在安装包里，但它同样是**走网络栈**取的（dev / Capacitor 都一样），
+         所以一样能给进度；`Content-Length` 缺失时 percent 会是 -1。 */
+      bytes = await readBodyWithProgress(res, (p) =>
+        onProgress?.({
+          gameId,
+          phase: 'download',
+          percent: percentOf(p.received, p.total),
+          received: p.received,
+          total: p.total,
+        }),
+      )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       return { ok: false, message: `读取本地包失败：${msg}` }

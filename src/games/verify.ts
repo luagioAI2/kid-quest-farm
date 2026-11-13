@@ -31,6 +31,7 @@
  */
 
 import type { Bytes } from './bytes'
+import { readBodyWithProgress, type DownloadProgress } from './download'
 import { ED25519_PUBLIC_KEY_BYTES } from './catalogKey'
 
 /** 一个游戏包在 `catalog.json` 里的条目。字段口径见 spec §12.5 的 `GameBundle.manifest`。 */
@@ -305,10 +306,16 @@ export async function fetchVerifiedPackage(
   url: string,
   expectedSha256: string,
   fetchImpl: typeof fetch = fetch,
+  /**
+   * 下载进度回调（2026-11-13）。**只影响显示**：走完 100% 仍然要验 SHA-256，
+   * 校验失败照样抛 —— 进度条不是"可信"的证明。
+   */
+  onProgress?: DownloadProgress,
 ): Promise<Bytes> {
   const res = await fetchImpl(url)
   if (!res.ok) throw new Error(`下载 ${url} 失败：HTTP ${res.status}`)
-  const bytes = new Uint8Array(await res.arrayBuffer())
+  // 边读边报进度（没有 `res.body` 时内部会退化成整段读，功能不受影响）
+  const bytes = await readBodyWithProgress(res, onProgress)
   await assertSha256(bytes, expectedSha256, `包 ${url}`)
   return bytes
 }

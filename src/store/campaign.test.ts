@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /* 主线活动 · 领奖走的是**本地**这条路（未登录 / 单机版）。
 
@@ -121,6 +121,64 @@ describe('主线活动：领到之后必须真的算拥有', () => {
     expect(r.message).toContain('没装成功')
     expect(r.message).toContain('我的游戏')
     expect(useApp.getState().ownedGameIds).toContain(FALL.reward.gameId)
+  })
+})
+
+describe('主线活动：奖励本来就有时别撒谎', () => {
+  it('★ 早就拥有这款游戏 → 说「本来就有」，不说「已经放进游戏柜啦」', async () => {
+    await seedDoneTasks(5)
+    // 先把它变成「已拥有」（模拟之前买过 / 用码换过）
+    const gameId = FALL.reward.gameId
+    const { postMall } = await import('../db/db')
+    await postMall({ delta: 0, source: 'redemption_code', refId: gameId, memo: '之前换过' })
+    await useApp.getState().refresh()
+    expect(useApp.getState().ownedGameIds).toContain(gameId)
+
+    const install = vi.fn(async () => ({ ok: true, message: '已安装' }))
+    useApp.setState({ installGameAuto: install })
+
+    const r = await useApp.getState().claimCampaignStep('first5')
+
+    expect(r.ok).toBe(true)
+    expect(r.message).toContain('本来就有')
+    expect(r.message).not.toContain('放进游戏柜')
+    // 本来就有就不用再装一遍
+    expect(install).not.toHaveBeenCalled()
+  })
+
+  it('没有过 → 正常说「放进游戏柜」', async () => {
+    await seedDoneTasks(5)
+    const r = await useApp.getState().claimCampaignStep('first5')
+    expect(r.message).toContain('放进游戏柜')
+  })
+})
+
+describe('主线活动：奖励本来就有时别撒谎', () => {
+  it('★ 早就拥有这款游戏 → 说「本来就有」，不说「已经放进游戏柜啦」', async () => {
+    await seedDoneTasks(5)
+    // 先把它变成「已拥有」（模拟之前买过 / 用码换过）
+    const gameId = FALL.reward.gameId
+    const { postMall } = await import('../db/db')
+    await postMall({ delta: 0, source: 'redemption_code', refId: gameId, memo: '之前换过' })
+    await useApp.getState().refresh()
+    expect(useApp.getState().ownedGameIds).toContain(gameId)
+
+    const install = vi.fn(async () => ({ ok: true, message: '已安装' }))
+    useApp.setState({ installGameAuto: install })
+
+    const r = await useApp.getState().claimCampaignStep('first5')
+
+    expect(r.ok).toBe(true)
+    expect(r.message).toContain('本来就有')
+    expect(r.message).not.toContain('放进游戏柜')
+    // 本来就有就不用再装一遍
+    expect(install).not.toHaveBeenCalled()
+  })
+
+  it('没有过 → 正常说「放进游戏柜」', async () => {
+    await seedDoneTasks(5)
+    const r = await useApp.getState().claimCampaignStep('first5')
+    expect(r.message).toContain('放进游戏柜')
   })
 })
 

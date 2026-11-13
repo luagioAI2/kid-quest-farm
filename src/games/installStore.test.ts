@@ -190,6 +190,45 @@ beforeEach(async () => {
 
 /* ------------------------------------------------------------------ */
 
+describe('installFromCatalog —— 进度上报（2026-11-13 用户要「像应用商城那样」）', () => {
+  it('★ 装的时候会按阶段报告：先「核对清单」再「下载中」，最后「安装中」', async () => {
+    const kp = await makeKeypair()
+    await stubHost({ kp, catalogId: 'demo', codeId: 'demo' })
+
+    const seen: { phase: string; percent: number }[] = []
+    const res = await useApp.getState().installFromCatalog(CATALOG_URL, 'demo', (p) =>
+      seen.push({ phase: p.phase, percent: p.percent }),
+    )
+
+    expect(res.ok).toBe(true)
+    expect(seen.map((s) => s.phase)).toContain('catalog')
+    expect(seen.map((s) => s.phase)).toContain('download')
+    expect(seen.map((s) => s.phase)).toContain('install')
+    // 顺序：核对 → 下载 → 安装（先报安装再下载就是链子串反了）
+    expect(seen.findIndex((s) => s.phase === 'download')).toBeLessThan(
+      seen.findIndex((s) => s.phase === 'install'),
+    )
+  })
+
+  it('★★ 进度走到 100% 不等于"能装"：哈希不对照样拒，且游戏没落库', async () => {
+    /* 这条防的是「把进度条当成功信号」—— 曾经很容易写成
+       「条满了就说装好了」。判据仍然是哈希和落库。 */
+    const kp = await makeKeypair()
+    await stubHost({ kp, catalogId: 'demo', codeId: 'demo', sha256: 'f'.repeat(64) })
+
+    const seen: number[] = []
+    const res = await useApp.getState().installFromCatalog(CATALOG_URL, 'demo', (p) =>
+      seen.push(p.percent),
+    )
+
+    expect(res.ok).toBe(false)
+    expect(res.message).toMatch(/SHA-256/)
+    // 进度确实走完了下载那一步（所以"满格"不是成功信号）
+    expect(seen).toContain(100)
+    expect(await getGameKv<string>('demo', BUNDLE_KEY)).toBeUndefined()
+  })
+})
+
 describe('installFromCatalog —— 生产路径', () => {
   it('★ 验签 + 验哈希都过 → 落进 gameKv，并出现在 installedGames 里', async () => {
     const kp = await makeKeypair()

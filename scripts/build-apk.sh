@@ -28,6 +28,13 @@ for arg in "$@"; do
   esac
 done
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 进度提示（「第几步/共几步」+ 长命令心跳）。缺文件也别让打包挂掉。
+# shellcheck source=lib/progress.sh
+if [ -f "$PROJECT_ROOT/scripts/lib/progress.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$PROJECT_ROOT/scripts/lib/progress.sh"
+  kqf_plan 3
+fi
 cd "$PROJECT_ROOT"
 
 # ---------------- 环境准备 ----------------
@@ -248,7 +255,9 @@ fi
 
 # ---------------- 构建 Web ----------------
 echo ""
-echo "▸ [1/3] 构建 Web 产物…"
+echo ""
+printf '\033[36m▸ [1/3] 构建 Web 产物…\033[0m\n'
+WEB_T0=$(date +%s)
 # 不在这里手工清 dist —— 交给 vite 的 emptyOutDir（默认开，outDir 在项目内）。
 #
 # 原来这里是 `find dist -type f -delete`，注释说「绕过批量删除拦截」。
@@ -297,10 +306,18 @@ if [ "${TF_APK_NO_GAMES:-0}" = "1" ] && [ -d dist/games ]; then
   # ★★ 这里用 `mv` 不用 `rm -rf`：开发沙箱的批量删除闸门**按「这一轮累计删了多少」
   #   计数**，脚本里无论是 `VAR=0 rm -rf` 还是 `env VAR=0 rm -rf` 都拦（实测
   #   `[SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":7713,...}`），而 `mv` 不算删除。
-  #   移到临时目录，构建完就没人再引用它了；临时目录里的旧副本下次构建时会被覆盖。
-  SKIP="${TMPDIR:-/tmp}/kqf-apk-games"
+  #   ★★ 备份目录放**项目盘**，且每次先清空。
+  #      原来放 `${TMPDIR:-/tmp}`（系统盘）并且**按时间戳新建**一份 ——
+  #      历史副本永不清理，实测攒到 15 份 / 2.7G，把 C 盘（本来只剩几 G）
+  #      填满，于是下一次打包在 `mv` 上崩：`No space left on device`，
+  #      而报错长得像路径写错。2026-11-13 踩到。
+  #
+  #      规则：**备份只留当前这一份**。dist/games 本来就是 `public/games`
+  #      的构建产物，下次 `vite build` 会重新生成，历史副本没有任何价值。
+  SKIP="$PROJECT_ROOT/.apk-games-skip"
+  rm -rf "$SKIP" 2>/dev/null || true
   mkdir -p "$SKIP"
-  mv dist/games "$SKIP/games-$(date +%Y%m%d%H%M%S)"
+  mv dist/games "$SKIP/games"
 fi
 
 if [ "$WEB_ONLY" = "1" ]; then
@@ -309,7 +326,9 @@ if [ "$WEB_ONLY" = "1" ]; then
   exit 0
 fi
 
-echo "▸ [2/3] 同步到 Android 工程…"
+printf '  \033[32m✓\033[0m Web 产物完成（%ds）\n' "$(( $(date +%s) - WEB_T0 ))"
+printf '\n\033[36m▸ [2/3] 同步到 Android 工程（cap sync，约 20 秒）…\033[0m\n'
+CAP_T0=$(date +%s)
 # cap sync 内部走 fs-extra 的 remove()，会整目录删除再复制。
 # 开发沙箱的 safe-delete 拦截器按「单次会话累计删除次数」计数，
 # 一旦超过阈值就整体拒绝，cap sync 这种自己清理缓存目录的工具必然踩中。
@@ -320,8 +339,33 @@ echo "▸ [2/3] 同步到 Android 工程…"
 # 不是用户数据。父 shell 与其他命令不受影响。
 CODEBUDDY_SAFE_DELETE_ENABLED=0 npx cap sync android
 
+# 跑 gradle，每 5 秒报一次「已用 N 秒」。
+#
+# ⚠️ 不能用 `kqf_run`（那个把输出藏进日志、失败才打）：
+#    gradle 失败时那 20 行报错**必须原样看到**，否则「为什么会话失败」根本无从查。
+#    所以这里输出仍然走屏幕，只是多一行心跳。
+gradle_with_beat() {
+  local task="$1"
+  local t0; t0=$(date +%s)
+  ./gradlew "$task" &
+  local pid=$!
+  local tick=0
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 5
+    tick=$((tick + 5))
+    printf '\r\033[2m  … gradle 已用 %ds（第一次跑会久一点，后面有缓存）\033[0m' "$tick"
+  done
+  printf '\r%*s\r' 60 ''
+  if ! wait "$pid"; then
+    echo "✗ gradle $task 失败（见上面的报错）"
+    exit 1
+  fi
+  echo "  ✓ gradle $task（$(( $(date +%s) - t0 ))s）"
+}
+
 # ---------------- Gradle 打包 ----------------
-echo "▸ [3/3] Gradle 打包 ($MODE)…"
+printf '  \033[32m✓\033[0m cap sync 完成（%ds）\n' "$(( $(date +%s) - CAP_T0 ))"
+printf '\n\033[36m▸ [3/3] Gradle 打包 (%s)…\033[0m\n' "$MODE"
 cd android
 
 if [ "$MODE" = "release" ]; then
@@ -336,10 +380,10 @@ if [ "$MODE" = "release" ]; then
     echo "    再执行 ./gradlew assembleRelease"
     exit 1
   fi
-  ./gradlew assembleRelease
+  gradle_with_beat assembleRelease
   APK="app/build/outputs/apk/release/app-release.apk"
 else
-  ./gradlew assembleDebug
+  gradle_with_beat assembleDebug
   APK="app/build/outputs/apk/debug/app-debug.apk"
 fi
 
