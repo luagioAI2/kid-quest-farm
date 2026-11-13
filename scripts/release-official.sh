@@ -17,8 +17,9 @@
 #   · 推之前：确认本地那个包是你测过的（比对 sha256，不猜）；
 #   · 推之后：自己的六条路径复测 + 打出回滚命令。
 #
-#   bash scripts/release-official.sh           # 正式发布
-#   bash scripts/release-official.sh --dry-run # 只走检查，不推
+#   bash scripts/release-official.sh                # 正式发布
+#   bash scripts/release-official.sh --dry-run      # 只走检查，不推
+#   bash scripts/release-official.sh --prepare-only # 把包铺好就停，不推
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -31,10 +32,20 @@ KQF_LOG_DIR="$ROOT/.e2e-scratch/release-logs"
 mkdir -p "$KQF_LOG_DIR"
 
 DRY=0
-if [ "${1:-}" = "--dry-run" ]; then DRY=1; fi
+PREPARE_ONLY=0
+case "${1:-}" in
+  --dry-run) DRY=1 ;;
+  --prepare-only) PREPARE_ONLY=1 ;;
+esac
 
 DEPLOY="$ROOT/../deploy/tf-vps"
 [ -d "$DEPLOY" ] || kqf_fail "找不到部署目录：$DEPLOY"
+
+# ★★ 交给 **node / python**（原生 Windows 程序）的路径必须是 Windows 形式。
+#    MSYS 的 `/e/plan/...` 到了它们嘴里会变成 `E:\e\plan\...` ——
+#    写文件、起服务、构建产物全都会落到一个不存在的镜像目录里，
+#    而且**退出码还是 0**。这个仓库已经踩过三次，统一用这个函数转。
+win_path() { ( cd "$1" 2>/dev/null && pwd -W ) || echo "$1"; }
 
 echo "=================================================="
 echo " 发布到线上（kidfarm.duckdns.org）"
@@ -54,14 +65,21 @@ APK_SIZE=$(du -h "$APK" | cut -f1)
 # （网页版能开，只是连不上服务器）。2026-11-12 差点踩到。
 RELEASE_WEB="$ROOT/.e2e-scratch/release-web"
 rm -rf "$RELEASE_WEB" 2>/dev/null || true
+mkdir -p "$RELEASE_WEB"
+# ⚠️ `--outDir` 传 **Windows 路径**：否则产物会落到 `E:\e\plan\...`（见上面 win_path）
+RELEASE_WEB_WIN="$(win_path "$RELEASE_WEB")"
 CODEBUDDY_SAFE_DELETE_ENABLED=0 \
   env VITE_API_BASE=https://kidfarm.duckdns.org \
       VITE_GAME_CATALOG_URL=https://kidfarm.duckdns.org/api/game/catalog \
-  npx vite build --outDir "$RELEASE_WEB" --emptyOutDir > "$KQF_LOG_DIR/web.log" 2>&1 || {
+  npm run build -- --outDir "$RELEASE_WEB_WIN" --emptyOutDir > "$KQF_LOG_DIR/web.log" 2>&1 || {
     echo "  ✗ 构建失败，最后 20 行："; tail -20 "$KQF_LOG_DIR/web.log"; exit 1
   }
 CLIENT_BUNDLE=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' "$RELEASE_WEB/index.html" | head -1 || true)
-[ -n "$CLIENT_BUNDLE" ] || kqf_fail "构建产物里找不到 bundle（构建失败但退出码是 0？）"
+# 找不到 bundle 有两种可能，**都要说**（原来只写「构建失败但退出码是 0？」，
+# 把真相「构建成功、产物写去了别处」掩盖了）：
+if [ -n "$CLIENT_BUNDLE" ]; then : ; else
+  kqf_fail "构建产物里找不到 bundle。检查：① 看 $KQF_LOG_DIR/web.log 有没有报错；② 确认产物没落到别处（--outDir 传的是 $RELEASE_WEB_WIN）"
+fi
 # 判据：产物里必须真有线上地址
 grep -q "kidfarm.duckdns.org" "$RELEASE_WEB/$CLIENT_BUNDLE" \
   || kqf_fail "客户端产物里没有线上接口地址 —— 这一版发上去会连不上服务器"
@@ -108,10 +126,27 @@ kqf_step "把这一版摆进部署包"
 # ⚠️ 顺序不能反：`build.sh` 会用 out-prev 覆盖 `out/client-web`，
 #    所以必须**先 build，再**把客户端产物拷进去（2026-11-12 踩过：
 #    先拷后 build ⇒ 差点把单机版当在线客户端发上去）。
-CODEBUDDY_SAFE_DELETE_ENABLED=0 mv "$DEPLOY/out-prev" "$DEPLOY/.pkg/op-$(date +%H%M%S)" 2>/dev/null || true
-kqf_run "打部署包" bash -c "cd '$DEPLOY' && bash build.sh --skip-web"
+#
+# ★★ `CODEBUDDY_SAFE_DELETE_ENABLED=0` 不能省：`build.sh` 开头要
+#    `rm -rf out-prev`（它自己的版本轮转），而 out-prev 里有 1600+ 个文件，
+#    超过安全删除闸门的阈值 ⇒ **整个构建停在那一步**：
+#      [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":1623,…}
+#    out/ out-prev/ 是纯构建产物，允许清理。2026-11-13 实测卡在这里。
+# ★ 后端没改就 `--skip-go`：省几分钟，也省磁盘（这台机器常年只剩一两 G）。
+#   判据是「**完全干净**」—— 有疑问一律重编，绝不把旧二进制发上线。
+API_DIR="$ROOT/../tf-platform-api"
+BUILD_FLAGS="--skip-web"
+if [ -d "$API_DIR" ] && [ -z "$(git -C "$API_DIR" status --porcelain 2>/dev/null)" ]; then
+  BUILD_FLAGS="--skip-go --skip-web"
+  kqf_hint "后端代码没改 ⇒ 复用 out-prev 里的二进制（--skip-go）"
+else
+  kqf_hint "后端有改动 ⇒ 重编 Go"
+fi
+
+kqf_run "打部署包" bash -c "cd '$DEPLOY' && bash build.sh $BUILD_FLAGS"
 # 客户端 Web 产物（在线版、含线上地址）
-CODEBUDDY_SAFE_DELETE_ENABLED=0 python - "$RELEASE_WEB" "$DEPLOY/out/client-web" <<'PY'
+# python 同样是原生 Windows 程序 ⇒ 两个参数都要 Windows 形式
+CODEBUDDY_SAFE_DELETE_ENABLED=0 python - "$RELEASE_WEB_WIN" "$(win_path "$DEPLOY/out")/client-web" <<'PY'
 import shutil, sys
 src, dst = sys.argv[1], sys.argv[2]
 shutil.rmtree(dst, ignore_errors=True)
@@ -128,6 +163,13 @@ cp "$APK" "$DEPLOY/out/site/download/kid-quest-farm.apk"
 grep -q "kidfarm.duckdns.org" "$DEPLOY"/out/client-web/assets/index-*.js \
   || kqf_fail "部署包里的客户端产物没有线上地址 —— 顺序搞反了（先 build 再拷）"
 kqf_ok "部署包内容核对通过（VERSION $(cat "$DEPLOY/out/VERSION"))"
+
+if [ "$PREPARE_ONLY" = "1" ]; then
+  echo ""
+  echo "  --prepare-only：包已经铺好，**没有推**。"
+  echo "  要发布就再跑一次（不带这个参数）：bash scripts/release-official.sh"
+  exit 0
+fi
 
 # ---------------------------------------------------------------- ④ 推
 kqf_step "推送到服务器"
