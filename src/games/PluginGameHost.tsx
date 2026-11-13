@@ -30,6 +30,19 @@ export function PluginGameHost({ gameId }: { gameId: string }) {
   /** 「上一局收干净」和「这一局开始挂」之间的先后顺序，见下面 effect 的注释 */
   const chainRef = useRef<Promise<void>>(Promise.resolve())
   const [error, setError] = useState<string | null>(null)
+  /**
+   * 挂载中（2026-11-13 用户：「初次打开游戏很慢，这时候是不是有个加载效果」）。
+   *
+   * 慢的原因是**第一次**要把 `.plugin.mjs` 和它的资源从网上取回来 + 执行，
+   * 之后浏览器缓存住了就快了（用户说的「后面就不慢了」就是这个）。
+   *
+   * 原来这段时间游戏区是**一片空白** —— 孩子会以为卡住了、反复点。
+   * 所以至少要有一个「在准备」的提示。
+   *
+   * ⚠️ 只在**真的在挂载**时为 true：`mountGame` 很快返回时（包已缓存）
+   *    这个提示会闪一下，那比空白更糟。挂载完成后立刻清掉。
+   */
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const el = boxRef.current
@@ -59,6 +72,28 @@ export function PluginGameHost({ gameId }: { gameId: string }) {
     let disposed = false
     let unmount: (() => void) | null = null
     setError(null)
+    setLoading(true)
+
+    /**
+     * ★★ 插件**一画出东西就撤掉我加的加载层**（2026-11-13 实测）。
+     *
+     * 很多插件自己带启动页（「下落的2048」就有一屏粉色方块 +「加载中…」）。
+     * 我原来等到 `mountGame` resolve 才收提示，可那时插件早就画完了自己的
+     * 加载页 —— 两层字叠在一起，截图里糊成一团。
+     *
+     * `mount()` 的契约是「往容器里塞东西」，所以**容器一有子节点**就说明
+     * 插件开始渲染了。用 MutationObserver 盯这一下，比猜时间靠谱。
+     */
+    const observer =
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver(() => {
+            if (el.childElementCount > 0 && !disposed) {
+              setLoading(false)
+              observer?.disconnect()
+            }
+          })
+    observer?.observe(el, { childList: true })
 
     const run = chainRef.current.then(async () => {
       // 上一局还没收完，这一局就已经被切走了 —— 连挂都不用挂
@@ -76,6 +111,10 @@ export function PluginGameHost({ gameId }: { gameId: string }) {
         // ErrorBoundary 会兜住，但那样孩子看到的是「出错了」，
         // 分不清是哪个游戏坏了。这里把游戏名和原因直接写出来。
         if (!disposed) setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        // 成功 / 失败都要收掉「准备中」—— 失败时下面会换成错误卡片，
+        // 留着提示等于两层话同时在屏上。
+        if (!disposed) setLoading(false)
       }
     })
     // 链本身不能因为某一局抛错就断掉
@@ -83,6 +122,7 @@ export function PluginGameHost({ gameId }: { gameId: string }) {
 
     return () => {
       disposed = true
+      observer?.disconnect()
       unmount?.()
       unmount = null
       // 兜底：插件没清干净的话，下一局会看见上一局的残留。
@@ -146,6 +186,31 @@ export function PluginGameHost({ gameId }: { gameId: string }) {
          */
         <div className="page-col relative flex w-full min-h-0 flex-1 flex-col">
           <div ref={boxRef} data-plugin-host={gameId} className="absolute inset-0" />
+          {/*
+            加载提示（2026-11-13）。**盖在容器上**而不是替换它 ——
+            容器必须一直在（插件的 `mount(container)` 要那个引用），
+            换掉它等于每次加载都重建父节点。
+            `pointer-events-none`：提示不该吃掉游戏的点击（它可能已经能点了）。
+          */}
+          {loading && (
+            <div
+              className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-paper/70 backdrop-blur-[2px]"
+              data-game-loading={gameId}
+            >
+              <div className="flex flex-col items-center gap-3">
+                {/* 用跳动的小点而不是转圈：转圈在低端机上更卡，而这里本来就在等加载 */}
+                <div className="flex gap-1.5">
+                  <span className="size-2.5 rounded-full bg-grass-400 anim-bounce-1" />
+                  <span className="size-2.5 rounded-full bg-sun-400 anim-bounce-2" />
+                  <span className="size-2.5 rounded-full bg-sky-400 anim-bounce-3" />
+                </div>
+                <p className="text-sm font-extrabold text-ink-600">
+                  正在打开{manifest?.name ? `「${manifest.name}」` : '游戏'}…
+                </p>
+                <p className="text-[11px] font-bold text-ink-400">第一次会慢一点，之后就快了</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

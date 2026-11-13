@@ -123,6 +123,20 @@ function IconBack() {
  * ⚠️ 改这个数值前先跑 `scripts/_measure-fullscreen-btn.mjs`：
  *   它会打印这枚键和「种子 / 动物 / 市场」的重叠百分比。判据是**全都 0%**，
  *   不是「看着差不多」。
+ *
+ * ★★ 2026-11-13 用户：「有些游戏似乎没有全屏按钮」。实测按钮**一直在 DOM 里、
+ *    也点得到**（`elementFromPoint` 命中的就是它）—— 问题是**看不见**：
+ *    原来是 `bg-ink-900/35`（35% 的黑）+ 白图标，压在农场那种深绿草地上，
+ *    两者都是低明度的暗色，边上还有一圈草地纹理，肉眼基本分辨不出来。
+ *
+ *    改法不是"做成实心白片"（用户明确说过要播放器那种透明感），而是
+ *    **加一道白环**：`ring-2 ring-white/85` + 外描边阴影。
+ *    白环的作用是**在任何背景上都勾出圆形轮廓** —— 浅色背景靠深色玻璃，
+ *    深色背景靠白环，两边都能看见，而且中间仍然是半透明的。
+ *
+ *    ⚠️ 判「看得见」不能只看截图（我第一版就是）—— 这条只能靠**人眼**看
+ *    多张不同游戏的截图。`_probe-fullscreen.mjs` 能证明"点得到"，
+ *    证明不了"看得见"。
  */
 export function GameFullscreenButton({ onEnter }: { onEnter: () => void }) {
   return (
@@ -132,7 +146,7 @@ export function GameFullscreenButton({ onEnter }: { onEnter: () => void }) {
       onClick={onEnter}
       aria-label="全屏玩"
       title="全屏玩"
-      className="btn absolute bottom-[74px] right-2 z-20 grid size-[34px] place-items-center rounded-full border border-white/45 bg-ink-900/35 text-white shadow-[0_2px_10px_rgba(0,0,0,0.24)] backdrop-blur-md active:btn-press"
+      className="btn absolute bottom-[74px] right-2 z-20 grid size-[34px] place-items-center rounded-full border border-white/60 bg-ink-900/55 text-white ring-2 ring-white/85 shadow-[0_2px_12px_rgba(0,0,0,0.38)] backdrop-blur-md active:btn-press"
     >
       <IconExpand />
     </button>

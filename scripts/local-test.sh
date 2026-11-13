@@ -15,6 +15,7 @@
 #   bash scripts/local-test.sh --no-apk       # 只出网页版，快
 #   bash scripts/local-test.sh --skip-tests   # 只构建+起站，几分钟内能点
 #   bash scripts/local-test.sh --skip-build   # 连构建都省，直接起现有 dist（几秒）
+#   bash scripts/local-test.sh --no-admin     # 不起后台（/admin/ 会 404）
 #
 # ⚠️ 它**不会**推服务器。发布是 `release-official.sh`，那一步要你手输「发布」。
 #
@@ -50,10 +51,12 @@ BUILD_APK=1
 WANT_PORT=""
 SKIP_TESTS=0
 SKIP_BUILD=0
+WITH_ADMIN=1   # 默认带后台（/admin/）；--no-admin 跳过
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-apk) BUILD_APK=0; shift ;;
     --port) WANT_PORT="${2:?--port 后面要跟端口号}"; shift 2 ;;
+    --no-admin) WITH_ADMIN=0; shift ;;
     --skip-tests) SKIP_TESTS=1; shift ;;
     --skip-build) SKIP_TESTS=1; SKIP_BUILD=1; shift ;;
     -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
@@ -162,7 +165,7 @@ if [ "$BUILD_APK" = "1" ]; then
 fi
 
 # ---------------------------------------------------------------- ④
-kqf_step "摆本地站点（官网 + /app/ + APK 下载）"
+kqf_step "摆本地站点（官网 + /app/ + 后台 + APK 下载）"
 SITE="$ROOT/.e2e-scratch/local-site"
 CODEBUDDY_SAFE_DELETE_ENABLED=0 rm -rf "$SITE" 2>/dev/null || true
 mkdir -p "$SITE/app"
@@ -174,6 +177,64 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0 node scripts/build-site.mjs --no-build --no-app 
 cp -r site/* "$SITE"/ 2>/dev/null || true
 # `/app/` = 客户端 Web 产物（和你手机上那个是同一份代码）
 cp -r dist/* "$SITE/app"/
+
+# ---- 后台（/admin/）----
+# admin 是**独立工程**（tf-admin/web），和客户端不是一份代码，所以必须单独搬。
+# ⚠️ 两个值都是**编译期**常量，少一个就白屏或登录 404（和部署脚本同口径）：
+#      --base=/admin/       否则静态资源去 /assets/ 找
+#      VITE_BASE_API=/gva   否则 axios 打 /api（那是平台 API 的路由）
+#    部署包里现成的 admin-web 是 nginx 用的，本地拿不到 ⇒ 这里现构建一份。
+#
+# ★ 构建要两三分钟，而它**并不常改**（改的多半是客户端）。
+#   所以按「源码指纹」缓存：tf-admin 的 HEAD + 工作区状态没变就复用上次产物。
+#   ⚠️ 指纹必须包含 `git status`（不只是 HEAD）—— 否则改了没提交的代码
+#      会一直用旧产物，表现是「我明明改了，页面上没变」。
+ADMIN_WEB="$ROOT/../tf-admin/web"
+ADMIN_STAMP_FILE="$ROOT/.e2e-scratch/admin-build.stamp"
+ADMIN_CACHE="$ROOT/.e2e-scratch/admin-dist"
+
+admin_stamp() {
+  # ⚠️ `git -C` 也吃不了 MSYS 的 `/e/...` 路径（会报 cannot change to …
+  #    No such file or directory，退出码 128）。git 同样是原生 Windows 程序 ——
+  #    这个仓库里同一个坑已经踩了第五次（python / node / vite / 部署拷贝 / 现在是 git）。
+  #    所以一律先 `pwd -W` 转成 `E:/plan/...` 再交给它。
+  local repo_win
+  repo_win="$(cd "$ROOT/../tf-admin" 2>/dev/null && pwd -W)" || return 0
+  {
+    git -C "$repo_win" rev-parse HEAD 2>/dev/null || echo no-git
+    # 指纹必须包含未提交改动 —— 只看 HEAD 的话，改了没提交的代码会一直用旧产物，
+    # 表现是「我明明改了，页面上没变」。
+    git -C "$repo_win" status --porcelain 2>/dev/null | head -40 || true
+  } | md5sum | cut -d' ' -f1
+}
+
+if [ "$WITH_ADMIN" = "1" ] && [ -d "$ADMIN_WEB/node_modules" ]; then
+  STAMP="$(admin_stamp)"
+  if [ -d "$ADMIN_CACHE" ] && [ "$(cat "$ADMIN_STAMP_FILE" 2>/dev/null || true)" = "$STAMP" ]; then
+    echo "  后台源码没变，复用上次构建（省两三分钟）"
+  else
+    echo "  正在构建后台（第一次会慢一点）…"
+    ( cd "$ADMIN_WEB" && CODEBUDDY_SAFE_DELETE_ENABLED=0 \
+        VITE_BASE_API=/gva VITE_FILE_API=/gva \
+        pnpm exec vite build --mode production --base=/admin/ ) \
+        > "$KQF_LOG_DIR/admin.log" 2>&1 || {
+      echo "  ✗ 后台构建失败，最后 20 行："; tail -20 "$KQF_LOG_DIR/admin.log"; exit 1
+    }
+    CODEBUDDY_SAFE_DELETE_ENABLED=0 rm -rf "$ADMIN_CACHE" 2>/dev/null || true
+    cp -r "$ADMIN_WEB/dist" "$ADMIN_CACHE"
+    printf '%s\n' "$STAMP" > "$ADMIN_STAMP_FILE"
+  fi
+  cp -r "$ADMIN_CACHE" "$SITE/admin"
+  # 判据：基址和接口前缀都得对（错一个就是白屏/登录 404，而且不报错）
+  grep -q "/admin/assets" "$SITE/admin/index.html" \
+    || kqf_fail "后台产物缺 /admin/assets 前缀（--base 没生效，会白屏）"
+  grep -rqs "/gva" "$SITE/admin/assets" \
+    || kqf_fail "后台产物里没有 /gva（VITE_BASE_API 没生效，登录会 404）"
+  kqf_ok "后台已就位（/admin/）"
+elif [ "$WITH_ADMIN" = "1" ]; then
+  kqf_warn "跳过后台：$ADMIN_WEB/node_modules 不存在（先 pnpm install）"
+fi
+
 if [ -n "$APK_PATH" ]; then
   mkdir -p "$SITE/download"
   cp "$APK_PATH" "$SITE/download/kid-quest-farm.apk"
@@ -188,6 +249,10 @@ echo "--------------------------------------------------"
 echo " 请在这里试："
 echo "   网页版   $URL/app/"
 echo "   官网     $URL/"
+if [ -d "$SITE/admin" ]; then
+  echo "   后台     $URL/admin/"
+  echo "            ⚠️ 后台连的是**线上真库**，只看看界面，别点删除/下架"
+fi
 if [ -n "$APK_PATH" ]; then
   echo "   装包     $URL/download/kid-quest-farm.apk"
   echo "            （手机上装之前先卸旧的；同一签名可覆盖升级）"
@@ -204,5 +269,12 @@ echo ""
 #    `$SITE` 是 MSYS 路径（`/e/plan/...`），而 python 是原生 Windows 程序，
 #    它把 `/e/...` 当成 `E:\e\...` ⇒ **整站 404，且日志里一句报错都没有**。
 #    2026-11-13 实测踩到（站点明明有文件，所有路径全 404）。
+# ★ 用 node 的 local-server（而不是 `python -m http.server`）：
+#   后台的接口是相对路径 `/gva`，静态服务会把请求兜底成 index.html ⇒
+#   前端拿 HTML 去 JSON.parse ⇒ 登录页永远转圈。那个服务会把它转发到线上。
+#
+# ⚠️ node 不认 MSYS 的 `/e/...`（会去找 `E://e//...` ⇒ MODULE_NOT_FOUND），
+#    所以两个路径都转成 Windows 形式。
 cd "$SITE"
-exec python -m http.server "$PORT" --bind 127.0.0.1
+exec node "$(cd "$HERE" && pwd -W)/lib/local-server.mjs" \
+  --dir "$(pwd -W)" --port "$PORT" --target https://kidfarm.duckdns.org
