@@ -2667,14 +2667,24 @@ try {
     /* 安全属性：**没输密码时，清空按钮不该出现在页面上**。
        只看「点不到」不够 —— 渲染出来但被禁用，家长一样会被吓到，
        而且以后谁把 disabled 去掉就悄悄放行了。 */
+    /* ★★ 2026-11-14 改判据：原来 grep「数据操作需要密码」这句话。
+       用户要求「点数据就显示密码」，中间那张说明卡被去掉了（只在点「先算了」
+       之后才出现），而文案也改成了「这一页要家长密码」。
+       判据换成**密码键盘在不在** —— 那是真正挡住操作的东西；
+       grep 文案的话，改一次文案这条就假红（它本来该守的不是文案）。 */
     const locked = await page.evaluate(() => ({
       hasDanger: /清空全部数据/.test(document.body.innerText),
-      hasGate: /数据操作需要密码/.test(document.body.innerText),
+      hasGate:
+        !!document.querySelector('[role="dialog"]') ||
+        /要家长密码/.test(document.body.innerText),
     }))
 
     /* ★ 2026-11-10：键盘现在**点出来**（`ParentLockButton` → `setPinOpen(true)`），
        不再铺在页面里。少了这一下，后面按数字会找不到按钮。 */
     const gateOpened = await page.evaluate(() => {
+      /* ★ 2026-11-14：进「数据」时键盘**已经自动弹**了（用户要求少一步）。
+         所以先看它在不在 —— 不在才去点那颗按钮（点了「先算了」的情况）。 */
+      if (document.querySelector('[role="dialog"]')) return true
       const b = [...document.querySelectorAll('button')].find((x) =>
         x.innerText.includes('爸妈：输密码'),
       )
