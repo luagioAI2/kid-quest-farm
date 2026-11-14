@@ -264,7 +264,12 @@ for p in / /app/ /download/kid-quest-farm.apk /healthz /api/game/catalog /admin/
   #    ⇒ 六个路径全部"不是 200"、脚本喊「先别通知用户」，而线上其实好好的。
   #    2026-11-14 实测踩到（手动 curl 六条全 200）。
   #    改成：只取状态码，忽略 curl 自己的退出码（状态码本身才是判据）。
-  code=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "https://kidfarm.duckdns.org$p" 2>/dev/null)
+  # ⚠️ 末尾必须 `|| true`：`code=$(curl …)` 的退出码就是 curl 的退出码，
+  #    本机 curl 恒返回 23 ⇒ `set -e` 会让整个脚本**在这里静默退出**，
+  #    复测一行都没打出来、发布其实已经成功（推送那步早过了）。
+  #    2026-11-14 实测踩到：日志停在「▸ [5/5] 线上复测」就没了。
+  code=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' \
+    "https://kidfarm.duckdns.org$p" 2>/dev/null || true)
   code="${code:-000}"
   # 兜底：真拿不到状态码时 curl 会给 000，长度一定是 3；长了说明是拼接产物
   [ ${#code} -eq 3 ] || code=000
