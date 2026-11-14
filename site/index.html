@@ -22,18 +22,21 @@
     <!-- ⚠️ 2026-10-03：title / description / keywords / JSON-LD 这一层原来还留着
          「教育口号」类的词（那张禁词表在 .workbuddy-ai/memory/MEMORY.md）。
          句面文案早就删干净了，只有 SEO 这一层没跟上 —— 改这层时照同一张表过一遍。 -->
-    <title>小任务农场｜6–14 岁孩子的任务激励 App — 完成小任务，经营大农场</title>
+    <title>小任务农场｜孩子任务积分 App，让他自己管自己（6–14 岁）</title>
     <meta
       name="description"
-      content="小任务农场是一款给 6–14 岁孩子的任务激励 App：把作业、家务、阅读变成可计时、可评分的任务，再用积分经营一座会生长的农场。无广告、无内购；单机版存档在设备上，在线版跟着账号走，支持安卓 APK 与手机浏览器。"
+      content="把作业、家务、阅读变成可计时、可评分的任务：孩子自己安排、自己计时，家长只审核、可一票否决，在用的过程中练时间管理和自控力。积分用来经营一座会长大的农场。6–14 岁，无广告、无内购，安卓 APK 与手机浏览器都能用。"
     />
     <meta
       name="keywords"
-      content="儿童任务app,孩子做家务奖励,积分奖励表,时间管理训练,番茄钟儿童版,农场游戏,家长管控,无广告儿童应用,安卓APK下载"
+      content="儿童任务app,孩子做家务奖励,积分奖励表,培养孩子自控力,孩子时间管理,儿童时间管理app,孩子写作业要盯着吗,家长审核,一票否决,番茄钟儿童版,农场游戏,无广告儿童应用,安卓APK下载"
     />
     <link rel="canonical" href="https://www.kidquestfarm.cn/" />
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1" />
     <meta name="theme-color" content="#fffaf2" />
+<!-- 百度移动适配的老信号：告诉它这一份就能同时服务 PC 和手机，
+     不需要另做一个 m. 站点。写上不亏，也别指望它单独起效。 -->
+<meta name="applicable-device" content="pc,mobile" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="author" content="小任务农场" />
     <meta name="application-name" content="小任务农场" />
@@ -51,10 +54,10 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="小任务农场" />
     <meta property="og:locale" content="zh_CN" />
-    <meta property="og:title" content="小任务农场｜完成小任务，经营大农场" />
+    <meta property="og:title" content="小任务农场｜让孩子自己管自己" />
     <meta
       property="og:description"
-      content="给 6–14 岁孩子的任务激励 App：完成任务拿积分，用积分经营一座会长大的农场。无广告、无内购；单机版离线，在线版云端存档。"
+      content="孩子自己安排任务、自己计时，家长只审核、可一票否决。积分用来经营一座会长大的农场。6–14 岁，无广告、无内购。"
     />
     <meta property="og:url" content="https://www.kidquestfarm.cn/" />
     <meta property="og:image" content="https://www.kidquestfarm.cn/og-cover.png" />
@@ -64,10 +67,10 @@
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="小任务农场｜完成小任务，经营大农场" />
+    <meta name="twitter:title" content="小任务农场｜让孩子自己管自己" />
     <meta
       name="twitter:description"
-      content="给 6–14 岁孩子的任务激励 App：完成任务拿积分，用积分经营一座会长大的农场。无广告、无内购；单机版离线，在线版云端存档。"
+      content="孩子自己安排任务、自己计时，家长只审核、可一票否决。积分用来经营一座会长大的农场。6–14 岁，无广告、无内购。"
     />
     <meta name="twitter:image" content="https://www.kidquestfarm.cn/og-cover.png" />
 
@@ -76,150 +79,168 @@
 
     <!-- 结构化数据：软件信息 + 站点 + 组织 + 常见问题 -->
     <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@graph": [
-          {
-            "@type": "WebSite",
-            "@id": "https://www.kidquestfarm.cn/#website",
-            "url": "https://www.kidquestfarm.cn/",
-            "name": "小任务农场",
-            "alternateName": "Kid Quest Farm",
-            "inLanguage": "zh-CN",
-            "description": "给 6–14 岁孩子的任务激励 App",
-            "publisher": { "@id": "https://www.kidquestfarm.cn/#org" }
-          },
-          {
-            "@type": "Organization",
-            "@id": "https://www.kidquestfarm.cn/#org",
-            "name": "小任务农场",
-            "url": "https://www.kidquestfarm.cn/",
-            "logo": {
-              "@type": "ImageObject",
-              "url": "https://www.kidquestfarm.cn/img/icon-512.png",
-              "width": 512,
-              "height": 512
-            }
-          },
-          {
-            "@type": "SoftwareApplication",
-            "@id": "https://www.kidquestfarm.cn/#app",
-            "name": "小任务农场",
-            "alternateName": "Kid Quest Farm",
-            "applicationCategory": "EducationalApplication",
-            "applicationSubCategory": "儿童任务管理与积分奖励",
-            "operatingSystem": "Android 7.0+, iOS, Web",
-            "softwareVersion": "1.2.2",
-            "inLanguage": "zh-CN",
-            "isAccessibleForFree": true,
-            "description": "把作业、家务、阅读变成可计时、可评分的任务，再用积分经营一座会生长的农场。无广告、无内购；单机版离线，在线版云端存档。",
-            "url": "https://www.kidquestfarm.cn/",
-            "installUrl": "https://www.kidquestfarm.cn/app/",
-            "downloadUrl": "https://www.kidquestfarm.cn/download/kid-quest-farm.apk",
-            "image": "https://www.kidquestfarm.cn/img/icon-512.png",
-            "screenshot": [
-              "https://www.kidquestfarm.cn/img/shot-tasks.png",
-              "https://www.kidquestfarm.cn/img/shot-farm.png",
-              "https://www.kidquestfarm.cn/img/shot-market.png",
-              "https://www.kidquestfarm.cn/img/shot-redeem.png"
-            ],
-            "offers": {
-              "@type": "Offer",
-              "price": "0",
-              "priceCurrency": "CNY",
-              "availability": "https://schema.org/InStock"
-            },
-            "audience": {
-              "@type": "PeopleAudience",
-              "suggestedMinAge": 6,
-              "suggestedMaxAge": 9,
-              "audienceType": "6–14 岁儿童及其家长"
-            },
-            "featureList": [
-              "任务计时与按时间衰减的积分结算",
-              "每天 / 每周 / 每月 / 每年周期任务与签到阶梯奖励",
-              "家长审核与质量打分",
-              "农场经营：12 块地、15 种作物、8 种动物",
-              "市场行情波动与背包待售",
-              "积分与兑换券双账本",
-              "兑换愿望清单与参考汇率",
-              "全量数据导出与恢复",
-              "单机版完全离线可用，无广告无内购"
-            ]
-          },
-          {
-            "@type": "FAQPage",
-            "@id": "https://www.kidquestfarm.cn/#faq",
-            "mainEntity": [
-              {
-                "@type": "Question",
-                "name": "适合几岁的孩子？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "主要面向 6–14 岁，从小学到初中都用得上。这段时间作业、家务、阅读都是日常。低年级由家长设好任务；高年级可以自己调整任务内容、时长和积分规则。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "需要联网吗？要注册账号吗？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "看用哪个版本。单机版（安卓安装包）不需要联网、也不需要账号，数据全在设备上，飞机上、没 WiFi 的爷爷奶奶家都能照常玩。在线版（网页版）需要一个账号：手机号登录，或者先开游客账号之后再绑定，数据跟着账号走，换手机登录就回来。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "孩子的数据会被上传吗？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "看用哪个版本。单机版没有服务端，任务、积分、农场记录全部保存在本机，只有「导出备份」能把数据拿出来。在线版会把任务、积分、农场进度同步到我们自己的服务器，这样换设备不丢。两个版本都没有第三方统计和广告 SDK。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "有广告吗？需要内购吗？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "没有广告，也没有任何内购和付费解锁。全部内容（12 块地、15 种作物、8 种动物、全部任务类型）都在应用内，不需要额外付费。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "孩子会不会自己偷偷加分？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "不会。孩子端只能提交任务、不能自评分数。打开「家长审核」后，孩子提交的任务会停在「等爸爸妈妈看」，必须由家长输入密码、给出质量分并点确认奖励，积分才真正入账。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "换手机或换浏览器，数据会丢吗？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "可以用「导出备份」把全部数据（任务、实例、积分流水、背包、农场、设置）存成一个 JSON 文件，在新设备上用「导入备份」恢复，接着玩。建议每隔一段时间导出一次。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "积分和真实零花钱怎么对应？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "家长可以在设置里定一个参考汇率（默认 1 元 ≈ 10 分）。给兑换品定价时，会顺带显示这个价格大约等于多少钱。这只是给家长的参照，扣多少分永远看标价本身，不影响任何数值。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "农场里的「兑换券」是什么？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "兑换券是卖出农产品后得到的第二种货币，和积分是两本独立的账。它只能用来兑换愿望，不能换回积分、也不能买种子和土地。这样设计是为了避免出现「种地→赚钱→买更多地→赚更多钱」的无限循环。"
-                }
-              }
-            ]
-          }
-        ]
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://www.kidquestfarm.cn/#website",
+      "url": "https://www.kidquestfarm.cn/",
+      "name": "小任务农场",
+      "alternateName": "Kid Quest Farm",
+      "inLanguage": "zh-CN",
+      "description": "给 6–14 岁孩子的任务激励 App",
+      "publisher": {
+        "@id": "https://www.kidquestfarm.cn/#org"
       }
-    </script>
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://www.kidquestfarm.cn/#org",
+      "name": "小任务农场",
+      "url": "https://www.kidquestfarm.cn/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://www.kidquestfarm.cn/img/icon-512.png",
+        "width": 512,
+        "height": 512
+      }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://www.kidquestfarm.cn/#app",
+      "name": "小任务农场",
+      "alternateName": "Kid Quest Farm",
+      "applicationCategory": "EducationalApplication",
+      "applicationSubCategory": "儿童任务管理与积分奖励",
+      "operatingSystem": "Android 7.0+, iOS, Web",
+      "softwareVersion": "1.2.2",
+      "inLanguage": "zh-CN",
+      "isAccessibleForFree": true,
+      "description": "把作业、家务、阅读变成可计时、可评分的任务，再用积分经营一座会生长的农场。无广告、无内购；单机版离线，在线版云端存档。",
+      "url": "https://www.kidquestfarm.cn/",
+      "installUrl": "https://www.kidquestfarm.cn/app/",
+      "downloadUrl": "https://www.kidquestfarm.cn/download/kid-quest-farm.apk",
+      "image": "https://www.kidquestfarm.cn/img/icon-512.png",
+      "screenshot": [
+        "https://www.kidquestfarm.cn/img/shot-tasks.png",
+        "https://www.kidquestfarm.cn/img/shot-farm.png",
+        "https://www.kidquestfarm.cn/img/shot-market.png",
+        "https://www.kidquestfarm.cn/img/shot-redeem.png"
+      ],
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY",
+        "availability": "https://schema.org/InStock"
+      },
+      "audience": {
+        "@type": "PeopleAudience",
+        "suggestedMinAge": 6,
+        "suggestedMaxAge": 9,
+        "audienceType": "6–14 岁儿童及其家长"
+      },
+      "featureList": [
+        "任务计时与按时间衰减的积分结算",
+        "每天 / 每周 / 每月 / 每年周期任务与签到阶梯奖励",
+        "家长审核与质量打分",
+        "农场经营：12 块地、15 种作物、8 种动物",
+        "市场行情波动与背包待售",
+        "积分与兑换券双账本",
+        "兑换愿望清单与参考汇率",
+        "全量数据导出与恢复",
+        "单机版完全离线可用，无广告无内购"
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://www.kidquestfarm.cn/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "适合几岁的孩子？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "主要面向 6–14 岁，从小学到初中都用得上。这段时间作业、家务、阅读都是日常。\n低年级由家长设好任务；高年级可以自己调整任务内容、时长和积分规则。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "家长需要每天盯着孩子做吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "不需要。任务清单由孩子自己排：先做哪个、几点开始、用多久，都在他那边。 做的时候自己开计时，做完提交。\n家长要做的只是看一眼结果 —— 确认，或者驳回。如果连这一步也不想管， 设置里可以关掉审核，改成提交即结算。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "需要联网吗？要注册账号吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "看用哪个版本。单机版（安卓安装包）不需要联网、也不需要账号， 数据全在设备上，飞机上、没 WiFi 的爷爷奶奶家都能照常玩。\n在线版（网页版）需要一个账号：可以用手机号登录，也可以先开一个游客账号， 之后再绑定。数据跟着账号走，换手机登录就回来。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "孩子的数据会被上传吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "单机版不会 —— 它没有任何服务端，任务、积分、农场记录全部保存在本机。\n在线版会把任务、积分、农场进度同步到我们自己的服务器，这样才能换设备不丢。 两种版本都没有第三方统计和广告 SDK；在线版也可以随时「导出备份」。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "心愿商城的东西是谁发货？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "心愿商城里的商品由合作商家提供。孩子在 App 里许愿，家长看到后自己定价； 要不要买、什么时候买，都由家长决定，App 里不收款。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "有广告吗？需要内购吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "没有广告，也没有任何内购。全部内容（12 块地、15 种作物、8 种动物、 全部任务类型）都在应用内，不需要额外付费解锁。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "孩子会不会自己偷偷加分？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "不会。孩子端只能提交任务、不能自评分数。打开「家长审核」后， 任务会停在「等爸爸妈妈看」，必须由家长输入密码、给出质量分并点确认奖励， 积分才真正入账。\n孩子提交前看到的分数一律写着「大约能拿到」——因为质量分还没定。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "换手机或换浏览器，数据会丢吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "在线版不会：数据在账号里，新设备登录就回来。 单机版的数据只在这台设备上，换设备要靠「导出备份」—— 把任务、积分流水、背包、农场、设置打包成一个 JSON 文件， 在新设备上用「导入备份」恢复，接着玩。\n单机版建议每隔一段时间导出一次，尤其是准备换设备或清理浏览器数据之前； 清理浏览器数据会把网页版的本地缓存一起清掉，所以别只留一份在本机。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "积分和真实零花钱怎么对应？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "家长可以在设置里定一个参考汇率（默认 1 元 ≈ 10 分）。 给兑换品定价时，会顺带显示这个价格大约等于多少钱。\n这只是给家长的参照，扣多少分看标价本身， 改汇率不会影响任何数值。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "农场里的「兑换券」是什么？为什么不直接给积分？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "兑换券是卖出农产品后得到的第二种货币，和积分是两本独立的账。\n它只能用来兑换愿望，不能换回积分，也不能买种子和土地。这样设计是为了避免出现 「种地 → 赚钱 → 买更多地 → 赚更多钱」的无限循环。"
+          }
+        }
+      ]
+    }
+  ]
+}
+      </script>
   </head>
 
   <body>
@@ -1761,6 +1782,20 @@
                 </p>
                 <p>
                   低年级由家长设好任务；高年级可以自己调整任务内容、时长和积分规则。
+                </p>
+              </div>
+            </details>
+
+            <details class="reveal">
+              <summary>家长需要每天盯着孩子做吗？</summary>
+              <div class="faq__body">
+                <p>
+                  不需要。任务清单由孩子自己排：先做哪个、几点开始、用多久，都在他那边。
+                  做的时候自己开计时，做完提交。
+                </p>
+                <p>
+                  家长要做的只是看一眼结果 —— 确认，或者驳回。如果连这一步也不想管，
+                  设置里可以关掉审核，改成提交即结算。
                 </p>
               </div>
             </details>
