@@ -46,6 +46,28 @@ export const WISH_KIND_META: Record<
 export type WishFilter = WishKind | null
 
 /**
+ * 品类丝带的底色 —— **心愿页和兑换页共用这一份**。
+ *
+ * 2026-11-11 用户要求「游戏只需要在原先的基础上做个装饰丝带」，于是有了丝带；
+ * 2026-11-12 又要求兑换页里的心愿行也标出来（那里和家里的兑换品混在一张表，
+ * 光看名字分不出是盲盒还是玩具）。
+ *
+ * ⚠️ 别在组件里再抄一份：两处颜色不一致时，同一个「盲盒」在两个页面会是
+ *    两种紫，看着像两个品类，而且没人会报错。
+ * ⚠️ 用 500 档实色而不是 `*-100` / `*-50` 浅色：浅色上白字看不清，而这里
+ *    的字是白色小字。
+ */
+export const WISH_RIBBON_BG: Record<WishKind, string> = {
+  gamebox: '#0ea5e9',
+  blindbox: '#8b5cf6',
+  toy: '#ec4899',
+  study: '#22c55e',
+  food: '#f97316',
+  outing: '#14b8a6',
+  collectible: '#64748b',
+}
+
+/**
  * 这次能不能换、两种币**各付多少**。
  *
  * 规则与「兑换」模块完全一致（2026-10-29 家长要求）：
@@ -89,15 +111,21 @@ export function planWishRedeem(
  * ⚠️ 第三个来源不能省：`uninstallGame` 会把包和存档一起删掉，删完之后
  *    前两个都认不出来（详见 `redeemedGameIdsFrom` 的注释）。
  *
- * ★ 抽成函数是因为**现在有两个地方要用**（心愿列表的过滤、兑换页里
- *   「已开放的心愿」那一块）。各写一遍的话，一边滤掉了另一边没滤，
- *   孩子就会在兑换列表里看到自己已经有的游戏 —— 那正是 2026-10-29
- *   刚修过的那个毛病。
+ * ★ 抽成函数是因为**现在有两个地方要用**：心愿列表（用它把卡片标成
+ *   「已拥有」，2026-11-08 起**不再过滤**，见 `WishPage` 里 `items` 的注释）
+ *   和兑换页「已开放的心愿」那一块（那里仍然**过滤**掉已拥有的）。
+ *   各写一遍的话，一边判成拥有、另一边没判，孩子就会在兑换列表里
+ *   看到自己已经有的游戏 —— 那正是 2026-10-29 刚修过的那个毛病。
  */
 export function wishOwnedSet(
   ownedGameIds: readonly string[],
   installedGames: Record<string, unknown>,
-  wishOrders: readonly { status: string; openedGameId?: string }[],
+  wishOrders: readonly {
+    status: string
+    openedGameId?: string
+    /** 「5 连开」一单给了多款 —— 类型不能收窄，否则清单会被当成不存在 */
+    openedGameIds?: string[]
+  }[],
 ): Set<string> {
   return new Set<string>([
     ...ownedGameIds,
@@ -178,9 +206,10 @@ export function wishShelf(
     if (!item || item.archived) continue
 
     if (item.kind === 'gamebox' && item.gameId && owned.has(item.gameId)) continue
-    if (item.kind === 'blindbox' && blindBoxRemaining(item.pool ?? [], [...owned]).length === 0) {
-      continue
-    }
+    /* 盲盒：剩余款数**不足这一盒要开的款数**就不能摆出来（见 blindBoxSoldOut）。
+       只判「池子空了」的话，5 连开会把「只剩 2 款」的盒子也摆出来，
+       点进去必然被拒 —— 那是「界面承诺了它做不到的事」。 */
+    if (item.kind === 'blindbox' && blindBoxSoldOut(item, [...owned])) continue
 
     out.push({ item, price: offer.voucherPrice })
   }
@@ -211,13 +240,23 @@ export function wishShelf(
  * 而且孩子确实没拿到东西）。
  */
 export function redeemedGameIdsFrom(
-  orders: readonly { status: string; openedGameId?: string }[],
+  orders: readonly {
+    status: string
+    openedGameId?: string
+    openedGameIds?: string[]
+  }[],
 ): string[] {
   const out = new Set<string>()
   for (const o of orders) {
-    if (!o.openedGameId) continue
+    /* ★ 「5 连开」一单给了 5 款，5 款都算「兑换过」。
+       只读 `openedGameId` 的话，另外 4 款会：
+         · 盒子卡片变回可兑换 → 再扣一次券；
+         · 盲盒池子把它们放回去 → 再开出来一次。
+       而且全程不报错。 */
+    if (!o.openedGameId && !(o.openedGameIds && o.openedGameIds.length)) continue
     if (o.status === 'committed' || o.status === 'confirmed' || o.status === 'done') {
-      out.add(o.openedGameId)
+      if (o.openedGameId) out.add(o.openedGameId)
+      for (const id of o.openedGameIds ?? []) out.add(id)
     }
   }
   return [...out]
@@ -248,21 +287,67 @@ export function blindBoxRemaining(
 }
 
 /**
- * 开一个盲盒。池子空了返回 `null`（调用方必须**先判断**再扣券）。
+ * 这一盒要开几款（1 = 单开）。
  *
- * `rand` 可注入是为了让测试能钉死结果 —— 用 `Math.random()` 的测试
- * 只能断言「开出来的一定在池子里」，断言不了「全拥有时开不出来」。
+ * 兜底到 1 是必须的：`unlockCount` 缺省、为 0、被手改成负数都当 1 ——
+ * 否则「开 0 款」会变成「扣了券什么都没给」。
  */
-export function pickBlindBox(
+export function blindBoxNeed(item: { unlockCount?: number }): number {
+  const n = Math.round(item.unlockCount ?? 1)
+  return n >= 1 ? n : 1
+}
+
+/**
+ * 这一盒现在还能不能开。
+ *
+ * ★ 判据是「剩余款数 < 需要款数」，**不是**「池子空了」。
+ *   5 连开在只剩 2 款时点下去必然被拒 —— 摆出来就是界面在骗人。
+ */
+export function blindBoxSoldOut(
+  item: { pool?: string[]; unlockCount?: number },
+  owned: readonly string[],
+): boolean {
+  return blindBoxRemaining(item.pool ?? [], owned).length < blindBoxNeed(item)
+}
+
+/**
+ * 一次开 n 款盲盒（「5 连开」）。
+ *
+ * 返回的每一款**都不在 `owned` 里**，而且互不重复 —— 这就是
+ * 「已经解锁的不计算」：孩子已有的先减掉，不占名额。
+ *
+ * ★ 剩余不足 n 时返回**短的列表**（有几款给几款），由调用方决定是
+ *   「整单拒绝」还是「按剩余给」。现在的口径是整单拒绝（见 `wishRedeem`）。
+ *
+ * `rand` 可注入是为了让测试钉死结果；内部由它派生一个确定性的伪随机
+ * 序列来做洗牌（Fisher-Yates），每一款被选中的概率相同。
+ */
+export function pickBlindBoxMany(
   pool: readonly string[],
   owned: readonly string[],
+  n: number,
   rand: () => number = Math.random,
-): string | null {
+): string[] {
+  if (!(n > 0)) return []
   const remaining = blindBoxRemaining(pool, owned)
-  if (remaining.length === 0) return null
-  // `Math.random()` 理论上可能返回 1（规范上不会，但别赌）
-  const i = Math.min(remaining.length - 1, Math.floor(rand() * remaining.length))
-  return remaining[i]
+  if (remaining.length === 0) return []
+  const take = Math.min(n, remaining.length)
+
+  // 由 rand() 派生一个确定性的 LCG 序列：同一个 rand 必须给出同一批，
+  // 否则测试只能断言「在池子里」，断言不了「抽的是哪几款」。
+  let seed = Math.floor(Math.min(0.999999, Math.max(0, rand())) * 1e9) + 1
+  const next = (m: number) => {
+    seed = (seed * 6364136223846793005 + 1442695040888963407) % Number.MAX_SAFE_INTEGER
+    return Math.floor((seed / 2 ** 33) % m)
+  }
+  const deck = [...remaining]
+  const out: string[] = []
+  for (let i = 0; i < take; i++) {
+    const j = i + next(deck.length - i)
+    ;[deck[i], deck[j]] = [deck[j], deck[i]]
+    out.push(deck[i])
+  }
+  return out
 }
 
 /**
@@ -298,9 +383,12 @@ export function compareWishItem(
   return a.name.localeCompare(b.name, 'zh-Hans-CN')
 }
 
-/** 状态的中文说法。列表、详情、家长端共用，别在组件里各写一份 */
+/** 状态的中文说法。列表、详情、家长端共用，别在组件里各写一份。
+ *  第四轮：`wished` 不再写「等定价」—— 家长审核时直接定价，孩子这一侧
+ *  只做过一件事：向爸妈申请。许过愿 = 已向爸妈申请。
+ *  第五轮（2026-11-06）：状态文案统一为「已向爸妈申请」。 */
 export const WISH_STATUS_TEXT: Record<string, string> = {
-  wished: '等爸妈定价',
+  wished: '已向爸妈申请',
   committed: '等爸妈确认',
   confirmed: '爸妈去买啦',
   done: '已经拿到',

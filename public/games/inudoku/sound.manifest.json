@@ -1,0 +1,472 @@
+{
+  "assets": {
+    "clear": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 6645,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 6645,
+            "offset": 0
+          },
+          "priority": 0,
+          "sha256": "55bdec40f9ca749d5f4d5307efd809c7890c89525c0309a9afa6324cafccde60"
+        }
+      }
+    },
+    "duskbgm": {
+      "kind": "music",
+      "loop": true,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 1140530,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 1140530,
+            "offset": 6645
+          },
+          "priority": 0,
+          "sha256": "2833357f5a0753d0f4c17067919e1b6ec0f6cd028aa36b17301f85bf82e299a1"
+        }
+      }
+    },
+    "music": {
+      "kind": "music",
+      "loop": true,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "mp3": {
+          "bytes": 501990,
+          "codec": "mp3",
+          "id": "mp3",
+          "mimeType": "audio/mpeg",
+          "pack": {
+            "id": "main",
+            "length": 501990,
+            "offset": 1147175
+          },
+          "priority": 0,
+          "sha256": "87a99f62e901b8365f1b868cd53bc015d2bf9f887e4c8a89a4fad11a36a62c16"
+        }
+      }
+    },
+    "paperwalk": {
+      "kind": "music",
+      "loop": true,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 1132280,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 1132280,
+            "offset": 1649165
+          },
+          "priority": 0,
+          "sha256": "37d40c4ab91f87884581c878a36942b7b5ddbba1ad5e1d4acfdb5104adbec2fe"
+        }
+      }
+    },
+    "pencil": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 3950,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 3950,
+            "offset": 2781445
+          },
+          "priority": 0,
+          "sha256": "165be41ba7c333506e979ac9ac09c3abc4d816ca493a53973a965ce8d7a3f8bc"
+        }
+      }
+    },
+    "skinget": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 12691,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 12691,
+            "offset": 2785395
+          },
+          "priority": 0,
+          "sha256": "c9fd80f3d9e7d8f7fce05ae541f50b0c06939870c2efd48896ffb17bff51373e"
+        }
+      }
+    },
+    "sunnybgm": {
+      "kind": "music",
+      "loop": true,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 1023063,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 1023063,
+            "offset": 2798086
+          },
+          "priority": 0,
+          "sha256": "048e4a5d75776b3550aaae0ec941d7a810869a0f62e15501b07d7e557513c71a"
+        }
+      }
+    },
+    "tap": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 1476,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 1476,
+            "offset": 3821149
+          },
+          "priority": 0,
+          "sha256": "74a5fc680103b39458f9f9b968d7aa0b942e412bca22d519f7ea2e4566acc867"
+        }
+      }
+    },
+    "unlock": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 18824,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 18824,
+            "offset": 3822625
+          },
+          "priority": 0,
+          "sha256": "78efd84c834d884f07e2f595d67aa755533b9abafaec5cd5f22ff33255866aeb"
+        }
+      }
+    },
+    "woof": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 5047,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 5047,
+            "offset": 3841449
+          },
+          "priority": 0,
+          "sha256": "f279133229d2013e393e06594bbb97230ebc5a21eae1d2a547d9c50ef478967a"
+        }
+      }
+    },
+    "wrong": {
+      "kind": "sfx",
+      "loop": false,
+      "resolvedLoadPolicy": {
+        "group": "gameplay",
+        "mode": "buffer"
+      },
+      "variants": {
+        "aac": {
+          "bytes": 6459,
+          "codec": "aac",
+          "id": "aac",
+          "mimeType": "audio/mp4",
+          "pack": {
+            "id": "main",
+            "length": 6459,
+            "offset": 3846496
+          },
+          "priority": 0,
+          "sha256": "472d5f995cd82b31e97bbb807924686cfd44430325b210f21c7249160cdc3357"
+        }
+      }
+    }
+  },
+  "buses": {
+    "ambience": {
+      "gainDb": -3,
+      "parent": "sfx",
+      "userCategory": "sfx"
+    },
+    "impact": {
+      "gainDb": -1,
+      "parent": "sfx",
+      "userCategory": "sfx"
+    },
+    "master": {
+      "gainDb": -3,
+      "parent": null,
+      "userCategory": "master"
+    },
+    "music": {
+      "gainDb": 0,
+      "parent": "master",
+      "userCategory": "music"
+    },
+    "sfx": {
+      "gainDb": 0,
+      "parent": "master",
+      "userCategory": "sfx"
+    },
+    "ui": {
+      "gainDb": -2,
+      "parent": "sfx",
+      "userCategory": "sfx"
+    },
+    "voice": {
+      "gainDb": -2,
+      "parent": "master",
+      "userCategory": "voice"
+    }
+  },
+  "contentHash": "40d41f98d6640d161a5650d4eee093f441c40accece45beb39c4b952c9f198bc",
+  "cues": {
+    "answer.wrong": {
+      "assetIds": [
+        "wrong"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 0,
+      "gainDb": -8,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "dog.correct": {
+      "assetIds": [
+        "woof"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 0,
+      "gainDb": -9,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "music.calm": {
+      "assetIds": [
+        "music"
+      ],
+      "bus": "music",
+      "cooldownMs": 0,
+      "gainDb": -12,
+      "loop": true,
+      "polyphony": 1,
+      "priority": 20
+    },
+    "music.dusk": {
+      "assetIds": [
+        "duskbgm"
+      ],
+      "bus": "music",
+      "cooldownMs": 0,
+      "gainDb": -12,
+      "loop": true,
+      "polyphony": 1,
+      "priority": 20
+    },
+    "music.paperwalk": {
+      "assetIds": [
+        "paperwalk"
+      ],
+      "bus": "music",
+      "cooldownMs": 0,
+      "gainDb": -12,
+      "loop": true,
+      "polyphony": 1,
+      "priority": 20
+    },
+    "music.sunny": {
+      "assetIds": [
+        "sunnybgm"
+      ],
+      "bus": "music",
+      "cooldownMs": 0,
+      "gainDb": -12,
+      "loop": true,
+      "polyphony": 1,
+      "priority": 20
+    },
+    "paper.tap": {
+      "assetIds": [
+        "tap"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 0,
+      "gainDb": -5,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "pencil.mark": {
+      "assetIds": [
+        "pencil"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 0,
+      "gainDb": -5,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "puzzle.clear": {
+      "assetIds": [
+        "clear"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 0,
+      "gainDb": -8,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "secret.unlock": {
+      "assetIds": [
+        "unlock"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 0,
+      "gainDb": -6,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    },
+    "skin.get": {
+      "assetIds": [
+        "skinget"
+      ],
+      "bus": "sfx",
+      "cooldownMs": 0,
+      "gainDb": -6,
+      "loop": false,
+      "polyphony": 6,
+      "priority": 5
+    }
+  },
+  "duckRules": {},
+  "masterSafety": {
+    "attackSeconds": 0.003,
+    "kneeDb": 0,
+    "ratio": 20,
+    "releaseSeconds": 0.25,
+    "thresholdDb": -3
+  },
+  "mixStates": {},
+  "musicStates": {
+    "dusk": {
+      "crossfadeMs": 1200,
+      "cueId": "music.dusk"
+    },
+    "paperwalk": {
+      "crossfadeMs": 1200,
+      "cueId": "music.paperwalk"
+    },
+    "puzzle": {
+      "crossfadeMs": 1200,
+      "cueId": "music.calm"
+    },
+    "sunny": {
+      "crossfadeMs": 1200,
+      "cueId": "music.sunny"
+    }
+  },
+  "packs": {
+    "main": {
+      "payloadBytes": 3852955,
+      "payloadSha256": "bc87d3cb60c1426cd6b8b297581f91821f8c7747171988f52dfe3513c8e5ec71",
+      "url": "sound.pack"
+    }
+  },
+  "projectHash": "c63cb9abe0726beaac9f8b38fb45c3116e1ed179e7d64e962c913217295c47e3",
+  "projectId": "wankozutsu",
+  "runtimePolicy": {
+    "lockedPlayback": "reject",
+    "maxConcurrentDecodes": 3
+  },
+  "schemaVersion": "1.0.0",
+  "voicePolicy": {
+    "busMax": {
+      "ambience": 4,
+      "impact": 8,
+      "music": 2,
+      "sfx": 16,
+      "ui": 8,
+      "voice": 4
+    },
+    "defaultCueMax": 6,
+    "globalMax": 24,
+    "stealPolicy": "lowest-priority-oldest"
+  }
+}

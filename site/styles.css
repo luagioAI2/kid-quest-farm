@@ -479,6 +479,137 @@ ol {
   height: 21px;
 }
 
+/* ---------- 「让他自己管自己」（2026-11-14） ----------
+   用户两次反馈后的第二版。第一版是「分工流程图 + 四张说明卡」——
+   机制讲清了，但**没有吸引力**。用户要的是钩子：
+     「我需要的是吸引人的噱头，不是让你真的摆出流程……家长一看到就心有灵犀。」
+
+   ⇒ 现在这一节的重心是**那句话**，不是图。所以：
+     · 标题做大（clamp 到 3rem 级），关键词用 em 强调
+     · 三个短语横排做视觉锚点，一眼能扫
+     · 图压到 176 高的窄条，只交代「家长只出现一次」
+
+   ⚠️ 别再往这里加说明卡。流程下面本来就有（使用流程 + 截图）。 */
+.hook {
+  /* 这一节要"亮"出来一点，和上下普通的 paper 段分开 */
+  background: linear-gradient(180deg, var(--paper) 0, #f6fbf7 100%);
+}
+
+.hook__inner {
+  text-align: center;
+}
+
+.hook__title {
+  margin: 14px 0 0;
+  font-family: var(--font-display);
+  /* ★ 这是全页第二个视觉重心（只在 h1 之下）。中文标题不用负字距 ——
+     汉字是满格方块，收字距会让它挤成一堵墙。 */
+  font-size: clamp(2rem, 5.2vw, 3.1rem);
+  font-weight: 700;
+  line-height: 1.28;
+  color: var(--ink-900);
+  letter-spacing: 0.005em;
+  text-wrap: balance;
+}
+
+.hook__title em {
+  font-style: normal;
+  color: var(--accent-strong);
+  /* 手写感的下划线，比纯变色更有"被圈出来"的感觉 */
+  background-image: linear-gradient(180deg, transparent 62%, var(--sun-200) 62%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  padding: 0 0.08em;
+}
+
+.hook__lead {
+  margin: 18px auto 0;
+  max-width: 34em;
+  font-size: clamp(0.98rem, 1.5vw, 1.1rem);
+  line-height: 1.95;
+  color: var(--ink-600);
+  text-wrap: pretty;
+}
+
+.hook__lead b {
+  color: var(--ink-900);
+}
+
+/* 三个短语：横排，手机折成三行。等宽，不分主次。 */
+.hook__keys {
+  margin: clamp(24px, 3vw, 34px) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(12px, 1.8vw, 20px);
+  text-align: left;
+}
+
+.hook__keys li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 16px 15px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--hairline);
+}
+
+.hook__keys .icon {
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  color: var(--accent-strong);
+}
+
+.hook__keys span {
+  font-size: 0.86rem;
+  line-height: 1.7;
+  color: var(--ink-500);
+}
+
+.hook__keys b {
+  display: block;
+  font-size: 0.98rem;
+  color: var(--ink-900);
+  margin-bottom: 2px;
+}
+
+/* 图：窄条，只做佐证 */
+.hook__figure {
+  margin: clamp(26px, 3.2vw, 38px) 0 0;
+}
+
+.hook__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* 720 : 176 —— 比例必须和 viewBox 一致，否则 `slice`/缩放会裁掉内容 */
+  aspect-ratio: 720 / 176;
+}
+
+.hook__cap {
+  margin-top: 10px;
+  font-size: 0.84rem;
+  line-height: 1.8;
+  color: var(--ink-500);
+}
+
+@media (max-width: 900px) {
+  .hook__keys {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hook__keys li {
+    padding: 14px 15px;
+  }
+  /* 手机上那条 720 宽的图会缩到 54%，图里的字就糊了 ——
+     这一节图只是佐证，手机上**干脆不显示**，靠上面三句已经说清。 */
+  .hook__figure {
+    display: none;
+  }
+}
+
 /* ---------- 6. 顶部导航 ---------- */
 .nav {
   position: sticky;
@@ -1705,6 +1836,129 @@ main {
   color: var(--accent-strong);
 }
 
+/* ---------- 22.5 两种用法切换（2026-11-10） ---------- */
+/* 应用现在有单机版和在线版两种用法，官网上要能切换着看。
+   切换只做一件事：改 <html data-ver>，显示哪一块交给下面这几条规则。
+   ⚠️ 默认（没有 data-ver / JS 没跑起来）显示**在线版** —— 它是点开就能用的那个，
+      写反了会让没开 JS 的人看到「私聊作者拿安装包」而没有任何可点的东西。 */
+.ver-switch {
+  display: flex;
+  width: fit-content;
+  margin: 0 auto 24px;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--paper-3);
+  border: 1px solid var(--ink-200);
+}
+.ver-switch__btn {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 9px 22px;
+  border-radius: 999px;
+  background: transparent;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink-600);
+  transition: background-color 0.18s, color 0.18s, box-shadow 0.18s;
+}
+.ver-switch__btn:hover {
+  color: var(--ink-900);
+}
+.ver-switch__btn[aria-selected='true'] {
+  background: #fff;
+  color: var(--ink-900);
+  box-shadow: 0 2px 8px rgb(51 40 30 / 0.12);
+}
+.ver-panel {
+  display: none;
+  max-width: 720px;
+  margin-inline: auto;
+  padding: 26px 26px 22px;
+}
+.ver-panel[data-ver='online'] {
+  display: block;
+}
+html[data-ver='local'] .ver-panel[data-ver='online'] {
+  display: none;
+}
+html[data-ver='local'] .ver-panel[data-ver='local'] {
+  display: block;
+}
+.ver-panel__tag {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--grass-100);
+  color: var(--grass-700);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.ver-panel__title {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink-900);
+}
+.ver-facts {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.ver-facts > div {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--ink-200);
+}
+.ver-facts > div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.ver-facts dt {
+  color: var(--ink-500);
+  font-size: 13px;
+  font-weight: 700;
+}
+.ver-facts dd {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.ver-panel__note {
+  margin: 14px 0 0;
+  color: var(--ink-500);
+  font-size: 13px;
+  line-height: 1.7;
+}
+/* APK 卡片里替代下载按钮的那句话（安装包不公开） */
+.dl__note {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--paper-3);
+  color: var(--ink-700);
+  font-size: 14px;
+  line-height: 1.7;
+}
+@media (max-width: 560px) {
+  .ver-panel {
+    padding: 20px 18px 18px;
+  }
+  .ver-facts > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
 /* ---------- 23. 打印（备案材料有时要打出来） ---------- */
 @media print {
   .nav,
@@ -1723,5 +1977,58 @@ main {
   .faq details {
     box-shadow: none;
     border: 1px solid var(--ink-200);
+  }
+}
+
+/* ---------- 22.6 三段式 / 通栏说明（2026-11-10 走查后补） ---------- */
+/* #wish 只有三张卡。默认 .pillars 是两列 ⇒ 第三张独占一行、右边空一块。
+   三列在 1440 上每张约 380px，正文还是一行 20 字上下，读得动。 */
+.pillars--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* ★★ 三张卡的行要对齐（2026-11-10 量的）：
+   改三列之前没人量过，实测量出来是这样 ——
+     孩子许愿  虚线顶 697  列表高 105  底部留白 30
+     家长定价  虚线顶 669  列表高  79  底部留白 84
+     攒够再换  虚线顶 669  列表高 105  底部留白 59
+   也就是「说明多一行」的那张卡虚线低 28px，「列表少一项」的那张底部空 54px。
+   `.pillar` 是 flex column、列表 `margin-top:18px` 紧跟说明 ⇒ 说明行数一变就错位；
+   只加 `margin-top:auto` 会更糟（虚线各落一个高度）。
+   ⇒ 用 **subgrid** 把四行（图标 / 标题 / 说明 / 虚线列表）在三个卡之间对齐，
+     列表行高取三者最大 ⇒ 虚线和底部自然同高，且不用写死任何 px。
+   ⚠️ 必须套 `@supports`：不支持的浏览器（iOS 15 及更早）会**丢掉**
+     `grid-template-rows: subgrid` 这一行，而 `.pillar` 已经变成 grid +
+     `grid-row: span 4` ⇒ 撑出四行隐式行，整段直接塌。不支持就退回 flex（现状）。 */
+@supports (grid-template-rows: subgrid) {
+  /* 只在**三列**的时候开：900px 以下退回单列，三张卡各占一整行，
+     横向对齐本来就没有意义，而 `grid-row: span 4` 还会撑出隐式行。 */
+  @media (min-width: 901px) {
+    .pillars--three {
+      grid-template-rows: auto auto auto auto;
+    }
+    .pillars--three .pillar {
+      display: grid;
+      grid-row: span 4;
+      grid-template-rows: subgrid;
+      align-content: start;
+    }
+  }
+}
+/* #games 是「左 4 条 + 右一块说明」。说明比列表矮一半，右下会留一个洞。
+   改成 2×2 卡片 + 说明块通栏，整段收成一个方块。 */
+.money--stack {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: clamp(16px, 2.4vw, 24px);
+}
+.money--stack .money__list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 900px) {
+  .pillars--three {
+    grid-template-columns: 1fr;
+  }
+  .money--stack .money__list {
+    grid-template-columns: 1fr;
   }
 }

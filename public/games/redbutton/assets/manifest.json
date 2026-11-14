@@ -1,0 +1,60 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 10,
+  "bytes": 1623629
+ },
+ "assets": [
+  {
+   "file": "audio/bgm_main.m4a",
+   "bytes": 960388,
+   "sha256": "892f69706a927b3079da00291b6ed20f1adaf9da1832cb75ae5f398abe1a02f6"
+  },
+  {
+   "file": "sheets/chests-c.webp",
+   "bytes": 66054,
+   "sha256": "808dcfe1a06d37027c557798938a8e236fa2d61e70832fe465820d4f0ecb5ba4"
+  },
+  {
+   "file": "sheets/fx-garden-c.webp",
+   "bytes": 72228,
+   "sha256": "404bbc981dea6e10e0c459f229729aca6491e61c08296dde6d9d0db492ba5f4d"
+  },
+  {
+   "file": "sheets/fx-icons-c.webp",
+   "bytes": 73986,
+   "sha256": "ff7844c5528b8a39d205f9da17b9ba44ff494c5576624c281367066f16d4f195"
+  },
+  {
+   "file": "sheets/hand.webp",
+   "bytes": 23442,
+   "sha256": "2f1545f5d1ea14f974a8f90bb417052d9e788edd41b01c682d2134472afbf239"
+  },
+  {
+   "file": "sheets/icons-c.webp",
+   "bytes": 51256,
+   "sha256": "7260422a24f2fa8c8fe9e3c8f59f9b3d77d81b340a2559d32f5b5de903a55462"
+  },
+  {
+   "file": "sheets/items-animals-c.webp",
+   "bytes": 132064,
+   "sha256": "5b99cc2a6c78e60f1fd090804e1802f0dd1af3eb155ebdcf11af91759166fa1f"
+  },
+  {
+   "file": "sheets/items-food-c.webp",
+   "bytes": 123404,
+   "sha256": "09ce54811da44c617e0d6e444e178fba006ef3316f150548b67eceeb420d97bf"
+  },
+  {
+   "file": "sheets/items-magic-c.webp",
+   "bytes": 118404,
+   "sha256": "5e0212daf11a82a3dfd12538423933217c4eabff826440ae948b7c90305262ee"
+  },
+  {
+   "file": "ui/icon_coin_selected.svg",
+   "bytes": 2403,
+   "sha256": "0361d00ce4b1cb591c555e97414089c98018e803ca2d15ef41eadacbb049e828"
+  }
+ ]
+}

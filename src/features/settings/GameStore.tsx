@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useApp } from '../../store/useApp'
 import { Card } from './ui'
 import { Portal } from '../../components/Portal'
@@ -14,8 +14,20 @@ import {
 } from '../../games/storefront'
 import { GAMES, gameById, type GameDef } from '../../games/registry'
 import { formatSize } from '../../games/size'
-import { checkPluginEconomy } from '../../domain/pluginEconomy'
+import { checkPluginEconomy, vouchersPerPlay } from '../../domain/pluginEconomy'
+import { ownedSetFor } from '../../domain/ownership'
+import { hasUpdate } from '../../games/version'
+import { isOnlineMode } from '../../sync/pull'
 import { GameIconArt } from './GameIcon'
+import { SnapshotSection } from './SnapshotSection'
+import { fetchVerifiedCatalog } from '../../games/install'
+import { catalogPublicKeyRaw } from '../../games/catalogKey'
+import { CATALOG_URL, catalogConfigured } from '../../games/catalogUrl'
+import {
+  barRatio,
+  installButtonText,
+  installProgressText,
+} from '../../domain/installProgress'
 
 /**
  * 我的游戏 —— 手机应用市场那种形态（2026-10-24 用户要求）。
@@ -52,23 +64,68 @@ import { GameIconArt } from './GameIcon'
  * `md:items-center md:p-6` + `md:max-w-2xl`；遮罩必须是 `fixed inset-0`
  * （父级一加 padding，`absolute` 就会缩进，四周露出一圈没盖住的地方）。
  *
- * ## 安装仍然是**同一条链**
+ * ## 安装：一颗按钮，两条路（2026-11-08）
  *
- * 这里只调用 `installLocalGame`（`store/useApp.ts`），校验/落库一行都没动。
+ * 行上那颗按钮先走生产路径 `installFromCatalog`（验签目录 + 验 SHA-256），
+ * 拿不到再退回 `installLocalGame`（随包发、哈希烧在 `localGames.ts` 里）。
+ * 校验和落库都在 store 里，这一层只负责挑路。
  * `data-local-*` 这几个锚点是 e2e 在用的，**不能改名字**。
  */
 
 /** 一次「装」的状态，列表和详情共用，避免两处各写一套（连点会装两遍） */
 function useInstall() {
   const installLocalGame = useApp((s) => s.installLocalGame)
+  const installFromCatalog = useApp((s) => s.installFromCatalog)
+  /* 进度只走 store：按钮和行内细进度条各读一次，显示同一个数字。
+     写在组件 state 里会变成「按钮 40%、进度条 0%」。 */
+  const reportProgress = useApp((s) => s.reportInstallProgress)
   const pushToast = useApp((s) => s.pushToast)
   const [installingId, setInstallingId] = useState<string | null>(null)
 
+  /*
+    ★ 2026-11-08 家长：「上面不是已经有游戏列表吗，没下载就是没下载的状态呀。」
+
+    ⇒ 「从服务器下载」那一块并进这张表，行上那颗按钮就是**下载**：
+      先走生产路径 `installFromCatalog`（验签目录 → 验 SHA-256 → 才执行），
+      拿不到再用随包发的本地包（`localGames.ts` 里烧着的 SHA-256）。
+
+    为什么还留着本地包这条路：这 App 是离线优先的（APK / 没网都是常态），
+    两条路**门槛同一份**（拥有判定都在 store 里），谁也不会绕过校验。
+    只有「目录没配 / 没网 / 验签失败」才落到本地包，toast 里会写明走了备用路。
+  */
   const install = async (id: string) => {
     if (installingId) return
     setInstallingId(id)
+    reportProgress({ gameId: id, phase: 'catalog', percent: -1, received: 0, total: 0 })
     try {
-      const res = await installLocalGame(id)
+      let res: { ok: boolean; message: string } | null = null
+      /* 先记下「这个包知不知道去哪下载」。
+         ★ 这一条单独判，是因为它的表现和网络故障一模一样（都落到本地包 404），
+           但修法完全不同：一个是重装新版 App，一个是查网络/证书。
+           2026-11-12 用户就被那句 HTTP 404 带偏过一次。 */
+      const canRemote = catalogConfigured()
+      if (canRemote) {
+        res = await installFromCatalog(CATALOG_URL, id, reportProgress)
+      }
+      if (!res?.ok) {
+        const remoteMsg = res?.message ?? ''
+        const local = await installLocalGame(id, reportProgress)
+        /* ★ 两条都失败时必须**两条都写**。
+           原来这里只留本地那条 ⇒ 不管真因是「没网 / 目录里没这款 / 验签失败 /
+           这个地址不是 https」，界面上永远是同一句「读取本地包失败：HTTP 404」，
+           而 404 恰恰是最不可能的那个原因（在线版 APK 本来就不随包发游戏）。
+           2026-11-12 用户就是被这句话带去了错误方向。 */
+        res = {
+          ok: local.ok,
+          message: local.ok
+            ? `${local.message}（用 App 自带的包）`
+            : !canRemote
+              ? `这个安装包没配下载服务器（只能用自带的包），而自带的包里也没有这款：${local.message} —— 装个新版 App 再试`
+              : remoteMsg
+                ? `服务器下载没成功（${remoteMsg}）；App 自带的包也没有（${local.message}）`
+                : local.message,
+        }
+      }
       pushToast({
         kind: res.ok ? 'success' : 'warn',
         title: res.ok ? '装好了' : '没装成',
@@ -77,6 +134,9 @@ function useInstall() {
       })
     } finally {
       setInstallingId(null)
+      /* ★ 一定要清。留着的话那一行会长期显示「下载中 87%」——
+         而装包早就结束了，看起来像卡住。 */
+      reportProgress(null)
     }
   }
   return { install, installingId }
@@ -88,18 +148,27 @@ function InstallAction({
   gateOpen,
   installingId,
   onInstall,
+  target,
   size = 'sm',
 }: {
   id: string
   gateOpen: boolean
   installingId: string | null
   onInstall: (id: string) => void
+  /** 该装哪一版：目录里有就用目录的（可能有新包），否则用随包发的 */
+  target?: string
   size?: 'xs' | 'sm' | 'lg'
 }) {
   const installedGames = useApp((s) => s.installedGames)
+  /* 只认"正在装的那一款"的进度 —— store 里只放一条，这里再按 id 对一次，
+     避免上一款收尾时的最后一帧画到这一行上。 */
+  const progress = useApp((s) => (s.installProgress?.gameId === id ? s.installProgress : null))
   const local = LOCAL_GAMES.find((g) => g.id === id)
   const installed = installedGames[id]
-  const upToDate = !!installed && !!local && installed.version === local.version
+  const want = target ?? local?.version
+  /* 判据用 `hasUpdate` 而不是 `!==`：目录回滚时（目录 1.0.0、机器 1.0.2）
+     不能劝人「更新」，那会把人降级还显示成功。 */
+  const upToDate = !!installed && !!want && !hasUpdate(want, installed.version)
   // 下载来的包不许占用内置 id（`installFromCatalog` 也会拒），这里直接把按钮拿掉
   const clashes = !!gameById(id)
 
@@ -139,7 +208,15 @@ function InstallAction({
         pad
       }
     >
-      {installingId === id ? '正在装…' : installed ? '更新' : '安装'}
+      {/* 有进度就报进度（「下载 42%」/「安装中…」），没有才退回笼统的一句。
+          ⚠️ 不能只写「正在下载…」—— 用户明确要的是**看得见进度**。 */}
+      {installingId === id && progress
+        ? installButtonText(progress)
+        : installingId === id
+          ? '正在下载…'
+          : installed
+            ? '更新'
+            : '下载'}
     </button>
   )
 }
@@ -291,6 +368,7 @@ function RowShell({
               {meta}
             </p>
           )}
+          <InstallBar gameId={pluginId} />
         </div>
         <div className="pointer-events-auto shrink-0">{pill}</div>
         {/*
@@ -316,6 +394,40 @@ function RowShell({
   )
 }
 
+/**
+ * 列表行里那条**细进度条**（2026-11-13）。
+ *
+ * 只在"这一行正在装"时出现：平时不渲染（`null`），不占版式 ——
+ * 列表的行高是一行行量过的，凭空多一块会把整列往下推。
+ *
+ * `percent < 0`（总长未知）时不画比例，改用一条来回滚动的条：
+ * 画一条停在 0% 的实心条会让人以为卡死。
+ */
+export function InstallBar({ gameId }: { gameId?: string }) {
+  const progress = useApp((s) => (s.installProgress?.gameId === gameId ? s.installProgress : null))
+  if (!progress) return null
+  const known = progress.percent >= 0
+  const ratio = barRatio(progress)
+  return (
+    <div className="mt-1.5" data-install-bar={gameId}>
+      <div className="h-1 overflow-hidden rounded-pill bg-ink-100">
+        <div
+          className={
+            known
+              ? 'h-full rounded-pill bg-grass-400 transition-[width] duration-200'
+              : 'indeterminate h-full w-1/3 rounded-pill bg-grass-400'
+          }
+          style={known ? { width: `${Math.round(ratio * 100)}%` } : undefined}
+          data-install-bar-fill={known ? Math.round(ratio * 100) : -1}
+        />
+      </div>
+      <div className="mt-0.5 text-[10px] font-bold text-ink-500" data-install-phase={progress.phase}>
+        {installProgressText(progress)}
+      </div>
+    </div>
+  )
+}
+
 type BuiltinRow = { src: 'builtin'; game: GameDef; kind: GameKind }
 type PluginRow = { src: 'plugin'; local: LocalGameEntry; g: StorefrontEntry; kind: GameKind }
 type MarketRow = BuiltinRow | PluginRow
@@ -327,6 +439,32 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
   const installedGames = useApp((s) => s.installedGames)
   const activeGameId = useApp((s) => s.activeGameId)
   const setActiveGame = useApp((s) => s.setActiveGame)
+  const ownedGameIds = useApp((s) => s.ownedGameIds)
+  const wishOrders = useApp((s) => s.wishOrders)
+
+  /*
+    目录里的版本号（id → version）。
+
+    ★ **拉不到就退回本地版本，列表照常渲染** —— 这张表是「我的游戏」的控制台，
+      不能因为一次网络抖动整张空掉。原来那块「从服务器下载」就是为了隔离这个
+      失败模式才单独开一块的；现在并进来之后，隔离点变成「只有『有没有新版』
+      这一条信息会缺」，而不是整张表。
+  */
+  const [catalogVer, setCatalogVer] = useState<Record<string, string> | null>(null)
+  useEffect(() => {
+    if (!catalogConfigured()) return
+    let alive = true
+    fetchVerifiedCatalog({ catalogUrl: CATALOG_URL, publicKeyRaw: catalogPublicKeyRaw() })
+      .then((cat) => {
+        if (alive) setCatalogVer(Object.fromEntries(cat.games.map((g) => [g.id, g.version])))
+      })
+      .catch(() => {
+        /* 静默：目录没配 / 没网 / 验签失败，都只意味着「不知道有没有新版」 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // 内置在前（农场是首款），插件按 `storefront.ts` 的书写顺序跟在后面。
   // 分组顺序由 `GAME_KIND_ORDER` 定，空分类不渲染。
@@ -339,6 +477,35 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
   ]
 
   /*
+    「拥有」的口径收在 `ownedSetFor` 里 —— **和 `installLocalGame` 的门槛同一口径**。
+    两处各写一份的话，会出现「按钮亮着、点下去说没拥有」这种最难受的组合。
+    这里读 store 快照是安全的：这是渲染，不是写入路径。
+
+    ★★ 在线版这里**只认服务端名单**：本地装了包、心愿单兑换过，都不算。
+      算上的话，界面会显示「已拥有」，而存档写穿会被 `10040401` 拒 ——
+      孩子玩一下午进度全丢，界面上全程正常。见 `domain/ownership.ts`。
+  */
+  const ownedSet = ownedSetFor(isOnlineMode, ownedGameIds, installedGames, wishOrders)
+
+  /*
+    2026-11-07 家长：「未拥有的游戏不要显示在上面，除非已经激活拥有」。
+
+    ⇒ 没拥有的插件**整行不渲染**（原来是显示一颗「未拥有」药丸）。理由：
+      这一屏叫「我的游戏」，列一堆自己打不开的东西，只会让家长以为自己买过。
+
+    三条例外，都是「已经在这台机器上生效了」，藏掉会更糟：
+      · `installedGames[id]` —— 装过。万一服务端把拥有权撤了，藏掉的话
+        家长既看不到它、也没地方卸载，包白占空间；
+      · `activeGameId === id` —— 当前正在用的那款。列表里没有「当前」是最诡异的；
+      · 内置游戏一律显示 —— 它们随包发、不存在「未拥有」，`RowShell` 里写的是「自带」。
+  */
+  const visibleRows = rows.filter((row) => {
+    if (row.src === 'builtin') return true
+    const id = row.local.id
+    return ownedSet.has(id) || !!installedGames[id] || activeGameId === id
+  })
+
+  /*
     ⚠️ 这里原来有一个 `buy()` —— 点「💎 价格」调 `buyGame`。
     2026-10-28 购买分支整段删掉之后它没有读者了，一起删。
     （`buyGame` 本身还在 store 里：心愿商城的数字商品走的是另一条链，别顺手删。）
@@ -348,26 +515,15 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
     <>
       <Card title="我的游戏" emoji="🎮">
         {/*
-          2026-10-28 家长：「换成『游戏不是为了沉迷，而是为了激励孩子完成任务』，
-          优化下话语，让家长能认同」。
+          2026-11-07 家长要求：把「我的游戏」下面那两段说明**去掉**
+          （「这些游戏是任务之后的奖励…」一直到「…底部那个游戏按钮就是它」）。
 
-          ⚠️ 那句话本身是「不只是 X 而是 Y」句式，**不能照抄上去** ——
-          本项目的文案口径见 `GamesSection.tsx` 头注释。这里把它拆成三句
-          陈述句：先做事、才换得到时间；时长有上限；游戏自己动不了账。
-          家长要的「认同」来自**这三条事实**，不是来自一句口号。
+          ⚠️ 别再加回来。这一屏的定位是**控制台**，不是介绍页：
+          家长进来是要切换 / 卸载游戏，不是读理念。
+          文案口径本身没变（见 `GamesSection.tsx` 头注释），只是不摆在这儿。
         */}
-        <p className="text-sm leading-relaxed text-ink-600">
-          这些游戏是任务之后的奖励，不是随时能打开的消遣。
-          孩子做完任务、拿到积分，才换得到游戏时间；玩多久由上面的「每天玩多久」管着。
-          游戏自己发不了积分，也延长不了时长。
-        </p>
-
-        <p className="mt-2 text-sm leading-relaxed text-ink-500">
-          点「详情」看每一款是让孩子练什么的。装好之后在这一行点「设为当前」，底部那个游戏按钮就是它。
-        </p>
-
         {GAME_KIND_ORDER.map((kind) => {
-          const group = rows.filter((r) => r.kind === kind)
+          const group = visibleRows.filter((r) => r.kind === kind)
           if (group.length === 0) return null
           return (
             <section key={kind} data-market-kind={kind} className="mt-5">
@@ -428,7 +584,9 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                   /* ---------- 插件：可装 / 已装 / 当前 ---------- */
                   const { local, g } = row
                   const installed = installedGames[local.id]
-                  const upToDate = !!installed && installed.version === local.version
+                  /* 该装哪一版：目录里有就用目录的（服务器可能有新包），否则随包发的那版 */
+                  const target = catalogVer?.[local.id] ?? local.version
+                  const upToDate = !!installed && !hasUpdate(target, installed.version)
                   const isCurrent = activeGameId === local.id
                   // 只有装过才谈得上「参数异常」—— 没装时没有 manifest 可校验
                   const issue = installed ? !!checkPluginEconomy(installed.economy) : false
@@ -441,7 +599,16 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                       upToDateId={upToDate ? local.id : undefined}
                       icon={<RowIcon id={g.id} tint={g.tint} />}
                       name={g.name}
-                      note={`v${local.version}`}
+                      /*
+                        装了旧版时写「旧 → 新」。只写目标版本的话，家长会以为
+                        装的就是那一版（原来是「已装 v1.0.0 · 有新版本 v1.0.2」，
+                        一行塞不下；箭头是同一个意思，占一半地方）。
+                      */
+                      note={
+                        installed && hasUpdate(target, installed.version)
+                          ? `v${installed.version} → v${target}`
+                          : `v${target}`
+                      }
                       subtitle={g.pitch}
                       /*
                         行上只留「适龄 · 一次多久」。**体积不放这儿** ——
@@ -469,14 +636,30 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
                               设为当前
                             </button>
                           )
-                        ) : (
+                        ) : ownedSet.has(local.id) ? (
                           <InstallAction
                             id={local.id}
                             gateOpen={gateOpen}
                             installingId={installingId}
                             onInstall={install}
+                            target={target}
                             size="xs"
                           />
+                        ) : (
+                          /* 没拥有：**不摆按钮**。摆一个「安装」再点出一句
+                             「还没拥有」是最差的组合 —— 界面先承诺，再当场否认。
+
+                             2026-10-30 文案从「去心愿商城」改成「未拥有」：
+                             那颗药丸是 `PILL_MUTE`（`span`，不可点），而它坐在
+                             **动作列**里、外面还裹着 `pointer-events-auto` ——
+                             整行别处都能点进详情，唯独这块点下去什么都不发生。
+                             写着「去…」就一定会有人去点。它现在只陈述状态 ——
+                             这一屏也不再说「怎么解锁」：家长 2026-11-07 要求
+                             把表格底下那几句说明连同「有兑换码？」一起删掉，
+                             解锁只剩「心愿 → 那件商品 → 爸妈定价页」一条路。 */
+                          <span className={PILL_MUTE} data-local-need-own={local.id}>
+                            未拥有
+                          </span>
                         )
                       }
                     />
@@ -486,128 +669,27 @@ export function GameMarket({ gateOpen }: { gateOpen: boolean }) {
             </section>
           )
         })}
-
-        <p className="mt-4 text-[11px] leading-snug text-ink-500">
-          装之前会核对包的内容（本地包对内置哈希）。卸载在「详情」最下面 —— 会把存档一起删掉。
-        </p>
-
-        <CodeRedeem gateOpen={gateOpen} />
       </Card>
 
       {detailId && (
-        <GameDetailSheet id={detailId} gateOpen={gateOpen} onClose={() => setDetailId(null)} />
+        /*
+          ★ 把「有没有拥有」传下去。详情页里那颗大按钮和列表行是**同一个动作的
+          两个入口** —— 列表那边判了拥有、详情这边没判，就会出现
+          「列表写『未拥有』、点进详情一个大黄『安装』」（2026-10-30 截图实拍到的）。
+          点下去当然装不成，弹一句「没装成 / 还没拥有」——
+          正是列表注释里说的「界面先承诺，再当场否认」。
+
+          不要让它自己去 `wishOwnedSet` 算：两处各写一份，迟早走散。
+        */
+        <GameDetailSheet
+          id={detailId}
+          gateOpen={gateOpen}
+          owned={ownedSet.has(detailId)}
+          targetVersion={catalogVer?.[detailId]}
+          onClose={() => setDetailId(null)}
+        />
       )}
     </>
-  )
-}
-
-/* ============================================================
-   ①.5 兑换码（spec §6 的 P2）
-   ============================================================ */
-
-/**
- * 「有兑换码？」—— 输 6 位码，把那一款游戏解锁并装好。
- *
- * ## 为什么放在这张卡里，而不是孩子端
- *
- * 码是**付款凭证**。这个 App 里一切跟钱有关的动作都在家长栏后面
- * （`gateOpen`），这里跟着同一条规矩。孩子想自己输，家长开着闸门就行。
- *
- * ## 为什么不用弹层
- *
- * 弹层要 Portal 到 `document.body`（外壳有隐式层叠上下文，z-index 没用），
- * 还要处理 Esc / 焦点陷阱 / 点背景关闭 —— 为一个输入框付这些代价不值。
- * 展开成一行就够了，而且家长栏本来就是竖着滚的。
- *
- * ## 文案
- *
- * **不写「一次性」**。防重只在这台设备上成立（没有账号、没有服务器），
- * 写「一次性」就是界面承诺了它做不到的事。
- */
-function CodeRedeem({ gateOpen }: { gateOpen: boolean }) {
-  const redeemGameCode = useApp((s) => s.redeemGameCode)
-  const [open, setOpen] = useState(false)
-  const [code, setCode] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    if (busy || !gateOpen) return
-    setBusy(true)
-    try {
-      const r = await redeemGameCode(code)
-      setMsg({ ok: r.ok, text: r.message })
-      // 成功才清空 —— 失败时留着刚敲的码，好对着改一位
-      if (r.ok) setCode('')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        data-code-open
-        disabled={!gateOpen}
-        onClick={() => setOpen(true)}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink-300 bg-white/60 py-2 text-[12.5px] font-bold text-ink-600 disabled:opacity-50"
-      >
-        🎟️ 有兑换码？
-      </button>
-    )
-  }
-
-  return (
-    <form onSubmit={submit} data-code-box className="mt-3 rounded-xl border border-ink-200 bg-white p-3">
-      <label htmlFor="game-code" className="text-[12.5px] font-bold text-ink-700">
-        把卡片上的 6 位码输进来
-      </label>
-      <p className="mt-0.5 text-[11px] leading-snug text-ink-500">
-        字母不区分大小写，中间那一横不用输。兑换成功后那一款会直接装好，也一直算「已拥有」。
-      </p>
-
-      <div className="mt-2 flex gap-2">
-        <input
-          id="game-code"
-          data-code-input
-          value={code}
-          onChange={(ev) => setCode(ev.target.value)}
-          // 手机键盘默认小写、码是大写 —— 归一化在 store 里做。
-          // 别用 `text-transform` 去「改正」显示：那样用户看不到自己敲了什么。
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          inputMode="text"
-          maxLength={8}
-          placeholder="ABC-DEF"
-          className="min-w-0 flex-1 rounded-lg border border-ink-200 px-3 py-2 font-mono text-[15px] uppercase tracking-[0.18em] text-ink-800 outline-none focus:border-grass-400"
-        />
-        <button
-          type="submit"
-          data-code-submit
-          disabled={busy || !gateOpen || code.trim().length === 0}
-          className="shrink-0 rounded-lg bg-grass-500 px-4 py-2 text-[13px] font-extrabold text-white disabled:opacity-50"
-        >
-          {busy ? '兑换中…' : '兑换'}
-        </button>
-      </div>
-
-      {msg && (
-        <p
-          data-code-msg
-          data-code-ok={msg.ok ? '1' : '0'}
-          className={`mt-2 text-[12px] font-bold ${msg.ok ? 'text-grass-600' : 'text-berry-500'}`}
-        >
-          {msg.text}
-        </p>
-      )}
-
-      <p className="mt-2 text-[11px] leading-snug text-ink-400">
-        同一个码在这台手机上只能兑换一次。设备里只留哈希，不留明文。
-      </p>
-    </form>
   )
 }
 
@@ -617,10 +699,16 @@ function CodeRedeem({ gateOpen }: { gateOpen: boolean }) {
 function GameDetailSheet({
   id,
   gateOpen,
+  owned,
+  targetVersion,
   onClose,
 }: {
   id: string
   gateOpen: boolean
+  /** 已拥有（含兑换码 / 心愿兑换 / 已装包三种来源，由 `GameMarket` 统一算） */
+  owned: boolean
+  /** 目录里的版本；拉不到就是 undefined（退回随包发的版本） */
+  targetVersion?: string
   onClose: () => void
 }) {
   const { install, installingId } = useInstall()
@@ -658,6 +746,8 @@ function GameDetailSheet({
           <DetailView
             g={g}
             gateOpen={gateOpen}
+            owned={owned}
+            targetVersion={targetVersion}
             installingId={installingId}
             onInstall={install}
             onClose={onClose}
@@ -671,12 +761,16 @@ function GameDetailSheet({
 function DetailView({
   g,
   gateOpen,
+  owned,
+  targetVersion,
   installingId,
   onInstall,
   onClose,
 }: {
   g: StorefrontEntry
   gateOpen: boolean
+  owned: boolean
+  targetVersion?: string
   installingId: string | null
   onInstall: (id: string) => void
   onClose: () => void
@@ -723,7 +817,7 @@ function DetailView({
             <div className="mt-2 flex flex-wrap gap-1.5">
               <Chip>{g.age}</Chip>
               <Chip>{g.session}</Chip>
-              {local && <Chip>{formatSize(local.bytes)}</Chip>}
+              {local && <Chip>{formatSize(local.totalBytes || local.bytes)}</Chip>}
             </div>
           </div>
         </div>
@@ -731,14 +825,45 @@ function DetailView({
         {/* ⚠️ `flex` 不能省：`InstallAction` 的「已安装」是个 `<span class="grid">`，
             在块级容器里会自动铺满整行 —— 而「安装」是 `<button>`（inline-block，只有内容宽）。
             少了这一层，同一位置装前是一个小药丸、装后是一条通栏绿条，看着像换了个控件。 */}
-        <div className="mt-3 flex">
-          <InstallAction
-            id={g.id}
-            gateOpen={gateOpen}
-            installingId={installingId}
-            onInstall={onInstall}
-            size="lg"
-          />
+        <div className="mt-3 flex flex-col items-start gap-1.5">
+          {owned ? (
+            <InstallAction
+              id={g.id}
+              gateOpen={gateOpen}
+              installingId={installingId}
+              onInstall={onInstall}
+              target={targetVersion}
+              size="lg"
+            />
+          ) : (
+            /*
+              没拥有：和列表行同一个口径 —— 不摆按钮。详情页是**单独的屏**，
+              列表底部那句说明它看不到，所以这里必须自己说一句怎么解锁。
+            */
+            <>
+              {/*
+                整串写出来，不拼 `PILL_MUTE`。
+
+                拼接**是能覆盖的**（实测 `h-8 h-10` → 40px、`text-[12.5px] text-sm` → 16px，
+                与 class 书写顺序无关），但那是 Tailwind 生成顺序碰巧如此 ——
+                读的人没法从这一行看出「最后是哪个值生效」，改的人也不敢动。
+                这颗要的尺寸和行内药丸本来就不是一档，写清比省 30 个字符值。
+
+                为什么比上面那排 Chip 大一档：它写的是**状态**，
+                跟「6 岁以上 · 4.3MB」那类规格挤在同一层级会被读成第 4 条规格。
+              */}
+              <span
+                className="grid h-10 shrink-0 place-items-center rounded-full bg-ink-100 px-4 text-sm font-extrabold text-ink-500"
+                data-local-need-own={g.id}
+              >
+                未拥有
+              </span>
+              <p className="text-[11.5px] font-bold leading-snug text-ink-500">
+                让孩子在「心愿」里说要哪款，你定价之后到「兑换」里换；
+                兑换码输在列表最下面。
+              </p>
+            </>
+          )}
         </div>
 
         {/* 练什么 —— 列表里已经不放这一栏了，家长要看就点进详情（2026-10-25） */}
@@ -792,10 +917,45 @@ function DetailView({
           </div>
         </section>
 
+        {/*
+          经济参数 —— `docs/game-plugin-spec.md` §4.4 要求「必须对家长可见」。
+          它原来在「游戏市场」那张卡里（`PluginStoreCard.tsx`），
+          2026-10-29 那张卡整体删掉时**连它一起删了**，契约就断了（22 个 e2e 的
+          断言还指着它，从此一直红）。现在收进**详情**：家长点进哪款就看哪款，
+          列表页仍然只有「装 / 卸 / 设为当前」，不加回一层。
+          ⚠️ 只有装了才有参数可看（没装时 manifest 还没下来）。
+        */}
+        {installed && (
+          <section className="mt-5" data-plugin-economy>
+            <h4 className="font-display text-base font-extrabold text-ink-900">花多少积分</h4>
+            <p className="mt-2 text-sm leading-relaxed text-ink-700">
+              一局 {installed.economy.playCost} 积分，期望产出 {installed.economy.expectedPayout}{' '}
+              {installed.coin.name}
+              {(() => {
+                const v = vouchersPerPlay(installed.economy)
+                return v > 0
+                  ? `（1 ${installed.coin.name} = ${installed.economy.voucherPerCoin} 兑换券，一局期望 ${+v.toFixed(2)} 兑换券）`
+                  : '（不开放兑换券）'
+              })()}
+            </p>
+          </section>
+        )}
+
         <p className="mt-5 rounded-2xl bg-paper-2 px-3 py-2.5 text-[11px] leading-snug text-ink-500">
-          这个游戏花的是 App 里的积分（家长在「设置 → 游戏」里能看到每一局花多少、期望收回多少）。
+          这个游戏花的是 App 里的积分（每一局花多少、期望收回多少，就在上面「花多少积分」那一栏）。
           它不能自己发积分。
         </p>
+
+        {/*
+          存档还原点 —— **只有在线版有**。本地版的历史版本根本不存在
+          （Dexie 里就是一份当前存档），摆个空壳只会让人以为「功能坏了」。
+
+          放在卸载正上方是有意的：卸载那段写的是「会连存档一起删掉」，
+          紧挨着就是「想退回去用还原点」，两句读下来是一个完整的意思。
+        */}
+        {installed && isOnlineMode && (
+          <SnapshotSection gameId={g.id} gameName={g.name} />
+        )}
 
         {/*
           卸载放在**详情最下面**（2026-10-25）。

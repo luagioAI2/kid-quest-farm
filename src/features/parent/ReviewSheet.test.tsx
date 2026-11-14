@@ -61,10 +61,18 @@ describe('家长审核面板：孩子的心愿', () => {
     // 默认 30 张（和心愿页的定价屏同一个起点）
     await user.click(await screen.findByRole('button', { name: /开放兑换 · 30 张/ }))
 
-    await waitFor(async () => {
-      const offer = await db.wishOffers.get('wish-blindbox')
+    /* ⚠️ 判据必须是 **store**，不能是「库行」：
+       `user.click` 只等到事件派发，保存按钮的 async 处理函数还在跑 ——
+       它先 `put`（库行立刻就对），再 `await refresh()`（要读十几张表）。
+       拿库行当判据会在 put 一落地就通过，于是用例结束、下一条 `beforeEach`
+       的 `db.delete()` 把还在读表的 `refresh()` 掀翻 ——
+       症状是「全绿 + 一条 DatabaseClosedError」。
+       store 那份是 `refresh()` 末尾赋的值，读到它就等于 refresh 收工了。 */
+    await waitFor(() => {
+      const offer = useApp.getState().wishOffers.find((o) => o.itemId === 'wish-blindbox')
       expect(offer?.voucherPrice, '定价要真的写进 wishOffers').toBe(30)
     })
+    expect((await db.wishOffers.get('wish-blindbox'))?.voucherPrice).toBe(30)
     /* 定价 = 回应。这条心愿立刻离开队列 —— 否则家长定完价、孩子还没换的
        那段时间里，顶栏 👀 的红点会一直亮着一个已经处理过的待办。 */
     expect(await screen.findByText(/都看完啦/), '队列要清空').toBeTruthy()
@@ -95,12 +103,20 @@ describe('家长审核面板：孩子的心愿', () => {
     render(<ReviewSheet />)
     await user.click(await screen.findByRole('button', { name: /这次先不换/ }))
 
-    await waitFor(async () => {
-      const row = await db.wishOrders.get('wo_wish')
+    /* ⚠️ 判据必须是 **store**，不能是「库行」：
+       `user.click` 只等到事件派发，保存按钮的 async 处理函数还在跑 ——
+       它先 `put`（库行立刻就对），再 `await refresh()`（要读十几张表）。
+       拿库行当判据会在 put 一落地就通过，于是用例结束、下一条 `beforeEach`
+       的 `db.delete()` 把还在读表的 `refresh()` 掀翻 ——
+       症状是「全绿 + 一条 DatabaseClosedError」。
+       store 那份是 `refresh()` 末尾赋的值，读到它就等于 refresh 收工了。 */
+    await waitFor(() => {
+      const row = useApp.getState().wishOrders.find((o) => o.id === 'wo_wish')
       expect(row?.status, '回绝之后不能还停在 wished').toBe('cancelled')
       // 理由的落点是商品详情页那句「上次爸妈说：…」（「我许的愿」2026-10-29 下线）
       expect(row?.cancelReason, '孩子再点进那件商品就能看到理由').toContain('先不换')
     })
+    expect((await db.wishOrders.get('wo_wish'))?.cancelReason).toContain('先不换')
     expect(await screen.findByText(/都看完啦/)).toBeTruthy()
   })
 
@@ -120,5 +136,59 @@ describe('家长审核面板：孩子的心愿', () => {
     expect(await screen.findByText(/第 1 \/ 2 个/)).toBeTruthy()
     expect(screen.getByText('游戏盲盒')).toBeTruthy()
     expect(screen.queryByText(inst!.title), '心愿没看完之前不该先摆任务').toBeNull()
+  })
+})
+
+/* ============================================================
+   第六轮：审核时一起定「能兑换几次」（2026-11-06）
+   ------------------------------------------------------------
+   用户原话：「家长审核设定兑换卷数量时，还得填是否一次性兑换，
+   都设定好后，接着加入到兑换列表。」
+
+   这条如果只在心愿页的定价屏（`OfferView`）做，家长从 👀 进来审核
+   时就没有这个选项 —— 而 👀 才是他们真正用的那个入口。
+   ============================================================ */
+describe('家长审核面板：能兑换几次', () => {
+  it('★ 默认：盲盒 / 游戏是一次性（省得家长每次都点）', async () => {
+    await db.wishOrders.put(wishedOrder() as never)
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<ReviewSheet />)
+    await user.click(await screen.findByRole('button', { name: /开放兑换 · 30 张/ }))
+
+    await waitFor(() => {
+      const offer = useApp.getState().wishOffers.find((o) => o.itemId === 'wish-blindbox')
+      expect(offer?.oneTime, '游戏类默认一次性').toBe(true)
+    })
+    expect((await db.wishOffers.get('wish-blindbox'))?.oneTime).toBe(true)
+  })
+
+  it('★ 实物默认可重复；点「只兑换一次」后跟着券价一起落库', async () => {
+    await db.wishOrders.put(
+      wishedOrder({
+        itemId: 'wish-dino',
+        itemName: '恐龙模型套装',
+        itemEmoji: '🦕',
+        kind: 'toy',
+      }) as never,
+    )
+    await useApp.getState().refresh()
+
+    const user = userEvent.setup()
+    render(<ReviewSheet />)
+    expect(await screen.findByText('能兑换几次？'), '审核卡上要有这一项').toBeTruthy()
+
+    await user.click(screen.getByText('只兑换一次'))
+    await user.click(await screen.findByRole('button', { name: /开放兑换 · 30 张/ }))
+
+    await waitFor(() => {
+      const offer = useApp.getState().wishOffers.find((o) => o.itemId === 'wish-dino')
+      expect(offer?.voucherPrice).toBe(30)
+      expect(offer?.oneTime, '选了「只兑换一次」要真的写进去').toBe(true)
+    })
+    const saved = await db.wishOffers.get('wish-dino')
+    expect(saved?.voucherPrice).toBe(30)
+    expect(saved?.oneTime, '真的落盘了').toBe(true)
   })
 })

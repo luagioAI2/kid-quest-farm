@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 72" fill="none">
+  <ellipse cx="48" cy="63.5" rx="32" ry="3" fill="#2F5A22" opacity=".12"/>
+
+  <!--
+    门洞：**深一档的暖棕**，读成「里面」。
+    ⚠️ 上一版是 `#8A5A3B` 35% —— 压在薄荷绿上变成一块灰水泥，像一堵墙。
+       这一版取不透明的中棕：既比奶油柱子深得多（一眼是洞），又还在暖色里（不发灰）。
+  -->
+  <path d="M20 62V44a11 11 0 0 1 22 0v18Z" fill="#B5875A"/>
+
+  <!-- 两根柱子：左亮右暗，门框才有前后 -->
+  <rect x="8" y="44" width="12" height="18" fill="#F3DCAE"/>
+  <rect x="42" y="44" width="12" height="18" fill="#E9CE97"/>
+
+  <!--
+    拱：stroke-width 12 = 柱子宽度，两端正好盖住柱心。
+    ⚠️ 端头用 `butt`：`round` 会在柱子外侧鼓出两个疙瘩，像长了耳朵。
+  -->
+  <path d="M14 44a17 17 0 0 1 34 0" stroke="#F3DCAE" stroke-width="12" stroke-linecap="butt"/>
+
+  <!--
+    门牌：白色横匾**架在拱顶上**，两根小托脚接住。
+    ⚠️ 上一版是悬空的 —— 一块白卡浮在拱上面，读成「贴纸」而不是「牌子」。
+  -->
+  <rect x="21.5" y="19" width="3" height="4.5" fill="#E9CE97"/>
+  <rect x="37.5" y="19" width="3" height="4.5" fill="#E9CE97"/>
+  <rect x="16" y="5" width="30" height="15" rx="3.6" fill="#FFFFFF"/>
+  <path d="M25 15.4c3.4-4.4 9.4-4.6 13.4-2-3.4 4.4-9.4 4.6-13.4 2Z" fill="#7CB342"/>
+  <path d="M27.4 15c3 .6 6 .4 8.6-.9" stroke="#5E8F32" stroke-width="1" stroke-linecap="round"/>
+
+  <!--
+    长颈鹿：站在右侧。
+    ⚠️ 四条腿的 x 必须**全部落在身体椭圆里**：上一版最右那条落在 86~91，
+       身体只到 85.5 ⇒ 远看是一条腿掉在旁边，和身体断开。
+  -->
+  <g>
+    <rect x="63" y="50" width="4.6" height="12" rx="2.3" fill="#D9A03C"/>
+    <rect x="68.5" y="50" width="4.6" height="12" rx="2.3" fill="#C98C2C"/>
+    <rect x="75.5" y="50" width="4.6" height="12" rx="2.3" fill="#D9A03C"/>
+    <rect x="81" y="50" width="4.6" height="12" rx="2.3" fill="#C98C2C"/>
+
+    <ellipse cx="74" cy="46" rx="12" ry="8.5" fill="#F2C14E"/>
+    <path d="M79 43 84 23" stroke="#F2C14E" stroke-width="8" stroke-linecap="round"/>
+
+    <!-- 角（两只小骨突）：长颈鹿最好认的地方之一 -->
+    <path d="M81.8 15.8v-3.4M86.2 15.2v-3.4" stroke="#C98C2C" stroke-width="1.8" stroke-linecap="round"/>
+    <circle cx="81.8" cy="11.6" r="1.7" fill="#C98C2C"/>
+    <circle cx="86.2" cy="11" r="1.7" fill="#C98C2C"/>
+
+    <ellipse cx="79.4" cy="16.4" rx="2.6" ry="1.5" transform="rotate(-34 79.4 16.4)" fill="#D9A03C"/>
+    <ellipse cx="84.5" cy="21" rx="6.2" ry="5.2" fill="#F2C14E"/>
+    <ellipse cx="89.5" cy="22.6" rx="3.2" ry="2.6" fill="#F7D375"/>
+    <circle cx="85.8" cy="19.4" r="1.2" fill="#3A2410"/>
+    <circle cx="86.2" cy="19" r=".4" fill="#FFFFFF"/>
+
+    <!-- 斑：只放四颗，多了在 153px 下就是脏点 -->
+    <circle cx="67" cy="44" r="2" fill="#D9A03C"/>
+    <circle cx="77" cy="49" r="1.6" fill="#D9A03C"/>
+    <circle cx="81.5" cy="32" r="1.6" fill="#D9A03C"/>
+    <circle cx="82.5" cy="26.5" r="1.3" fill="#D9A03C"/>
+  </g>
+
+  <!-- 灌木：压住两个柱脚，画面才「落地」 -->
+  <ellipse cx="13" cy="62.5" rx="8" ry="3.8" fill="#8FD06A"/>
+  <ellipse cx="50" cy="63" rx="7" ry="3.5" fill="#7FC15C"/>
+</svg>

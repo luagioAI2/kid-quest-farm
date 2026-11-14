@@ -116,11 +116,16 @@ describe('gameKv 的命名空间', () => {
    ② 备份往返 —— 下载来的游戏不能一备份就没
    ============================================================ */
 
-describe('备份带上 gameKv', () => {
-  it('导出 → 清空 → 导入，游戏的状态和包都回来了', async () => {
-    // ★ 这条是本组的**核心**。`gameKv` 漏出备份的话，家长换手机 /
-    //   清库恢复之后，所有下载来的游戏会**静默消失** —— 不报错，
-    //   只是「我明明装过的游戏没了」。
+describe('备份带上 gameKv（只带存档，不带本体）', () => {
+  it('导出 → 清空 → 导入：存档回来了，游戏本体不回来', async () => {
+    // ★ 这条守的仍然是「家长换手机之后游戏不会静默消失」，但**机制换了**：
+    //   以前是「包跟着备份走」，现在是「只带存档 + 一份『装过哪些游戏』的名单」，
+    //   恢复后按名单从**本地包**重装。
+    //
+    // 为什么换：`__bundle` 是几 MB 的代码，而挂载时它会被 `import()` 执行，
+    // 中间没有哈希也没有签名。备份文件正是家长之间会互相传的东西
+    // （「这是我配好的任务，你导入吧」）⇒ 一份文件就能往 App 里塞代码。
+    // 详见 `store/useApp.ts` 的 `saveOnlyGameKv`。
     await setGameKv('demo', BUNDLE_KEY, fakeBundleCode('demo'))
     await setGameKv('demo', 'draws', 12)
 
@@ -132,18 +137,25 @@ describe('备份带上 gameKv', () => {
     const res = await useApp.getState().importBackup(backup)
     expect(res.ok).toBe(true)
 
-    expect(await getGameKv<number>('demo', 'draws')).toBe(12)
-    expect(await listInstalledBundles()).toEqual([
-      { gameId: 'demo', code: fakeBundleCode('demo') },
-    ])
+    expect(await getGameKv<number>('demo', 'draws'), '存档必须回来').toBe(12)
+    expect(await listInstalledBundles(), '本体不许跟着备份走').toEqual([])
+    expect(
+      (backup as { data: { meta: { installedGameIds?: string[] } } }).data.meta.installedGameIds,
+      '★ 名单要记着 —— 恢复后靠它把本地游戏装回来',
+    ).toContain('demo')
   })
 
-  it('导入后 `installedGames` 立刻派生出来（不用重启）', async () => {
+  it('导入后 `installedGames` 不含「只存在于备份里」的游戏', async () => {
+    // 反过来钉一次：`installedGames` 是从 `__bundle` 那一行派生的，而本体
+    // 不进备份 ⇒ 导入之后它必须是**空**的。
+    //
+    // 这条以前断言的是「立刻派生出来」—— 那是旧契约（包跟着备份走）。
+    // 现在「派生出来了」恰恰说明**文件里的代码落库了**，是坏事。
     await setGameKv('demo', BUNDLE_KEY, fakeBundleCode('demo'))
     const backup = await useApp.getState().exportBackup()
     await db.gameKv.clear()
     await useApp.getState().importBackup(backup)
-    expect(Object.keys(useApp.getState().installedGames)).toEqual(['demo'])
+    expect(Object.keys(useApp.getState().installedGames)).toEqual([])
   })
 })
 

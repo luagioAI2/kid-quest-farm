@@ -1,25 +1,42 @@
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { selectPendingCheckIns, selectPendingReview, useApp } from './store/useApp'
 import { wishesAwaitingReply } from './domain/wish'
 import TaskPage from './features/tasks/TaskPage'
-import PointsPage from './features/tasks/PointsPage'
+import PointsSheet from './features/tasks/PointsSheet'
 import RedeemPage from './features/redeem/RedeemPage'
 import WishPage from './features/wish/WishPage'
 import SettingsPage from './features/settings/SettingsPage'
 import { ReviewSheetModal } from './features/parent/ReviewSheet'
 import { SplashPage } from './features/splash/SplashPage'
+import { shouldRefreshOnForeground } from './sync/foreground'
+import { ensureTemplateApplied } from './online/template'
+import { isOnlineMode } from './sync/pull'
+import { useAccount } from './store/useAccount'
 import { SetupWizard } from './features/onboarding/SetupWizard'
+import { BindSheet } from './features/account/BindSheet'
+import { BootRetryPage } from './features/account/BootRetryPage'
+import { LoginSheet } from './features/account/LoginSheet'
 import { ChildTour } from './features/onboarding/ChildTour'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { SyncBanner } from './components/SyncBanner'
 import { isNative, playTone } from './platform/files'
 import { gameById } from './games/registry'
 import { CURRENCY } from './domain/currency'
 import { pageFor } from './games/pages'
 import { PluginGameHost } from './games/PluginGameHost'
+import { GameFullscreenButton, ImmersiveGameBar } from './features/game/GameChrome'
 import { GamePlayGate } from './features/game/GamePlayGate'
 import './features/farm/farm.css'
 
-type TabKey = 'tasks' | 'game' | 'redeem' | 'wish' | 'points'
+type TabKey = 'tasks' | 'game' | 'redeem' | 'wish'
 
 /**
  * 底部导航里**固定**的那三格。
@@ -31,6 +48,18 @@ type TabKey = 'tasks' | 'game' | 'redeem' | 'wish' | 'points'
  * 游戏那一格的值是 `tab-<当前游戏 id>` —— 默认（农场）时正好是 `tab-farm`，
  * 而 `ChildTour.tsx` 的导览步骤和 `capture-tablet.mjs` / `e2e-check.mjs`
  * 都钉着这个字符串。**别把它改成固定的 `tab-game`**，那会同时弄断导览和 e2e。
+ *
+ * ## 2026-11-05：积分**不再是**一格（用户：「下边栏 4 个为好」）
+ *
+ * 原来五格：任务 / 游戏 / 兑换 / 心愿 / 积分。用户原话：「积分是不是换个地方
+ * 更好，主要是挤占了下边栏，下边栏 4 个为好。」
+ *
+ * 积分那一页本来就不提供任何**动作**（余额常驻在顶栏，那一页只有
+ * 「这分怎么来的 / 攒到哪些成就」），占一格是纯消耗。现在改从**顶栏那颗 🪙**
+ * 点进去（`data-tour="header-points"`），底栏回到四格。
+ *
+ * ⚠️ 别把它加回来。四格在 390px 上是每格约 97px，五格是 78px ——
+ * 手指按得下去，但「任务」和「兑换」两格的文字会贴在一起。
  */
 const STATIC_TABS: { key: TabKey; label: string; emoji: string; tour: string }[] = [
   { key: 'tasks', label: '任务', emoji: '📋', tour: 'tab-tasks' },
@@ -38,7 +67,6 @@ const STATIC_TABS: { key: TabKey; label: string; emoji: string; tour: string }[]
   // 心愿商城（2026-10-28）：和「兑换」并列，不是它的子页 ——
   // 兑换是家里的事（家长自建、家长兑现），心愿是外面的事（合作商商品、淘宝成交）。
   { key: 'wish', label: '心愿', emoji: '🛍️', tour: 'tab-wish' },
-  { key: 'points', label: '积分', emoji: '🪙', tour: 'tab-points' },
 ]
 
 /**
@@ -52,6 +80,7 @@ const SPLASH_MIN_MS = 1900
 
 export default function App() {
   const ready = useApp((s) => s.ready)
+  const bootError = useApp((s) => s.bootError)
   const balance = useApp((s) => s.balance)
   /** 兑换券：农场产出的结算币。和积分是两套账，见 store 里 postHarvest 的注释。 */
   const harvestBalance = useApp((s) => s.harvestBalance)
@@ -68,6 +97,8 @@ export default function App() {
   const dismissToast = useApp((s) => s.dismissToast)
   const boot = useApp((s) => s.boot)
   const tick = useApp((s) => s.tick)
+  const refresh = useApp((s) => s.refresh)
+  const reloadSettings = useApp((s) => s.reloadSettings)
   const settings = useApp((s) => s.settings)
   /**
    * 当前正在玩的游戏。底部导航的游戏那一格（图标 + 名字）跟着它走。
@@ -85,11 +116,74 @@ export default function App() {
   const activePlugin = useApp((s) => s.installedGames[activeGameId])
 
   const [tab, setTab] = useState<TabKey>('tasks')
+  /**
+   * 游戏页是否**沉浸全屏**。默认 `false` —— 2026-11-11 用户改的模型：
+   *
+   * > 一开始不要全屏，应该有个透明的 全屏按钮，类似于播放器那种，
+   * > 全屏后，退出按钮直接左上角返回就是（在游戏上层 偏玻璃），
+   * > 最后右上角 多一个 微信小程序 退出那种。
+   *
+   * 之前是「进游戏就整屏」（顶栏底栏全收），孩子一进游戏就找不到「任务 / 心愿」，
+   * 家长也以为 App 坏了。现在改成**默认带外壳**，想沉浸再点右下角那枚全屏键。
+   *
+   * 两个动作别混：
+   *   · 退出全屏（左上角返回）→ 只是变回带外壳，**还在游戏里**；
+   *   · 退出游戏（右上角胶囊）→ 回任务页，**离开游戏**。
+   */
+  const [gameFull, setGameFull] = useState(false)
+  const inGame = tab === 'game'
+  /** 只有「在游戏页 + 用户点了全屏」才收外壳。别的地方一律带外壳 */
+  const immersive = inGame && gameFull
+  /**
+   * 切 tab 的唯一入口：**离开游戏页就把全屏状态清掉**。
+   *
+   * 不清的话会留下一个「隐形全屏」：全屏时右上角胶囊 → 回任务页（`gameFull`
+   * 还是 true），下次再点底栏进游戏，画面直接又是整屏 —— 孩子会以为
+   * 「刚才那次返回没生效」。所以在切走的这一下就复位，而不是在渲染时判。
+   */
+  const goTab = useCallback((next: TabKey) => {
+    setTab(next)
+    if (next !== 'game') setGameFull(false)
+  }, [])
   const [showSettings, setShowSettings] = useState(false)
+  /**
+   * 设置页打开时落在哪一栏。默认「孩子」。
+   *
+   * 加它是因为心愿页「激活成功」的弹框要能一步跳到「设置 → 游戏」
+   * （2026-11-05）。`SettingsPage` 的 tab 是它自己的 state，
+   * 所以只能由这里先定好初值再挂载 —— 改完再 set 是没用的。
+   */
+  const [settingsTab, setSettingsTab] = useState<'child' | 'rules' | 'game' | 'data'>(
+    'child',
+  )
+  /**
+   * 「我的积分」整屏层（2026-11-05）。
+   *
+   * 它以前是底栏的第五格。用户说「积分挤占了下边栏，4 个为好」，
+   * 于是入口挪到顶栏那颗 🪙 —— 那一页没有任何动作，余额本来就常驻顶栏，
+   * 占一格是纯消耗。**别把它加回 `STATIC_TABS`**（理由见那边的注释）。
+   */
+  const [showPoints, setShowPoints] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [splashMinElapsed, setSplashMinElapsed] = useState(false)
   /** 家长设置向导：null = 关着，'first' = 首次引导，'replay' = 设置页点「重看」 */
   const [wizardMode, setWizardMode] = useState<'first' | 'replay' | null>(null)
+  /* 在线版：没登录就别开引导 —— 理由见下面那个 effect 的注释 */
+  const session = useAccount((st) => st.session)
+  /** 启动时自动拿账号的结果（`needs-login` = 上一次是正式账号，得请他登回来） */
+  const bootAccount = useAccount((st) => st.bootAccount)
+  const ensureGuest = useAccount((st) => st.ensureGuest)
+  /** 「请用手机号登回来」面板。只在 `needs-login` 时自动开一次，关掉不再纠缠 */
+  const [loginOpen, setLoginOpen] = useState(false)
+  /**
+   * 登录面板预填的号码。
+   *
+   * 目前只有一个来源：「保存进度」面板里发现号码已经有账号了，改口让人
+   * 用这个号码登回来（见 `BindSheet` 的 `onGoLogin`）。号码刚打过一遍，
+   * 再让人重打一次毫无意义。
+   */
+  const [loginPrefill, setLoginPrefill] = useState<string | undefined>(undefined)
+  const loginPrompted = useRef(false)
   /** 给孩子的功能导览开着吗 */
   const [tourOpen, setTourOpen] = useState(false)
   /** 首次进入只自动决定一次，之后靠设置页的「重看」入口手动开 */
@@ -133,11 +227,26 @@ export default function App() {
    * 这个 effect 会因为依赖变化再跑一遍。
    */
   const onboardingDone = settings.onboardingDone
+  /**
+   * 在线版**先登录，再谈引导**。
+   *
+   * ★ 引导的两个动作在没登录时都做不成：
+   *   ① 它 `Portal` 到 body、和登录闸门同为 `z-60`，而它**挂得更晚** ⇒
+   *      压在闸门上面，登录按钮 `elementFromPoint` 命中的是引导 —— 点不到；
+   *   ② 它「完成」时要写小名 / 头像，而在线版的设置是**写穿**的：
+   *      没登录 ⇒ 写不上去 ⇒ 回退 + 提示，`onboardingDone` 永远落不下来 ⇒
+   *      下次启动又弹一遍。
+   *   所以在线版没登录时**不决定**这件事（`gateDecided` 不置位），
+   *   等登录之后这个 effect 会再跑一遍，那时候再按 `onboardingDone` 决定。
+   *
+   * 本地版没这个顺序问题，照旧。
+   */
+  const needLogin = isOnlineMode && !session
   useLayoutEffect(() => {
-    if (!entered || gateDecided.current) return
+    if (!entered || gateDecided.current || needLogin) return
     gateDecided.current = true
     if (!onboardingDone) setWizardMode('first')
-  }, [entered, onboardingDone])
+  }, [entered, onboardingDone, needLogin])
 
   /** 向导走完 → 紧接着给孩子看导览（引导是「两段」的，见 SetupWizard 注释） */
   const finishWizard = () => {
@@ -193,11 +302,14 @@ export default function App() {
   )
 
   /**
-   * 底部导航的全部五格：把「游戏」那一格插在「任务」和「兑换」之间。
+   * 底部导航的全部四格：把「游戏」那一格插在「任务」和「兑换」之间。
    *
-   * 2026-10-28 从四格变五格（加了「心愿」）。底栏是 `flex-1` + `justify-center`，
-   * 不是固定列宽，所以加一格只是每格变窄（390px 上 97 → 78px），
-   * **不需要改布局代码**。但所有「按第几个 tab」定位的测试都要复查。
+   * 2026-10-28 曾经从四格变五格（加了「心愿」），2026-11-05 又回到四格
+   * （「积分」挪到顶栏那颗 🪙，理由见 `STATIC_TABS` 的注释）。
+   * 底栏是 `flex-1` + `justify-center`，不是固定列宽，所以增删一格只是每格变宽窄
+   * （390px 上五格 78px、四格 97px），**不需要改布局代码**。
+   * 但所有「按第几个 tab」定位的测试都要复查 —— 这次改的就有
+   * `e2e-check.mjs` / `capture-tablet.mjs` / `capture.mjs` 三处。
    *
    * 游戏格是**运行时算**的 —— 图标、名字、`data-tour` 全都来自当前游戏。
    * 农场是首款且默认拥有，所以默认状态下这一格就是原来的「🌾 农场 / tab-farm」，
@@ -223,8 +335,26 @@ export default function App() {
    */
   const pendingRedeemItem = useApp((s) => s.pendingRedeemItem)
   useEffect(() => {
-    if (pendingRedeemItem) setTab('redeem')
-  }, [pendingRedeemItem])
+    /* 走 `goTab` 而不是裸 `setTab`：万一是从全屏游戏里跳过来的，
+       全屏状态要跟着复位（见 `goTab` 的注释）。 */
+    if (pendingRedeemItem) goTab('redeem')
+  }, [pendingRedeemItem, goTab])
+
+  /**
+   * 同上一条通道：心愿页说「去设置看看」时，打开设置页并落到指定栏。
+   *
+   * ⚠️ 顺序是「先定栏 → 再打开 → 再清空」。反过来（先打开）会先挂载
+   * 一次「孩子」栏，闪一下再跳 —— 而 `SettingsPage` 的 `useState`
+   * 初值只取一次，晚了就再也改不动了。
+   */
+  const pendingSettingsTab = useApp((s) => s.pendingSettingsTab)
+  const takePendingSettingsTab = useApp((s) => s.takePendingSettingsTab)
+  useEffect(() => {
+    if (!pendingSettingsTab) return
+    setSettingsTab(pendingSettingsTab)
+    setShowSettings(true)
+    takePendingSettingsTab()
+  }, [pendingSettingsTab, takePendingSettingsTab])
 
   const tabs = useMemo(
     () => [
@@ -237,7 +367,6 @@ export default function App() {
       },
       STATIC_TABS[1],
       STATIC_TABS[2],
-      STATIC_TABS[3],
     ],
     [activeGame, activePlugin, activeGameId],
   )
@@ -254,10 +383,65 @@ export default function App() {
    */
   const GamePage = pageFor(activeGame)
 
-  // 启动：加载数据 + 补齐今日任务
+  /**
+   * 启动：**先拿到账号**，再加载数据 + 补齐今日任务。
+   *
+   * ★ 顺序不能反。`boot()` 里的第一次 `refresh()` 负责把服务端数据拉进
+   *   Dexie，而没有会话时它直接返回 `no-session`，一条都不拉 ——
+   *   孩子看到的是一整套空界面，而屏幕上什么都不会说。
+   *
+   * 在线版这一步会自动建一个**游客账号**（`ensureGuest`），所以新用户
+   * 不用注册、不用等验证码，进来就能玩。上一次用的是正式账号时它不会
+   * 建游客，而是转成 `needs-login` 请人登回来（理由见 `useAccount`）。
+   *
+   * `alive` 是为了 StrictMode：它会挂载→卸载→挂载，两次都跑 `boot()`。
+   * 第一次的 `boot` 在卸载后被跳过，第二次照常跑 —— 正好一次。
+   */
   useEffect(() => {
-    void boot()
-  }, [boot])
+    let alive = true
+    void (async () => {
+      const ok = await ensureGuest()
+      if (!alive) return
+      /* ★ 模板落地排在 boot() **前面**：boot 里的第一次 pull 会顺手把
+         刚铺出来的任务 / 兑换品带进本地 Dexie。反过来先 boot 再铺，
+         孩子第一屏是空的，得等下一次启动才看得到 —— 而新用户不会给第二次机会。
+         本地版 / 没登录时它直接返回，不会多打一次网络请求。 */
+      await ensureTemplateApplied()
+      if (!alive) return
+      /* ★ 账号没建成 ⇒ **别** boot()。
+         没有会话时 `refresh()` 直接返回 `no-session`，一条都不拉 ——
+         孩子会看到一整套空界面（没任务、没积分、农场空的），而屏幕上
+         一个字都不会说。首屏就这么空，他不会去猜，直接关掉。
+         `needs-login` 不走这里：那是「上次是正式账号」，有登录面板那条出口。 */
+      if (!ok && useAccount.getState().bootAccount === 'failed') return
+      await boot()
+    })()
+    return () => {
+      alive = false
+    }
+  }, [boot, ensureGuest])
+
+  /**
+   * 「重试」按钮：再建一次账号，成功才继续 `boot()`。
+   *
+   * `ensureGuest` 本身幂等（已经有会话就直接 ready），所以连点也不会建出
+   * 两个号；请求期间按钮是禁用的（`busy` 在 store 里）。
+   */
+  const retryBoot = async () => {
+    const ok = await ensureGuest()
+    if (!ok) return
+    /* 上一次是「模板那一步失败」时，重试要连它一起重来 —— 只重 boot()
+       会得到一个空任务板，而用户以为已经修好了。 */
+    await ensureTemplateApplied()
+    await boot()
+  }
+
+  /** 上一次是正式账号 ⇒ 请他登回来（自动开一次，关掉就不再开） */
+  useEffect(() => {
+    if (bootAccount !== 'needs-login' || loginPrompted.current) return
+    loginPrompted.current = true
+    setLoginOpen(true)
+  }, [bootAccount])
 
   // 每分钟推进：跨日检测 + 动物产出
   useEffect(() => {
@@ -282,25 +466,72 @@ export default function App() {
     })()
   }, [])
 
-  // 从后台切回前台时刷新一次，避免显示过期数据
+  /**
+   * 从后台切回前台：推进一次 + **真的重拉一次**。
+   *
+   * ⚠️ 只调 `tick()` 是不够的 —— 它只在**跨逻辑日**时才 `refresh()`
+   * （见 `store/useApp.ts` 的 `tick`）。所以这条注释以前写着「刷新一次，
+   * 避免显示过期数据」，实际什么都没刷：平板放一边半天再拿起来，
+   * 看到的还是半天前的任务和积分，家长在**另一台设备**上改的 PIN / 限时
+   * 也要等到重启或跨日才生效 —— 全都不报错。
+   *
+   * `refresh()` 自己会把并发调用折叠成一次，所以这里不必再防重入；
+   * 只防「来回切 App 每次都打一轮接口」（30 秒闸门，见 `sync/foreground.ts`）。
+   */
   useEffect(() => {
     if (!ready) return
+    let lastPullAt = 0
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void tick()
+      if (document.visibilityState !== 'visible') return
+      void tick()
+      const now = Date.now()
+      if (!shouldRefreshOnForeground(lastPullAt, now)) return
+      lastPullAt = now
+      /* ★ 顺序不能反：`reloadSettings` 读的是 `refresh()` 刚写进 Dexie 的
+         那份（`refresh` 自己不碰 store 里的 settings）。只调 `refresh()`
+         的话，家长在另一台设备上改的 PIN / 每日限时仍然要等重启才生效。 */
+      void (async () => {
+        await refresh()
+        await reloadSettings()
+      })()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [ready, tick])
+  }, [ready, tick, refresh, reloadSettings])
 
   // 数据好了 **并且** 入场页待够了才进主界面。
   // 这里是一次性的启动闸门（之前还没挂载任何子页面），所以可以整棵替换；
   // 进了主界面之后就再也不走这个分支了。
+  //
+  /* ★ 账号没建成（连不上服务器）⇒ 停在这一屏，别进空界面。
+     必须放在 splash 那条**前面**：这时候 `ready` 永远是 false，
+     不拦就是一个永远转圈的开场页。 */
+  if (isOnlineMode && bootAccount === 'failed' && !ready) {
+    return <BootRetryPage onRetry={() => void retryBoot()} />
+  }
+  /* ★ 启动过程本身抛错（Dexie 写不进去 / 服务端形状不对导致的 TypeError…）
+     ⇒ 同样停住。`boot()` 里已经把错收进 `bootError` 并且**不置 ready**，
+     不接这一屏就是永远转圈 —— 没有报错、没有重试、没有出口。 */
+  if (bootError && !ready) {
+    return (
+      <BootRetryPage
+        title="启动时出了点问题"
+        detail={bootError}
+        hint="再试一次看看。要是还不行，把这一屏截图发给我们。"
+        onRetry={() => void retryBoot()}
+      />
+    )
+  }
   if (!ready || !splashMinElapsed) return <SplashPage />
 
   return (
     <div className="relative flex min-h-screen flex-col">
       {showSettings ? (
-        <SettingsPage onBack={() => setShowSettings(false)} onReplayGuide={replayGuide} />
+        <SettingsPage
+          initialTab={settingsTab}
+          onBack={() => setShowSettings(false)}
+          onReplayGuide={replayGuide}
+        />
       ) : (
         <>
           {/* 顶部状态条：两种币常驻可见，让孩子随时看到自己的收获。
@@ -308,6 +539,7 @@ export default function App() {
               内容再收进 `page-col`。原来顶栏和内容一起被 `max-w-2xl` 卡住，
               在 iPad 上会变成「中间悬着一条 672px 的横条」，两边各空一大块。
               同理，底部导航也改成通栏。 */}
+          {!immersive && (
           <header className="sticky top-0 z-30 border-b border-ink-900/10 bg-paper/95 backdrop-blur">
             {/* `pl-safe pr-safe` 是 calc(env(...) + 1rem)，正好等于原来的 px-4，
                 但横屏刘海屏上会多让出安全区。横屏时刘海就在顶栏左右两端，
@@ -351,15 +583,32 @@ export default function App() {
                   {mallBalance}
                 </span>
               </div>
-              <div
-                className="flex shrink-0 items-center gap-1 rounded-full bg-sun-200 px-1.5 py-1.5 shadow-flat"
-                aria-label={`积分 ${balance}`}
+              {/*
+                🪙 积分牌**同时是入口**（2026-11-05）。
+
+                它原来是纯展示的 `div`，因为积分另有一格底栏。用户要求底栏回到
+                四格之后，「这分怎么来的 / 攒到哪些成就」就没有门了 ——
+                所以这里从 `div` 换成 `button`：点一下打开整屏的「我的积分」。
+
+                ⚠️ 别把 `aria-label` 改成不含「积分」两个字的说法：
+                   e2e-check 的顶栏探针靠 `startsWith(POINTS.name)` 找它，
+                   改了就变成「顶栏没有积分牌」的假失败。
+                ⚠️ `data-tour="header-points"` 是新手导览第 4 步的锚点。
+                   改成 `tab-points` 的话导览会指着一个不存在的元素
+                   （挖洞层 `{rect && …}` ⇒ 不压暗、气泡浮在中间、整屏点不动）。
+              */}
+              <button
+                type="button"
+                data-tour="header-points"
+                onClick={() => setShowPoints(true)}
+                aria-label={`积分 ${balance}，看积分明细`}
+                className="btn flex shrink-0 items-center gap-1 rounded-full bg-sun-200 px-1.5 py-1.5 shadow-flat active:btn-press"
               >
                 <span className="text-sm leading-none">🪙</span>
                 <span className="tnum font-display text-sm font-extrabold leading-none text-ink-900">
                   {balance}
                 </span>
-              </div>
+              </button>
               {/*
                 兑换券**所有游戏都显示**（2026-10-24 改）。
 
@@ -412,8 +661,28 @@ export default function App() {
               </button>
             </div>
           </header>
+          )}
 
-          <main key={tab} className="flex flex-1 flex-col anim-fade-in">
+          {/*
+            「现在连不上服务器」的横幅。**放在 header 和 main 之间**：
+            它是全局状态，不属于任何一个 tab —— 挂在某个页面里的话，
+            孩子切到别的页面就看不到，正好在那一刻误以为数据是新的。
+          */}
+          {/* 沉浸全屏时唯一的 App 界面：左上角返回（退出全屏）+ 右上角胶囊（退出游戏）。
+              **只在全屏时存在** —— 不全屏时底栏就在，直接点「任务」回去。 */}
+          {immersive && (
+            <ImmersiveGameBar
+              onExitFullscreen={() => setGameFull(false)}
+              onExitGame={() => goTab('tasks')}
+            />
+          )}
+
+          <SyncBanner />
+
+          {/* `relative` 是给「全屏」那枚浮动键当定位父级的（见下面的
+              `GameFullscreenButton`）—— 它必须跟着**游戏那块**走，
+              不能跑到顶栏或底栏上去。 */}
+          <main key={tab} className="relative flex flex-1 flex-col anim-fade-in">
             <ErrorBoundary resetKey={tab}>
               {tab === 'tasks' && <TaskPage />}
               {/*
@@ -450,13 +719,22 @@ export default function App() {
               </Suspense>
               {tab === 'redeem' && <RedeemPage />}
               {tab === 'wish' && <WishPage />}
-              {tab === 'points' && <PointsPage />}
             </ErrorBoundary>
+
+            {/* 不全屏时叠在游戏画面右下角的「全屏」键（播放器那种）。
+                **挂在 `main` 里而不是页面里** —— 内置农场和下载来的插件游戏
+                是两套渲染路径，挂在 App 这一层才对两者都生效。
+                ⚠️ 全屏之后它必须消失：那时右下角要留给游戏自己，
+                退出全屏走左上角那颗返回。 */}
+            {inGame && !gameFull && (
+              <GameFullscreenButton onEnter={() => setGameFull(true)} />
+            )}
           </main>
 
           {/* 底部导航：同样通栏 + `page-col` 收内容（理由见顶栏注释）。
               底栏保留在底部而不是改成侧边栏 —— 孩子两手握平板时，
               拇指够得着底边，够不着侧边中段。 */}
+          {!immersive && (
           <nav className="sticky bottom-0 z-30 border-t border-ink-900/10 bg-paper/95 backdrop-blur">
             <div className="page-col flex items-stretch justify-center gap-1 px-2 py-2 pb-safe">
               {tabs.map((t) => {
@@ -464,7 +742,7 @@ export default function App() {
                 return (
                   <button
                     key={t.key}
-                    onClick={() => setTab(t.key)}
+                    onClick={() => goTab(t.key)}
                     /* 新手导览靠这个属性定位，不靠「第几个 button」（见 ChildTour 注释） */
                     data-tour={t.tour}
                     className={
@@ -486,8 +764,15 @@ export default function App() {
               })}
             </div>
           </nav>
+          )}
         </>
       )}
+
+      {/* 「我的积分」整屏层：从顶栏那颗 🪙 点开（底栏已经没有这一格了）。
+          挂在这里而不是 `<main>` 里 —— 它自己 Portal 到 body，理由见
+          `components/Portal.tsx`；放在这一层是为了**切 tab 不会把它带走**，
+          关掉之后还停在原来那一格。 */}
+      {showPoints && <PointsSheet onClose={() => setShowPoints(false)} />}
 
       {/* 家长确认弹层：挂在最外层，切 Tab / 进设置都不影响它 */}
       <ReviewSheetModal open={reviewOpen} onClose={() => setReviewOpen(false)} />
@@ -499,9 +784,30 @@ export default function App() {
       {wizardMode && (
         <SetupWizard replay={wizardMode === 'replay'} onFinish={finishWizard} />
       )}
-      {tourOpen && <ChildTour onFinish={finishTour} onStepChange={setTab} />}
+      {tourOpen && <ChildTour onFinish={finishTour} onStepChange={goTab} />}
 
-      <ToastHost toasts={toasts} onDismiss={dismissToast} />
+      {/* 「保存进度」面板：游客花兑换券被拒、第 3 次启动、点横条，
+          三个入口共用这一个（自己 Portal 到 body，所以放在哪一层都行）。 */}
+      <BindSheet
+        onGoLogin={(m) => {
+          setLoginPrefill(m)
+          setLoginOpen(true)
+        }}
+      />
+
+      {/* 「用手机号登回来」：只有 `bootAccount === 'needs-login'` 会自动开一次。
+          以前这里是一整块全屏闸门（`OnlineLoginGate`），新用户一进来就被拦；
+          现在默认路径是自动游客账号，只有「上次是正式账号」才需要这一屏。 */}
+      <LoginSheet
+        open={loginOpen}
+        onClose={() => {
+          setLoginOpen(false)
+          setLoginPrefill(undefined)
+        }}
+        prefillMobile={loginPrefill}
+      />
+
+      <ToastHost toasts={toasts} onDismiss={dismissToast} fullscreen={immersive} />
     </div>
   )
 }
@@ -511,9 +817,21 @@ export default function App() {
 function ToastHost({
   toasts,
   onDismiss,
+  fullscreen = false,
 }: {
   toasts: { id: string; kind: string; title: string; detail?: string; emoji?: string }[]
   onDismiss: (id: string) => void
+  /**
+   * 游戏全屏时往下让一段。
+   *
+   * 顶栏收掉之后，提示条原来落的位置（`top-3`）正好压在游戏自己的顶栏上 ——
+   * 云边小农场那里是「Lv. 徽章 + 牧场/田地/鱼塘」那一排，是全屏里唯一的交互控件。
+   * 让出的高度是**量出来的**（`scripts/_probe-toast-fullscreen.mjs`，1024×768 与 390×844
+   * 两个尺寸一致）：退出条 8~34、游戏顶栏 46~94 ⇒ 取 100（顶栏底 + 6 间隙）。
+   * 84 那版是拍脑袋算的，实测压住 10px。
+   * `env(safe-area-inset-top)` 由退出条自己吃掉，这里补上同样的量。
+   */
+  fullscreen?: boolean
 }) {
   const tone: Record<string, string> = {
     success: 'bg-grass-300',
@@ -522,11 +840,17 @@ function ToastHost({
     warn: 'bg-berry-200',
   }
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex flex-col items-center gap-2 px-4">
+    <div
+      className="pointer-events-none fixed inset-x-0 z-50 flex flex-col items-center gap-2 px-4"
+      style={fullscreen ? { top: 'calc(env(safe-area-inset-top) + 100px)' } : { top: 12 }}
+    >
       {toasts.map((t) => (
         <button
           key={t.id}
           onClick={() => onDismiss(t.id)}
+          /* 探针靠它认「提示条真的画出来了」。store 里收到不算数 ——
+             提示条是 Portal 之外的另一棵树，写错位置就永远不显示。 */
+          data-toast={t.kind}
           className={
             'pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border-3 border-ink-900/10 px-4 py-3 text-left shadow-float anim-bounce-in ' +
             (tone[t.kind] ?? 'bg-white')

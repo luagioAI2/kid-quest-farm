@@ -8,6 +8,19 @@ import { fileURLToPath, URL } from 'node:url'
  */
 export default defineConfig({
   plugins: [react()],
+  /**
+   * 单测一律跑**本地模式**。
+   *
+   * 这个 worktree 的 App 默认是在线版（`sync/pull.ts` 里默认 online），
+   * 而 store 的单测断言的是本地领域逻辑（播种、结算、农场推进）。
+   * 不钉死的话，每条用例都会去发 HTTP —— 不是报错，是**变慢 + 结果取决于网络**，
+   * 而失败信息会是「fetch is not defined」，看起来像环境问题。
+   *
+   * 在线版自己的逻辑（id 映射、字段映射）是纯函数，单独测，不需要这个开关。
+   */
+  define: {
+    'import.meta.env.VITE_APP_MODE': JSON.stringify('local'),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

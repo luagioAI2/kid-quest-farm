@@ -13,10 +13,14 @@ import {
   postLedger,
   postMall,
   savePlots,
+  saveSettings,
   setGameKv,
   setMeta,
+  wipeAll,
 } from '../db/db'
 import {
+  KNOWN_BACKUP_KEYS,
+  makeBackupSample,
   selectCheckInTasks,
   selectPendingCheckIns,
   selectPeriodTasks,
@@ -1572,7 +1576,7 @@ describe('道具掉落总开关', () => {
     })
     const inst = useApp
       .getState()
-      .instances.find((i) => i.taskId === task.id && i.status === 'pending')
+      .instances.find((i) => i.taskId === task!.id && i.status === 'pending')
     if (!inst) throw new Error('没生成实例')
     await useApp.getState().submitInstance(inst.id, 10, undefined)
     await useApp.getState().reviewInstance(inst.id, undefined, 10)
@@ -1756,7 +1760,7 @@ describe('首次启动：今日任务', () => {
     expect(selectCheckInTasks(useApp.getState()).map((x) => x.title)).toContain('每周喝水打卡')
     expect(todayTitles()).not.toContain('每周喝水打卡')
     expect(selectPeriodTasks(useApp.getState()).map((x) => x.title)).not.toContain('每周喝水打卡')
-    expect(t.cycle).toBe('weekly')
+    expect(t!.cycle).toBe('weekly')
   })
 
   it('五个签到任务都能在「坚持签到」里找到', () => {
@@ -3515,5 +3519,470 @@ describe('一次性兑换品', () => {
     expect(item.limitPerDay).toBeUndefined()
     await useApp.getState().redeem(item.id)
     expect(await useApp.getState().redeem(item.id)).toBe(false)
+  })
+})
+
+/* ============================================================
+   覆盖面闸门：加了新表，备份 / 清空必须跟着登记
+   ------------------------------------------------------------
+   这一族 bug 已经犯过三次，全都是「加了表，忘了登记」：
+
+     · `harvestLedger` / `mallLedger` —— 导出漏 → 换机丢记录；
+     · `wishOrders` —— 导出漏 → 券被扣了却没订单可退（2026-10-28）；
+     · `wishCodes`（v10）—— 导出**和**清空都漏 → 清空 / 恢复旧备份之后
+       那张实体卡作废（2026-10-30）。
+
+   三次都是**零报错**：界面照常、其它闸门全绿，只有用户会发现「东西不对」。
+   所以这里不逐个点名单表，而是**枚举 `db.tables`** —— 下次加 v11 的表，
+   这两条会直接红，逼你当场决定「进不进备份、清不清」。
+   ============================================================ */
+describe('覆盖面闸门：每一张表都要进备份 / 被清空', () => {
+  /** 备份里的字段名和表名不一样的，在这里登记（目前只有农场事件） */
+  const BACKUP_KEY_OF: Record<string, string> = { farmEvents: 'events' }
+  /** 有意**不**进备份的表：写在这里并说清为什么（现在是空的） */
+  const DEVICE_LOCAL: string[] = []
+
+  it('★ 导出覆盖每一张表（漏一张 = 换机丢数据，且零报错）', async () => {
+    const backup = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const data = backup.data
+    // ⚠️ 只数 key 不够：`wishCodes: undefined` 这种「登记了但没真取数」也算有 key，
+    // 而 `JSON.stringify` 会把值为 undefined 的字段整个丢掉 —— 文件里就是没有。
+    // 实测过：写成 `wishCodes: undefined` 时，只数 key 的判据**照样全绿**。
+    const keys = new Set(
+      Object.entries(data)
+        .filter(([, v]) => v !== undefined && v !== null)
+        .map(([k]) => k),
+    )
+    const missing = db.tables
+      .map((t) => t.name)
+      .filter((n) => !DEVICE_LOCAL.includes(n))
+      .filter((n) => !keys.has(BACKUP_KEY_OF[n] ?? n))
+    expect(missing, '这些表没进备份 —— 加表时忘了登记？').toEqual([])
+  })
+
+  it('★ 清空全部数据 = 每一张表都被 clear 过', async () => {
+    // 不去铺数据（空表清不清都是空的，测不出漏），直接看**有没有调 clear**。
+    //
+    // ⚠️ spy 必须挂在**原型**上，不能挂在实例上：`wipeAll` 是在
+    // `db.transaction(...)` 里面调 `db.tasks.clear()` 的，而事务里的
+    // `db.tasks` 是**另一个** Table 实例（事务作用域那一份）——
+    // 在实例上 spy，17 张表会全部报「没被清空」，看着像 bug 其实是用错了尺子。
+    const proto = Object.getPrototypeOf(db.tasks) as { clear: () => Promise<void> }
+    const called = new Set<string>()
+    const spy = vi.spyOn(proto, 'clear').mockImplementation(function (this: { name: string }) {
+      called.add(this.name)
+      return Promise.resolve()
+    })
+    try {
+      await wipeAll()
+    } finally {
+      spy.mockRestore()
+    }
+    const missed = db.tables.map((t) => t.name).filter((n) => !called.has(n))
+    expect(missed, '这些表没被清空 —— 新表要登记进 wipeAll').toEqual([])
+  })
+
+  /* ------------------------------------------------------------
+     meta 表：**导出是全量的，导入是手写清单**
+     ------------------------------------------------------------
+     `exportBackup` 把整个 `meta` 拍成 `data.meta`（`Object.fromEntries`，全量），
+     而 `importBackup` 只按手写的 6 个 key 写回（settings / farm.market /
+     farm.plots / farm.totals / farm.day / farm.quotaCarry），**从来没读过
+     `d.meta`**。也就是说导出的那一份是「全量」，导入端只认自己认识的。
+
+     现在 meta 里恰好只剩一个没被点名的 key（`farm.lastEventCheck`，事件概率
+     用的时间戳），丢了也只是「暂时不掷灾害骰子」，看不出来。真正的问题是
+     **下次有人往 meta 里加东西，导出会自动带上、导入会静默丢掉** ——
+     和 `wishCodes` 是同一族：一侧自动、一侧手写，迟早走散。
+     ------------------------------------------------------------ */
+  it('★ 导出 → 导入 不能丢掉「没被点名」的 meta key', async () => {
+    await setMeta('farm.lastEventCheck', 1700000000000)
+    const snap = await useApp.getState().exportBackup()
+    await db.meta.clear()
+
+    const res = await useApp.getState().importBackup(snap)
+    expect(res.ok, res.message).toBe(true)
+    expect(
+      (await db.meta.get('farm.lastEventCheck'))?.value,
+      '没被点名的 meta key 也要回来（导出是全量的）',
+    ).toBe(1700000000000)
+  })
+
+  it('★ 连「将来才会有的 key」也要回来（否则下次还得再补一遍清单）', async () => {
+    // 这条故意用一个**没人读**的 key：如果修法是「把 farm.lastEventCheck
+    // 加进那份手写清单」，上一条会绿、这一条仍然红 —— 逼出通用解。
+    await setMeta('probe.futureKey', { a: 1 })
+    const snap = await useApp.getState().exportBackup()
+    await db.meta.clear()
+
+    const res = await useApp.getState().importBackup(snap)
+    expect(res.ok, res.message).toBe(true)
+    expect((await db.meta.get('probe.futureKey'))?.value).toEqual({ a: 1 })
+  })
+
+  /* ------------------------------------------------------------
+     家长 PIN：**它是凭据，不是数据**
+     ------------------------------------------------------------
+     `parentPin` 是**明文**（`domain/types.ts`：「明文仅本地，4 位」，
+     `ParentGate` 直接 `pin === settings.parentPin` 比），而它住在
+     `settings` 里，`exportBackup` 把 `settings` 整个导出去。
+
+     于是那句「明文仅本地」是假的：**每次导出备份，家长锁的密码就跟着
+     那个 JSON 离开这台设备**。而备份文件正是会被发到微信 / 网盘里的东西。
+
+     反方向同样要命：`importBackup` 也是整份 `settings` 覆盖写。所以一份
+     **没有** `parentPin` 的备份（老备份、或者孩子自己删了那行）导入之后，
+     家长锁就被清空了 —— 孩子只要拿到任何一份旧备份就能解锁。
+     ------------------------------------------------------------ */
+  it('★ 备份里不能有家长 PIN（明文，会被发到微信里）', async () => {
+    await useApp.getState().updateSettings({ parentPin: '7391' })
+    const snap = await useApp.getState().exportBackup()
+    expect(JSON.stringify(snap), 'PIN 是凭据，不该离开这台设备').not.toContain('7391')
+  })
+
+  it('★ 导入一份没有 PIN 的备份，不能把家长锁清空', async () => {
+    await useApp.getState().updateSettings({ parentPin: '7391' })
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const settings = { ...(snap.data.settings as Record<string, unknown>), parentPin: undefined }
+    const res = await useApp.getState().importBackup({ ...snap, data: { ...snap.data, settings } })
+    expect(res.ok, res.message).toBe(true)
+    expect(useApp.getState().settings.parentPin, '一份文件不该能清掉家长锁').toBe('7391')
+    expect(
+      ((await db.meta.get('settings'))?.value as { parentPin?: string }).parentPin,
+      '库里也不能被清掉',
+    ).toBe('7391')
+  })
+
+  it('★ 导入一份带别的 PIN 的备份，不能改掉本机的 PIN', async () => {
+    await useApp.getState().updateSettings({ parentPin: '7391' })
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const settings = { ...(snap.data.settings as Record<string, unknown>), parentPin: '1111' }
+    const res = await useApp.getState().importBackup({ ...snap, data: { ...snap.data, settings } })
+    expect(res.ok, res.message).toBe(true)
+    expect(useApp.getState().settings.parentPin, 'PIN 由本机决定，备份说了不算').toBe('7391')
+    expect(
+      ((await db.meta.get('settings'))?.value as { parentPin?: string }).parentPin,
+      '库里也不许被文件改掉',
+    ).toBe('7391')
+  })
+
+  /* ------------------------------------------------------------
+     「今天玩了多久」也是**这台设备今天的状态**，不是数据
+     ------------------------------------------------------------
+     `settings.gameClock` 是每日游戏时长的闸门来源（`GamePlayGate` 读它）。
+     它跟着备份走有两个方向的问题：
+       · 孩子**玩满 30 分钟**之后导入一份玩之前的备份 ⇒ 额度被刷回去；
+       · 换台设备恢复 ⇒ 把「昨天那台设备今天玩了多少」带过来。
+     和 PIN 同一类：不是孩子挣到的东西，是这台设备的用量。
+     ------------------------------------------------------------ */
+  it('★ 备份里不带「今天玩了多久」', async () => {
+    const day = currentDayKey(useApp.getState().settings.dayStartHour)
+    await useApp.getState().updateSettings({ gameClock: { day, sec: 1200 } })
+    const snap = await useApp.getState().exportBackup()
+    expect(JSON.stringify(snap), '用量不是数据，不该跟着文件走').not.toContain('gameClock')
+  })
+
+  it('★ 导入一份「今天还没玩」的备份，不能把本机额度刷回去', async () => {
+    const day = currentDayKey(useApp.getState().settings.dayStartHour)
+    await useApp.getState().updateSettings({ gameClock: { day, sec: 1200 } })
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const settings = {
+      ...(snap.data.settings as Record<string, unknown>),
+      gameClock: { day, sec: 0 },
+    }
+
+    const res = await useApp.getState().importBackup({ ...snap, data: { ...snap.data, settings } })
+    expect(res.ok, res.message).toBe(true)
+    expect(useApp.getState().settings.gameClock?.sec, '玩过的时长不能被一份文件抹掉').toBe(1200)
+    expect(
+      ((await db.meta.get('settings'))?.value as { gameClock?: { sec: number } }).gameClock?.sec,
+      '库里也不能',
+    ).toBe(1200)
+  })
+
+  /* ------------------------------------------------------------
+     备份不带游戏本体 —— 一半是体积，一半是「它会执行」
+     ------------------------------------------------------------
+     `gameKv.__bundle` 是整段游戏代码（`anthill` 一款 4.2 MB），而
+     `mountGame()` 读它 → `importBundle()` → `Blob` → `import()`，
+     中间没有哈希也没有签名。下载层有签名，备份这条路把门绕过去了。
+
+     后果不只是「备份大」：别人发来一份「我配好的任务」，里面塞一段代码，
+     导入就等于把它跑起来 —— 它能读孩子的账本、能 fetch 任意地址。
+     ------------------------------------------------------------ */
+  it('★ 备份里不带游戏本体，只带存档', async () => {
+    await setGameKv('cloudfarm', BUNDLE_KEY, 'export function start() {}')
+    await setGameKv('cloudfarm', ASSET_BASE_KEY, '/games/cloudfarm/')
+    await setGameKv('cloudfarm', 'save', { level: 3 })
+
+    const snap = (await useApp.getState().exportBackup()) as {
+      data: { gameKv: { key: string }[] }
+    }
+    const keys = snap.data.gameKv.map((r) => r.key)
+    expect(keys, '本体不许进备份').not.toContain('cloudfarm:__bundle')
+    expect(keys, '资源根也是宿主保留键').not.toContain('cloudfarm:__assets')
+    expect(keys, '存档必须留着 —— 否则换机等于进度清零').toContain('cloudfarm:save')
+    expect(JSON.stringify(snap), '一个字节的代码都不该在里面').not.toContain(
+      'export function start',
+    )
+  })
+
+  it('★ 备份记下「装过哪些游戏」，否则恢复后装不回来', async () => {
+    await setGameKv('cloudfarm', BUNDLE_KEY, 'x')
+    await setGameKv('corgi', BUNDLE_KEY, 'y')
+    const snap = (await useApp.getState().exportBackup()) as {
+      data: { meta: { installedGameIds?: string[] } }
+    }
+    const ids = snap.data.meta.installedGameIds
+    expect([...(ids ?? [])].sort(), '名单从 __bundle 行派生').toEqual(['cloudfarm', 'corgi'])
+  })
+
+  it('★ 恢复时装不回来的游戏，要说出是哪几款', async () => {
+    /* 备份只带存档，游戏本体恢复后从本地包重装。装不上的（离线 / 这个版本
+       没有它）**不该让整次恢复失败**，但也不能只说「还有 N 款」——
+       装了五六款时家长根本找不出是哪一行显示「安装」而不是「已安装」。 */
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const withGames = {
+      ...snap,
+      data: {
+        ...snap.data,
+        meta: { ...((snap.data.meta as Record<string, unknown>) ?? {}), installedGameIds: ['anthill'] },
+      },
+    }
+    const res = await useApp.getState().importBackup(withGames)
+    expect(res.ok, res.message).toBe(true)
+    // jsdom 里取不到包（fetch 打不开），所以它一定落在「装不回来」那一边
+    expect(res.message, '要说名字，不是只说个数').toContain('蚂蚁搬家')
+    // 判据是「点名 + 说清去哪装」，不抄原话 —— 文案会改，这两件事不会
+    expect(res.message).toContain('去「游戏」页重装')
+  })
+
+  /* ------------------------------------------------------------
+     「下载一个空模板看看」—— 它要回答「备份长什么样」
+     ------------------------------------------------------------
+     原来这份模板是 `data: {}`：家长打开只看到一个空对象，什么也没回答，
+     而且 `version` 还停在 1（真实导出早就是 4 了）。
+     ------------------------------------------------------------ */
+  it('★ 空模板要把表结构摊开，且不落后于真实导出', async () => {
+    const real = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const sample = makeBackupSample() as { data: Record<string, unknown> }
+
+    // 真实导出里每一个**数组表**，模板里都得有 —— 加表时忘了改模板会红
+    const realArrayKeys = Object.keys(real.data)
+      .filter((k) => Array.isArray(real.data[k]))
+      .sort()
+    expect(Object.keys(sample.data).sort(), '模板的表清单要和导出对齐').toEqual(realArrayKeys)
+    expect(realArrayKeys.length, '前提：导出里确实有数组表').toBeGreaterThan(5)
+
+    // 值是空数组 —— 让「至少要有一样实际内容」那条把它挡在门外
+    expect(Object.values(sample.data).every((v) => Array.isArray(v) && v.length === 0)).toBe(true)
+  })
+
+  it('★ 导入空模板会被拒绝（不能拿它把数据清空）', async () => {
+    // 模板是给人看的，**不能**被当成一份能恢复的备份 ——
+    // 否则家长（或孩子）拿它点一次恢复，真实数据就被一份空壳顶掉了。
+    await postLedger({ delta: 30, source: 'manual_adjust', memo: '先有点东西' })
+    await useApp.getState().refresh()
+    const before = useApp.getState().balance
+
+    const res = await useApp.getState().importBackup(makeBackupSample())
+    expect(res.ok, res.message).toBe(false)
+    expect(res.message).toContain('空')
+    await useApp.getState().refresh()
+    expect(useApp.getState().balance, '被拒绝就一个字节都不该动').toBe(before)
+  })
+
+  it('★★ 导入一份自带代码的备份，那段代码不许落库', async () => {
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const evil = {
+      ...snap,
+      data: {
+        ...snap.data,
+        gameKv: [
+          { gameId: 'cloudfarm', key: 'cloudfarm:__bundle', value: 'window.__pwned = true' },
+          { gameId: 'cloudfarm', key: 'cloudfarm:__assets', value: '/evil/' },
+          { gameId: 'cloudfarm', key: 'cloudfarm:save', value: { level: 9 } },
+        ],
+      },
+    }
+    const res = await useApp.getState().importBackup(evil)
+    expect(res.ok, res.message).toBe(true)
+    expect(
+      await getGameKv('cloudfarm', BUNDLE_KEY),
+      '别人发来的备份不许把代码塞进库 —— 挂载时它会被 import() 执行',
+    ).toBeUndefined()
+    expect(await getGameKv('cloudfarm', ASSET_BASE_KEY), '资源根同理').toBeUndefined()
+    expect(await getGameKv('cloudfarm', 'save'), '存档照常恢复').toEqual({ level: 9 })
+  })
+
+  it('★ 导入之后 settings 要跟着刷新（否则设置页显示的还是旧的）', async () => {
+    // `refresh()` 一开头就是 `const { settings } = get()` —— 它**不重读**
+    // settings。导入写完库只调 `refresh()`，于是内存里还是导入前那份：
+    // 设置页显示旧的孩子名字 / 旧的审核开关，而且 `refresh` 里算「今天是哪天」
+    // （`dayStartHour`）、时间流速、事件开关用的全是旧值。
+    await useApp.getState().updateSettings({ childName: '导入前的名字' })
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const settings = { ...(snap.data.settings as Record<string, unknown>), childName: '备份里的名字' }
+
+    const res = await useApp.getState().importBackup({ ...snap, data: { ...snap.data, settings } })
+    expect(res.ok, res.message).toBe(true)
+    expect(useApp.getState().settings.childName, '导入完 store 里的 settings 要跟着变').toBe(
+      '备份里的名字',
+    )
+  })
+})
+
+/* ============================================================
+   备份版本号：只往一个方向拦
+   ------------------------------------------------------------
+   `version` 以前**只写不读**（导出侧的老注释就写着「导入端不看它」）。
+   对「老文件」那是对的 —— 版本比当前小的必须照样能读，这条不能破。
+   但反方向会**静默丢数据**：新版加了表，旧版 App 照单全收，不认识的那张
+   被悄悄丢掉，提示还是「数据已恢复」；它再导出一次，那份数据就永久没了。
+   ============================================================ */
+describe('备份版本号：新的不认，旧的要认', () => {
+  /** 拿一份**真实导出**当底稿再改版本号 —— 不手搓，免得跟导出结构走散 */
+  const withVersion = async (pick: (v: number) => number) => {
+    const snap = (await useApp.getState().exportBackup()) as {
+      version: number
+      data: Record<string, unknown>
+    }
+    return { ...snap, version: pick(snap.version) }
+  }
+
+  it('★ 比当前新的备份要拒绝，并说清「先更新 App」', async () => {
+    const res = await useApp.getState().importBackup(await withVersion((v) => v + 1))
+    expect(res.ok, '比当前新的备份不该被接受').toBe(false)
+    expect(res.message).toContain('更新')
+  })
+
+  it('★ 被拒绝时一个字节都不该动', async () => {
+    await postLedger({ delta: 30, source: 'manual_adjust', memo: '先有点东西' })
+    await useApp.getState().refresh()
+    const before = useApp.getState().balance
+    const res = await useApp.getState().importBackup(await withVersion((v) => v + 1))
+    expect(res.ok).toBe(false)
+    await useApp.getState().refresh()
+    expect(useApp.getState().balance, '拦下来就不能清库').toBe(before)
+  })
+
+  it('★ 比当前旧的备份照样能读（老文件永远读得回来）', async () => {
+    const res = await useApp.getState().importBackup(await withVersion((v) => Math.max(1, v - 1)))
+    expect(res.ok, res.message).toBe(true)
+  })
+
+  it('★ 没写版本号的老文件也能读', async () => {
+    const snap = (await useApp.getState().exportBackup()) as Record<string, unknown>
+    delete snap.version
+    const res = await useApp.getState().importBackup(snap)
+    expect(res.ok, res.message).toBe(true)
+  })
+
+  it('★ 加表必须同时登记：真实导出的键 == 已知键清单', async () => {
+    /* 加了一张表却忘了 bump `BACKUP_VERSION`，旧版 App 就会静默丢掉它。
+       这条把「导出写了哪些键」和「导入认得哪些键」钉在一起：改一边就得看另一边。 */
+    const snap = (await useApp.getState().exportBackup()) as { data: Record<string, unknown> }
+    const exported = Object.keys(snap.data)
+      .filter((k) => snap.data[k] !== undefined)
+      .sort()
+    expect(
+      exported,
+      '导出的键和 KNOWN_BACKUP_KEYS 对不上 —— 加表时记得同时 bump BACKUP_VERSION',
+    ).toEqual([...KNOWN_BACKUP_KEYS].sort())
+  })
+})
+
+describe('并发 refresh：折叠成一次 + 补跑一次', () => {
+  it('★★ 三次并发 refresh 会跑两轮（不补的话，刚写进去的读不回来）', async () => {
+    await boot()
+    const spy = vi.spyOn(db.tasks, 'toArray')
+    const a = useApp.getState().refresh()
+    const b = useApp.getState().refresh()
+    const c = useApp.getState().refresh()
+    await Promise.all([a, b, c])
+    const rounds = spy.mock.calls.length
+    spy.mockRestore()
+    /* 每次 doRefresh 只读一次 db.tasks.toArray() ⇒ 轮数 == 跑了几遍。
+       只跑一轮的话，第二个调用方刚写下去的东西读不回来 ——
+       服务端已经 done、界面还写着「待确认」，而且不报错。 */
+    expect(rounds, '三次并发只跑一轮 = 后来那次写入被丢掉了').toBe(2)
+  })
+
+  it('顺序调用各跑各的（补跑机制不会把两次刷新并成一次）', async () => {
+    await boot()
+    const spy = vi.spyOn(db.tasks, 'toArray')
+    await useApp.getState().refresh()
+    await useApp.getState().refresh()
+    const rounds = spy.mock.calls.length
+    spy.mockRestore()
+    expect(rounds).toBe(2)
+  })
+})
+
+/* ============================================================
+   reloadSettings：把 Dexie 里的家长设置重新读进 store
+   ------------------------------------------------------------
+   回归的是「另一台设备改了 PIN / 每日限时，这台要等重启才生效」。
+   `refresh()` 只把云端那份写进 Dexie 的 `meta`（`sync/pull.ts` 的
+   `pullSettings`），store 里的 `settings` 一直是旧的那份 —— 不报错，
+   所以只能靠断言 store 真的变了。
+   ============================================================ */
+
+describe('reloadSettings', () => {
+  it('Dexie 里的设置变了 ⇒ store 跟着变', async () => {
+    const before = useApp.getState().settings
+    await saveSettings({ ...before, childName: '另一台设备改的' })
+    await useApp.getState().reloadSettings()
+    expect(useApp.getState().settings.childName).toBe('另一台设备改的')
+  })
+
+  it('没变化就不 set（一次 set 会触发一整轮订阅，而这条会被反复调到）', async () => {
+    const before = useApp.getState().settings
+    await useApp.getState().reloadSettings()
+    expect(useApp.getState().settings).toBe(before)
+  })
+})
+
+/* ---- 启动失败不许把人卡在开场页（2026-11-03） ----
+ *
+ * `boot()` 原来没有 try/catch：三个 await 里任何一处抛错（Dexie 写不进去、
+ * 服务端返回的形状不对导致的 TypeError…）都会让 `set({ ready: true })`
+ * 永远执行不到 ⇒ **永远停在开场页转圈**。没有报错、没有重试、没有出口，
+ * 用户只能卸载重装（数据全丢）。
+ *
+ * 这条测试守的是：抛错之后 `bootError` 有值、`ready` 仍然是 false
+ * （让界面去拦）、`loading` 必须落回 false（否则按钮/骨架永远转）。
+ */
+describe('启动：抛错不能把 ready 留在 false 而没人知道', () => {
+  it('★ boot() 里抛错 ⇒ 记下 bootError，loading 落回 false', async () => {
+    const realRefresh = useApp.getState().refresh
+    /* 让 boot 的第三步炸掉 —— 比 mock Dexie 更贴近真实（refresh 内部
+       本来就是网络 + 写库 + 计算，任何一步都可能抛） */
+    useApp.setState({
+      ready: false,
+      loading: true,
+      bootError: null,
+      refresh: () => Promise.reject(new Error('refresh 炸了'))
+    })
+
+    await useApp.getState().boot()
+
+    const s = useApp.getState()
+    expect(s.ready, 'ready 不能是 true —— 数据没加载完就放人进去等于空界面').toBe(false)
+    expect(s.bootError).toContain('refresh 炸了')
+    expect(s.loading, 'loading 不落回 false，骨架/按钮会一直转').toBe(false)
+
+    /* 还原，别污染后面的用例 */
+    useApp.setState({ refresh: realRefresh, bootError: null })
+  })
+
+  it('★ 再 boot 一次成功就清掉 bootError（重试必须真的能救回来）', async () => {
+    useApp.setState({ ready: false, loading: true, bootError: '上一次炸了' })
+
+    await boot()
+
+    const s = useApp.getState()
+    expect(s.ready).toBe(true)
+    expect(s.bootError).toBeNull()
   })
 })

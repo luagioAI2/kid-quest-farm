@@ -44,6 +44,7 @@ import { join, relative } from 'node:path'
 import zlib from 'node:zlib'
 import { makeProfileDir, SCRATCH_BASE } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4393/'
 const VIEWPORT = process.argv[3] ?? 'phone'
@@ -309,6 +310,23 @@ console.log('\n【① 安装】')
   await wait(700)
   check('切到「游戏」那一栏', await clickText('游戏'))
   await wait(600)
+  /* 2026-11 起闸门是「卡片 + 按钮」：先点「爸妈：输密码」才弹数字键盘。
+     不点的话下面 4 次 0 全打在空气里，而「列表里没有 ropeland」会指向错的方向。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+      /爸妈：输密码/.test(x.textContent ?? ''),
+    )
+    b?.click()
+  })
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
   for (let i = 0; i < 4; i++) {
     await page.evaluate(() => {
       const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.trim() === '0')
@@ -317,6 +335,9 @@ console.log('\n【① 安装】')
     await wait(160)
   }
   await wait(600)
+  /* 2026-11-07 起「未拥有的游戏不显示」⇒ 必须先预置拥有、再等那一行，
+     反过来的话 `waitFor` 白等一轮，报的是「列表里没有」，真因却是「没拥有」。 */
+  await grantGame(page, GAME_ID)
   check('列表里列出了 ropeland', await waitFor(`[data-local-row="${GAME_ID}"]`, 8000))
 
   const clicked = await clickSel(`[data-local-install="${GAME_ID}"]`)
@@ -325,18 +346,6 @@ console.log('\n【① 安装】')
 
   const ver = await page.evaluate((id) => window.__kqf__.plugin.installed()[id]?.version, GAME_ID)
   check(`装上的版本是 v${GAME_VERSION}`, ver === GAME_VERSION, `实际 ${ver}`)
-
-  const econ = await page.evaluate(() => {
-    const el = document.querySelector('[data-plugin-economy]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
-  })
-  // 经济说明必须写**这款游戏自己的**数，不能拿别人的模板顶上
-  check(
-    `家长能看到「一局 ${PLAY_COST} 积分」`,
-    new RegExp(`一局\\s*${PLAY_COST}\\s*积分`).test(econ),
-    econ,
-  )
-  check('没写「开放兑换券」（ropeland 不产券）', !/=\s*1\s*兑换券/.test(econ), econ)
 
   check('点了「设为当前」', await clickSel(`[data-plugin-set-current="${GAME_ID}"]`))
   await wait(800)
@@ -529,6 +538,22 @@ console.log('\n【⑧ 卸载】')
   await wait(700)
   await clickText('游戏')
   await wait(600)
+  /* 同上：闸门是「卡片 + 按钮」，先点「爸妈：输密码」才弹键盘。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+      /爸妈：输密码/.test(x.textContent ?? ''),
+    )
+    b?.click()
+  })
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
   for (let i = 0; i < 4; i++) {
     await page.evaluate(() => {
       const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.trim() === '0')

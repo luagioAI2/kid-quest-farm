@@ -5,6 +5,7 @@ import { Portal } from '@/components/Portal'
 import type { TaskCategory, TaskCycle } from '@/domain/types'
 import type { GlobalSettleParams } from '@/domain/settlement'
 import { runningMs } from '@/domain/time'
+import { ITEM_BY_ID } from '@/domain/catalog'
 
 /* ============================================================
    小任务农场 · 任务模块内部 UI 基元
@@ -474,23 +475,86 @@ export function EmptyHint({
   )
 }
 
-/* 奖励道具预览（读 catalog，无需额外依赖） */
+/* 奖励道具预览（读 catalog，无需额外依赖）
+ *
+ * ★ 2026-11-14 用户：「任务奖励那 显示类型图标或者彩带（现在不够明显）。」
+ *   原来是一串裸 emoji 塞在 11px 的小字行里，和「⏰ 20 分钟」同权重 ——
+ *   奖励是最该被孩子看见的，却最看不见。
+ *   ⇒ 每个奖励做成**带底色的圆标签**，颜色按类型分（种子绿 / 动物黄 / 道具蓝），
+ *     稀有度 epic/rare 再加描边；前面加一枚 🎁 让「有奖励」这件事先跳出来。
+ */
 export function RewardChips({ itemIds, max = 3 }: { itemIds: string[]; max?: number }) {
   if (!itemIds || itemIds.length === 0) return null
   const shown = itemIds.slice(0, max)
   const rest = itemIds.length - shown.length
   return (
-    <span className="inline-flex items-center gap-1 text-base" title="完成后掉落">
+    <span
+      data-reward-chips
+      className="inline-flex items-center gap-1 rounded-pill bg-sun-100/70 py-0.5 pl-1 pr-1.5"
+      title="完成这个任务会掉落"
+    >
+      <span aria-hidden className="text-[11px] leading-none">
+        🎁
+      </span>
       {shown.map((id) => (
         <RewardChip key={id} itemId={id} />
       ))}
-      {rest > 0 && <span className="text-[11px] font-bold text-ink-500">+{rest}</span>}
+      {rest > 0 && <span className="text-[11px] font-extrabold text-ink-600">+{rest}</span>}
     </span>
   )
 }
 
+/**
+ * 一个奖励标签。
+ *
+ * 类型判断看 `kindOfItem`：种子（有 `speciesId`）/ 动物（有 `animalId`）/ 其余算道具。
+ * ⚠️ 别在渲染里遍历 `catalog.ITEMS` 找（那样每次重渲染都是 O(n)）——
+ *    `REWARD_META` 是模块级索引。
+ */
 function RewardChip({ itemId }: { itemId: string }) {
-  return <span aria-hidden>{REWARD_EMOJI[itemId] ?? '🎁'}</span>
+  const meta = ITEM_BY_ID.get(itemId)
+  const kind = rewardKindOf(itemId)
+  const tone =
+    kind === 'seed'
+      ? 'bg-grass-100 text-grass-700 border-grass-300'
+      : kind === 'animal'
+        ? 'bg-sun-100 text-sun-700 border-sun-300'
+        : 'bg-sky-50 text-sky-600 border-sky-300'
+  // 稀有的多一圈描边：不给它做动画，静态对比就够
+  const rareRing =
+    meta?.rarity === 'epic'
+      ? ' ring-2 ring-grape-400/60'
+      : meta?.rarity === 'rare'
+        ? ' ring-1 ring-sun-400/70'
+        : ''
+  return (
+    <span
+      data-reward-kind={kind}
+      data-reward-item={itemId}
+      title={meta ? `${meta.name}${meta.rarity === 'common' ? '' : '（稀有）'}` : '奖励'}
+      className={clsx(
+        'inline-flex items-center gap-0.5 rounded-pill border px-1 py-0.5 text-[11px] font-extrabold leading-none',
+        tone,
+        rareRing,
+      )}
+    >
+      <span aria-hidden>{REWARD_EMOJI[itemId] ?? '🎁'}</span>
+      {/* 桌面上有名字才认得出来；手机上靠图标 + 颜色 */}
+      <span className="hidden sm:inline">{meta?.name ?? '奖励'}</span>
+    </span>
+  )
+}
+
+/**
+ * 奖励的类型：种子 / 动物 / 道具。
+ *
+ * ★ 直接用 `catalog.ITEM_BY_ID`（模块级 Map），**不再建第二份索引** ——
+ *   「同一份事实存两份一定会走散」，而 catalog 增删物品时没人会记得改这里。
+ */
+function rewardKindOf(itemId: string): 'seed' | 'animal' | 'item' {
+  const it = ITEM_BY_ID.get(itemId)
+  if (!it) return 'item'
+  return it.speciesId ? 'seed' : it.animalId ? 'animal' : 'item'
 }
 
 /** 与 catalog.ITEMS 对齐的轻量 emoji 索引，避免在渲染里反复建 Map */

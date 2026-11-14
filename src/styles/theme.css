@@ -556,3 +556,43 @@
 @utility anim-delay-5 {
   animation-delay: 0.46s;
 }
+
+/* 未知长度的进度条（下载时服务端没给 Content-Length）。
+   一条 1/3 宽的色块来回滚 —— 比一条停在 0% 的实心条好：
+   后者看起来像卡死，而这时其实正在下载。 */
+@keyframes kqf-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+@utility indeterminate {
+  animation: kqf-indeterminate 1.2s ease-in-out infinite;
+}
+
+/* 加载提示的三个跳动小点（2026-11-13）。
+   插件游戏第一次要取包 + 执行，之前那段游戏区是**全白**的，
+   孩子以为卡住会反复点。三点依次起落比转圈省电，低端机上也不卡。 */
+@keyframes kqf-dot-bounce {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.55;
+  }
+  35% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+@utility anim-bounce-1 {
+  animation: kqf-dot-bounce 1.1s ease-in-out infinite;
+}
+@utility anim-bounce-2 {
+  animation: kqf-dot-bounce 1.1s ease-in-out 0.15s infinite;
+}
+@utility anim-bounce-3 {
+  animation: kqf-dot-bounce 1.1s ease-in-out 0.3s infinite;
+}

@@ -5,12 +5,14 @@ import type { RedeemCategory, RedeemItem, WishItem } from '@/domain/types'
 import { humanizeAgo } from '@/domain/time'
 import { clampPointsPerYuan, formatYuan } from '@/domain/cash'
 import { describeRedeemPayment, planRedeemPayment, type RedeemPayment } from '@/domain/redeem'
-import { WISH_KIND_META, wishOwnedSet, wishShelf, type WishTone } from '@/domain/wish'
+import { WISH_KIND_META, WISH_RIBBON_BG, wishShelf, type WishTone } from '@/domain/wish'
+import { ownedSetFor } from '@/domain/ownership'
+import { isOnlineMode } from '@/sync/pull'
 import { redeemHistory } from '@/domain/redeemHistory'
 import { WISH_ITEMS } from '@/games/wishCatalog'
 import { Portal } from '@/components/Portal'
 import { BoxView } from '../wish/BoxView'
-import { ParentPinPanel } from '../parent/ParentGate'
+import { ParentLockButton, ParentPinSheet } from '../parent/ParentGate'
 import { BottomSheet, CoinPill } from '../farm/farmUi'
 
 /* ============================================================
@@ -138,6 +140,8 @@ export function RedeemBody() {
 
   const [tab, setTab] = useState<'shop' | 'records' | 'manage'>('shop')
   const [pinOk, setPinOk] = useState(false)
+  /** 密码弹框开着没有（闸门本身是「锁卡 + 弹框」，不再是内联键盘） */
+  const [pinOpen, setPinOpen] = useState(false)
 
   /*
    * ⚠️ 2026-10-29 撤掉的东西，别加回来：**这一页里没有「招商」**。
@@ -194,20 +198,66 @@ export function RedeemBody() {
    */
   const pendingCount = useMemo(() => history.filter((r) => r.pending).length, [history])
 
-  const wishRows = useMemo(
-    () =>
-      wishShelf(
-        WISH_ITEMS,
-        wishOffers,
-        wishOwnedSet(ownedGameIds, installedGames, wishOrders),
-        wishOrders,
-      ),
-    [wishOffers, ownedGameIds, installedGames, wishOrders],
-  )
+  /**
+   * 每件心愿商品**已经兑换过几次**（2026-11-06）。
+   *
+   * 只数「真的成交了」的单子：`wished` 一分钱没扣、`cancelled` 券退回去了，
+   * 把它们算进次数，孩子会看到「已兑换 3 次」而手里只有一件东西。
+   *
+   * 口径和 `redeemedGameIdsFrom` 一致（committed / confirmed / done），
+   * 别在这里另起一套。
+   */
+  const redeemedTimes = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const o of wishOrders) {
+      if (o.status === 'committed' || o.status === 'confirmed' || o.status === 'done') {
+        m.set(o.itemId, (m.get(o.itemId) ?? 0) + 1)
+      }
+    }
+    return m
+  }, [wishOrders])
 
   /**
-   * 分类 → 行。家里的兑换品和**爸妈已开放的心愿**在这里合成同一张表，
-   * 按价格混排 —— 分组只决定标题，不决定付款规则。
+   * 心愿行按**家长同意的时间**倒序（2026-11-12 用户要求）。
+   *
+   * 「按时间先后排，最新的排前」—— 刚被爸妈放开的那个东西，孩子一进兑换
+   * 就该看见。`openedAt` 就是家长定价（= 同意兑换）的那一刻，见 `WishOffer`。
+   *
+   * ⚠️ 排序放在**这里**而不是 `wishShelf` 里：心愿页用的是同一个 `wishShelf`，
+   *    那边刚按「盲盒在前 + 目录顺序」调好（用户说「心愿商城很好」），
+   *    在领域函数里改顺序会把心愿页一起改掉。
+   * ⚠️ 同一毫秒的两行用名字兜底，否则顺序取决于 `Array.prototype.sort` 的
+   *    实现细节，测试会偶发红。
+   */
+  const wishRows = useMemo(() => {
+    const openedAt = new Map(wishOffers.map((o) => [o.itemId, o.openedAt]))
+    return wishShelf(
+      WISH_ITEMS,
+      wishOffers,
+      /* ★ 在线版只认服务端名单（`ownedSetFor` 里判） */
+      ownedSetFor(isOnlineMode, ownedGameIds, installedGames, wishOrders),
+      wishOrders,
+    ).sort((a, b) => {
+      const ta = openedAt.get(a.item.id) ?? 0
+      const tb = openedAt.get(b.item.id) ?? 0
+      if (ta !== tb) return tb - ta
+      return a.item.name.localeCompare(b.item.name, 'zh-Hans-CN')
+    })
+  }, [wishOffers, ownedGameIds, installedGames, wishOrders])
+
+  /**
+   * 分类 → 行。家里的兑换品和**爸妈已开放的心愿**在这里合成同一张表。
+   *
+   * ## 顺序（2026-11-12 用户要求）
+   *
+   * 心愿行**排在前面**、按家长同意的时间倒序；家里的兑换品跟在后面、按价格升序。
+   *
+   * 原来是一律按价格混排，理由是「别又变回两块」。但心愿行是**有时间的**
+   * （`openedAt` = 家长同意那一刻），家里那几件是常量、没有时间 —— 混在一张
+   * 按价格排的表里，「最新的排前」就无从谈起。用户这次要的正是「刚同意的先看到」。
+   *
+   * ⚠️ 分组标题仍然只由分类决定，付款规则也仍然一模一样 —— 只是**组内先后**
+   *    按时间。没有另起「心愿」分类，也没多出入口。
    */
   const sections = useMemo(() => {
     const map = new Map<RedeemCategory, ShopRow[]>()
@@ -230,15 +280,18 @@ export function RedeemBody() {
     for (const w of wishRows) {
       push(WISH_CATEGORY, { kind: 'wish', cost: w.price, price: w.price, item: w.item })
     }
-    return CATEGORY_ORDER.filter((c) => (map.get(c)?.length ?? 0) > 0).map((c) => ({
-      category: c,
-      meta: CATEGORY_META[c],
-      rows: (map.get(c) ?? []).sort((a, b) => a.cost - b.cost),
-    }))
+    return CATEGORY_ORDER.filter((c) => (map.get(c)?.length ?? 0) > 0).map((c) => {
+      const all = map.get(c) ?? []
+      const wishes = all.filter((r) => r.kind === 'wish')
+      const family = all.filter((r) => r.kind === 'family').sort((a, b) => a.cost - b.cost)
+      return { category: c, meta: CATEGORY_META[c], rows: [...wishes, ...family] }
+    })
   }, [redeemItems, wishRows])
 
   /* ---- 盲盒的揭晓层 ---- */
-  const [boxGame, setBoxGame] = useState<string | null>(null)
+  /* 「5 连开」一单开出多款 ⇒ 存**整个清单**。
+     只存第一个的话，开箱层只揭晓 1 款，另外 4 款静默进游戏柜。 */
+  const [boxGames, setBoxGames] = useState<string[] | null>(null)
 
   /* ---- 从心愿页「去兑换换」跳过来：滚到那一行并闪一下 ---- */
   const takePendingRedeemItem = useApp((s) => s.takePendingRedeemItem)
@@ -260,7 +313,8 @@ export function RedeemBody() {
     return () => window.clearTimeout(t)
   }, [flashId])
 
-  const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+  /* 保护开着就要过闸门 —— 没设过密码也过（面板会变成「先设一个」） */
+  const needsPin = settings.protectParentActions !== false
 
   return (
     <>
@@ -330,8 +384,9 @@ export function RedeemBody() {
                           price={row.price}
                           balance={balance}
                           harvestBalance={harvestBalance}
+                          times={redeemedTimes.get(row.item.id) ?? 0}
                           flash={flashId === row.item.id}
-                          onBox={setBoxGame}
+                          onBox={setBoxGames}
                         />
                       ),
                     )}
@@ -377,6 +432,16 @@ export function RedeemBody() {
                         `… + 50 积分 ·` / `刚刚` —— 分隔符孤零零挂在行尾。 */}
                     <span className="whitespace-nowrap"> · {humanizeAgo(r.createdAt)}</span>
                   </p>
+                  {/* 家长填的订单号要能查回来 —— 填了看不见等于没填。
+                      只对心愿单有值（App 内兑现的那几件没有外链订单）。 */}
+                  {r.orderNo && (
+                    <p
+                      data-history-order-no
+                      className="mt-0.5 truncate text-[10.5px] font-bold text-ink-400"
+                    >
+                      🧾 订单号 {r.orderNo}
+                    </p>
+                  )}
                 </div>
                 <span
                   className={clsx(
@@ -392,22 +457,49 @@ export function RedeemBody() {
         </div>
       )}
 
+      {/* 管理 tab 的闸门（2026-11-06 统一成弹框）。
+          原来是键盘直接铺在这一栏里：切到「⚙️ 管理」的孩子迎面一屏数字键，
+          既没有「这是爸妈的事」的说明，也没有出口。现在是一张锁卡 + 一颗
+          按钮，点下去才弹密码。 */}
       {tab === 'manage' &&
         (needsPin && !pinOk ? (
-          <ParentPinPanel
-            title="请爸爸妈妈来一下"
-            hint="管理兑换品需要密码"
-            onPass={() => setPinOk(true)}
-          />
+          <div className="pt-4">
+            <div className="rounded-3xl bg-white p-6 text-center shadow-flat">
+              <div className="text-5xl">🔒</div>
+              <p className="mt-3 font-display text-lg font-extrabold text-ink-900">
+                管理兑换品需要密码
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-ink-500">
+                加一件、改价格、下架，都是爸妈的事。
+              </p>
+              <div className="mt-4">
+                <ParentLockButton
+                  label="爸妈：管理兑换品"
+                  tone="primary"
+                  onClick={() => setPinOpen(true)}
+                />
+              </div>
+            </div>
+          </div>
         ) : (
           <ManagePanel />
         ))}
+
+      <ParentPinSheet
+        open={pinOpen}
+        onClose={() => setPinOpen(false)}
+        onPass={() => {
+          setPinOk(true)
+          setPinOpen(false)
+        }}
+        hint="管理兑换品需要密码"
+      />
 
       {/* 盲盒的揭晓层。
           它原来在心愿页，2026-10-29 随「扣币只留兑换这一处」一起搬过来。
           **必须 Portal 到 body** —— 外壳的 `anim-fade-in` 是隐式层叠上下文，
           留在页面里 z-index 再大也压不住底部导航（项目硬约束）。 */}
-      {boxGame && (
+      {boxGames && (
         <Portal>
           <div
             role="dialog"
@@ -416,7 +508,7 @@ export function RedeemBody() {
             className="fixed inset-0 z-50 flex items-center justify-center bg-paper px-4"
           >
             <div className="w-full max-w-sm">
-              <BoxView gameId={boxGame} onDone={() => setBoxGame(null)} />
+              <BoxView gameIds={boxGames} onDone={() => setBoxGames(null)} />
             </div>
           </div>
         </Portal>
@@ -474,6 +566,7 @@ function WishRedeemRow({
   price,
   balance,
   harvestBalance,
+  times,
   flash,
   onBox,
 }: {
@@ -481,9 +574,11 @@ function WishRedeemRow({
   price: number
   balance: number
   harvestBalance: number
+  /** 这件商品**已经兑换过几次**（只数成交的，见 `redeemedTimes`） */
+  times: number
   /** 刚从心愿页「去兑换换」跳过来 —— 闪一下，让孩子看见是哪一行 */
   flash: boolean
-  onBox: (gameId: string) => void
+  onBox: (gameIds: string[]) => void
 }) {
   const wishRedeem = useApp((s) => s.wishRedeem)
   const pushToast = useApp((s) => s.pushToast)
@@ -494,6 +589,8 @@ function WishRedeemRow({
   const plan = planRedeemPayment(price, harvestBalance, balance)
   const affordable = plan.affordable
   const meta = WISH_KIND_META[item.kind]
+  /* 品类由丝带表达，这行只留丝带装不下的信息（商家名 / 说明）。都没有就不占一行 */
+  const subtitle = [item.partnerName, item.note].filter(Boolean).join(' · ')
 
   const doRedeem = async () => {
     if (busy) return
@@ -506,7 +603,10 @@ function WishRedeemRow({
         return
       }
       setConfirming(false)
-      if (res.gameId && item.kind === 'blindbox') onBox(res.gameId)
+      if (item.kind === 'blindbox') {
+        const ids = res.gameIds?.length ? res.gameIds : res.gameId ? [res.gameId] : []
+        if (ids.length) onBox(ids)
+      }
     } finally {
       setBusy(false)
     }
@@ -516,24 +616,52 @@ function WishRedeemRow({
     <li
       data-shop-row={item.id}
       className={clsx(
-        'surface overflow-hidden',
+        'surface relative overflow-hidden',
         !affordable && 'opacity-70',
         flash && 'ring-4 ring-grass-400',
       )}
     >
+      {/* 品类丝带（2026-11-12 用户要求）—— 和心愿商城那张卡是同一套语言：
+          右上角 45° 小条、白字、一个品类一个颜色（`WISH_RIBBON_BG`）。
+          为什么这里必须有：这一行和**家里的兑换品**混在同一张表里，
+          名字（「泡泡玛特盲盒」）不一定看得出是盲盒还是玩具，而两者的
+          交付方式完全不同（一个当场开游戏、一个等爸妈去买）。
+          ⚠️ `pointer-events-none`：丝带盖在卡片角上，不能挡掉按钮。
+          ⚠️ `data-redeem-ribbon` 的值是**品类**，走查脚本按它数每种几张。 */}
+      <span
+        data-redeem-ribbon={item.kind}
+        aria-hidden
+        className="pointer-events-none absolute right-0 top-0 h-[46px] w-[46px] overflow-hidden"
+      >
+        <span
+          className="absolute right-[-19px] top-[10px] w-[66px] rotate-45 py-[2px] text-center text-[9px] font-extrabold leading-[1.3] tracking-[0.08em] text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+          style={{ background: WISH_RIBBON_BG[item.kind] }}
+        >
+          {meta.label}
+        </span>
+      </span>
+
       <div className="flex items-center gap-3 p-3">
         <div className="grid size-14 shrink-0 place-items-center rounded-2xl border border-ink-900/10 bg-sun-100 text-2xl">
           {item.emoji}
         </div>
-        <div className="min-w-0 flex-1">
+        {/* `pr-9` 给丝带让位：名字是 `truncate` 的，不铺到右上角就不会被丝带压字 */}
+        <div className="min-w-0 flex-1 pr-9">
           <p className="truncate font-display text-base font-extrabold text-ink-900">{item.name}</p>
-          <p className="line-clamp-2 text-xs text-ink-500">
-            {item.partnerName ?? meta.label}
-            {item.note ? ` · ${item.note}` : ''}
-          </p>
+          {/* 品类已经在丝带上了，这里不再重复写一遍（心愿商城同一个口径）。
+              只留「商家 · 说明」这类**丝带装不下**的信息。 */}
+          {subtitle && <p className="line-clamp-2 text-xs text-ink-500">{subtitle}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <CoinPill amount={price} icon="🎫" tone={affordable ? 'sun' : 'danger'} />
-            <span className="text-[11px] text-ink-400">{meta.emoji}</span>
+            {/* 已兑换次数：家长看「这件东西到底换过几次」，孩子看「还能不能再换」 */}
+            {times > 0 && (
+              <span
+                data-redeem-times={item.id}
+                className="rounded-full bg-grass-100 px-2 py-0.5 text-[11px] font-extrabold text-grass-700"
+              >
+                已兑换 {times} 次
+              </span>
+            )}
           </div>
           <p className="mt-1 text-[11px] font-bold text-ink-500">
             付款：<PaySplit plan={plan} />

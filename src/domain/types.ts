@@ -371,6 +371,14 @@ export interface HarvestEntry {
 export type MallSource =
   | 'game_purchase' // 买游戏（负数）
   | 'redemption_code' // 兑换码解锁（**delta 恒为 0**，见 `purchasedIdsFrom`）
+  /**
+   * 主线活动奖励（2026-11-12，**delta 恒为 0**）。
+   *
+   * 和 `redemption_code` 分开记的理由：两者都不花钱，但「码」和「活动」
+   * 在报表上是两件事 —— 混成一个来源，就回答不了「这款游戏是买来的、
+   * 用卡换的，还是做活动送的」。`purchasedIdsFrom` 两个都认。
+   */
+  | 'campaign'
   | 'manual_adjust' // 家长手工调整
 
 /**
@@ -766,6 +774,37 @@ export interface RedeemItem {
   stock?: number
   /** 是否下架 */
   archived?: boolean
+  /**
+   * 现在该不该出现在**孩子**的列表里。
+   *
+   * 只有**在线版**会写这个字段：服务端在一次查询里算好
+   * （已下架 / 一次性换过 / 缺货 三条，见 `RedeemService.ListItems`），
+   * 客户端直接采信，不自己再推一遍。
+   *
+   * 本地版**不写**它（`undefined`），可见性在读取时算
+   * （`loadRedeemItems` 滤 `archived`，store 再滤「一次性换过的」）。
+   * 两边都不写 `false` 之外的值，所以 `loadRedeemItems` 里
+   * `r.visible !== false` 这个判据对两个版本都成立。
+   */
+  visible?: boolean
+  /**
+   * 今天换过几次（**服务端算的**，只有在线版有值）。
+   *
+   * 为什么要它、而不是本地数一遍：两边的「今天」不是同一个意思。
+   *
+   * | | 日界 | 起点 |
+   * | --- | --- | --- |
+   * | 服务端（真正拦人的那个） | **自然日 0 点**（配置时区） | `RedeemService.todayStart` |
+   * | 本地版（`redeemedToday`） | **逻辑日**（默认凌晨 4 点） | `appDayKey(…, dayStartHour)` |
+   *
+   * 于是 00:00–04:00 这四小时里，本地会把「昨晚 8 点换的那次」也算进今天，
+   * 而服务端早就翻篇了 —— 界面上「每天最多 1 次 · 今天用完了」把按钮禁掉，
+   * 孩子却明明还能换（服务端会放行）。反过来更糟：`limitPerDay` 的**闸门在服务端**，
+   * 界面说什么都不影响安全性，但「界面先拒绝、服务端其实允许」正是本项目最烦的形态。
+   *
+   * ⇒ 在线版直接采信服务端给的这个数（同 `visible` 的口径），拿不到才退回本地算。
+   */
+  todayCount?: number
   /** 是否由家长创建（孩子不能改） */
   createdByParent?: boolean
   createdAt: number
@@ -853,7 +892,7 @@ export interface WishItem {
   /**
    * 盲盒池：候选游戏 id。
    *
-   * ⚠️ 真正开奖时还要**减去孩子已拥有的**（见 `domain/wish.ts` 的 `pickBlindBox`）。
+   * ⚠️ 真正开奖时还要**减去孩子已拥有的**（见 `domain/wish.ts` 的 `pickBlindBoxMany`）。
    * 池子里写死「全部游戏」是对的 —— 拥有关系是每个家庭不同的，不能写进常量。
    */
   pool?: string[]
@@ -866,12 +905,32 @@ export interface WishItem {
   note?: string
   /** 兑换须知（「不指定款式」这类必须写清楚） */
   notice?: string
-  /** 外链。**只在家长确认页出现**，孩子端读不到 */
-  buyUrl?: string
-  /** 外链按钮文字，如「去淘宝购买」 */
-  buyLabel?: string
   archived?: boolean
   sortOrder?: number
+  /**
+   * 一次开出几款游戏（只对 `blindbox` 有意义，缺省 1 = 单开）。
+   *
+   * ★ 「已经解锁的不计算」落在这里的语义上：开奖时先把已拥有的从池子里
+   *   减掉，再从剩下的里面抽这么多款 —— 已拥有的**不占名额**。
+   * ⚠️ 剩余不足这个数时**整单拒绝**（不是「有几款给几款」）：
+   *   卖的是 N 款的价，给少了就是缺斤少两。
+   */
+  unlockCount?: number
+}
+
+/**
+ * 后台配的外链（tf-admin「商城」列表里的 `buy_url` / `buy_label`）。
+ *
+ * ★ 2026-11-06 起**只有这一份来源**：界面上「去购买」那颗按钮**有没有**，
+ *   全看服务端有没有下发这一条。目录里原来那套「没配就现拼一条淘宝搜索页」
+ *   的兜底已经删掉了 —— 兜底会让「运营没配」和「配了」在界面上长得一模一样，
+ *   而用户要的正是「没配就别显示」。
+ */
+export interface WishBuyLink {
+  /** 打开的外链。**服务端已保证是 http(s)**（后台表单挡过一次，后端再挡一次） */
+  url: string
+  /** 按钮文字。后台没填 = `undefined`，界面用「去购买」 */
+  label?: string
 }
 
 /**
@@ -894,9 +953,23 @@ export interface WishOffer {
   voucherPrice: number
   /** 钻石价（测试用）。0 / 不填 = 不卖 */
   diamondPrice?: number
+  /**
+   * 家长定下价格（= 同意兑换）的时刻，Unix 秒。0 / 缺省 = 不知道。
+   *
+   * 2026-11-12 起服务端会下发（`WishItemView.OpenedAt`），「兑换」列表按它倒序。
+   * ⚠️ 在这之前服务端没有这个字段，客户端只能填 0 ⇒ 所有行时间相等 ⇒
+   *    排序静默退化成按名字排（看着「排了」其实没排）。别再把它写死成 0。
+   */
   openedAt: number
   /** 关闭时间。关掉不删行 —— 孩子之前换过的历史还要能解释 */
   closedAt?: number
+  /**
+   * 是否一次性兑换（2026-11-06）。
+   *
+   * `true` = 兑换一次后就从兑换列表里删掉，心愿商城物品状态变回「我想要」。
+   * `false` / 不填 = 可以反复兑换，兑换列表里始终保留，并显示「已兑换 N 次」。
+   */
+  oneTime?: boolean
 }
 
 /**
@@ -965,6 +1038,13 @@ export interface WishOrder {
 
   /** 盲盒开出的游戏 id（只有 `blindbox` 会有） */
   openedGameId?: string
+  /**
+   * 「一次开 N 款」时开出的**全部**游戏 id。
+   *
+   * ⚠️ `openedGameId` 仍然写第一个（老代码/老数据只看那一个），
+   * 两个都写是故意的。读的时候必须兼容：清单为空就退回看 `openedGameId`。
+   */
+  openedGameIds?: string[]
 
   /* ---- 收货信息：敏感，见 `docs/wish-mall-spec.md` §9 ---- */
   ship?: WishShipInfo
@@ -1278,7 +1358,14 @@ export interface AppSettings {
    */
   gameClock?: GameClock
 
-  /** 家长锁 PIN（明文仅本地，4 位） */
+  /**
+   * 家长锁 PIN（**明文** 4 位）。
+   *
+   * ⚠️ 它住在 `settings` 里，而 `settings` 是整份进备份的 —— 所以
+   * `exportBackup` 会**剥掉**它（`stripDeviceLocal`，和 `gameClock` 同一处），
+   * `importBackup` 也**不认**文件里的值（只认本机原来那个）。否则
+   * 「明文仅本地」是句假话：备份文件会被发到微信 / 网盘，而 4 位数字肉眼就能用。
+   */
   parentPin?: string
 
   /*

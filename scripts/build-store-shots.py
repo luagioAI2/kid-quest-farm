@@ -238,6 +238,43 @@ PLAN = [
         ("screenshots/store-3.png", "3"),
         ("screenshots/store-4.png", "4"),
     ]),
+    # 2026-11-08 新增（扒自 MakePlay 的 Harvest Heist，本地化成「我是一个农场主」）。
+    # 源图由 `task-games/farmlord/_store-shots.mjs` 拍（DPR 2，420×880）。
+    # 顺序：农场长什么样 → 商店种子 → 商店动物 → 邻居（能去别人家偷菜）。
+    # ⚠️ 第 1 张必须**先把地种上**：全新档是 6 块秃地，拍出来像一张背景图。
+    # ⚠️ 商店页签是**开关** —— 点已经选中的那个会把弹层关掉，
+    #    第一次就是这么拍成农场的（脚本里现在只在没选中时才点）。
+    ("farmlord", "farmlord", [
+        ("screenshots/store-1-farm.png", "1"),
+        ("screenshots/store-2-shop-seeds.png", "2"),
+        ("screenshots/store-3-shop-animals.png", "3"),
+        ("screenshots/store-4-neighbors.png", "4"),
+    ]),
+    # 2026-11-09 新增（扒自 MakePlay 的 `v/29`，本地化成「下落的2048」）。
+    # 源图由 `task-games/fall2048/scripts/store-shots.mjs` 拍（DPR 2，390×844）。
+    # 顺序：首页 → 对局（井里已经有半箱）→ 扭蛋抽到皮肤 → 升级商店。
+    # ⚠️ 第 2 张必须**先热身一局再重开**：称号是游戏内的一次性收藏品，名字还是原版的
+    #    「多巴胺小鬼」系列，而「获得称号！」那条提示正好压在井口 ⇒ 第一局会把它带进图里。
+    # ⚠️ 第 2 张的判据是**分数 ≥ 220**，不是「点了几下」：合成是随机的，
+    #    固定点 6 下会拍出「8 分」那张，看起来像刚点开还没玩。
+    ("fall2048", "fall2048", [
+        ("screenshots/store-1-title.png", "1"),
+        ("screenshots/store-2-play.png", "2"),
+        ("screenshots/store-3-gacha.png", "3"),
+        ("screenshots/store-4-shop.png", "4"),
+    ]),
+    # 2026-11-09 新增（扒自 MakePlay 的 `v/29`，本地化成「犬独」）。
+    # 源图由 `task-games/inudoku/scripts/store-shots.mjs` 拍（DPR 2，390×844）。
+    # 顺序：标题 → 对局（落了 3 只狗）→ 皮肤面板 → 设置（BGM 列表）。
+    # ⚠️ 第 2 张只落 3 只、**不落满**：第 1 关 4×4 只需要 4 只，落满就通关弹结算，
+    #    棋盘会被结算弹窗盖住。而且每落一只都要重新点「放小狗」—— 原版放对一只
+    #    之后会自动切回「笔记」模式，不切回去后面几下全是画叉。
+    ("inudoku", "inudoku", [
+        ("screenshots/store-1-title.png", "1"),
+        ("screenshots/store-2-play.png", "2"),
+        ("screenshots/store-3-breeds.png", "3"),
+        ("screenshots/store-4-settings.png", "4"),
+    ]),
 ]
 
 WIDTH = 360

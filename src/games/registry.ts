@@ -108,8 +108,10 @@ export function purchasedIdsFrom(
   for (const e of entries) {
     if (!e.refId) continue
     if (e.source === 'game_purchase' && e.delta < 0) out.add(e.refId)
-    // 码解锁不看 delta：它就是 0
-    else if (e.source === 'redemption_code') out.add(e.refId)
+    // 码解锁 / 活动奖励都不看 delta：它们就是 0
+    // ⚠️ 漏掉 `campaign` 的症状：本地版领了活动奖励，界面还是「未拥有」，
+    //    而账本里明明有一行 —— 因为拥有关系是**从账本推**的，不是另存一份。
+    else if (e.source === 'redemption_code' || e.source === 'campaign') out.add(e.refId)
   }
   return [...out]
 }

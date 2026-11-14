@@ -26,11 +26,27 @@
  *
  * `isSecureContext = true`；`crypto.subtle.digest('SHA-256')` 已知答案对得上
  * （`ba7816bf…`）；`crypto.subtle.generateKey({name:'Ed25519'})` 可用、导出公钥 32 字节。
- * ⇒ **原生 WebCrypto 就够，不需要引任何第三方密码学库。**
  * Node 22 的 `globalThis.crypto.subtle` 同样支持（单测跑在 node 环境）。
+ *
+ * ── ★★ 2026-11-13 修正：上面那句结论**只对 Chrome 113+ 成立** ──────────
+ *
+ * 用户报「APP 里设置 → 游戏无法下载，提示 **ed 密钥没法导入**」。
+ * 排查：公钥 32 字节 ✓、签名用两套实现各验一次都通过 ✓、
+ * 不是非安全上下文（那种报「没有 WebCrypto」，文案不同）。
+ * ⇒ 是 **WebView 不认识 Ed25519**。
+ *
+ * `Ed25519` 是 **Chrome 113** 才进 WebCrypto 的。老安卓机的 System WebView
+ * 常年停在更早版本 ⇒ 「有 `subtle`、但没有 Ed25519」⇒ 一装就报这句。
+ *
+ * 我当时的错在于：**把自己的浏览器支持当成了用户的浏览器支持**，
+ * 而"实测"只测了一台 Chrome 155。
+ *
+ * 所以现在**两层**：优先原生（快、不吃包体），导不进去才回退纯 JS
+ * （`@noble/ed25519`）。⚠️ 兜底**绝不是"跳过验签"**。
  */
 
 import type { Bytes } from './bytes'
+import { readBodyWithProgress, type DownloadProgress } from './download'
 import { ED25519_PUBLIC_KEY_BYTES } from './catalogKey'
 
 /** 一个游戏包在 `catalog.json` 里的条目。字段口径见 spec §12.5 的 `GameBundle.manifest`。 */
@@ -133,12 +149,18 @@ export async function importEd25519PublicKey(publicKeyRaw: Bytes): Promise<Crypt
       'verify',
     ])
   } catch (e) {
+    /* ★ 不再直接抛 —— 可能是老 WebView 不认识 Ed25519（Chrome < 113）。
+       记下原因，让调用方回退纯 JS（见 verifyEd25519 的注释）。
+       用 `--` 前缀标记，避免和「配置错」混在一起。 */
     const msg = e instanceof Error ? e.message : String(e)
-    throw new Error(
-      `Ed25519 公钥导不进去（${msg}）—— 要么 base64 解错了，要么这个浏览器不支持 Ed25519。` +
-        '支持度实测见 src/games/verify.ts 的文件头。',
-    )
+    throw new Error(`--no-subtle-ed25519--${msg}`)
   }
+}
+
+/** 是不是「原生不支持 Ed25519」这一种失败（而不是公钥本身坏了）。 */
+function isSubtleUnsupported(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg.startsWith('--no-subtle-ed25519--')
 }
 
 /** 验签。返回 `false` = 签名对不上（包被改过 / 用错了私钥签）。 */
@@ -156,6 +178,31 @@ export async function verifyEd25519(
 }
 
 /**
+ * 纯 JS 兜底验签（2026-11-13）。
+ *
+ * 用在**这台设备不支持 WebCrypto Ed25519** 的时候（老安卓 WebView）。
+ * 语义和 `verifyEd25519` 完全一致：返回 `false` = 没通过，不许装。
+ *
+ * ⚠️ `@noble/ed25519` v3 要求先喂 `sha512`（它自己不带哈希实现）。
+ *    这一行**必须**在调用 verify 之前 —— 忘了会抛「hashes.sha512 未设置」。
+ */
+async function verifyEd25519Pure(
+  publicKeyRaw: Bytes,
+  signature: Bytes,
+  message: Bytes,
+): Promise<boolean> {
+  const ed = await import('@noble/ed25519')
+  const { sha512 } = await import('@noble/hashes/sha2.js')
+  ed.hashes.sha512 = sha512
+  try {
+    return ed.verify(signature, message, publicKeyRaw)
+  } catch {
+    // 签名长度不对 / 点不在曲线上 … 一律算没通过
+    return false
+  }
+}
+
+/**
  * 校验 catalog 的签名。**这是整条下载链的总闸**：不过这一关，下面的
  * `parseCatalog` 连跑都不该跑（catalog 在被验签之前是**不可信数据**）。
  */
@@ -164,7 +211,21 @@ export async function verifyCatalogSignature(
   signature: Bytes,
   publicKeyRaw: Bytes,
 ): Promise<boolean> {
-  const key = await importEd25519PublicKey(publicKeyRaw)
+  /* ★★ 三层决策，顺序不能换：
+     ① 原生能用 → 原生（最快，且不加载纯 JS 那份代码）
+     ② 原生「不认识 Ed25519」→ 纯 JS（老 WebView 走这条）
+     ③ 公钥长度不对等**配置问题** → 照旧抛（不能伪装成"验不过"）
+
+     ⚠️ 别把 ③ 也吞掉往 ② 上靠 —— 公钥坏了走纯 JS 一样验不过，
+        但报错会变成「签名不匹配」，把配置问题伪装成攻击，排查方向全反。 */
+  let key: CryptoKey | null = null
+  try {
+    key = await importEd25519PublicKey(publicKeyRaw)
+  } catch (e) {
+    if (!isSubtleUnsupported(e)) throw e
+    // 这台设备不支持 → 纯 JS
+    return verifyEd25519Pure(publicKeyRaw, signature, catalogBytes)
+  }
   return verifyEd25519(key, signature, catalogBytes)
 }
 
@@ -305,10 +366,16 @@ export async function fetchVerifiedPackage(
   url: string,
   expectedSha256: string,
   fetchImpl: typeof fetch = fetch,
+  /**
+   * 下载进度回调（2026-11-13）。**只影响显示**：走完 100% 仍然要验 SHA-256，
+   * 校验失败照样抛 —— 进度条不是"可信"的证明。
+   */
+  onProgress?: DownloadProgress,
 ): Promise<Bytes> {
   const res = await fetchImpl(url)
   if (!res.ok) throw new Error(`下载 ${url} 失败：HTTP ${res.status}`)
-  const bytes = new Uint8Array(await res.arrayBuffer())
+  // 边读边报进度（没有 `res.body` 时内部会退化成整段读，功能不受影响）
+  const bytes = await readBodyWithProgress(res, onProgress)
   await assertSha256(bytes, expectedSha256, `包 ${url}`)
   return bytes
 }

@@ -1,0 +1,109 @@
+import { api } from './client'
+
+/* ============================================================
+   在线版 · 钱包 / 积分流水（tf-platform-api `/api/wallet/*`）
+   ------------------------------------------------------------
+   在线版里**积分余额的真相源是服务端**：本地 `ledger` 表退化成镜像，
+   余额不再等于「本地流水求和」，而是 `wallet.points`。
+
+   ⚠️ 三种币不是一种：`points`（积分）/ `coupon`（兑换券）/ `diamond`（钻石）。
+   本地 `balance` 只对应 `points`；兑换券在本地叫 `harvestBalance`，
+   走的是另一张表（`harvestLedger`）。别把 `coupon` 往 `balance` 里加。
+   ============================================================ */
+
+export interface ServerWallet {
+  uid: number
+  points: number
+  coupon: number
+  diamond: number
+}
+
+export const walletInfo = () => api<ServerWallet>('/wallet/info', {})
+
+/** 服务端流水行（时间戳是 **unix 秒**） */
+export interface ServerLedgerEntry {
+  id: number
+  currency: 'points' | 'coupon' | 'diamond' | string
+  delta: number
+  balance_after: number
+  source: string
+  ref_id: string
+  memo: string
+  created_at: number
+}
+
+/**
+ * 积分流水。
+ *
+ * ⚠️ **分页参数叫 `pageSize`（驼峰），不是 `page_size`。**
+ *
+ * 服务端有两种分页 DTO 并存：
+ *   · `entities.Paginator`（钱包 / 兑换记录 / 心愿…）→ json 标签是 `pageSize`
+ *   · 手写的那几个（`/task/pending-review`）→ 是 `page_size`
+ *
+ * 传错的那个不会报错：绑定失败被 `ShouldBindJSON` 的返回值丢掉（`_ =`），
+ * `PageSize` 留在 0 → 服务端 `Normalize()` 兜底成 **30**。
+ * 症状是「每页永远 30 条」，而调用方以为自己要了 200。
+ * 2026-11-02 实测：账号攒到第 33 条流水之后，本地余额（= 拉到的流水求和）
+ * 比服务端少了 124 —— 界面上的积分**凭空少了一截**，没有任何报错。
+ */
+export const walletLedger = (page = 1, pageSize = 50) =>
+  api<{ count: number; list: ServerLedgerEntry[] }>('/wallet/ledger', {
+    page,
+    pageSize,
+  })
+
+/**
+ * 扣积分（插件游戏开局这类「游戏内消费」）。
+ *
+ * ## 为什么必须有这个接口
+ *
+ * 在线版的积分以服务端为准，而插件游戏扣分原本只写本地账本。那会**静默漂移**：
+ * 本地多一条 `lg_` 行、服务端没有，而拉取只清 `srv_` 行 —— 那条本地行永远留着，
+ * 余额就此对不上，界面上什么都看不出来。
+ *
+ * 服务端只认 `game_spend` 这一个来源（白名单），传别的会拿 `606 参数错误`。
+ *
+ * @param clientRequestId 幂等键。**必须每次都不同**（`newCoinRequestId()`），
+ *   传空串时服务端不写幂等键 —— 重试就会真的扣两次。
+ */
+/**
+ * 把「本地版留下的旧账」一次性结转进这个账号。
+ *
+ * 服务端按 `(uid, key, 币种)` 幂等：同一份载荷重试只生效一次。
+ * 调用方见 `online/legacy.ts`（首次登录时自动跑一次）。
+ */
+export const walletImport = (body: {
+  key: string
+  points: number
+  coupons: number
+  /** 各币种笔数，只用来写备注 */
+  counts?: Record<string, number>
+}) =>
+  api<{
+    imported: boolean
+    points: number
+    coupons: number
+    diamonds: number
+    wallet: ServerWallet
+  }>('/wallet/import', {
+    key: body.key,
+    points: body.points,
+    coupons: body.coupons,
+    diamonds: 0,
+    counts: body.counts,
+  })
+
+export const walletSpend = (body: {
+  amount: number
+  refId: string
+  memo: string
+  clientRequestId: string
+}) =>
+  api<ServerWallet>('/wallet/spend', {
+    amount: body.amount,
+    source: 'game_spend',
+    ref_id: body.refId,
+    memo: body.memo,
+    client_request_id: body.clientRequestId,
+  })

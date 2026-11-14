@@ -22,6 +22,12 @@
  * 图片由 `scripts/build-store-shots.py` 从各游戏工程的真机截图转出来，
  * 放在 `public/store/<id>/<n>.webp`（360 宽，全量 ~300 KB）。
  * `caption` 是给家长看的说明，**只能描述截图里真的有的东西**。
+ *
+ * ★★ 这里**只能写相对路径**（`store/…`，不能写 `/store/…`）。
+ *   客户端 Web 挂在 `/app/` 下（`vite base: './'`），绝对路径会被解析成
+ *   `https://<host>/store/…` ⇒ 线上全是 404，而 APK 里（挂在 `/`）却好好的。
+ *   症状：网页版「游戏详情」的截图一张都不出来，控制台四条 404，
+ *   而同一份代码打进 APK 完全正常。`build-client-web.sh` 里有 grep 闸门兜底。
  */
 
 /** 图标底色档位（对应 `theme.css` 的色板）。三款游戏要能一眼分开 */
@@ -80,10 +86,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/cloudfarm/1.webp', caption: '田里一共 12 块地，种下去等它长大' },
-      { src: '/store/cloudfarm/2.webp', caption: '动物要喂、要摸，产出得自己收' },
-      { src: '/store/cloudfarm/3.webp', caption: '市场按当天的行情收你的收成' },
-      { src: '/store/cloudfarm/4.webp', caption: '鱼塘可以钓鱼，也能养水里的动物' },
+      { src: 'store/cloudfarm/1.webp', caption: '田里一共 12 块地，种下去等它长大' },
+      { src: 'store/cloudfarm/2.webp', caption: '动物要喂、要摸，产出得自己收' },
+      { src: 'store/cloudfarm/3.webp', caption: '市场按当天的行情收你的收成' },
+      { src: 'store/cloudfarm/4.webp', caption: '鱼塘可以钓鱼，也能养水里的动物' },
     ],
     about: [
       '一块地、一把种子、一个市场。种下去要等它长大，长成了摘下来，拿到市场上卖。卖早了价钱低，卖晚了占着地方。',
@@ -115,10 +121,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 3~8 分钟',
     shots: [
-      { src: '/store/prizepark/1.webp', caption: '机台能切正面 / 侧面，爪子对准了再下' },
-      { src: '/store/prizepark/2.webp', caption: '奖池里毛绒、手办、零食都有' },
-      { src: '/store/prizepark/3.webp', caption: '同样的奖品凑成一套，能一起兑换' },
-      { src: '/store/prizepark/4.webp', caption: '背包里重复的可以卖，也能换成兑换券' },
+      { src: 'store/prizepark/1.webp', caption: '机台能切正面 / 侧面，爪子对准了再下' },
+      { src: 'store/prizepark/2.webp', caption: '奖池里毛绒、手办、零食都有' },
+      { src: 'store/prizepark/3.webp', caption: '同样的奖品凑成一套，能一起兑换' },
+      { src: 'store/prizepark/4.webp', caption: '背包里重复的可以卖，也能换成兑换券' },
     ],
     about: [
       '机台不止一种：普通夹取台、桥式台、零食堆、章鱼烧台。每种抓法不一样，正面看是「正对着」，切到侧面才知道爪子偏了多少。',
@@ -142,9 +148,9 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 3~5 分钟',
     shots: [
-      { src: '/store/claw3d/1.webp', caption: '一台真的能转视角的娃娃机' },
-      { src: '/store/claw3d/2.webp', caption: '正面看：爪子正对着娃娃' },
-      { src: '/store/claw3d/3.webp', caption: '侧面看：才知道爪子到底偏了多少' },
+      { src: 'store/claw3d/1.webp', caption: '一台真的能转视角的娃娃机' },
+      { src: 'store/claw3d/2.webp', caption: '正面看：爪子正对着娃娃' },
+      { src: 'store/claw3d/3.webp', caption: '侧面看：才知道爪子到底偏了多少' },
     ],
     about: [
       '机器可以换视角看，正面看是「正对着」，侧面看才知道偏了多少。下爪之前多看一眼，是这里唯一能提高成功率的事。',
@@ -173,10 +179,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/sugar/1.webp', caption: '三个甜点角色站在展示台上，点「开始游戏」进第一层' },
-      { src: '/store/sugar/2.webp', caption: '五个角色各有三个形态，攒够 EXP 才能进化' },
-      { src: '/store/sugar/3.webp', caption: '一共 10 层，每层的 boss 机制不一样，打过才解锁下一层' },
-      { src: '/store/sugar/4.webp', caption: '上半是敌人血条，下半是 6×6 的糖珠盘，拖一串同色就能充能' },
+      { src: 'store/sugar/1.webp', caption: '三个甜点角色站在展示台上，点「开始游戏」进第一层' },
+      { src: 'store/sugar/2.webp', caption: '五个角色各有三个形态，攒够 EXP 才能进化' },
+      { src: 'store/sugar/3.webp', caption: '一共 10 层，每层的 boss 机制不一样，打过才解锁下一层' },
+      { src: 'store/sugar/4.webp', caption: '上半是敌人血条，下半是 6×6 的糖珠盘，拖一串同色就能充能' },
     ],
     about: [
       '拖动糖珠把同色的连成一串，松手结算。拖得越长倍率越高 —— 所以要想的不是「怎么凑三个」，而是「能不能再多串一个」。',
@@ -206,10 +212,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/anthill/1.webp', caption: '草地上摆着叶子和苹果，蚂蚁排着队往洞里搬' },
-      { src: '/store/anthill/2.webp', caption: '商店里三种特殊蚂蚁：兵蚁跑得快、大力蚁一趟搬三份、金蚁卖得贵' },
-      { src: '/store/anthill/3.webp', caption: '设置里能换语言、关掉音乐和音效' },
-      { src: '/store/anthill/4.webp', caption: '第 2 个世界换成野餐垫，食物也跟着换了' },
+      { src: 'store/anthill/1.webp', caption: '草地上摆着叶子和苹果，蚂蚁排着队往洞里搬' },
+      { src: 'store/anthill/2.webp', caption: '商店里三种特殊蚂蚁：兵蚁跑得快、大力蚁一趟搬三份、金蚁卖得贵' },
+      { src: 'store/anthill/3.webp', caption: '设置里能换语言、关掉音乐和音效' },
+      { src: 'store/anthill/4.webp', caption: '第 2 个世界换成野餐垫，食物也跟着换了' },
     ],
     about: [
       '蚂蚁会自己找食物，但先去搬哪一块由你点。点一下空地在原地冲刺，能省下一段来回的时间。',
@@ -242,10 +248,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '7 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/moestrike/1.webp', caption: '标题画面：飘在云上的城堡，下面是「冒险」和「角色」两个入口' },
-      { src: '/store/moestrike/2.webp', caption: '一共 100 关、20 片区域，每片 5 关，最后一关是 BOSS' },
-      { src: '/store/moestrike/3.webp', caption: '战斗：敌人头顶的数字是出手倒计时，底部四张是队伍里轮着上的四个人' },
-      { src: '/store/moestrike/4.webp', caption: '十位少女，通关一关会加入一位新的；灰掉的是还没解锁' },
+      { src: 'store/moestrike/1.webp', caption: '标题画面：飘在云上的城堡，下面是「冒险」和「角色」两个入口' },
+      { src: 'store/moestrike/2.webp', caption: '一共 100 关、20 片区域，每片 5 关，最后一关是 BOSS' },
+      { src: 'store/moestrike/3.webp', caption: '战斗：敌人头顶的数字是出手倒计时，底部四张是队伍里轮着上的四个人' },
+      { src: 'store/moestrike/4.webp', caption: '十位少女，通关一关会加入一位新的；灰掉的是还没解锁' },
     ],
     about: [
       '回合制弹弓。按住屏幕往后拉、松手，当前出手的少女就朝反方向弹出去；撞到敌人掉血，撞不到就白挨一轮。',
@@ -278,10 +284,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 2~5 分钟',
     shots: [
-      { src: '/store/melonjar/1.webp', caption: '标题画面：水下的玻璃罐，下面是开始游戏 / 每日挑战 / 强化 / 成就' },
-      { src: '/store/melonjar/2.webp', caption: '对局：按住左右拖、松手落果，同级的两个撞在一起就合成更大一级' },
-      { src: '/store/melonjar/3.webp', caption: '强化面板：宝石只有一份，加高警戒线、换更好的起手水果、提高宝石加成三选一' },
-      { src: '/store/melonjar/4.webp', caption: '八个成就：合出大西瓜、连击 5、单局 1 万分、连续 7 天每日挑战……' },
+      { src: 'store/melonjar/1.webp', caption: '标题画面：水下的玻璃罐，下面是开始游戏 / 每日挑战 / 强化 / 成就' },
+      { src: 'store/melonjar/2.webp', caption: '对局：按住左右拖、松手落果，同级的两个撞在一起就合成更大一级' },
+      { src: 'store/melonjar/3.webp', caption: '强化面板：宝石只有一份，加高警戒线、换更好的起手水果、提高宝石加成三选一' },
+      { src: 'store/melonjar/4.webp', caption: '八个成就：合出大西瓜、连击 5、单局 1 万分、连续 7 天每日挑战……' },
     ],
     about: [
       '按住屏幕左右拖动，虚线指到哪松手就落在哪；两个同级水果碰到一起会爆汁合体，越合越大，合出大西瓜是这一局的目标。',
@@ -315,10 +321,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/minergirl/1.webp', caption: '矿道一条条往下开，矿工自己采矿，矿车把矿石运上去卖掉' },
-      { src: '/store/minergirl/2.webp', caption: '点矿道看这一级的产出、速度和容量，再决定升不升' },
-      { src: '/store/minergirl/3.webp', caption: '重开矿场会清空现金和矿道，换来的投资人永久 +10% 产出' },
-      { src: '/store/minergirl/4.webp', caption: '管理员有 14 套衣服，累计收入到门槛才解锁，换装不影响数值' },
+      { src: 'store/minergirl/1.webp', caption: '矿道一条条往下开，矿工自己采矿，矿车把矿石运上去卖掉' },
+      { src: 'store/minergirl/2.webp', caption: '点矿道看这一级的产出、速度和容量，再决定升不升' },
+      { src: 'store/minergirl/3.webp', caption: '重开矿场会清空现金和矿道，换来的投资人永久 +10% 产出' },
+      { src: 'store/minergirl/4.webp', caption: '管理员有 14 套衣服，累计收入到门槛才解锁，换装不影响数值' },
     ],
     about: [
       '矿道是一条一条往下开的：矿工自己下井采矿，矿车装满一趟才往回走，矿石运到地面卖掉换钱。钱够了，下一条矿道才开得起来。',
@@ -354,10 +360,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 2~5 分钟',
     shots: [
-      { src: '/store/ropeland/1.webp', caption: '标题画面：草地和羊群，点「开始跳绳」就进第一局' },
-      { src: '/store/ropeland/2.webp', caption: '对局：绳子在上下摆，羊排成一排，跟着节奏点屏幕就一起跳' },
-      { src: '/store/ropeland/3.webp', caption: '结算：存活羊数、峰值羊数、这一局拿到多少羊毛' },
-      { src: '/store/ropeland/4.webp', caption: '牧场的升级面板：开局羊数、铃铛数、狗狗救援，都用羊毛买' },
+      { src: 'store/ropeland/1.webp', caption: '标题画面：草地和羊群，点「开始跳绳」就进第一局' },
+      { src: 'store/ropeland/2.webp', caption: '对局：绳子在上下摆，羊排成一排，跟着节奏点屏幕就一起跳' },
+      { src: 'store/ropeland/3.webp', caption: '结算：存活羊数、峰值羊数、这一局拿到多少羊毛' },
+      { src: 'store/ropeland/4.webp', caption: '牧场的升级面板：开局羊数、铃铛数、狗狗救援，都用羊毛买' },
     ],
     about: [
       '绳子来回摆动，每一圈都要在它落地的那一刻点一下屏幕，羊群才会一起跳过去。点早了、点晚了都会绊倒 —— 绊倒一次就吓跑三成，所以这不是比谁点得快。',
@@ -392,10 +398,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/blockfit/1.webp', caption: '标题画面：牛皮纸格子底，四角粘着彩纸拼片' },
-      { src: '/store/blockfit/2.webp', caption: '对局：上面是方框棋盘，下面是待放的拼片，右下角是旋转 / 翻面 / 撤销' },
-      { src: '/store/blockfit/3.webp', caption: '题目列表：15 道题从 4×4 到 8×8，卡片下方三颗点是一道题的三枚印章' },
-      { src: '/store/blockfit/4.webp', caption: '过关结算：这一局拿了哪几枚印章，可以直接下一题或重来' },
+      { src: 'store/blockfit/1.webp', caption: '标题画面：牛皮纸格子底，四角粘着彩纸拼片' },
+      { src: 'store/blockfit/2.webp', caption: '对局：上面是方框棋盘，下面是待放的拼片，右下角是旋转 / 翻面 / 撤销' },
+      { src: 'store/blockfit/3.webp', caption: '题目列表：15 道题从 4×4 到 8×8，卡片下方三颗点是一道题的三枚印章' },
+      { src: 'store/blockfit/4.webp', caption: '过关结算：这一局拿了哪几枚印章，可以直接下一题或重来' },
     ],
     about: [
       '屏幕下方是一堆形状各异的拼片，把每一块拖进上面的方框，方框填满、不留一点缝就过关。',
@@ -430,10 +436,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '8 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/deckrush/1.webp', caption: '标题画面：三档难度，普通 60 秒构筑、困难 30 秒' },
-      { src: '/store/deckrush/2.webp', caption: '构筑：三张备选里挑一张进卡组，下方是已经凑到的牌，顶部是 60 秒倒计时' },
-      { src: '/store/deckrush/3.webp', caption: '战斗：手牌在下方，敌人头顶标着它下一步的动作' },
-      { src: '/store/deckrush/4.webp', caption: '卡牌图鉴：32 张牌，可以按稀有度和流派筛' },
+      { src: 'store/deckrush/1.webp', caption: '标题画面：三档难度，普通 60 秒构筑、困难 30 秒' },
+      { src: 'store/deckrush/2.webp', caption: '构筑：三张备选里挑一张进卡组，下方是已经凑到的牌，顶部是 60 秒倒计时' },
+      { src: 'store/deckrush/3.webp', caption: '战斗：手牌在下方，敌人头顶标着它下一步的动作' },
+      { src: 'store/deckrush/4.webp', caption: '卡牌图鉴：32 张牌，可以按稀有度和流派筛' },
     ],
     about: [
       '一局分两段。先是构筑：屏幕中间摊开三张牌，挑一张放进卡组，马上换下一组，一直挑到时间用完。',
@@ -468,10 +474,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/corgi/1.webp', caption: '标题画面：草地上坐着一只柯基，下面只有一个「开始玩」和三档语言' },
-      { src: '/store/corgi/2.webp', caption: '主界面：中间是柯基的屁屁，顶上写着每秒爱心，下面是六档零食卡片' },
-      { src: '/store/corgi/3.webp', caption: '衣柜：头饰 / 颈部 / 尾部三栏，每件都写着「穿上 +3% 产出」' },
-      { src: '/store/corgi/4.webp', caption: '柯基图鉴：花园里的七种毛色，左右滑动换一只上场，标着每秒产出和领养价' },
+      { src: 'store/corgi/1.webp', caption: '标题画面：草地上坐着一只柯基，下面只有一个「开始玩」和三档语言' },
+      { src: 'store/corgi/2.webp', caption: '主界面：中间是柯基的屁屁，顶上写着每秒爱心，下面是六档零食卡片' },
+      { src: 'store/corgi/3.webp', caption: '衣柜：头饰 / 颈部 / 尾部三栏，每件都写着「穿上 +3% 产出」' },
+      { src: 'store/corgi/4.webp', caption: '柯基图鉴：花园里的七种毛色，左右滑动换一只上场，标着每秒产出和领养价' },
     ],
     about: [
       '点屏幕上的柯基攒爱心 —— 这一款点的是它的屁屁，点得越快屁屁越圆。爱心用来买六档零食：小饼干、鸡胸肉、奶酪块、烤红薯、饭碗、草莓蛋糕，每买一份，之后每一下点出来的爱心就多一截。',
@@ -506,10 +512,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/screamchick/1.webp', caption: '标题画面：纸片剪出来的「尖叫鸡」三个字，中间一只张着嘴的方头鸡' },
-      { src: '/store/screamchick/2.webp', caption: '关卡盘：每格写着关号和三颗星，打通 12 关之后的样子' },
-      { src: '/store/screamchick/3.webp', caption: '对局：脖子铺出去铺到 83%，顶上是进度条，下面是这一关的提示' },
-      { src: '/store/screamchick/4.webp', caption: '过关面板：三颗星分开标着「铺满全场 / 吃光零食 / 一次通过」' },
+      { src: 'store/screamchick/1.webp', caption: '标题画面：纸片剪出来的「尖叫鸡」三个字，中间一只张着嘴的方头鸡' },
+      { src: 'store/screamchick/2.webp', caption: '关卡盘：每格写着关号和三颗星，打通 12 关之后的样子' },
+      { src: 'store/screamchick/3.webp', caption: '对局：脖子铺出去铺到 83%，顶上是进度条，下面是这一关的提示' },
+      { src: 'store/screamchick/4.webp', caption: '过关面板：三颗星分开标着「铺满全场 / 吃光零食 / 一次通过」' },
     ],
     about: [
       '屏幕上滑一下，鸡脖子就朝那个方向一直伸，撞到墙才停，伸过的格子会铺成黄色地板。把这张图里所有蓝格子都铺满就过关 —— 所以每一关都是一道「一笔画」，得先想好先伸哪边，不然会把自己堵死。',
@@ -543,10 +549,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/sweetspin/1.webp', caption: '关卡盘：20 个六边形，前 12 关已经通了，第 13 关亮着' },
-      { src: '/store/sweetspin/2.webp', caption: '开局：这一关的管道还没接通，右上那个橘色小电池就是电源' },
-      { src: '/store/sweetspin/3.webp', caption: '差最后三下：灯泡亮了一片，右下还灭着一盏' },
-      { src: '/store/sweetspin/4.webp', caption: '过关面板：三颗星、这一关走了 24 步（正好压在三星线上）、累计总星星' },
+      { src: 'store/sweetspin/1.webp', caption: '关卡盘：20 个六边形，前 12 关已经通了，第 13 关亮着' },
+      { src: 'store/sweetspin/2.webp', caption: '开局：这一关的管道还没接通，右上那个橘色小电池就是电源' },
+      { src: 'store/sweetspin/3.webp', caption: '差最后三下：灯泡亮了一片，右下还灭着一盏' },
+      { src: 'store/sweetspin/4.webp', caption: '过关面板：三颗星、这一关走了 24 步（正好压在三星线上）、累计总星星' },
     ],
     about: [
       '每一关是一张六边形地图，格子里各有一段管道（直的、拐弯的、三通的），点一下就顺时针转 60 度。左边有一节电池，把电顺着管道接到每一盏灯上，全亮就过关 —— 所以先想清楚电从哪边走，再动手转，比乱点快得多。',
@@ -578,10 +584,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '8 岁以上',
     session: '一次 10~20 分钟',
     shots: [
-      { src: '/store/renttower/1.webp', caption: '4 层楼 16 间房：8 间住着人，空房挂着「招租中」，右边是便利店，底下是「加盖 5F · ¥600万」' },
-      { src: '/store/renttower/2.webp', caption: '点开 1 号房：面包师粉星饼干，满意度 96/100，租金 ¥44/秒，滑杆上是这一间房的合理区间' },
-      { src: '/store/renttower/3.webp', caption: '盖到 11 层、44 间房，右上角可以按层翻看（现在停在 4F–11F）' },
-      { src: '/store/renttower/4.webp', caption: '便利店收银：客人说「结账」，点柜台上的商品扫码，合计从 ¥0 开始往上加' },
+      { src: 'store/renttower/1.webp', caption: '4 层楼 16 间房：8 间住着人，空房挂着「招租中」，右边是便利店，底下是「加盖 5F · ¥600万」' },
+      { src: 'store/renttower/2.webp', caption: '点开 1 号房：面包师粉星饼干，满意度 96/100，租金 ¥44/秒，滑杆上是这一间房的合理区间' },
+      { src: 'store/renttower/3.webp', caption: '盖到 11 层、44 间房，右上角可以按层翻看（现在停在 4F–11F）' },
+      { src: 'store/renttower/4.webp', caption: '便利店收银：客人说「结账」，点柜台上的商品扫码，合计从 ¥0 开始往上加' },
     ],
     about: [
       '一圈循环是：空房招租 → 定租金 → 装修 → 收租 → 加盖。租金按秒结算，不玩的时候也在攒 —— 隔一阵回来，顶上会亮出「领取 · 外出期间的房租」，点一下收进账。',
@@ -614,10 +620,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 3~5 分钟',
     shots: [
-      { src: '/store/stackmeow/1.webp', caption: '对局：塔已经堆了 12 块，顶上是分数 24 / 等级 2 / 连击 ×12，再上面那块正在左右滑' },
-      { src: '/store/stackmeow/2.webp', caption: '标题画面：黄底黑字的「堆呀堆」，下面一行小字写着玩法，中间一个「开始」' },
-      { src: '/store/stackmeow/3.webp', caption: '结算：这一局 24 分、最佳 28 分，下面是「再来一次」和「主页」' },
-      { src: '/store/stackmeow/4.webp', caption: '暂停面板：继续 / 再来一次 / 声音 / 主页' },
+      { src: 'store/stackmeow/1.webp', caption: '对局：塔已经堆了 12 块，顶上是分数 24 / 等级 2 / 连击 ×12，再上面那块正在左右滑' },
+      { src: 'store/stackmeow/2.webp', caption: '标题画面：黄底黑字的「堆呀堆」，下面一行小字写着玩法，中间一个「开始」' },
+      { src: 'store/stackmeow/3.webp', caption: '结算：这一局 24 分、最佳 28 分，下面是「再来一次」和「主页」' },
+      { src: 'store/stackmeow/4.webp', caption: '暂停面板：继续 / 再来一次 / 声音 / 主页' },
     ],
     about: [
       '屏幕上一块积木左右来回滑，点一下它就往下掉。落在塔顶正中间最好，歪了就把多出来的那一截削掉 —— 塔一次比一次窄，窄到接不住就结束了。所以这是一款「越准越能玩下去」的游戏：手一抖，后面几步就都在还债。',
@@ -650,10 +656,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '8 岁以上',
     session: '一次 10~15 分钟',
     shots: [
-      { src: '/store/cellguard/1.webp', caption: '首页：选章节（第 1 章 · 熬夜病毒 / 普通 / 推荐战力 100），中间是这一关的病毒，底下「开始战斗」' },
-      { src: '/store/cellguard/2.webp', caption: '一局打到 10%：病毒从左上角拐着弯往里走，抗体在通道上打它们，底下是守在终点的细胞' },
-      { src: '/store/cellguard/3.webp', caption: '英雄页：攻击 21、暴击 5%、攻速 +0%，每一条右边标着 60 金币加一点，下面是这一级的奖励' },
-      { src: '/store/cellguard/4.webp', caption: '结算：生存进度、消灭病毒数、战斗时长，以及这一局拿到的金币和碎片' },
+      { src: 'store/cellguard/1.webp', caption: '首页：选章节（第 1 章 · 熬夜病毒 / 普通 / 推荐战力 100），中间是这一关的病毒，底下「开始战斗」' },
+      { src: 'store/cellguard/2.webp', caption: '一局打到 10%：病毒从左上角拐着弯往里走，抗体在通道上打它们，底下是守在终点的细胞' },
+      { src: 'store/cellguard/3.webp', caption: '英雄页：攻击 21、暴击 5%、攻速 +0%，每一条右边标着 60 金币加一点，下面是这一级的奖励' },
+      { src: 'store/cellguard/4.webp', caption: '结算：生存进度、消灭病毒数、战斗时长，以及这一局拿到的金币和碎片' },
     ],
     about: [
       '一局是这样的：病毒从通道一头一波波往里爬，你的细胞守在另一头。武器会自动开火，你要做的是选什么武器、把它们摆在通道的哪一段。撑满 100% 就算过关，被咬穿就结束 —— 顶上的进度条会一直告诉你离过关还有多远。',
@@ -686,10 +692,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/redbutton/1.webp', caption: '首页：一颗大红按钮，标题写着「别按红按钮」，底下是「按下它……？」' },
-      { src: '/store/redbutton/2.webp', caption: '连按 12 下：按钮下方写着「连击 ×12」，宝箱掉在四周，顶上金币 95、等级 Lv3' },
-      { src: '/store/redbutton/3.webp', caption: '升级面板：指尖力量 Lv4（每点 +1.1 金币，再 6 级 ×3），下面是自动产出的点击机器人' },
-      { src: '/store/redbutton/4.webp', caption: '扭蛋抽奖机：用宝石抽收藏品，「再抽 40 次必出传说」' },
+      { src: 'store/redbutton/1.webp', caption: '首页：一颗大红按钮，标题写着「别按红按钮」，底下是「按下它……？」' },
+      { src: 'store/redbutton/2.webp', caption: '连按 12 下：按钮下方写着「连击 ×12」，宝箱掉在四周，顶上金币 95、等级 Lv3' },
+      { src: 'store/redbutton/3.webp', caption: '升级面板：指尖力量 Lv4（每点 +1.1 金币，再 6 级 ×3），下面是自动产出的点击机器人' },
+      { src: 'store/redbutton/4.webp', caption: '扭蛋抽奖机：用宝石抽收藏品，「再抽 40 次必出传说」' },
     ],
     about: [
       '这款游戏的全部操作就是按那颗红按钮 —— 名字也这么劝你。按一下掉金币，连按攒连击，连击越高每下掉得越多；偶尔暴击、偶尔「神之一击」×50，屏幕会抖一下。掉出来的金币拿去升级，升级之后按一下掉得更多。',
@@ -721,10 +727,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '8 岁以上',
     session: '一次 10~15 分钟',
     shots: [
-      { src: '/store/guardshift/1.webp', caption: '标题页：写着「看清路线，布下陷阱与士兵」，两个大按钮是「防卫模式」和「进攻模式」' },
-      { src: '/store/guardshift/2.webp', caption: '防卫关卡 1-1：小跑怪沿着砖路往上走，两个守卫贴着路边拦，跳出的 +6 是打怪掉的金币' },
-      { src: '/store/guardshift/3.webp', caption: '伙伴图鉴：14 个防守伙伴 + 12 个进攻伙伴，每张都标着远程 / 近战 / 范围 / 增益' },
-      { src: '/store/guardshift/4.webp', caption: '出阵前的阵容页：先看「本关的敌人」和三角克制，再从拥有的卡牌里挑 5 个，底下是「出阵」' },
+      { src: 'store/guardshift/1.webp', caption: '标题页：写着「看清路线，布下陷阱与士兵」，两个大按钮是「防卫模式」和「进攻模式」' },
+      { src: 'store/guardshift/2.webp', caption: '防卫关卡 1-1：小跑怪沿着砖路往上走，两个守卫贴着路边拦，跳出的 +6 是打怪掉的金币' },
+      { src: 'store/guardshift/3.webp', caption: '伙伴图鉴：14 个防守伙伴 + 12 个进攻伙伴，每张都标着远程 / 近战 / 范围 / 增益' },
+      { src: 'store/guardshift/4.webp', caption: '出阵前的阵容页：先看「本关的敌人」和三角克制，再从拥有的卡牌里挑 5 个，底下是「出阵」' },
     ],
     about: [
       '这是塔防：敌人一波一波沿同一条路走向城堡，你在路边的格子上摆守卫。守卫自己会打，但打不到离路太远的地方 —— 所以真正要动脑的是「这条路的哪个拐角最值得放人」。每波开始前会显示这一波有几个什么怪，撑过去就赢，城堡被拆光就输。',
@@ -756,10 +762,10 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '7 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/hoopsneak/1.webp', caption: '标题页：一本摊开的笔记本，封面上是篮筐和小人，两个按钮是「开始」和「选关」' },
-      { src: '/store/hoopsneak/2.webp', caption: '笔记本 1 的第 1 关：球已经在半空飞向右边的手绘篮筐，左边那颗星是刚吃到的' },
-      { src: '/store/hoopsneak/3.webp', caption: '每翻一本笔记本先弹一张说明卡：「新元素：真空区 —— 黑色区域里没有重力，球会一直直线飞」' },
-      { src: '/store/hoopsneak/4.webp', caption: '后面的笔记本（第 5 本）：砖墙、炸弹球、红格子地板，前面的基础关只是开始' },
+      { src: 'store/hoopsneak/1.webp', caption: '标题页：一本摊开的笔记本，封面上是篮筐和小人，两个按钮是「开始」和「选关」' },
+      { src: 'store/hoopsneak/2.webp', caption: '笔记本 1 的第 1 关：球已经在半空飞向右边的手绘篮筐，左边那颗星是刚吃到的' },
+      { src: 'store/hoopsneak/3.webp', caption: '每翻一本笔记本先弹一张说明卡：「新元素：真空区 —— 黑色区域里没有重力，球会一直直线飞」' },
+      { src: 'store/hoopsneak/4.webp', caption: '后面的笔记本（第 5 本）：砖墙、炸弹球、红格子地板，前面的基础关只是开始' },
     ],
     about: [
       '这是投球解谜：一页横格纸上，左边站着小人，右边立着篮筐，中间横着地板和几块机关。按住屏幕蓄力，松手把球扔出去 —— 球会弹、会滚、会被吸走，最后进没进筐一眼就能看出来。每关的球只有一次机会，没进就点右上角的重新开始。',
@@ -792,16 +798,122 @@ export const STOREFRONT: StorefrontEntry[] = [
     age: '6 岁以上',
     session: '一次 5~10 分钟',
     shots: [
-      { src: '/store/doodlederby/1.webp', caption: '涂鸦教室：点阵纸上是一匹刚画好的马，纸下面一排是八种颜色和撤销、清空；最上面那条是引导，一步一步教你先画身子、再画腿' },
-      { src: '/store/doodlederby/2.webp', caption: '02 预览：刚才那几笔线条被拉成立体的管子，马站在草坡上 —— 它真的是你画的那匹马，不是套了个模型' },
-      { src: '/store/doodlederby/3.webp', caption: '03 参赛：给它起个名字，选「节奏短跑 100 米」或「跨栏乱斗 200 米」，下面六项是这匹马的性格，由画法算出来' },
-      { src: '/store/doodlederby/4.webp', caption: '比赛中：四匹马在赛道上（另外三匹标着「电脑」），中间绿区是踩节奏的时机，下面是「轻点加把劲」和「跳」' },
+      { src: 'store/doodlederby/1.webp', caption: '涂鸦教室：点阵纸上是一匹刚画好的马，纸下面一排是八种颜色和撤销、清空；最上面那条是引导，一步一步教你先画身子、再画腿' },
+      { src: 'store/doodlederby/2.webp', caption: '02 预览：刚才那几笔线条被拉成立体的管子，马站在草坡上 —— 它真的是你画的那匹马，不是套了个模型' },
+      { src: 'store/doodlederby/3.webp', caption: '03 参赛：给它起个名字，选「节奏短跑 100 米」或「跨栏乱斗 200 米」，下面六项是这匹马的性格，由画法算出来' },
+      { src: 'store/doodlederby/4.webp', caption: '比赛中：四匹马在赛道上（另外三匹标着「电脑」），中间绿区是踩节奏的时机，下面是「轻点加把劲」和「跳」' },
     ],
     about: [
       '这是「画一匹马，然后让它跑起来」：左边是点阵纸和八种颜色的蜡笔，画完点「领养一匹」也能直接拿一匹现成的马。02 预览里，你画的每一条线都会变成一根立体的管子，拼成站在草坡上的马 —— 画歪了它就是歪的，腿没连上身子它就是散的。',
       '03 参赛页把画法翻译成六项分数（步幅、轻盈、稳重、节奏、爆发、耐力，满分 10）：身子越扁长步幅越大，线条越曲折节奏越高，左右越对称越稳。两种赛制看的不是同一组分数 —— 100 米节奏短跑吃节奏、爆发、耐力，200 米跨栏乱斗吃步幅、轻盈、稳重，所以同一匹马在两场里的表现不一样。',
       '比赛时马自己会跑，你要做的是在绿色那一段里轻点屏幕加一把劲，连击越长加速越猛；跨栏赛还要按「跳」，绊一下速度掉到四成。跑完给一张成绩单：名次、用时、最长连击，还有一句点评。这一款不联网 —— 对手是电脑马，成绩只存在这台设备的游戏存档里，没有排行榜也不上传任何东西。',
       '这一款一场花 10 积分，**点「03 送它去比赛」的那一刻**才收；画马、看 3D 预览、起名、换赛制都不收，跑完再点「再跑一场」按新的一场算。花积分换的是「这一场跑得怎么样」的一次机会，换不来任何能兑回积分的东西。',
+    ],
+  },
+  {
+    id: 'farmlord',
+    name: '我是一个农场主',
+    emoji: '🥕',
+    /*
+     * 金：整屏是草地绿 + 土块深棕，图标底色要能跟草地分开。
+     * 草绿已经 6 款了（云边小农场也在其中，同色会糊成一片），金色配麦子最像。
+     */
+    tint: 'sun',
+    /*
+     * chill：游戏里的钱和宝石**不出农场** —— 没有「币 → 兑换券」的出口
+     * （`voucherPerCoin: 0`、`expectedPayout: 0`）。
+     *
+     * ⚠️ 门票口径 2026-11-08 用户拍板「先不收积分」：manifest 的 `playCost`
+     * 只能填正数（`checkPluginEconomy` 硬校验），所以填 1 当占位，
+     * 插件里**一行扣分都没有**。下面 `about` 最后一段就是按这个写的，
+     * 真开始收的时候要一起改（别只改 manifest）。
+     */
+    kind: 'chill',
+    pitch: '种地、浇水、收割、把收成卖钱，再去邻居家偷一把菜。',
+    learn: [
+      '小麦 10 分钟就熟，玉米要 1 个半小时，西瓜得等 13 小时 —— 种什么就得等多久，等的这段时间什么也做不了',
+      '熟了不摘会掉产量：每过 10 分钟少收 2%，最多少 24%，所以得记着回来收',
+      '去邻居家偷菜最多拿走四成，同一块地偷过一次就记住你了，再来只能拿剩下的',
+      '商店按等级开门：没到级的种子写着「2 级解锁」「8 级解锁」，攒够钱也买不了',
+    ],
+    age: '6 岁以上',
+    session: '一次 3~5 分钟，作物熟了回来收一轮',
+    shots: [
+      { src: 'store/farmlord/1.webp', caption: '农场：六块地种着小麦、胡萝卜、玉米、番茄和草莓，左边一列是手、锄头、种子、水壶、化肥这些工具，底栏是商店 / 谷仓 / 邻居 / 动态' },
+      { src: 'store/farmlord/2.webp', caption: '商店的种子页：小麦 6 钱、胡萝卜 16 钱，每张卡写着每次收获给多少经验、多久成熟、一次产多少；没到等级的写着「3 级解锁」' },
+      { src: 'store/farmlord/3.webp', caption: '商店的动物页：鸡、鸭、奶牛、猪、绵羊、山羊，每只写着产出什么（鸡蛋、羽毛、牛奶、松露、羊毛、奶酪）、多久产一次、吃什么' },
+      { src: 'store/farmlord/4.webp', caption: '邻居页：王阿姨、阿强、小林、隔壁老李，每人一个「去看看」，旁边标着「可偷」' },
+    ],
+    about: [
+      '这是种地的：六块地、一把种子、一个谷仓。种下去有成熟时间 —— 小麦 10 分钟，胡萝卜 45 分钟，玉米 1 个半小时，越贵的等越久。熟了在谷仓按件卖，卖的钱再买种子、买动物、开新地。动物是另一条线：鸡下蛋、牛产奶、猪拱松露，喂了才产。',
+      '时间是实打实走的：熟了不摘，产量每 10 分钟掉 2%，最多掉 24%；商店按等级开门，不到级的东西写着「N 级解锁」，不是花钱就能提前买。所以这一款玩的是「什么时候回来」—— 不是一直盯着屏幕。',
+      '邻居页有四个邻居（王阿姨、阿强、小林、隔壁老李）。点「去看看」能进他们农场，摘走最多四成；同一块地偷过一次就记住你，再来只能拿剩下的。也能帮忙和捣乱，捣乱每天有次数上限。这些邻居是游戏里的电脑角色，不联网。',
+      '这一款现在不花积分，也不发兑换券 —— 农场里的钱和宝石只在农场里用，玩到的东西带不出来。种下去的地、卖出去的菜、偷过谁家，都会自己存下来，下次进来接着玩。',
+    ],
+  },
+  {
+    id: 'fall2048',
+    name: '下落的2048',
+    emoji: '🔢',
+    tint: 'berry',
+    /*
+     * `chill` = 花积分换一段时间，一分券都不产出（`expectedPayout: 0`）。
+     * 游戏里那枚金币是它自己的（打方块掉、买升级/皮肤用），和 App 的积分两套账 ——
+     * 所以不能塞进 `think`（那句「玩出来的东西能换成兑换券」对它就是假话）。
+     */
+    kind: 'chill',
+    pitch: '把数字方块丢进井里，两个一样的撞在一起就合并。',
+    learn: [
+      '点哪儿就落哪儿 —— 但方块会滚、会歪，想放的位置和真落下的位置不是一回事',
+      '只有两个一样的才会合并，凑成一条链升得最快',
+      '井只有 9 格宽，堆到顶就结束：前面放得随意，后面就没地方了',
+      '一次点一下掉一块，按住可以连着放',
+    ],
+    age: '6 岁以上',
+    session: '一次 3~8 分钟',
+    shots: [
+      { src: 'store/fall2048/1.webp', caption: '首屏：开奖、升级、扭蛋、皮肤、任务，下面是自己的金币和最好成绩' },
+      { src: 'store/fall2048/2.webp', caption: '井口在上方，点哪儿方块就落到哪儿，顶上是分数、下一块和暂停' },
+      { src: 'store/fall2048/3.webp', caption: '两块一样的撞上会合并，连击攒满会进狂热' },
+      { src: 'store/fall2048/4.webp', caption: '升级商店：用游戏里攒的金币买掉落速度、连击时长这些' },
+    ],
+    about: [
+      '井口在上，方块从上面掉下来。点哪儿就落哪儿，两个相同的撞在一起会合并成更大的一块 —— 和数字版 2048 一个道理，只是这里是真掉下来、真的会滚。',
+      '落点和实际位置有偏差：方块会滚、会歪、会卡在缝里。所以要想的不只是「放哪一格」，还有「它会不会跑」。井只有 9 格宽、14 格高，堆到顶就结束。',
+      '游戏里那些金币、升级、皮肤是它自己的一套，和 App 的积分不互通 —— 玩得再多也换不出兑换券。这一款花积分开一局，就是花积分换一段时间。',
+    ],
+  },
+  {
+    id: 'inudoku',
+    name: '犬独',
+    emoji: '🐕',
+    tint: 'sun',
+    /*
+     * `chill` = 花积分换一段时间，一分券都不产出（`expectedPayout: 0`）。
+     * 这款连「自己的币」都没有：原版那套金币是拿去**买命 / 买皮肤 / 买 BGM** 的，
+     * 我们把它整块摘了（没有 `gp.pay`），皮肤和 BGM 改成通关解锁 ——
+     * 所以它既不能进 `think`，也不该进 `play`（那句「产出看运气」对它没意义）。
+     */
+    kind: 'chill',
+    pitch: '在格子里放小狗：每行、每列、每块颜色里各一只，还不能挨着。',
+    learn: [
+      '每一行、每一列、每一块同色的区域里，都只能有一只小狗',
+      '斜着挨着也不行 —— 两只狗对角相邻就算错',
+      '格子上标着数字的，表示它周围八格里正好有这么多只（进阶关才有）',
+      '放错了扣一颗心，三颗心用完这一关从头再来',
+    ],
+    age: '6 岁以上',
+    session: '一关 2~6 分钟',
+    shots: [
+      { src: 'store/inudoku/1.webp', caption: '首屏：完成度、三颗入口按钮，下面是 12 项成就' },
+      { src: 'store/inudoku/2.webp', caption: '棋盘按颜色分块，顶上三颗心，下面一排是放狗 / 笔记 / 待定 / 撤销 / 提示' },
+      { src: 'store/inudoku/3.webp', caption: '8 只狗耳朵皮肤：柴犬开局就有，其余靠通关一只只解锁' },
+      { src: 'store/inudoku/4.webp', caption: '设置里有 4 首 BGM、音效开关和三种语言' },
+    ],
+    about: [
+      '规则一句话就能讲完：每一行、每一列、每一块同色区域里，各放一只小狗，而且两只狗不能挨着（斜着也不行）。格子越少越好上手 —— 第一关只有 4×4、四只狗。',
+      '36 关主线从 4×4 一路长到 12×12，通关之后还有「双子」和「骨头」两章共 16 道进阶题：前者一个区域要放两只，后者棋盘上写着数字，告诉你周围八格里该有几只。',
+      '这一款没有内购，也没有金币：原版里买命、买皮肤、买 BGM 的入口全部摘掉了，8 只狗和 4 首曲子改成**通关解锁**（每 5 关一只狗、每 4 关一首曲子）。花积分开一关，玩完不产出兑换券。',
     ],
   },
 ]

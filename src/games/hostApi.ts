@@ -12,6 +12,18 @@
  * 为什么用保留键而不是另开一张表：表必须**编译期声明**，而下载来的游戏
  * 是运行时才出现的（见 `db.ts` 的 `this.version(7)` 注释）。
  *
+ * ## 在线版：同一个门，背后换成服务端
+ *
+ * `VITE_APP_MODE=online` 时，下面**六扇会改数的门**全部改走 `online/coin.ts`
+ * （服务端 `/game/coin/*` + `/wallet/spend`）—— 但**返回值契约一个字都不变**
+ * （`boolean` / `number` / `void`），因为插件是按本地版那份契约写的。
+ *
+ * 余额那一扇（`gameCoinBalance`）**不分支**：它照旧读 Dexie，
+ * 而在线版里 `__coin` 是服务端余额的**镜像**（见 `db.ts` 的
+ * `mirrorGameCoinBalance`）。为什么不做成「在线时现问服务端」：
+ * 这个方法插件**每帧都可能调**（画「还剩几个币」），
+ * 一个 60fps 的小游戏能把接口打成筛子。
+ *
  * ## 命名空间由**宿主**拼
  *
  * 插件只给「自己的键」，`${gameId}:` 前缀由 `db.gameKvKey` 拼。这样插件
@@ -30,6 +42,18 @@ import {
   spendGameCoin,
   spendPoints,
 } from '../db/db'
+import { ApiError, NETWORK } from '../api/client'
+import {
+  coinFailToast,
+  oBuyCoins,
+  oMintCoins,
+  oMintVouchers,
+  oRedeemCoins,
+  oSpendCoins,
+  oSpendPoints,
+} from '../online/coin'
+import { oKvGet, oKvList, oKvSet, warnKvFailure } from '../online/kv'
+import { isOnlineMode } from '../sync/pull'
 import { hapticLight, playTone } from '../platform/files'
 import type { HostApi } from './plugin'
 
@@ -84,8 +108,14 @@ function assertNotReserved(key: string): void {
 export function makeHostApi(deps: {
   /** 现读当前积分余额 */
   getBalance: () => number
-  /** 扣分之后让 store 刷新（余额、账本都要重新算） */
-  refresh: () => Promise<void>
+  /**
+   * 扣分之后让 store 刷新（余额、账本都要重新算）。
+   *
+   * `skipPull: true` = **只重读本地表，不发请求**。在线版里纯币操作
+   * （铸币 / 花币）用它：余额已经由 `mirrorGameCoinBalance` 写成服务端
+   * 返回的那个数了，再拉一遍等于每玩一局发八个请求。
+   */
+  refresh: (opts?: { skipPull?: boolean }) => Promise<void>
   pushToast: (t: {
     kind: 'success' | 'warn' | 'info'
     title: string
@@ -102,10 +132,41 @@ export function makeHostApi(deps: {
    */
   voucherPerCoin: () => number
 }): (gameId: string) => HostApi {
+  /**
+   * 在线版写穿的统一兜底：**故障不抛给插件，改成一句提示**。
+   *
+   * 为什么不让它抛：插件是按本地版的契约写的（那几个方法**从不失败**，
+   * 只有 `false` / `0`）。抛出去就是插件里的 unhandled rejection，
+   * 症状是「点了没反应」—— 而真正的原因（没网）谁也看不到。
+   *
+   * 为什么也不静默 `return fallback`：那就变成「看起来成功了」。
+   * 断网策略是**直接不可用 + 明确告诉用户要联网**，所以必须弹一条。
+   */
+  const guarded = async <T,>(fallback: T, run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run()
+    } catch (e) {
+      const err =
+        e instanceof ApiError
+          ? e
+          : new ApiError(NETWORK, (e as { message?: string })?.message || '操作没成功')
+      deps.pushToast(coinFailToast(err))
+      return fallback
+    }
+  }
+
   return (gameId: string): HostApi => ({
     balance: () => deps.getBalance(),
 
     spendPoints: async (amount, memo) => {
+      if (isOnlineMode) {
+        /* 积分在服务端，本地那条 `lg_` 行**永远不会被拉取清掉** ——
+           只写本地就是余额永久漂移（见 online/coin.ts 的头注释）。
+           这一扇**必须**整轮刷新：积分余额和流水都变了。 */
+        const ok = await guarded(false, () => oSpendPoints(amount, gameId, memo))
+        if (ok) await deps.refresh()
+        return ok
+      }
       const ok = await spendPoints(amount, {
         // 插件花钱统一记 `game_spend`，`refId` 带上是谁花的 ——
         // 否则家长看到一笔「-10」不知道是哪款游戏扣的。
@@ -118,6 +179,12 @@ export function makeHostApi(deps: {
     },
 
     mintGameCoin: async (amount, memo) => {
+      if (isOnlineMode) {
+        await guarded(undefined, () => oMintCoins(gameId, amount, memo))
+        // 纯币操作：余额镜像已经写成服务端那个数，不必再拉一轮。
+        await deps.refresh({ skipPull: true })
+        return
+      }
       // 负数 / 0 一律不写（`addGameCoin` 里也是这个守卫 —— 币只进不出）。
       await addGameCoin(gameId, amount, memo)
       if (Math.round(amount) > 0) await deps.refresh()
@@ -129,8 +196,16 @@ export function makeHostApi(deps: {
      *
      * ⚠️ 不要在这里改成「先读余额再 mint 一笔负数」：守卫就跑到事务外面了，
      * 两次并发各自读到同一个「够」，于是都扣 —— 超支，而且每条流水都自洽、不报错。
+     *
+     * 在线版：守卫在服务端（`game_coin_wallet` 行锁 + 余额判断），
+     * 不够时服务端报 `10040901`，这里翻成 `false` —— 和本地契约一致。
      */
     spendGameCoin: async (amount, memo) => {
+      if (isOnlineMode) {
+        const ok = await guarded(false, () => oSpendCoins(gameId, amount, memo))
+        if (ok) await deps.refresh({ skipPull: true })
+        return ok
+      }
       const ok = await spendGameCoin(gameId, amount, memo)
       if (ok) await deps.refresh()
       return ok
@@ -142,10 +217,18 @@ export function makeHostApi(deps: {
      * ⚠️ 这里刻意不接「插件传 rate」的重载：那等于把印钞机的旋钮交给插件。
      * 汇率没配（0）就直接返回 0，不抛 —— 「这款游戏不开放兑换」是正常状态，
      * 不是错误（抛了会让插件在 catch 里静默吞掉，反而更难查）。
+     *
+     * 在线版：`rate <= 0` 时**一个请求都不发**。服务端不知道 manifest 里
+     * 写着「不开放」，照换不误 —— 发了就等于绕开家长的那个开关。
      */
     redeemGameCoin: async (count, memo) => {
       const rate = deps.voucherPerCoin()
       if (!(rate > 0)) return 0
+      if (isOnlineMode) {
+        const got = await guarded(0, () => oRedeemCoins(gameId, count, rate))
+        if (got > 0) await deps.refresh()
+        return got
+      }
       const got = await redeemGameCoins(gameId, count, rate, memo)
       if (got > 0) await deps.refresh()
       return got
@@ -158,6 +241,11 @@ export function makeHostApi(deps: {
      * 娃娃就能变回币、币又能直接开局 —— 抓娃娃本身能续玩。
      */
     mintVoucher: async (count, memo) => {
+      if (isOnlineMode) {
+        const got = await guarded(0, () => oMintVouchers(gameId, count, memo))
+        if (got > 0) await deps.refresh()
+        return got
+      }
       const got = await mintGameVouchers(gameId, count, memo)
       if (got > 0) await deps.refresh()
       return got
@@ -166,13 +254,25 @@ export function makeHostApi(deps: {
     /**
      * 用积分买币。走 `db.buyGameCoins` —— 扣积分和记币在**同一个事务**里。
      * 拆成 `spendPoints` + `mintGameCoin` 两步的话，中间崩一下就是「积分扣了、币没到」。
+     *
+     * 在线版：服务端 `/game/coin/buy` 的注释里写着同一句话 —— 它也在
+     * **一个数据库事务**里扣积分 + 记币，所以「原子」这件事跟着搬过去了。
      */
     buyGameCoin: async (count, pointsPerCoin, memo) => {
+      if (isOnlineMode) {
+        const ok = await guarded(false, () => oBuyCoins(gameId, count, pointsPerCoin))
+        if (ok) await deps.refresh()
+        return ok
+      }
       const ok = await buyGameCoins(gameId, count, pointsPerCoin, memo)
       if (ok) await deps.refresh()
       return ok
     },
 
+    /**
+     * 余额。**两种模式都读 Dexie** —— 在线版里 `__coin` 是服务端余额的镜像
+     * （见 `mirrorGameCoinBalance` 的注释：插件每帧都可能调这个方法）。
+     */
     gameCoinBalance: () => gameCoinBalanceOf(gameId),
 
     storage: {
@@ -187,13 +287,30 @@ export function makeHostApi(deps: {
        */
       get: async <T,>(key: string): Promise<T | undefined> => {
         assertNotReserved(key)
+        /* 在线版读 Dexie —— 拉取刚把服务端那份搬进来（`kv/list` 一次拿全）。
+           不现问服务端：插件启动时会连着 get 好几个键，慢网下就是好几秒白屏。 */
+        if (isOnlineMode) return oKvGet<T>(gameId, key)
         return getGameKv<T>(gameId, key)
       },
       set: async (key: string, value: unknown): Promise<void> => {
         assertNotReserved(key)
+        if (isOnlineMode) {
+          /* ⚠️ 这里**抛**，不像游戏币那几扇门那样返回 false。
+             `storage.set` 的契约本来就是 `Promise<void>`（本地版也会 reject），
+             而「存档没存上却装作存上了」是这个 App 最不能接受的失败方式。
+             抛之前先弹一条，否则插件没写 catch 时症状就是「点了没反应」。 */
+          try {
+            await oKvSet(gameId, key, value)
+          } catch (e) {
+            warnKvFailure(gameId, e, deps.pushToast)
+            throw e
+          }
+          return
+        }
         await setGameKv(gameId, key, value)
       },
       list: async () => {
+        if (isOnlineMode) return oKvList(gameId)
         const all = await listGameKv(gameId)
         const out: Record<string, unknown> = {}
         for (const [k, v] of Object.entries(all)) {

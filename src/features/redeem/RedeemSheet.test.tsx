@@ -44,10 +44,20 @@ async function giveVouchers(n: number) {
 
 /** 家长定价。`closed` 模拟「家长关掉了兑换」 */
 async function priceItem(itemId: string, voucherPrice: number, closed = false) {
+  await priceItemAt(itemId, voucherPrice, Date.now(), closed)
+}
+
+/** 同上，但**指定同意的时间** —— 验「最新的排前面」时必须能控制先后 */
+async function priceItemAt(
+  itemId: string,
+  voucherPrice: number,
+  openedAt: number,
+  closed = false,
+) {
   await db.wishOffers.put({
     itemId,
     voucherPrice,
-    openedAt: Date.now(),
+    openedAt,
     ...(closed ? { closedAt: Date.now() } : {}),
   })
   await useApp.getState().refresh()
@@ -73,6 +83,52 @@ describe('兑换列表：爸妈定好价的心愿', () => {
     expect(screen.queryByText(/心愿商城 · 爸妈开放了/), '不该再另起一块').toBeNull()
     // 也不该长得像「外面来的东西」：付款行和家里那几件一模一样
     expect(within(row).getByText(/付款：/)).toBeTruthy()
+  })
+
+  /* 2026-11-12 用户要求：兑换页里这些「爸妈已经同意」的心愿行，
+     ① 要有丝带标出品类（它们和家里的兑换品混在同一张表，光看名字分不清
+        是盲盒还是玩具，而两者的交付方式完全不同）；
+     ② 按家长同意的时间倒序，最新的排前面。 */
+  it('★ 心愿行挂着品类丝带（丝带上就是品类名）', async () => {
+    /* 用游戏盒子这一条：它的品类没有歧义（`gamebox` → 「游戏」）。
+       ⚠️ 别拿 `wish-popmart`（泡泡玛特盲盒）当判据 —— 它的 `kind` 是
+       `collectible`（实体收藏），名字里那个「盲盒」和数字盲盒
+       （`blindbox` = 开游戏池）不是一回事，按名字猜会写错断言。 */
+    await priceItem('wish-game-renttower', 30)
+
+    render(<RedeemBody />)
+    await ready()
+
+    const row = shopRow('wish-game-renttower')
+    const ribbon = row.querySelector<HTMLElement>('[data-redeem-ribbon]')
+    expect(ribbon, '心愿行没有丝带').toBeTruthy()
+    // 值是**品类**而不是布尔：走查脚本要靠它数「每种几张」
+    expect(ribbon?.getAttribute('data-redeem-ribbon')).toBe('gamebox')
+    expect(ribbon?.textContent).toBe('游戏')
+    // 家里那几件不带丝带 —— 有丝带的才是「外面来的心愿」
+    const familyRibbons = document.querySelectorAll(
+      '[data-shop-row]:not([data-shop-row^="wish-"]) [data-redeem-ribbon]',
+    )
+    expect(familyRibbons.length, '家里的兑换品不该挂心愿丝带').toBe(0)
+  })
+
+  it('★ 最新的排前面：按家长同意的时间倒序', async () => {
+    const t0 = Date.now() - 60_000
+    // 先同意「收租公寓」，一分钟后又同意「泡泡玛特盲盒」
+    await priceItemAt('wish-game-renttower', 30, t0)
+    await priceItemAt('wish-popmart', 30, t0 + 60_000)
+
+    render(<RedeemBody />)
+    await ready()
+
+    const ids = [...document.querySelectorAll('[data-shop-row]')].map((e) =>
+      e.getAttribute('data-shop-row'),
+    )
+    const iPop = ids.indexOf('wish-popmart')
+    const iRent = ids.indexOf('wish-game-renttower')
+    expect(iPop, '两行都该在列表里').toBeGreaterThanOrEqual(0)
+    expect(iRent).toBeGreaterThanOrEqual(0)
+    expect(iPop, '后同意的应该排在先同意的前面').toBeLessThan(iRent)
   })
 
   it('对照组：没定价的心愿不出现（那只是「想要」，不是能换）', async () => {
@@ -316,5 +372,96 @@ describe('兑换页 tab 行', () => {
         'whitespace-nowrap',
       )
     }
+  })
+})
+
+
+/* ============================================================
+   第六轮：行上写「已兑换 N 次」（2026-11-06）
+   ------------------------------------------------------------
+   用户原话：「兑换列表 item 添加已兑换次数。」
+
+   口径只数**真的成交了**的单子：`wished` 一分钱没扣、`cancelled`
+   券退回去了 —— 把它们算进去，孩子会看到「已兑换 3 次」而手里只有一件。
+   ============================================================ */
+describe('兑换列表：已兑换次数', () => {
+  const order = (id: string, status: string) => ({
+    id,
+    itemId: 'wish-popmart',
+    itemName: '泡泡玛特盲盒',
+    itemEmoji: '🎁',
+    kind: 'toy' as const,
+    voucherPrice: 30,
+    status,
+    vouchersHeld: 30,
+    createdAt: Date.now(),
+  })
+
+  it('★ 成交过的单子才算次数（wished / cancelled 不算）', async () => {
+    await priceItem('wish-popmart', 30)
+    await db.wishOrders.bulkPut([
+      order('wo_a', 'done'),
+      /* ⚠️ 不能拿 `confirmed` 当「成交过」的例子：它算**在走流程**，
+         `wishShelf` 会把整行排除掉（那件东西已经付过钱了）——
+         断言会红在「列表里没有这一行」，看着像次数算错了。 */
+      order('wo_b', 'done'),
+      order('wo_c', 'cancelled'),
+      order('wo_d', 'wished'),
+    ] as never)
+    await useApp.getState().refresh()
+
+    render(<RedeemBody />)
+    await ready()
+
+    const row = shopRow('wish-popmart')
+    expect(within(row).getByText(/已兑换 2 次/), '次数只数成交的').toBeTruthy()
+  })
+
+  it('★ 一次没换过就不写这一行（别写「已兑换 0 次」）', async () => {
+    await priceItem('wish-popmart', 30)
+    render(<RedeemBody />)
+    await ready()
+
+    expect(within(shopRow('wish-popmart')).queryByText(/已兑换/)).toBeNull()
+  })
+})
+
+/* ============================================================
+   管理 tab 的家长密码：锁卡 + 弹框（2026-11-06 统一）
+   ------------------------------------------------------------
+   改之前切到「⚙️ 管理」就是迎面一屏数字键：没有「这是爸妈的事」的说明，
+   也没有出口。现在是一张锁卡 + 一颗按钮。
+   ============================================================ */
+describe('兑换：管理 tab 的家长密码是弹框', () => {
+  const openManage = async () => {
+    await useApp.getState().updateSettings({ protectParentActions: true, parentPin: '0000' })
+    await useApp.getState().refresh()
+    const user = userEvent.setup()
+    render(<RedeemBody />)
+    await ready()
+    await user.click(screen.getByRole('button', { name: /管理/ }))
+    return user
+  }
+
+  it('★ 切到管理：先看到锁卡，不是一屏数字键', async () => {
+    await openManage()
+    expect(document.querySelector('[data-parent-lock]'), '锁按钮没有').toBeTruthy()
+    expect(screen.queryByRole('button', { name: '确定' }), '键盘铺在页面里了').toBeNull()
+    expect(screen.getByText('管理兑换品需要密码')).toBeTruthy()
+  })
+
+  it('★ 点锁按钮弹框，输对才出现管理面板', async () => {
+    const user = await openManage()
+    await user.click(document.querySelector('[data-parent-lock]') as HTMLElement)
+    const sheet = await screen.findByRole('dialog')
+
+    for (const k of ['0', '0', '0', '0']) {
+      await user.click(within(sheet).getByRole('button', { name: k }))
+    }
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(
+      screen.queryByText('管理兑换品需要密码'),
+      '过了闸锁卡还挂着 —— 说明 pinOk 没接上',
+    ).toBeNull()
   })
 })

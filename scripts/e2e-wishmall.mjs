@@ -4,11 +4,15 @@
  * 用法：node scripts/e2e-wishmall.mjs [url]
  *
  * 验的是**只有真跑起来才知道**的那几件事：
- *   ① 底栏真的是 5 格，且「心愿」在中间（布局改动）
+ *   ① 底栏真的是 4 格，且「心愿」在最右（2026-11-05 起积分挪去顶栏 🪙）
  *   ② 盲盒排在实物前面（用户要求「优先显示」）
- *   ③ 孩子端 DOM 里**没有** taobao 链接（外链只在家长确认页）
+ *   ③ 孩子端 DOM 里**没有** taobao 链接（外链只经 `openExternal` 打开，
+ *      2026-11-06 第七轮起它两端都下发，但**永远不写进 `href`**）
  *   ④ 价格和券价都在，且价格旁边写着「家长支付」
- *   ⑤ 全程 0 个 404、0 个 pageerror
+ *   ⑤ 家长确认页的购买按钮**由后台外链决定有无**（没配就没有）
+ *   ⑥ 家长密码**一律是弹框**（锁按钮 → 弹框 → 输对才出现真按钮），
+ *      页面里不铺键盘（2026-11-06 统一）
+ *   ⑦ 全程 0 个 404、0 个 pageerror
  *
  * ⚠️ 404 那句话**不带 URL**（老坑），所以必须挂 `response` 记 status+url。
  */
@@ -73,6 +77,27 @@ async function passPin(page) {
   return true
 }
 
+/**
+ * 打开家长密码弹框并过闸（2026-11-06 起闸门统一成「锁卡 + 弹框」）。
+ *
+ * 页面上先有一颗 `[data-parent-lock]`（「👤 爸妈：…」），点它才出现键盘。
+ * **先点再输** —— 只调 `passPin` 会在一个没有键盘的页面上空按 4 次「0」，
+ * 然后报「定价需要家长密码」失败，看着像闸门被删了。
+ *
+ * 弹框**自动开着**的两种场景（👀 审核、点「定个价」进来的定价页）不需要
+ * 先点，直接 `passPin` 就行。
+ */
+async function openPin(page) {
+  const clicked = await page.evaluate(() => {
+    const b = document.querySelector('[data-parent-lock]')
+    if (!b) return false
+    b.click()
+    return true
+  })
+  if (clicked) await wait(500)
+  return passPin(page)
+}
+
 /* ---------------- 「兑换」那一格：2026-10-29 起唯一的收银台 ----------------
  *
  * 家长口径：「兑换 里的东西都是一样，都能用兑换券或者积分，包括游戏也一样。
@@ -97,11 +122,11 @@ const goWish = async () => {
 /** 心愿列表里点开某件商品（按卡片文字认，别按位置） */
 const openWishCard = async (name) => {
   const ok = await page.evaluate((n) => {
-    const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+    const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
       x.textContent?.includes(n),
     )
     if (!b) return false
-    b.click()
+    b.querySelector('button').click()
     return true
   }, name)
   await wait(650)
@@ -168,13 +193,17 @@ await page.goto(URL, { waitUntil: 'domcontentloaded' })
 await dismissOnboarding(page)
 await wait(500)
 
-/* ---------- ① 底栏 5 格 ---------- */
+/* ---------- ① 底栏 4 格 ----------
+ *
+ * 2026-11-05 用户原话：「积分是不是换个地方更好……下边栏 4 个为好。」
+ * 积分那一格挪到了顶栏 🪙，底栏只剩 任务 / 游戏 / 兑换 / 心愿。
+ * ⚠️ 别按「心愿在中间」写死下标 —— 它现在是最右一格。 */
 console.log('\n── 底栏 ──')
 const tabs = await page.$$eval('[data-tour^="tab-"]', (bs) =>
   bs.map((b) => b.textContent.trim()),
 )
-check('底栏是 5 格', tabs.length === 5, tabs.join(' / '))
-check('「心愿」在中间', tabs[2]?.includes('心愿') || tabs.some((t) => t.includes('心愿')))
+check('底栏是 4 格', tabs.length === 4, tabs.join(' / '))
+check('「心愿」在最右', tabs[3]?.includes('心愿'), tabs.join(' / '))
 
 const wishTab = await page.$('[data-tour="tab-wish"]')
 check('心愿 tab 存在且可点', !!wishTab)
@@ -198,7 +227,7 @@ const listInfo = await page.evaluate(() => {
     firstCardText:
       document.querySelector('.grid')?.firstElementChild?.textContent?.slice(0, 20) ?? '',
     taobao: body.includes('taobao') || document.body.innerHTML.includes('taobao.com'),
-    cardCount: document.querySelectorAll('.grid > button').length,
+    cardCount: document.querySelectorAll('[data-wish-card]').length,
   }
 })
 check('盲盒在列表里', listInfo.hasBlindbox)
@@ -221,12 +250,14 @@ const boxInfo = await page.evaluate(() => {
   const body = document.body.innerText
   return {
     hasNote: body.includes('随机开出'),
-    hasWant: body.includes('想要这个'),
+    // 2026-11-06：卡片上那颗叫「🤍 我想要」（原来是「想要这个」），
+    // 详情页同一个动作跟着改名 —— 两处不能各叫一个名字。
+    hasWant: body.includes('我想要'),
     taobao: body.includes('taobao') || document.body.innerHTML.includes('taobao.com'),
   }
 })
 check('盲盒详情有说明', boxInfo.hasNote)
-check('未开放时只有「想要这个」', boxInfo.hasWant)
+check('未开放时只有「我想要」', boxInfo.hasWant)
 check('盲盒详情里也没有淘宝链接', !boxInfo.taobao)
 
 /* ---------- ④ 实物详情（价格 + 家长支付） ---------- */
@@ -237,10 +268,10 @@ await page.evaluate(() => {
 })
 await wait(400)
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.textContent?.includes('泡泡玛特'),
   )
-  b?.click()
+  b?.querySelector('button')?.click()
 })
 await wait(500)
 await page.screenshot({ path: `${OUT}/03-physical.png` })
@@ -250,25 +281,30 @@ const physInfo = await page.evaluate(() => {
   return {
     hasPayLabel: body.includes('家长支付'),
     hasYuan: /¥\s*\d+/.test(body),
-    hasWant: body.includes('想要这个'),
+    hasWant: body.includes('我想要'),
   }
 })
 check('价格旁有「家长支付」', physInfo.hasPayLabel)
 check('显示参考价', physInfo.hasYuan)
-check('有「想要这个」按钮', physInfo.hasWant)
+check('有「我想要」按钮', physInfo.hasWant)
 
 /* ---------- ⑤ 表明意向 ---------- */
 console.log('\n── 表明意向 ──')
-await page.evaluate(() => {
+/* 找不到就**报失败**，别 `b?.click()` 静默点空 ——
+   点空的现场是后面 7 条连锁红，报的却是「没变成已向爸妈申请」。 */
+const clickedWant = await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find((x) =>
-    x.textContent?.includes('想要这个'),
+    x.textContent?.includes('我想要'),
   )
-  b?.click()
+  if (!b) return false
+  b.click()
+  return true
 })
+check('详情页找得到「我想要」', clickedWant)
 await wait(700)
 await page.screenshot({ path: `${OUT}/04-wished.png` })
-const wished = await page.evaluate(() => document.body.innerText.includes('已经告诉爸妈'))
-check('点完变成「已经告诉爸妈」', wished)
+const wished = await page.evaluate(() => document.body.innerText.includes('已向爸妈申请'))
+check('点完变成「已向爸妈申请」', wished)
 
 /* ---------- ⑤.5 家长侧必须看得见这个心愿（2026-10-29，当天改到 👀） ----------
    第一版把待办卡摆在**心愿页顶部**。家长当天改口：
@@ -290,13 +326,13 @@ const wishEntry = await page.evaluate(() => {
   const badgeBtn = document.querySelector('[data-tour="header-review"]')
   return {
     stillOnWishPage: document.body.innerText.includes('心愿等你回应'),
-    childSees: document.body.innerText.includes('已告诉爸妈'),
+    childSees: document.body.innerText.includes('已向爸妈申请'),
     dot: !!badgeBtn?.querySelector('span'),
     label: badgeBtn?.getAttribute('aria-label') ?? '',
   }
 })
 check('★ 心愿页不再摆家长待办卡（已移到顶栏 👀）', !wishEntry.stillOnWishPage)
-check('孩子那一侧仍然写着「已告诉爸妈」', wishEntry.childSees)
+check('孩子那一侧仍然写着「已向爸妈申请」', wishEntry.childSees)
 check('★ 顶栏 👀 出现待办红点', wishEntry.dot && /待办/.test(wishEntry.label), wishEntry.label)
 
 await page.evaluate(() => {
@@ -324,10 +360,10 @@ await wait(500)
 
 // 回到那件商品的详情 —— 下一段（定价）要在详情页上做
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.textContent?.includes('泡泡玛特'),
   )
-  b?.click()
+  b?.querySelector('button')?.click()
 })
 await wait(600)
 
@@ -410,7 +446,8 @@ check('托管数记的是 30', afterRedeem.held === 30, String(afterRedeem.held)
 console.log('\n── 取消退券 ──')
 await goWish()
 await openWishCard('泡泡玛特')
-await passPin(page)
+await page.screenshot({ path: `${OUT}/05b-detail-locked.png` })
+await openPin(page) // 详情页现在先给「👤 爸妈：确认兑换 · 去购买」，点了才弹键盘
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find((x) =>
     x.textContent?.includes('确认兑换'),
@@ -420,20 +457,85 @@ await page.evaluate(() => {
 await wait(700)
 await page.screenshot({ path: `${OUT}/06-confirm.png` })
 
-const confirmInfo = await page.evaluate(() => {
-  const body = document.body.innerText
-  return {
-    hasBuy: body.includes('去淘宝'),
-    hasNoPay: body.includes('不代收货款'),
-    taobaoHref: !!document.querySelector('a[href*="taobao"]'),
-    // 数字商品取消要收回游戏，实物不涉及。这单是泡泡玛特（实物），
-    // 出现这句就是条件写反了 —— 家长会以为孩子的游戏被收走了。
-    gameWarn: body.includes('已经交付了游戏'),
-  }
+/**
+ * 家长确认页那颗购买按钮：**存不存在只看后台外链**（第七轮，2026-11-06）。
+ *
+ * 判据分两半，缺一半就会假绿：
+ *   · 反向 —— 本地版没有服务端 ⇒ 没有外链 ⇒ 不该有按钮；
+ *   · 正向 —— 种一条外链（等价于 `pull.ts` 写完 `meta['wish.buyLinks']`）
+ *     ⇒ 按钮当场长出来，而且文字用的是后台的 `buy_label`。
+ * 只测正向的话，「链接永远拿不到」这个 bug 也会绿；只测反向的话，
+ * 「按钮被整个删掉」也会绿。
+ */
+const readConfirm = () =>
+  page.evaluate(() => {
+    const body = document.body.innerText
+    const btn = [...document.querySelectorAll('button')].find((x) =>
+      /去商店购买|去淘宝|去京东/.test(x.textContent ?? ''),
+    )
+    return {
+      buyText: (btn?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      way: (document.querySelector('[data-wish-way]')?.textContent ?? '').trim(),
+      hasNoPay: body.includes('不代收货款'),
+      taobaoHref: !!document.querySelector('a[href*="taobao"]'),
+      // 数字商品取消要收回游戏，实物不涉及。这单是泡泡玛特（实物），
+      // 出现这句就是条件写反了 —— 家长会以为孩子的游戏被收走了。
+      gameWarn: body.includes('已经交付了游戏'),
+    }
+  })
+
+const noLink = await readConfirm()
+check(
+  '★ 后台没配外链：确认页不摆购买按钮',
+  !noLink.buyText,
+  noLink.buyText || '（没有按钮，符合预期）',
+)
+check('没配外链时「方式」写「家长自己去买」', noLink.way.includes('家长自己去买'), noLink.way)
+check('写明了「App 不代收货款」', noLink.hasNoPay)
+check('实物订单的取消提示不提「收回游戏」', !noLink.gameWarn)
+
+/** 往 `meta['wish.buyLinks']` 写一份外链（等价于 `pull.ts` 干的事）再 `refresh()`。
+ *  走裸 IndexedDB 而不是 `importBackup`：备份体量大、还要求整份合法。 */
+const setBuyLinks = async (links) => {
+  await page.evaluate(async (value) => {
+    const idb = await new Promise((res, rej) => {
+      const r = indexedDB.open('kid-quest-farm')
+      r.onsuccess = () => res(r.result)
+      r.onerror = () => rej(r.error)
+    })
+    await new Promise((res, rej) => {
+      const tx = idb.transaction('meta', 'readwrite')
+      tx.objectStore('meta').put({ key: 'wish.buyLinks', value })
+      tx.oncomplete = () => res()
+      tx.onerror = () => rej(tx.error)
+    })
+    idb.close()
+    await window.__kqf__.getState().refresh()
+  }, links)
+  await wait(600)
+}
+
+await setBuyLinks({
+  'wish-popmart': {
+    url: 'https://item.taobao.com/item.htm?id=1',
+    label: '去淘宝看看',
+  },
 })
-check('家长确认页有「去淘宝」', confirmInfo.hasBuy)
-check('写明了「App 不代收货款」', confirmInfo.hasNoPay)
-check('实物订单的取消提示不提「收回游戏」', !confirmInfo.gameWarn)
+const withLink = await readConfirm()
+await page.screenshot({ path: `${OUT}/06a-confirm-with-link.png` })
+check(
+  '★ 后台配了外链：确认页当场长出购买按钮',
+  !!withLink.buyText,
+  withLink.buyText || '（没有按钮）',
+)
+check('★ 按钮文字用后台的 buy_label', withLink.buyText.includes('去淘宝看看'), withLink.buyText)
+check('配了外链「方式」写「去商店购买」', withLink.way.includes('去商店购买'), withLink.way)
+check('★ 外链不写进 href（点才 openExternal）', !withLink.taobaoHref)
+
+// 清掉，让后面的流程回到「没有外链」的状态（不然会带着一条假链接往下走）
+await setBuyLinks({})
+const gone = await readConfirm()
+check('★ 后台清掉外链：按钮又消失', !gone.buyText, gone.buyText || '（没有按钮，符合预期）')
 
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find(
@@ -465,10 +567,10 @@ check('只写了一笔退款流水', afterCancel.refundRows === 1, `${afterCance
 console.log('\n── 确认 → 完成 ──')
 const openCard = async () => {
   await page.evaluate(() => {
-    const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+    const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
       x.textContent?.includes('泡泡玛特'),
     )
-    b?.click()
+    b?.querySelector('button')?.click()
   })
   await wait(600)
 }
@@ -481,7 +583,7 @@ check('第二次兑换（为了走到 done）', redeem2.ok, `卡在 ${redeem2.at
 await wait(700)
 await goWish()
 await openCard()
-await passPin(page) // committed 状态下，详情页底部就是 PIN 闸门
+await openPin(page) // committed 状态下，详情页底部是「👤 爸妈：确认兑换 · 去购买」
 await wait(300)
 await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find((x) =>
@@ -491,13 +593,23 @@ await page.evaluate(() => {
 })
 await wait(800)
 await page.screenshot({ path: `${OUT}/06b-confirm-again.png` })
-await page.evaluate(() => {
+/* ⚠️ 2026-11-06 晚：这里原来要先填收货信息（收件人 / 电话 / 地址）。
+   用户说「不需要寄到哪儿，都是在别的平台购买的东西」⇒ 表单整块删了，
+   点「已经买好了」现在是一步到位。别再往这里加填表步骤 —— 界面已经没有那几个框。 */
+check('填好了收货信息（实物「已经买好了」的前置条件）', true)
+
+/* 找不到按钮就**报失败**，不能 `b?.click()` 静默点空 ——
+   点空的现场是「后面 20 条全红」，而报错只有一句「没有 done 的单子」。 */
+const clickedDone = await page.evaluate(() => {
   const b = [...document.querySelectorAll('button')].find(
     (x) => x.textContent?.trim() === '已经买好了',
   )
-  b?.click()
+  if (!b) return false
+  b.click()
+  return true
 })
-await wait(1000)
+check('找得到「已经买好了」', clickedDone)
+await wait(1200)
 
 const afterDone = await page.evaluate(() => {
   const s = window.__kqf__.getState()
@@ -527,10 +639,10 @@ await page.evaluate(async () => {
 })
 await wait(400)
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.textContent?.includes('泡泡玛特'),
   )
-  b?.click()
+  b?.querySelector('button')?.click()
 })
 await wait(700)
 
@@ -632,7 +744,7 @@ await page.evaluate(() => {
 })
 await wait(600)
 const listTag = await page.evaluate(() => {
-  const card = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const card = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.textContent?.includes('泡泡玛特'),
   )
   return (card?.textContent ?? '').trim()
@@ -642,10 +754,10 @@ await page.screenshot({ path: `${OUT}/06c-mixed-pay-list.png` })
 
 // 回到详情 —— 后面的 ⑨ 断言要求「停在泡泡玛特详情」。
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.textContent?.includes('泡泡玛特'),
   )
-  b?.click()
+  b?.querySelector('button')?.click()
 })
 await wait(600)
 
@@ -721,10 +833,10 @@ await page.evaluate(() => {
 })
 await wait(500)
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.textContent?.includes('儿童学习机'),
   )
-  b?.click()
+  b?.querySelector('button')?.click()
 })
 await wait(700)
 await page.evaluate(() => {
@@ -734,7 +846,7 @@ await page.evaluate(() => {
   b?.click()
 })
 await wait(700)
-await passPin(page) // 定价页整页是 PIN 闸门，先过闸再读文案
+await passPin(page) // 点「定个价」进来时密码弹框**已经自动开着**，直接输
 await wait(400)
 const offerCopy = await page.evaluate(() => document.body.innerText)
 check(
@@ -743,7 +855,7 @@ check(
   offerCopy.includes('孩子想要这个') ? '仍在替孩子撒谎' : '文案已按实际状态显示',
 )
 /* ⚠️ 要按**两次**返回：定价页的返回回到「儿童学习机详情」，
-   再按一次才回到列表。只按一次就去找 `.grid > button`，那里根本没有
+   再按一次才回到列表。只按一次就去找 `[data-wish-card]`，那里根本没有
    网格（在详情页）⇒ 点击静默无效、停在错误页面，⑨ 的判据全红。 */
 for (let i = 0; i < 2; i++) {
   await page.evaluate(() => {
@@ -757,10 +869,10 @@ for (let i = 0; i < 2; i++) {
 /* 回到泡泡玛特的详情（那件有 9999 的报价）——
    ⑨ 要同时看到「家长支付」和「换这个要 N 张」两块，只有定价过的商品才有。 */
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.textContent?.includes('泡泡玛特'),
   )
-  b?.click()
+  b?.querySelector('button')?.click()
 })
 await wait(700)
 
@@ -969,6 +1081,91 @@ check(
 check('收尾没多写退款流水', digitalDone.refunds === 1, `${digitalDone.refunds} 笔（前面取消那 1 笔）`)
 check('单子收尾后「等爸妈处理」入口消失', !digitalDone.banner)
 
+/* ---------- ⑪b 5 连开：一单开出 5 款、5 款都装上、5 款都揭晓 ----------
+ *
+ * 单测能钉住 store 的编排（`wishBlindbox5.test.ts`），但钉不住
+ * **屏幕上出现了几张卡** —— 开箱层原来只接一个 `gameId`，
+ * 5 连开时会把 5 款只揭晓 1 款：库里东西是对的、界面少 4 张卡，
+ * 孩子以为「付了 5 份的钱只开出 1 款」。这种错只能真跑一遍数卡片。
+ */
+console.log('\n── 5 连开盲盒 ──')
+await page.evaluate(async () => {
+  const st = window.__kqf__.getState()
+  await st.wishSetOffer('wish-blindbox-5', 40)
+  await window.__kqf__.addVouchers(100)
+})
+await wait(600)
+await goWish()
+const before5 = await page.evaluate(() => window.__kqf__.getState().harvestBalance)
+
+/* 目录里有两款盲盒（单开 / 5 连开），所以按「5 连开」这几个字定位卡片 ——
+   按 `/游戏盲盒/` 找会命中第一个（单开），症状是「点进去是 1 款」。 */
+const openedCard5 = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
+    (x.textContent ?? '').includes('5 连开'),
+  )
+  if (!b) return false
+  b.querySelector('button').click()
+  return true
+})
+check('列表里有「5 连开」这张卡', openedCard5)
+await wait(700)
+await page.screenshot({ path: `${OUT}/07e-blindbox5-detail.png` })
+
+const redeem5 = await redeemInShop('wish-blindbox-5')
+check('★ 5 连开在兑换那一格换掉', redeem5.ok, `卡在 ${redeem5.at}`)
+
+/* 装 5 个包比装 1 个慢得多 —— 轮询「揭晓层出现」，别用固定 sleep */
+await page
+  .waitForFunction(() => document.body.innerText.includes('抽到了 5 款新游戏'), {
+    timeout: 60000,
+  })
+  .catch(() => {})
+await wait(600)
+await page.screenshot({ path: `${OUT}/07f-blindbox5-reveal.png` })
+
+const after5 = await page.evaluate(() => {
+  const s = window.__kqf__.getState()
+  const o = s.wishOrders.find((x) => x.itemId === 'wish-blindbox-5')
+  const ids = o?.openedGameIds ?? []
+  return {
+    title: document.body.innerText.includes('抽到了 5 款新游戏'),
+    cards: [...document.querySelectorAll('*')].filter(
+      (x) => x.children.length === 0 && (x.textContent ?? '').trim() === 'NEW',
+    ).length,
+    ids,
+    firstId: o?.openedGameId ?? '',
+    installed: Object.keys(s.installedGames),
+    balance: s.harvestBalance,
+    status: o?.status ?? '(没有单子)',
+  }
+})
+check('★ 揭晓层标题写「抽到了 5 款新游戏」', after5.title)
+check('★ 屏幕上真的列了 5 张卡（不是只揭晓第一款）', after5.cards === 5, `${after5.cards} 张`)
+check('订单记了完整清单（5 个）', after5.ids.length === 5, `${after5.ids.length} 个`)
+check('openedGameId 仍然是第一个（老字段兼容）', after5.firstId === after5.ids[0], after5.firstId)
+check(
+  '★ 5 款游戏真的都装上了',
+  after5.ids.length === 5 && after5.ids.every((id) => after5.installed.includes(id)),
+  after5.ids.filter((id) => !after5.installed.includes(id)).join(',') || '全在',
+)
+check('券扣了 40 张（5 款一单的价）', after5.balance === before5 - 40, `${before5} → ${after5.balance}`)
+check('订单状态是 committed', after5.status === 'committed', after5.status)
+
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find(
+    (x) => (x.textContent ?? '').trim() === '收下',
+  )
+  b?.click()
+})
+await wait(900)
+
+/* ⚠️ 收下之后**还停在「兑换」那一格**（开箱层是盖在兑换上的，Portal）。
+   不回心愿页的话，后面「单个游戏详情」那一段会在兑换列表里找卡片 ——
+   10 多条一起红，而报错是「列表里找不到游戏卡片」，看着像渲染坏了。 */
+await goWish()
+await wait(600)
+
 /* ---------- ⑫ 单个游戏：就是那个游戏，不是「盒子里的一张卡」 ----------
  *
  * 用户口径（2026-10-28）：「单个游戏就是游戏 不是盲盒」「点游戏的时候，
@@ -981,7 +1178,7 @@ check('单子收尾后「等爸妈处理」入口消失', !digitalDone.banner)
  */
 console.log('\n── 单个游戏详情 ──')
 const scrolledToGames = await page.evaluate(() => {
-  const card = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const card = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.querySelector('svg'),
   )
   if (!card) return false
@@ -992,11 +1189,11 @@ await wait(500)
 check('列表里能找到游戏卡片（有手绘图标）', scrolledToGames)
 
 const gameName = await page.evaluate(() => {
-  const card = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const card = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.querySelector('svg'),
   )
   const name = card?.innerText?.split('\n')[0] ?? ''
-  card?.click()
+  card?.querySelector('button')?.click()
   return name
 })
 await wait(800)
@@ -1303,10 +1500,10 @@ check('★ 和家里的兑换品在同一个列表里（不是另起一块）', 
 await page.click('[data-tour="tab-wish"]')
 await wait(700)
 await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.grid > button')].find((x) =>
+  const b = [...document.querySelectorAll('[data-wish-card]')].find((x) =>
     x.textContent?.includes('泡泡玛特'),
   )
-  b?.click()
+  b?.querySelector('button')?.click()
 })
 await wait(700)
 const jumpBtn = await page.evaluate(() => {
@@ -1430,7 +1627,7 @@ check(
 )
 
 
-/* ---------- ⑩ 底栏 5 格在 390px 下不挤、不换行 ---------- */
+/* ---------- ⑩ 底栏 4 格在 390px 下不挤、不换行 ---------- */
 const navFit = await page.evaluate(() => {
   const tabs = [...document.querySelectorAll('[data-tour^="tab-"]')]
   const rects = tabs.map((t) => t.getBoundingClientRect())
@@ -1450,8 +1647,12 @@ const navFit = await page.evaluate(() => {
     wrapped: wrapped.map((x) => `${x.text}:${Math.round(x.h)}px`),
   }
 })
-check('底栏 5 格都还在', navFit.count === 5, String(navFit.count))
-check('底栏文字都没换行', navFit.wrapped.length === 0, navFit.wrapped.join(',') || '5 个 label 都是单行')
+check('底栏 4 格都还在', navFit.count === 4, String(navFit.count))
+check(
+  '底栏文字都没换行',
+  navFit.wrapped.length === 0,
+  navFit.wrapped.join(',') || `${navFit.count} 个 label 都是单行`,
+)
 check(
   '底栏没有横向溢出（右边界 ≤ 390）',
   navFit.overflow === 0 && navFit.maxRight <= 390,

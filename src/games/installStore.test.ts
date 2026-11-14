@@ -45,7 +45,7 @@ vi.mock('./catalogKey', () => ({
   },
 }))
 
-const { db, getGameKv, BUNDLE_KEY } = await import('../db/db')
+const { db, getGameKv, BUNDLE_KEY, postMall } = await import('../db/db')
 const { useApp } = await import('../store/useApp')
 const { GAME_FARM } = await import('./ids')
 const { sha256Hex } = await import('./verify')
@@ -66,6 +66,24 @@ async function boot() {
   await db.delete()
   await db.open()
   await useApp.getState().boot()
+}
+
+/**
+ * 把这个 id 记成「已拥有」。
+ *
+ * ★ 为什么现在每条用例都要先调它：`installFromCatalog` 加了**拥有门槛**
+ * （2026-10-30 家长：「加门槛，没拥有不能装」），门槛在 store 里、在整条
+ * 校验链**之前**。不授权的话每条用例都只会拿到「这款还没拥有」，
+ * 于是那些「签名不对要拒」「哈希不对要拒」的断言全部**因为别的原因**变绿
+ * —— 绿得毫无意义，改坏了也发现不了。
+ *
+ * 用 `redemption_code` 而不是 `game_purchase`：后者的判据是 `delta < 0`，
+ * 得凭空造一笔扣款；兑换码这条路 delta 就是 0，正是「白给一个拥有」。
+ */
+async function grantOwned(...ids: string[]) {
+  for (const id of ids) {
+    await postMall({ delta: 0, source: 'redemption_code', refId: id, memo: `测试授权 ${id}` })
+  }
 }
 
 /** 一段合法的「假包」（`importBundle` 被替身成 `JSON.parse`） */
@@ -166,9 +184,50 @@ beforeEach(async () => {
   keySlot.raw = null
   fetched = []
   await boot()
+  /* 被测的 id 先授权 —— 门槛过了，后面的断言才是在验校验链本身 */
+  await grantOwned('demo', 'ghost-game')
 })
 
 /* ------------------------------------------------------------------ */
+
+describe('installFromCatalog —— 进度上报（2026-11-13 用户要「像应用商城那样」）', () => {
+  it('★ 装的时候会按阶段报告：先「核对清单」再「下载中」，最后「安装中」', async () => {
+    const kp = await makeKeypair()
+    await stubHost({ kp, catalogId: 'demo', codeId: 'demo' })
+
+    const seen: { phase: string; percent: number }[] = []
+    const res = await useApp.getState().installFromCatalog(CATALOG_URL, 'demo', (p) =>
+      seen.push({ phase: p.phase, percent: p.percent }),
+    )
+
+    expect(res.ok).toBe(true)
+    expect(seen.map((s) => s.phase)).toContain('catalog')
+    expect(seen.map((s) => s.phase)).toContain('download')
+    expect(seen.map((s) => s.phase)).toContain('install')
+    // 顺序：核对 → 下载 → 安装（先报安装再下载就是链子串反了）
+    expect(seen.findIndex((s) => s.phase === 'download')).toBeLessThan(
+      seen.findIndex((s) => s.phase === 'install'),
+    )
+  })
+
+  it('★★ 进度走到 100% 不等于"能装"：哈希不对照样拒，且游戏没落库', async () => {
+    /* 这条防的是「把进度条当成功信号」—— 曾经很容易写成
+       「条满了就说装好了」。判据仍然是哈希和落库。 */
+    const kp = await makeKeypair()
+    await stubHost({ kp, catalogId: 'demo', codeId: 'demo', sha256: 'f'.repeat(64) })
+
+    const seen: number[] = []
+    const res = await useApp.getState().installFromCatalog(CATALOG_URL, 'demo', (p) =>
+      seen.push(p.percent),
+    )
+
+    expect(res.ok).toBe(false)
+    expect(res.message).toMatch(/SHA-256/)
+    // 进度确实走完了下载那一步（所以"满格"不是成功信号）
+    expect(seen).toContain(100)
+    expect(await getGameKv<string>('demo', BUNDLE_KEY)).toBeUndefined()
+  })
+})
 
 describe('installFromCatalog —— 生产路径', () => {
   it('★ 验签 + 验哈希都过 → 落进 gameKv，并出现在 installedGames 里', async () => {
@@ -218,6 +277,22 @@ describe('installFromCatalog —— 生产路径', () => {
     expect(res.message).toContain('other')
     expect(await getGameKv<string>('other', BUNDLE_KEY)).toBeUndefined()
     expect(await getGameKv<string>('demo', BUNDLE_KEY)).toBeUndefined()
+  })
+
+  it('★★ 没拥有 → 装不了，而且**连目录都不去取**', async () => {
+    /* 门槛必须在 store 里、在整条链**之前**：
+       · 放按钮上没用 —— 批量装、调试桥都会绕过按钮；
+       · 放链之后也没用 —— 包已经下载并验过了，白跑一趟网络，
+         而且「验签通过」这件事会让调用方误以为装上了。 */
+    const kp = await makeKeypair()
+    await stubHost({ kp, catalogId: 'not-mine', codeId: 'not-mine' })
+
+    const res = await useApp.getState().installFromCatalog(CATALOG_URL, 'not-mine')
+    expect(res.ok).toBe(false)
+    expect(res.message).toContain('还没拥有')
+    expect(fetched, '没拥有就不该发任何请求').toEqual([])
+    expect(await db.gameKv.count()).toBe(0)
+    expect(useApp.getState().installedGames['not-mine']).toBeUndefined()
   })
 
   it('★★ 下载来的包用了**内置游戏的 id** → 拒绝（这是劫持，不是重名）', async () => {

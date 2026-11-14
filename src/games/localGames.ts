@@ -27,7 +27,10 @@ export interface LocalGameEntry {
   /** 站点绝对路径（`/games/<id>/<包>`），dev / preview / Capacitor 都一样 */
   url: string
   sha256: string
+  /** 入口文件（`.plugin.mjs`）的字节数 —— 校验用，不是「这个游戏多大」 */
   bytes: number
+  /** 入口 + 资源的合计字节数。界面上显示「多大」用这个 */
+  totalBytes: number
   /** 资源根，以 `/` 结尾 */
   assetBase: string
 }
@@ -40,6 +43,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/prizepark/prizepark.plugin.mjs",
     "sha256": "9ae0f5473e3940b87655f65ba2a56755e3b0fce7dc2a3d7e3746f02bab15fe86",
     "bytes": 3396733,
+    "totalBytes": 10964597,
     "assetBase": "/games/prizepark/"
   },
   {
@@ -49,15 +53,17 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/claw3d/claw3d.plugin.mjs",
     "sha256": "99e8e82061696134a871dc594fdd721a919492c36513d047570b2e1484657f69",
     "bytes": 5225796,
+    "totalBytes": 5225796,
     "assetBase": "/games/claw3d/"
   },
   {
     "id": "cloudfarm",
     "name": "云边小农场",
-    "version": "1.1.4",
+    "version": "1.1.9",
     "url": "/games/cloudfarm/cloudfarm.plugin.mjs",
-    "sha256": "e9470d0f9f2080cdc288e8f9d9437dff81d0985d8eb69915f295f597c490557d",
-    "bytes": 4493618,
+    "sha256": "184b6c160d462624e5efce07d42233c8d16d87d2e2355e36b05488a0891940ab",
+    "bytes": 4498405,
+    "totalBytes": 14796704,
     "assetBase": "/games/cloudfarm/"
   },
   {
@@ -67,6 +73,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/sugar/sugar.plugin.mjs",
     "sha256": "ee351fe13ead7f418e4f9c9e10ab16a2238975be5777142e933b4d77a8f5c758",
     "bytes": 1021949,
+    "totalBytes": 3571172,
     "assetBase": "/games/sugar/"
   },
   {
@@ -76,6 +83,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/anthill/anthill.plugin.mjs",
     "sha256": "314b721d24981279a2302445afd348402fabc80c49df808b74caadffd3407f70",
     "bytes": 4310548,
+    "totalBytes": 6163651,
     "assetBase": "/games/anthill/"
   },
   {
@@ -85,6 +93,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/moestrike/moestrike.plugin.mjs",
     "sha256": "3edc2b77a658c79253c73603c3d8d953c5b7b7efa72ae7a476cbfbbf813b6918",
     "bytes": 4302668,
+    "totalBytes": 14415714,
     "assetBase": "/games/moestrike/"
   },
   {
@@ -94,6 +103,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/melonjar/melonjar.plugin.mjs",
     "sha256": "22a3d9f52c8a8473d50923c38a9f140864a8436ee4fa652d9d31eb4f39b9e23c",
     "bytes": 5993596,
+    "totalBytes": 8853599,
     "assetBase": "/games/melonjar/"
   },
   {
@@ -103,6 +113,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/minergirl/minergirl.plugin.mjs",
     "sha256": "2135931d9f1c2e60b05b7904da150559557991a6c0ee10ae30c6f26204ec1e13",
     "bytes": 1170500,
+    "totalBytes": 15239539,
     "assetBase": "/games/minergirl/"
   },
   {
@@ -112,6 +123,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/ropeland/ropeland.plugin.mjs",
     "sha256": "e0930995ace757888a98bc20229ce757e0b02702670acdf70aade85660c950d1",
     "bytes": 4298589,
+    "totalBytes": 8717955,
     "assetBase": "/games/ropeland/"
   },
   {
@@ -121,6 +133,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/blockfit/blockfit.plugin.mjs",
     "sha256": "734c3de97de53eff76377fe0f6300476f9d1bd3807009b9cdf8b8dde41cb9be2",
     "bytes": 4371633,
+    "totalBytes": 5894323,
     "assetBase": "/games/blockfit/"
   },
   {
@@ -130,6 +143,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/deckrush/deckrush.plugin.mjs",
     "sha256": "50f4b49e5c9ee36eb0934d998522678a0f65ecfe9df3fad0774905028b79c592",
     "bytes": 4331925,
+    "totalBytes": 11877879,
     "assetBase": "/games/deckrush/"
   },
   {
@@ -139,6 +153,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/corgi/corgi.plugin.mjs",
     "sha256": "7bf98367145834a0a0fafe1444852571cf28ab0bfbd3fc228805581526d1f19e",
     "bytes": 1939221,
+    "totalBytes": 12396653,
     "assetBase": "/games/corgi/"
   },
   {
@@ -148,6 +163,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/screamchick/screamchick.plugin.mjs",
     "sha256": "7918af7274bd19897c9329df3717c229b6ce3acced6a2e8ab6f8851e8537d09b",
     "bytes": 991750,
+    "totalBytes": 5226451,
     "assetBase": "/games/screamchick/"
   },
   {
@@ -157,6 +173,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/sweetspin/sweetspin.plugin.mjs",
     "sha256": "0b58db812e6d6f94da1024168000546ba63a5627656bbe89cdef186e9748980d",
     "bytes": 108344,
+    "totalBytes": 1345628,
     "assetBase": "/games/sweetspin/"
   },
   {
@@ -166,6 +183,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/renttower/renttower.plugin.mjs",
     "sha256": "3cebf49680965d6a0310821f4b062ab361a95877626041c5e20a4439d7c88974",
     "bytes": 4593256,
+    "totalBytes": 17548111,
     "assetBase": "/games/renttower/"
   },
   {
@@ -175,6 +193,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/stackmeow/stackmeow.plugin.mjs",
     "sha256": "6749bb8c90d156e5ac3c5a41fbc494cb50f5220b93c0872bce62f66dddccd270",
     "bytes": 4247977,
+    "totalBytes": 6903156,
     "assetBase": "/games/stackmeow/"
   },
   {
@@ -184,15 +203,17 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/cellguard/cellguard.plugin.mjs",
     "sha256": "758f56b723d3f683f3c631a35da94eb0db7109bad5a1719089611831ee6982be",
     "bytes": 307406,
+    "totalBytes": 307406,
     "assetBase": "/games/cellguard/"
   },
   {
     "id": "redbutton",
     "name": "别按红按钮",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "url": "/games/redbutton/redbutton.plugin.mjs",
-    "sha256": "2a1cbab20d281e2af7d49a5d49dea4a213a55d3395834067b542347d67f31369",
+    "sha256": "1dd42d9d714da52be9b50c734c8a3295ddbd529c2e79230d637e10c582be113e",
     "bytes": 1117038,
+    "totalBytes": 2842106,
     "assetBase": "/games/redbutton/"
   },
   {
@@ -202,6 +223,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/guardshift/guardshift.plugin.mjs",
     "sha256": "3d7c82d0f40ad37706b5014827221a3f97f6780b3f0b0f51cc47906931536e76",
     "bytes": 4399615,
+    "totalBytes": 12768882,
     "assetBase": "/games/guardshift/"
   },
   {
@@ -211,6 +233,7 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/hoopsneak/hoopsneak.plugin.mjs",
     "sha256": "80e377474e3eb79aa8b186e0a437597ed6e1ed79e08ce1ea9582ca6b8507ccd0",
     "bytes": 4425730,
+    "totalBytes": 6733169,
     "assetBase": "/games/hoopsneak/"
   },
   {
@@ -220,7 +243,38 @@ export const LOCAL_GAMES: LocalGameEntry[] = [
     "url": "/games/doodlederby/doodlederby.plugin.mjs",
     "sha256": "2a93a0c34852d6401622278c5180920a057b121b1e4dd5ce72a7aeb0ead0c95b",
     "bytes": 4421556,
+    "totalBytes": 5607311,
     "assetBase": "/games/doodlederby/"
+  },
+  {
+    "id": "farmlord",
+    "name": "我是一个农场主",
+    "version": "1.0.1",
+    "url": "/games/farmlord/farmlord.plugin.mjs",
+    "sha256": "7cc4e3fc4dd7f290568020d2ec0e373f3d190d31d5f6c88bfd67914b3492c2c8",
+    "bytes": 7830,
+    "totalBytes": 7358255,
+    "assetBase": "/games/farmlord/"
+  },
+  {
+    "id": "fall2048",
+    "name": "下落的2048",
+    "version": "1.0.3",
+    "url": "/games/fall2048/fall2048.plugin.mjs",
+    "sha256": "605aa926d1bb7044349c7e2c65cb8be0c75536b89d3434ca6407ea2d1cbc050c",
+    "bytes": 2089344,
+    "totalBytes": 4915152,
+    "assetBase": "/games/fall2048/"
+  },
+  {
+    "id": "inudoku",
+    "name": "犬独",
+    "version": "1.0.1",
+    "url": "/games/inudoku/inudoku.plugin.mjs",
+    "sha256": "e363ea80e44fb7cf2ab93c26395caf8e56358af30a51e324625f72e83ad1bb31",
+    "bytes": 4343702,
+    "totalBytes": 9955970,
+    "assetBase": "/games/inudoku/"
   }
 ]
 

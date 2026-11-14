@@ -1,0 +1,61 @@
+{
+ "schema": "makeplay.sprite-anim/1",
+ "name": "dachshund-ear",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "94f8ea66a0dc1188c761898b79f49a330b4195c19355eca96db7496483e83f74",
+   "size": 75136
+  },
+  {
+   "path": "sheet.png",
+   "sha256": "351904cfb29defda7c758ec9155fe58d16574dcee58d8e2e3017908375cea8e8",
+   "size": 525700
+  }
+ ],
+ "action_id": "ears_sway",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 256,
+  "h": 256,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.82
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 5
+ },
+ "qa": {
+  "seam_union_mae": 10.86,
+  "still_mae": null,
+  "bg_worst": 0.0,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "despill_exact": 0,
+  "despill_keylike": 0,
+  "despill_dirty": 0,
+  "mirror_mismatch_px": 0,
+  "event_source": "geometric",
+  "event_amplitude": 0.26
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 335130005,
+  "attempt": 1,
+  "source_frames": 33
+ }
+}

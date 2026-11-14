@@ -22,6 +22,7 @@
  */
 
 import type { Bytes } from './bytes'
+import type { DownloadProgress } from './download'
 import {
   assertAllowedPackageUrl,
   fetchVerifiedPackage,
@@ -120,6 +121,8 @@ export async function fetchVerifiedGame(opts: {
   /** 烧进 APK 的公钥（原始 32 字节）。生产路径传 `catalogPublicKeyRaw()`。 */
   publicKeyRaw: Bytes
   fetchImpl?: typeof fetch
+  /** 取包进度（只用于显示；验签与哈希不受影响） */
+  onProgress?: DownloadProgress
 }): Promise<ResolvedGame> {
   const { gameId } = opts
   const fetchImpl = opts.fetchImpl ?? fetch
@@ -134,8 +137,9 @@ export async function fetchVerifiedGame(opts: {
     throw new Error(`游戏目录里没有「${gameId}」。目录里现有：${known}`)
   }
 
-  // ⑤ 取包 + 验 SHA-256。这一步过后字节才是可信的。
-  const bytes = await fetchVerifiedPackage(game.url, game.sha256, fetchImpl)
+  /* ⑤ 取包 + 验 SHA-256。这一步过后字节才是可信的。
+        `onProgress` 只在这一步有意义 —— 目录和签名只有几 KB。 */
+  const bytes = await fetchVerifiedPackage(game.url, game.sha256, fetchImpl, opts.onProgress)
 
   // ⑥ 到这一步才把代码交出去。用 `TextDecoder` 而不是 `res.text()` ——
   //    哈希已经验过的是 `bytes`，转文本只是为了喂 `importBundle`。

@@ -90,4 +90,36 @@ describe('游戏图标', () => {
     expect(a).toContain('#FF5C8A')
     expect(b).toContain('#FF5C8A')
   })
+
+  it('★ 横幅版是 4:3，主体还是同一支（不是重画的第二份）', () => {
+    const wide = render(<GameIconArt id="corgi" tint="sun" wide />).container
+    const svg = wide.querySelector('svg')!
+    expect(svg.getAttribute('viewBox')).toBe('0 0 96 72')
+
+    /**
+     * ⚠️ 取 `g > g` 而不是 `g`：横幅版外面多套了一层定位用的
+     * `<g transform="translate(16 4)">`，主体那一支在它里面。
+     * 直接取第一层 `g` 比到的会是「包装层 + 主体」，和正方形版差一层嵌套 ——
+     * 那是**断言写错了**，不是代码有问题。
+     */
+    const wideArt = svg.querySelector('g > g')?.innerHTML ?? ''
+    expect(wideArt.length).toBeGreaterThan(50)
+
+    // 同一个 id：横幅版和正方形版的主体必须**逐字相同** ——
+    // 一旦有人为了横幅另抄一份，这条会红（而界面只是「长得有点像」）
+    const square = render(<GameIconArt id="corgi" tint="sun" />).container
+    expect(wideArt).toBe(square.querySelector('svg > g')?.innerHTML ?? '')
+  })
+
+  it('★ 横幅版和正方形版同页出现时，渐变 id 不撞', () => {
+    const { container } = render(
+      <>
+        <GameIconArt id="corgi" tint="sun" />
+        <GameIconArt id="corgi" tint="sun" wide />
+      </>,
+    )
+    const ids = [...container.querySelectorAll('linearGradient')].map((n) => n.id)
+    expect(ids.length).toBe(4) // 两支各一个底色 + 一个顶光
+    expect(new Set(ids).size, `渐变 id 撞了：${ids.join(', ')}`).toBe(4)
+  })
 })

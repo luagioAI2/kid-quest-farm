@@ -54,20 +54,41 @@ export function GameIconArt({
   id,
   tint = DEFAULT_TINT,
   className,
+  wide = false,
 }: {
   id: string
   tint?: StoreTint
   className?: string
+  /**
+   * 4:3 横幅版（96×72）：底色**铺满整块卡片**，主体还是那一支。
+   *
+   * 心愿商城的列表卡是 153×115 的 4:3 底。正方形图标放进去只有 72px，
+   * 四周空一大圈，和隔壁「实物商品」的满幅插画摆在一起像两种东西。
+   * 横幅版把同一支主体放大到 **1.125 倍**（64×64 → 72×72）摆进 96×72 的画布
+   * （`translate(12 0)`），底色矩形跟着变宽 —— 主体那 1200 行一个字都不用改。
+   *
+   * ⚠️ **倍率只能是 1.125**。这一档刚好让主体撑满画布高度、一点不裁：
+   *    · 再小（比如 1.0）主体只占 89% 高，横向多出来的 32px 全是空渐变，
+   *      `deckrush` 那种「牌本来就小」的会被放大成一张空卡；
+   *    · 再大就会裁掉上下（`farm` / `cloudfarm` 的田垄和地基在 y=64 上）。
+   *    缩到 0.9 更糟：主体自带的地面被抬离下沿，底下露出一条纯渐变，
+   *    看着像地面浮起来了。
+   * ⚠️ 渐变 id 要带 `-w`：同一页里正方形版和横幅版会同时出现（列表 + 详情），
+   * id 撞了颜色会串。
+   */
+  wide?: boolean
 }) {
   const [top, bottom, deep] = BG[tint] ?? BG[DEFAULT_TINT]
-  const uid = `${id}-${tint}`
+  const uid = `${id}-${tint}${wide ? '-w' : ''}`
   const bgId = `gi-${uid}-bg`
   const glossId = `gi-${uid}-gloss`
   /** 没有专属图形就用兜底那支 —— 不在表里 ≠ 报错，但也不假装是那个游戏 */
   const Art = ART[id] ?? Fallback
+  const w = wide ? 96 : 64
+  const h = wide ? 72 : 64
 
   return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden focusable="false">
+    <svg viewBox={`0 0 ${w} ${h}`} className={className} aria-hidden focusable="false">
       <defs>
         <linearGradient id={bgId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={top} />
@@ -80,10 +101,16 @@ export function GameIconArt({
         </linearGradient>
       </defs>
 
-      <rect width="64" height="64" fill={`url(#${bgId})`} />
-      <rect width="64" height="64" fill={`url(#${glossId})`} />
+      <rect width={w} height={h} fill={`url(#${bgId})`} />
+      <rect width={w} height={h} fill={`url(#${glossId})`} />
 
-      <Art deep={deep} />
+      {wide ? (
+        <g transform="translate(12 0) scale(1.125)">
+          <Art deep={deep} />
+        </g>
+      ) : (
+        <Art deep={deep} />
+      )}
     </svg>
   )
 }
@@ -121,6 +148,106 @@ const ART: Record<string, (p: { deep: string }) => ReactElement> = {
   guardshift: Guardshift,
   hoopsneak: Hoopsneak,
   doodlederby: Doodlederby,
+  farmlord: Farmlord,
+  fall2048: Fall2048,
+  inudoku: Inudoku,
+}
+
+/**
+ * 下落的2048：三块数字砖斜着往下掉，右下角撞出一朵小火花。
+ *
+ * 只画砖、不画数字 —— 64px 的格子里写「512」是一团糊，家长看不出那是什么。
+ * 配色取原版方块表的粉 / 绿 / 蓝三档，和游戏里第一屏能对得上。
+ */
+function Fall2048({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 落地阴影：偏右下，和另外三块的下落方向一致 */}
+      <ellipse cx="35" cy="56.5" rx="18" ry="4" fill={deep} opacity=".3" />
+
+      {/* 最上面那块：粉（原版 2 号色） */}
+      <rect x="14" y="11" width="17" height="17" rx="4.4" fill="#FF6FB5" />
+      <rect x="14" y="11" width="17" height="17" rx="4.4" fill="none" stroke="#FFFFFF" strokeWidth="1.4" opacity=".55" />
+
+      {/* 中间那块：绿（原版 8 号色），错开半格 */}
+      <rect x="27.5" y="24" width="17" height="17" rx="4.4" fill="#3BE07A" />
+      <rect x="27.5" y="24" width="17" height="17" rx="4.4" fill="none" stroke="#FFFFFF" strokeWidth="1.4" opacity=".5" />
+
+      {/* 最下面那块：蓝（原版 512 号色），压在最前 */}
+      <rect x="19" y="38" width="19" height="19" rx="5" fill="#3D7BFF" />
+      <rect x="19" y="38" width="19" height="19" rx="5" fill="none" stroke="#FFFFFF" strokeWidth="1.6" opacity=".6" />
+      {/* 高光：统一从左上打过来 */}
+      <rect x="22.4" y="41.2" width="7.6" height="3.4" rx="1.7" fill="#FFFFFF" opacity=".38" />
+
+      {/* 合并火花：四道短线，压在右下角，避开三块砖 */}
+      <g stroke="#FFD23F" strokeWidth="2.1" strokeLinecap="round">
+        <path d="M43.5 45.5l4.2-1.6" />
+        <path d="M44.6 50.6l4.4.8" />
+        <path d="M41.6 40.4l1.6-4.2" />
+      </g>
+    </g>
+  )
+}
+
+/**
+ * 犬独：一块按颜色分块的格子，中间蹲着一只垂耳小狗。
+ *
+ * 不画「每行每列各一只」的完整棋盘 —— 64px 里塞四只狗只会糊成一片色块。
+ * 取第一眼能认出的两样东西：**垂耳狗头** + **它占住的那一格**。
+ * 棋盘用暖白而不是纯白：底色是 `sun`（金），纯白会把这块金色压成脏黄。
+ */
+function Inudoku({ deep }: { deep: string }) {
+  return (
+    <g>
+      <ellipse cx="32" cy="57" rx="17" ry="3.6" fill={deep} opacity=".3" />
+
+      {/* 棋盘：暖白 + 一圈浅描边，才有「纸」的厚度 */}
+      <rect x="8.5" y="11" width="47" height="41" rx="6.5" fill="#FFFBF0" />
+      <rect
+        x="8.5"
+        y="11"
+        width="47"
+        height="41"
+        rx="6.5"
+        fill="none"
+        stroke={deep}
+        strokeWidth="1.1"
+        opacity=".35"
+      />
+
+      {/* 分块线：3 竖 2 横。压得很轻 —— 重了就变成「井字棋」 */}
+      <g stroke={deep} strokeWidth="1" opacity=".2">
+        <path d="M24.2 11v41" />
+        <path d="M39.8 11v41" />
+        <path d="M8.5 25h47" />
+        <path d="M8.5 38h47" />
+      </g>
+
+      {/* 耳朵在后：两片下垂的圆角块，比脸暗一档 */}
+      <ellipse cx="19.2" cy="33.2" rx="4.4" ry="7.6" fill="#8A5A38" transform="rotate(-18 19.2 33.2)" />
+      <ellipse cx="44.8" cy="33.2" rx="4.4" ry="7.6" fill="#8A5A38" transform="rotate(18 44.8 33.2)" />
+
+      {/* 脸 */}
+      <ellipse cx="32" cy="33.4" rx="12.2" ry="11.2" fill="#F6E3BE" />
+      <ellipse
+        cx="32"
+        cy="33.4"
+        rx="12.2"
+        ry="11.2"
+        fill="none"
+        stroke="#C9A167"
+        strokeWidth="1"
+        opacity=".65"
+      />
+
+      {/* 眼睛 + 鼻子；高光统一从左上打过来 */}
+      <ellipse cx="27.6" cy="31.4" rx="1.7" ry="1.9" fill="#4A3423" />
+      <ellipse cx="36.4" cy="31.4" rx="1.7" ry="1.9" fill="#4A3423" />
+      <ellipse cx="32" cy="36.8" rx="2.2" ry="1.7" fill="#4A3423" />
+      <ellipse cx="27.1" cy="30.6" rx=".55" ry=".6" fill="#FFFFFF" opacity=".85" />
+      <ellipse cx="35.9" cy="30.6" rx=".55" ry=".6" fill="#FFFFFF" opacity=".85" />
+    </g>
+  )
 }
 
 /** 有专属图形的 id（测试用；也方便一眼看出新增游戏要不要补一支） */
@@ -191,6 +318,32 @@ function CloudFarm({ deep }: { deep: string }) {
       <path d="M20.5 12 32 4.5 43.5 12Z" fill="#D9553F" />
       <rect x="30" y="17.5" width="4.6" height="6.5" fill="#D9553F" />
       <rect x="30.4" y="7.6" width="3.2" height="3" fill="#FFD9A0" />
+    </g>
+  )
+}
+
+/** 我是一个农场主：一根胡萝卜 + 一段篱笆（偷菜农场的招牌画面） */
+function Farmlord({ deep }: { deep: string }) {
+  return (
+    <g>
+      {/* 土垄：压在下沿，和云边小农场那条绿丘分开 */}
+      <path d="M0 50c10-6 22-6 32-2s22 1 32-2v18H0Z" fill={deep} opacity=".55" />
+
+      {/* 篱笆：两根桩 + 一根横杆 */}
+      <g fill="#F6E6C8">
+        <rect x="5.5" y="29" width="4" height="21" rx="1.6" />
+        <rect x="16" y="34" width="4" height="16" rx="1.6" />
+        <rect x="4.5" y="35.4" width="17.5" height="3.4" rx="1.7" />
+      </g>
+
+      {/* 胡萝卜：先画暗面再画亮面，否则是一块平橘色 */}
+      <path d="M44 21.5c5.2 0 9.3 4.1 9.3 8.9 0 6.2-6.8 15.4-9.3 17.9-2.5-2.5-9.3-11.7-9.3-17.9 0-4.8 4.1-8.9 9.3-8.9Z" fill="#F08A3C" />
+      <path d="M47.8 23.6c3.5 1.1 5.5 3.7 5.5 6.8 0 4.8-4.6 11.8-7.2 15.1 1.5-4.6 3.7-9.8 3.7-13.9 0-3.3-.9-5.8-2-8Z" fill="#D96F26" opacity=".65" />
+
+      {/* 缨：三片叶子，深浅错开 */}
+      <path d="M44 21.5c-1-4.2-3.5-6.9-6.7-8.4 2.7 3.1 4 5.7 4.2 9Z" fill="#5FA83C" />
+      <path d="M44 21.5c1.7-4.2 4.8-6.5 8.4-7.1-3.4 2.7-5.5 5-6.1 8Z" fill="#7BC24A" />
+      <path d="M44 21.5c0-4.6 1.5-7.8 3.6-9.9-1.3 3.8-1.7 6.7-1.1 9.9Z" fill="#4E9330" />
     </g>
   )
 }

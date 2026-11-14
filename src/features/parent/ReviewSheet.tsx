@@ -10,7 +10,7 @@ import {
   categoryOf,
   formatMultiplier,
 } from '../tasks/ui'
-import { ParentPinPanel } from './ParentGate'
+import { parentPinCopy, PinSheetBody } from './ParentGate'
 import { settleInstance } from '@/domain/settlement'
 import { checkInPayout } from '@/domain/recurrence'
 import { humanizeMinutes, humanizeAgo } from '@/domain/time'
@@ -149,7 +149,7 @@ export function ReviewSheet() {
  * ## 为什么在**这里**回应，而不是让家长跳去心愿商城
  *
  * 2026-10-29 之前，家长的回应入口藏在「心愿商城 → 那件商品 → 详情页底部」。
- * 孩子点完「🤍 想要这个」之后，家长那边**一片安静** —— 顶栏没有红点、
+ * 孩子点完「🤍 我想要」之后，家长那边**一片安静** —— 顶栏没有红点、
  * 心愿页顶部只有一张写着「有 N 个心愿等你回应」的卡，点进去还得自己找。
  * 家长原话：「爸爸妈妈会查看处理」。
  *
@@ -187,6 +187,18 @@ function WishReviewCard({
      家长在两个入口看到同一个默认值，不会觉得是两套东西。
      已经定过价、后来被关掉又来的（`voucherPrice` 非 0），从原价起步。 */
   const [price, setPrice] = useState(() => Math.max(5, order.voucherPrice || 30))
+  /**
+   * 是否一次性兑换（2026-11-06，和券价一起在审核这一步定）。
+   *
+   * 用户原话：「家长审核设定兑换卷数量时，还得填是否一次性兑换，
+   * 都设定好后，接着加入到兑换列表。」
+   *
+   * 默认和心愿页的定价屏（`OfferView`）一致：游戏 / 盲盒 = 一次性
+   * （一个游戏换一次就够了），实物 = 可重复（同一个玩具再买一个也合理）。
+   */
+  const [oneTime, setOneTime] = useState(
+    () => item?.kind === 'gamebox' || item?.kind === 'blindbox',
+  )
   const [busy, setBusy] = useState(false)
 
   const nowHave = harvestBalance + balance
@@ -194,7 +206,7 @@ function WishReviewCard({
   const approve = async () => {
     setBusy(true)
     try {
-      await wishSetOffer(order.itemId, price)
+      await wishSetOffer(order.itemId, price, oneTime)
       pushToast({
         kind: 'reward',
         title: `已开放：${price} 张兑换券`,
@@ -295,6 +307,42 @@ function WishReviewCard({
             读起来像「…马上就能换。券不够的部分…」—— 一坨。 */}
         <p className="mt-1 px-1 text-[11px] font-bold leading-snug text-ink-400">
           券不够的部分会自动用积分补（1 张 = 1 积分），和「兑换」里一样。
+        </p>
+      </div>
+
+      {/* 是否一次性：和券价**同一屏**定完，这一件才算「设定好、可以进兑换列表」 */}
+      <div className="mt-3">
+        <p className="mb-2 px-1 font-display text-sm font-extrabold text-ink-500">
+          能兑换几次？
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-wish-once-off
+            onClick={() => setOneTime(false)}
+            className={
+              'btn h-10 flex-1 rounded-xl text-[13px] font-extrabold active:btn-press ' +
+              (!oneTime ? 'bg-sun-300 text-ink-900' : 'bg-white text-ink-500')
+            }
+          >
+            可以重复兑换
+          </button>
+          <button
+            type="button"
+            data-wish-once-on
+            onClick={() => setOneTime(true)}
+            className={
+              'btn h-10 flex-1 rounded-xl text-[13px] font-extrabold active:btn-press ' +
+              (oneTime ? 'bg-grape-400 text-white' : 'bg-white text-ink-500')
+            }
+          >
+            只兑换一次
+          </button>
+        </div>
+        <p className="mt-2 px-1 text-[11px] font-bold leading-snug text-ink-400">
+          {oneTime
+            ? '兑换成功后这一件会自动离开「兑换」列表，孩子想再要可以重新许愿。'
+            : '一直留在「兑换」列表里，并显示已经兑换过几次。'}
         </p>
       </div>
 
@@ -780,7 +828,10 @@ export function ReviewSheetModal({
   const settings = useApp((s) => s.settings)
   const [unlocked, setUnlocked] = useState(false)
 
-  const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+  /* 保护开着就要过闸门 —— **没设过密码也要过**（面板会变成「先设一个」）。
+     2026-10-30 之前这里是 `!!parentPin && ...`：没设密码就完全不设防，
+     而那正是新装的默认状态（引导里点「以后再说」）。 */
+  const needsPin = settings.protectParentActions !== false
 
   // 每次打开都从"锁着"开始
   useEffect(() => {
@@ -789,11 +840,15 @@ export function ReviewSheetModal({
 
   const passed = !needsPin || unlocked
 
+  /* 标题口径和 `ParentPinSheet` 共用一份：第一次用家长区时不能说
+     「请爸爸妈妈来一下」（那会让人以为要输一个**已有的**密码）。 */
+  const gate = parentPinCopy(!!settings.parentPin, '请爸爸妈妈来一下')
+
   return (
     <Sheet open={open} onClose={onClose} labelledBy="review-title">
       <SheetHead
-        title={passed ? '帮宝贝看看' : '请爸爸妈妈来一下'}
-        emoji={passed ? '👀' : '🔒'}
+        title={passed ? '帮宝贝看看' : gate.title}
+        emoji={passed ? '👀' : gate.emoji}
         sub={passed ? '确认任务、签到与心愿' : '审核需要密码'}
         id="review-title"
         onClose={onClose}
@@ -801,12 +856,14 @@ export function ReviewSheetModal({
       {passed ? (
         <ReviewSheet />
       ) : (
-        <div className="px-5 pb-8 pt-2">
-          <ParentPinPanel
-            title="请爸爸妈妈来一下"
-            hint="给宝贝打分、确认奖励，需要先输密码"
+        /* ⚠️ 这里**不要**再摆一块 `ParentPinPanel`：它自带 🔒 和标题，
+           而上面 `SheetHead` 已经出过一次 —— 屏幕上会叠两个锁、两个同名标题
+           （2026-11-06 截图抓到）。只放键盘那一块。 */
+        <div className="px-5 pb-8 pt-1">
+          <PinSheetBody
+            hint={gate.hint ?? '给宝贝打分、确认奖励，需要先输密码'}
             onPass={() => setUnlocked(true)}
-            onCancel={onClose}
+            onClose={onClose}
           />
         </div>
       )}

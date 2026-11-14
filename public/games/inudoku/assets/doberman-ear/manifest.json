@@ -1,0 +1,61 @@
+{
+ "schema": "makeplay.sprite-anim/1",
+ "name": "doberman-ear",
+ "files": [
+  {
+   "path": "preview.gif",
+   "sha256": "676d17783df01fb11d8d43989e8377e852818aaaf2fddfde7bafbb3935116e54",
+   "size": 122714
+  },
+  {
+   "path": "sheet.png",
+   "sha256": "d6f6eadffe4ee7bf2ce2095c563ec67c6e4a6bfadc7a3b0eac0ccca83378d868",
+   "size": 819334
+  }
+ ],
+ "action_id": "ear_twitch",
+ "kind": "oneshot_return",
+ "frame": {
+  "w": 256,
+  "h": 256,
+  "count": 12,
+  "cols": 4,
+  "rows": 3
+ },
+ "fps": 7.22,
+ "frame_ms": 139,
+ "duration_ms": 1662,
+ "loop": false,
+ "facing": "right",
+ "mirrorable": true,
+ "anchor": {
+  "x": 0.5,
+  "y": 0.82
+ },
+ "events": {
+  "impact_frame": null,
+  "release_frame": null,
+  "apex_frame": 6
+ },
+ "qa": {
+  "seam_union_mae": 11.13,
+  "still_mae": null,
+  "bg_worst": 0.001,
+  "edge_touch": 0,
+  "first_hit_frame": null,
+  "despill_exact": 0,
+  "despill_keylike": 0,
+  "despill_dirty": 0,
+  "mirror_mismatch_px": 0,
+  "event_source": "timing",
+  "event_amplitude": 0.026
+ },
+ "provenance": {
+  "lane": "realistic",
+  "conditioning": "i2v",
+  "action_confidence": "compiled",
+  "seed": 891427231,
+  "attempt": 1,
+  "source_frames": 33
+ }
+}

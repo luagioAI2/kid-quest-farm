@@ -33,35 +33,68 @@ export async function saveBlob(filename: string, content: string): Promise<boole
 }
 
 /**
+ * 把文本写进一个**能被系统分享出去**的目录，返回 `{ uri }`；都失败返回 null。
+ *
+ * ⚠️ 为什么要试两个目录，而不是只写 Documents：
+ *
+ * `Directory.Documents` 在 Android 上映射到**公共** Documents
+ * （`Environment.getExternalStoragePublicDirectory(DIRECTORY_DOCUMENTS)`，
+ * 见 @capacitor/filesystem 的 `LegacyFilesystemImplementation`）。
+ * 它成功时体验最好 —— 家长能在文件管理器里直接找到那个 .json；
+ * 但从 Android 10 起要 `requestLegacyExternalStorage`、11+ 还受分区存储约束，
+ * **它不是一定能写**。
+ *
+ * 而原来这里写失败后的兜底是 `saveBlob`，在 APK 的 WebView 里
+ * `<a download>` + `blob:` 根本不会落盘（没有 DownloadListener），
+ * 可 `saveBlob` 照样返回 true —— 界面说「已导出」，文件却不存在。
+ *
+ * 所以中间加一层应用私有的 `Cache`：它一定可写，Share 又能通过
+ * FileProvider 把它发出去（`res/xml/file_paths.xml` 里已声明 `cache-path`）。
+ * 家长在分享面板里自己选存到哪，比替他们决定更好。
+ */
+async function writeToShareableDir(
+  filename: string,
+  content: string,
+): Promise<{ uri: string } | null> {
+  for (const directory of [Directory.Documents, Directory.Cache]) {
+    try {
+      const res = await Filesystem.writeFile({
+        path: filename,
+        data: content,
+        directory,
+        encoding: Encoding.UTF8,
+        recursive: true,
+      })
+      return res
+    } catch {
+      // 换下一个目录；两个都写不进去才交给调用方兜底
+    }
+  }
+  return null
+}
+
+/**
  * 导出文本：原生环境走「写入文件 + 系统分享」，Web 走下载。
  * 返回值仅表示"是否成功发起了导出动作"。
  */
 export async function shareOrDownload(filename: string, content: string): Promise<boolean> {
   if (isNative()) {
-    try {
-      // 写到应用文档目录，用户可在文件管理器里找到
-      const res = await Filesystem.writeFile({
-        path: filename,
-        data: content,
-        directory: Directory.Documents,
-        encoding: Encoding.UTF8,
-        recursive: true,
-      })
+    const written = await writeToShareableDir(filename, content)
+    if (written) {
       try {
         await Share.share({
           title: '小任务农场 · 数据备份',
           text: '这是小任务农场的数据备份文件，请妥善保存。',
-          url: res.uri,
+          url: written.uri,
           dialogTitle: '保存或分享备份',
         })
       } catch {
         // 用户取消了分享面板 —— 文件已经写好了，仍算成功
       }
       return true
-    } catch {
-      // 原生路走不通时退回下载
-      return saveBlob(filename, content)
     }
+    // 两个目录都写不进去（极罕见）：退回浏览器下载
+    return saveBlob(filename, content)
   }
   return saveBlob(filename, content)
 }

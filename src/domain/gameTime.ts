@@ -60,6 +60,32 @@ export function rollGameClock(clock: GameClock | undefined, todayKey: string): G
   return { day: clock.day, sec: Number.isFinite(sec) && sec > 0 ? Math.round(sec) : 0 }
 }
 
+/**
+ * 合并「本机」和「云端」两份今日用量：**取大的那个**。
+ *
+ * 为什么需要它：限时额度现在跟着账号走（换台设备 / 重装 App 不能重置），
+ * 但两端的计数器都在各自跑，合并规则写错就是「额度被刷回来」：
+ *
+ *   · 用云端那份直接盖 ⇒ 本机玩到 25 分钟、云端还是 20 分钟，
+ *     拉一次退回 20 ⇒ 再玩 5 分钟又拉一次……**额度永远用不完**；
+ *   · 两份相加 ⇒ 两台设备同时在玩时同一段时间被算两遍，提前锁死。
+ *
+ * 所以取 `max`：它是「今天至少玩了这么久」的下界，只会偏严、不会偏松。
+ * 不是今天的（别的日子 / 字段坏了）一律按 0 算 —— 交给 `rollGameClock` 归一，
+ * 不在这里另写一套解析规则（两套迟早会不一致）。
+ */
+export function mergeGameClock(
+  local: GameClock | undefined,
+  cloud: GameClock | undefined,
+  dayStartHour: number,
+  now: number = Date.now(),
+): GameClock {
+  const today = appDayKey(now, dayStartHour)
+  const a = rollGameClock(local, today)
+  const b = rollGameClock(cloud, today)
+  return { day: today, sec: Math.max(a.sec, b.sec) }
+}
+
 /** 今天已经玩了多少秒（跨天自动算成 0） */
 export function playedSecToday(
   clock: GameClock | undefined,

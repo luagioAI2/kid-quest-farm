@@ -164,3 +164,37 @@ apkLinks.forEach((a) => {
     }, 2600)
   })
 })
+
+/* ---------- 9. 版本切换（单机版 / 在线版） ---------- */
+// 只改 <html data-ver>，显示哪一块交给 CSS（见 styles.css 第 22.5 节）。
+// 记在 localStorage 里是「上次选了单机版，回来还是单机版」；
+// 隐私模式下读写会抛，吞掉即可，功能不受影响。
+const verBtns = Array.from(document.querySelectorAll('[data-ver-btn]'))
+const VER_KEY = 'kqf.site.ver'
+
+function setVer(v) {
+  const next = v === 'local' ? 'local' : 'online'
+  document.documentElement.dataset.ver = next
+  verBtns.forEach((b) => {
+    b.setAttribute('aria-selected', String(b.dataset.verBtn === next))
+  })
+  try {
+    localStorage.setItem(VER_KEY, next)
+  } catch {
+    /* 存不了就算了 */
+  }
+}
+
+if (verBtns.length) {
+  let saved = 'online'
+  try {
+    const v = localStorage.getItem(VER_KEY)
+    if (v === 'local' || v === 'online') saved = v
+  } catch {
+    /* 读不了就用默认 */
+  }
+  setVer(saved)
+  verBtns.forEach((b) => {
+    b.addEventListener('click', () => setVer(b.dataset.verBtn))
+  })
+}

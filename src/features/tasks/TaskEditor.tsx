@@ -24,7 +24,7 @@ import {
 import { ITEMS } from '@/domain/catalog'
 import type { Task, TaskCategory, TaskCycle } from '@/domain/types'
 import { useApp, type NewTaskInput } from '@/store/useApp'
-import { ParentPinPanel } from '../parent/ParentGate'
+import { PinSheetBody, parentPinCopy } from '../parent/ParentGate'
 import {
   Btn,
   CATEGORY,
@@ -104,8 +104,9 @@ export function TaskEditor({
   const [rewardItemIds, setRewardItemIds] = useState<string[]>([])
   const [err, setErr] = useState<string | null>(null)
 
-  /** 家长校验：没设密码就等于不设防（省得自己都进不去） */
-  const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+  /* 家长校验：保护开着就要过 —— 没设过密码的，第一次进这里当场设一个
+     （以前是「没设密码 = 不设防」，而新装默认就是没密码，等于没保护） */
+  const needsPin = settings.protectParentActions !== false
   const [unlocked, setUnlocked] = useState(false)
 
   // 关闭时重新上锁，避免孩子趁家长走开继续改
@@ -308,24 +309,33 @@ export function TaskEditor({
     onClose()
   }
 
+  /* 闸门没开的时候，**弹层标题本身**就要说「要密码」。
+     否则同一个弹层里会出现两个标题（「改一改任务」+「请爸爸妈妈来一下」），
+     和 👀 审核弹层以前那个毛病一模一样（2026-11-06 截图确认过一次）。 */
+  const gate = needsPin && !unlocked
+  const head = gate
+    ? parentPinCopy(!!settings.parentPin, '请爸爸妈妈来一下', '改任务、加任务，先输一下密码')
+    : null
+
   return (
     <Sheet open={open} onClose={onClose} labelledBy="task-editor-title">
       <SheetHead
         id="task-editor-title"
-        title={editing ? '改一改任务' : '加一个新任务'}
-        emoji={editing ? '✏️' : '➕'}
+        title={head ? head.title : editing ? '改一改任务' : '加一个新任务'}
+        emoji={head ? head.emoji : editing ? '✏️' : '➕'}
         onClose={onClose}
       />
 
       <div className="space-y-5 px-5 pb-10">
-        {/* ---------- 家长门禁：任务的新增/编辑是家长动作 ---------- */}
-        {needsPin && !unlocked ? (
-          <div className="anim-fade-in surface border border-sun-300 bg-sun-50 p-4">
-            <ParentPinPanel
-              title="请爸爸妈妈来一下"
-              hint="改任务、加任务，先输一下密码"
+        {/* ---------- 家长门禁：任务的新增/编辑是家长动作 ----------
+            键盘直接铺在这张弹层里（打开就要输），但**不再自带标题** ——
+            标题归上面那个 `SheetHead`，这里只出副标题 + 键盘。 */}
+        {gate ? (
+          <div className="anim-fade-in">
+            <PinSheetBody
+              hint={head?.hint}
               onPass={() => setUnlocked(true)}
-              onCancel={onClose}
+              onClose={onClose}
             />
           </div>
         ) : (

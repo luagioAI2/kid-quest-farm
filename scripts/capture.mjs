@@ -17,7 +17,9 @@
  */
 import puppeteer from 'puppeteer-core'
 import { makeProfileDir } from './lib/profile.mjs'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { seedParentPin } from './lib/onboarding.mjs'
+import { grantGame } from './lib/own.mjs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
 const URL = process.argv[2] ?? 'http://127.0.0.1:4180/'
 const OUT = process.argv[3] ?? 'screenshots/redesign'
@@ -127,6 +129,21 @@ try {
     await wait(500)
   }
 
+  /** 退出全屏的游戏页。不在游戏里时什么也不做（幂等）。
+      ⚠️ 2026-11-09 起 `tab === 'game'` 是整页全屏：顶栏、底栏都不渲染。
+      截图脚本每拍完农场那几屏就得退出来，否则后面每一张都拍成农场页
+      —— 而且**一条都不会报错**（错图比缺图更糟）。 */
+  const leaveGame = async () => {
+    const hit = await page.evaluate(() => {
+      const b = document.querySelector('[data-tour="exit-game"], nav [data-tour="tab-tasks"]')
+      if (!b) return false
+      b.click()
+      return true
+    })
+    if (hit) await wait(700)
+    return hit
+  }
+
   /** 种一块地并等它成熟，返回地块下标 */
   const plantMature = async () => {
     const i = await page.evaluate(async () => {
@@ -211,10 +228,7 @@ try {
 
     await clickByText('下一步')
     await wait(600)
-    await shot('01d-guide-pin')
-
-    await clickByText('以后再说')
-    await wait(600)
+    // 2026-10-30：向导里已经没有「设家长密码」这一步（改成第一次用家长区时才要求）
     await shot('01e-guide-done')
 
     // 给孩子看的功能导览：拍两张，看高亮框有没有真的跟着 tab 走
@@ -227,15 +241,20 @@ try {
 
     await clickByText('下一步')
     await wait(800)
-    await shot('01g-tour-farm')
+    await shot('01g-tour-game')
 
-    // 功能导览一共**六步**：前四步讲底部四个 tab（给孩子），
+    // 功能导览一共**七步**（2026-11-10 重做）：前五步讲底栏四格 + 顶栏 🪙（给孩子），
     // 后两步讲顶栏的「家长确认」和「设置」（给家长，2026-09-21 补）。
     // ⚠️ 新增的那两步**必须**也拍下来 —— 项目硬规矩：
     //    走查图集里看不见的改动 ≈ 没验过（见本文件顶部第 2 条）。
     await clickByText('下一步')
     await wait(800)
     await shot('01h-tour-redeem')
+
+    // 2026-10-28 加的「心愿」：和兑换并列，不是它的子页 —— 导览必须也讲
+    await clickByText('下一步')
+    await wait(800)
+    await shot('01h2-tour-wish')
 
     await clickByText('下一步')
     await wait(800)
@@ -268,10 +287,18 @@ try {
     })
     await wait(700)
 
+    // 01b / 01c / 01e + 导览七步（01f~01k，其中 01h2 是新增的心愿）= 10 张
     console.log('  引导截图：01b~01k（10 张）')
   } else {
     console.log('  ! 没弹新手引导（profile 里已经有 onboardingDone 标记，这 10 张会缺）')
   }
+
+  /* 2026-10-30 起新装**没有**家长密码（引导里不再要求设，第一次进家长区
+     才要求）。但这个脚本后面有多处「遇到锁就按 4 个 0」的写法 ——
+     没密码时那会变成「第一遍设置」，按四下只是设好了、还没过闸，
+     后面几张图会拍成密码面板（而且不报错）。所以统一钉一个 0000。
+     ⚠️ 必须在 if/else **之外**：老 profile 不弹引导时同样要钉。 */
+  await seedParentPin(page)
 
   await shot('02-tasks')
 
@@ -454,10 +481,18 @@ try {
   await shot('08c-market-row')
   await closeSheet()
 
-  /* 9~10. 其余 Tab */
+  /* 9~10. 其余 Tab
+     ⚠️ 「积分」**不在这个循环里**（2026-11-05）：底栏回到四格，明细改从
+     顶栏那颗 🪙 点开。走查见下面 10-points 那一段 —— 那边必须点
+     `header-points`，不能再按底栏文字找。 */
+  /* ★ 农场 / 市场那几屏都在全屏的游戏页里，这里必须先退出来再切 tab。
+     不退的后果（2026-11-10 实测）：09-redeem 拍出来是农场、
+     10-points 找不到顶栏 🪙、11-settings 找不到 ⚙️，最后崩在等
+     `[data-market-builtin]` —— 十几张图全错，且没有任何报错。 */
+  await leaveGame()
+
   for (const [label, name] of [
     ['兑换', '09-redeem'],
-    ['积分', '10-points'],
     // 心愿商城（2026-10-28 新增，P1）。放最后是因为它自己还要往下走两屏
     // （详情 / 家长定价），下一节直接接着拍，不用再切回来。
     ['心愿', '10b-wish-list'],
@@ -491,7 +526,7 @@ try {
         脚本只会打印一句跳过 —— 静默少一张图。 */
   await page.evaluate(async () => {
     const st = () => window.__kqf__.getState()
-    await st().updateSettings({ protectParentActions: false, parentPin: undefined })
+    await st().updateSettings({ protectParentActions: false })
   })
   await wait(300)
   await clickByText('兑换', 'nav')
@@ -520,6 +555,27 @@ try {
   } else {
     console.log('  ⚠️ 09b 跳过：兑换页没找到「管理」')
   }
+  /* 10. 我的积分（2026-11-05 从底栏一格改成顶栏 🪙 点开的整屏层）
+     ------------------------------------------------------------
+     拍它的理由：这是这一轮唯一「入口换地方」的改动 —— 底栏少了一格、
+     顶栏那颗 🪙 从纯展示变成按钮。**光看代码看不出那颗币有没有变样**，
+     而它旁边还挤着 💎 和 🎫，多一个「可点」的视觉线索很容易把那一行撑坏。
+     ⚠️ 一定要拍**关掉之后**的底栏（`11-nav-four`）：
+        「四格」是这个需求的全部，而底栏在页脚、永远不在任何一屏的正中间。 */
+  await page.evaluate(() => document.querySelector('[data-tour="header-points"]')?.click())
+  await wait(700)
+  const pointsOpened = await page.evaluate(
+    () => !!document.querySelector('[data-points-sheet]'),
+  )
+  if (pointsOpened) {
+    await shot('10-points')
+    await page.evaluate(() => document.querySelector('[data-points-close]')?.click())
+    await wait(500)
+  } else {
+    console.warn('  ⚠️ 10-points 跳过：点了顶栏 🪙 但没开出 [data-points-sheet]')
+  }
+  await shot('11-nav-four')
+
   await clickByText('心愿', 'nav')
   await wait(600)
 
@@ -536,7 +592,7 @@ try {
         （没有参考价、没有外链按钮），拿它当样本等于漏掉最该看的那半页。 */
   await page.evaluate(async () => {
     const st = () => window.__kqf__.getState()
-    await st().updateSettings({ protectParentActions: false, parentPin: undefined })
+    await st().updateSettings({ protectParentActions: false })
   })
   await wait(400)
 
@@ -645,13 +701,17 @@ try {
   await page
     .waitForFunction(() => window.__kqf__.getState().toasts.length === 0, { timeout: 6000 })
     .catch(() => {})
+  /* ⚠️ 2026-11-10：卡片根节点从 `<button>` 换成了 `<div data-wish-id>`（下面还要
+     再放两颗按钮，button 嵌 button 不合法）。所以 `.grid > button` **一个都匹配不到**
+     —— 只会打印一句「跳过」，静默少一张图。改成按 `data-wish-kind` 挑一张游戏卡，
+     再点它里面那颗「打开」按钮。 */
   const gameCard = await page.evaluate(() => {
-    const card = [...document.querySelectorAll('.grid > button')].find((x) =>
-      x.querySelector('svg'),
-    )
+    const card = document.querySelector('[data-wish-kind="gamebox"]')
     if (!card) return null
     card.scrollIntoView({ block: 'center' })
-    card.click()
+    const open = card.querySelector('button')
+    if (!open) return null
+    open.click()
     return card.innerText.split('\n')[0]
   })
   if (gameCard) {
@@ -695,7 +755,7 @@ try {
     await window.__kqf__.getState().wishExpress('wish-dino')
   })
   await wait(700)
-  /* 上面那句「已经告诉爸妈」的 toast 挂在 top-3，会盖住 👀 弹层的标题
+  /* 上面那句「已向爸妈申请」的 toast 挂在 top-3，会盖住 👀 弹层的标题
      （拍出来是「一张被黄条压住的图」）。等它自己消失再拍。 */
   await page
     .waitForFunction(() => window.__kqf__.getState().toasts.length === 0, { timeout: 8000 })
@@ -790,9 +850,11 @@ try {
 
   /* 11. 设置页（孩子 tab） */
   await page.evaluate(async () => {
-    // 清掉家长锁，免得点齿轮时被 PIN 拦住（PIN 归 e2e 测，截图脚本不管）
+    /* 清掉家长锁，免得点齿轮时被 PIN 拦住（PIN 归 e2e 测，截图脚本不管）。
+       ⚠️ 2026-10-30 起只能靠 protectParentActions:false —— 清 parentPin
+       现在等于「还没设过」，闸门会改成要求当场设一个。 */
     const st = () => window.__kqf__.getState()
-    await st().updateSettings({ protectParentActions: false, parentPin: undefined })
+    await st().updateSettings({ protectParentActions: false })
   })
   await page.evaluate(() => {
     const b = document.querySelector('button[aria-label="设置"]')
@@ -800,6 +862,25 @@ try {
   })
   await wait(700)
   await shot('11-settings')
+
+  /* 11d. 设置 · 数据 tab：导出 / 恢复 / 危险操作
+     ------------------------------------------------------------
+     这一屏**从来没进过图集**。它上面有「导出备份」「从备份恢复」和
+     「清空全部数据」（不可撤销）—— 第 4 层走查对这一屏等于没验。
+     2026-10-30 给「从备份恢复」补了一句「家长密码不在备份里」，
+     才发现没有任何一张图能看到那句话。
+
+     ★ 滚到「从备份恢复」那张卡：它在折叠线以下，不滚就是没拍。 */
+  await clickByText('数据')
+  await wait(900)
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('*')].find(
+      (x) => x.children.length === 0 && /从备份恢复/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'center' })
+  })
+  await wait(800)
+  await shot('11d-settings-data')
 
   /* 12b. 设置 · 规则 tab：音效 / 震动开关
      这两个字段一直存在、默认开着，但**以前没有开关**（家长关不掉）。
@@ -881,47 +962,141 @@ try {
   await wait(900)
   await shot('11b-games-settings')
 
-  // 列表已经摊在设置页上（2026-10-25 改，不再有「进入游戏市场」弹层）
-  await page.waitForFunction(() => !!document.querySelector('[data-local-row]'), {
+  /* 列表已经摊在设置页上（2026-10-25 改，不再有「进入游戏市场」弹层）。
+     ⚠️ 2026-11-07 起「未拥有的游戏不显示」⇒ 新档案下**一行插件都没有**，
+     等 `[data-local-row]` 会白等 10 秒再抛，整轮图从这里断掉。
+     等**内置行**（`data-market-builtin`，永远在）。 */
+  await page.waitForFunction(() => !!document.querySelector('[data-market-builtin]'), {
     timeout: 10000,
+  })
+  /*
+    ★ 拍之前必须滚到列表上。这张图以前只拍卡片顶部（「每天玩多久」+「我的游戏」
+      开头），21 行游戏全在折叠线以下 —— 等于这一屏从来没被走查过。
+      `block:'center'` 而不是 `'start'`：`'start'` 会把它顶到顶栏底下被盖住一半。
+  */
+  await page.evaluate(() => {
+    document.querySelector('[data-market-builtin]')?.scrollIntoView({ block: 'center' })
   })
   await wait(400)
   await shot('11b2-games-market')
 
+  /*
+    11b4：表格底下那两句说明（去哪儿弄游戏 / 兑换码在哪 / 卸载在哪）。
+    它是**家长唯一的操作指引**，而且改过两次口径：
+      · 2026-10-30：原来写「去心愿商城换」，而心愿商城不收钱；
+      · 2026-11-07：未拥有的行不显示了，原来那句「写着『未拥有』的还不能装」
+        指向一个界面上已经不存在的东西。
+    不进图集就等于这次改文案没验过。判据用**新文案里的词**（只有已经拥有）。
+  */
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('p')].find((x) =>
+      /只有已经拥有/.test(x.textContent ?? ''),
+    )
+    el?.scrollIntoView({ block: 'center' })
+  })
+  await wait(400)
+  await shot('11b4-games-footnote')
+
+  /*
+    ★★ 未拥有的行不渲染 ⇒ 详情入口 `[data-store-detail]` **也不存在**。
+    这一屏的默认状态是「一款插件都没有」，直接点会**静默拍成设置页** ——
+    错图比缺图更糟（看起来像「详情改坏了」，其实根本没打开）。
+    所以先预置拥有；后面点「安装」用的也是这一款。
+
+    id 从**仓库里那份真实注册表**挑（`public/games/index.json`，App 自己也读它），
+    不在脚本里写死：换一款游戏就要改脚本，而改漏了不会响。
+  */
+  const pluginIds = (JSON.parse(readFileSync('public/games/index.json', 'utf8')).games ?? []).map(
+    (g) => g.id,
+  )
+  const needOwnId = await page.evaluate((ids) => {
+    const s = window.__kqf__?.getState?.()
+    if (!s) return ''
+    const have = new Set([...(s.ownedGameIds ?? []), ...Object.keys(s.installedGames ?? {})])
+    return ids.find((id) => !have.has(id)) ?? ''
+  }, pluginIds)
+  if (!needOwnId) {
+    throw new Error('注册表里的插件全都有了 —— 没法拍详情 / 安装这条路。先看 public/games/index.json。')
+  }
+  await grantGame(page, needOwnId)
+  await page.waitForFunction(
+    (id) => !!document.querySelector(`[data-store-detail="${id}"]`),
+    { timeout: 8000 },
+    needOwnId,
+  )
+
   // 详情页（第一款的「帮助孩子 / 截图 / 关于」）
+  await page.evaluate((id) => {
+    document.querySelector(`[data-store-detail="${id}"]`)?.scrollIntoView({ block: 'center' })
+  }, needOwnId)
+  await wait(200)
   await page.evaluate(() => document.querySelector('[data-store-detail]')?.click())
   await wait(900)
   await shot('11b3-games-detail')
   await page.evaluate(() => document.querySelector('[data-store-close]')?.click())
   await wait(600)
 
-  const localInstallClicked = await page.evaluate(() => {
-    const b = document.querySelector('[data-local-install]')
+  /*
+    2026-10-30 起「没拥有不能装」—— 这一屏的默认状态是**一款都装不了**：
+    21 行全是「去心愿商城」那颗灰药丸，页面上一个 `[data-local-install]` 都没有。
+
+    本脚本原来直接找安装按钮，找不到就抛「本地包清单是空的？」。这句话是**错的**
+    （清单里有 21 款，只是都没拥有），而且它把整轮截图拦在这里 —— 11c 之后的
+    十几张图全部停在上一次的样子，看起来像「这批改动没碰那些屏」。
+    正是 `notes/verify-probes.md` 里那条：**锚点失效的报错会指向错误的原因**。
+
+    所以先预置拥有（和 `e2e-anthill` 等套件同一口径，走 `window.__kqf__.grantGame`），
+    再走家长那条路点「安装」—— 截图要拍的是**界面**，用 `installFromUrl` 绕过
+    就拍不到「正在装…」和装完那一行的状态。
+  */
+  /* 拥有权已经在上一步（拍详情之前）预置好了 —— 这里只等那一行的安装按钮。
+     `grantGame` 幂等，再调一次也无害。 */
+  await grantGame(page, needOwnId)
+  await page.waitForFunction(
+    (id) => !!document.querySelector(`[data-local-install="${id}"]`),
+    { timeout: 8000 },
+    needOwnId,
+  )
+
+  const localInstallClicked = await page.evaluate((id) => {
+    const b = document.querySelector(`[data-local-install="${id}"]`)
     if (!b) return false
     b.scrollIntoView({ block: 'center' })
     b.click()
     return true
-  })
+  }, needOwnId)
   // 找不到就**炸掉**，别静默拍一张「没装成」的图（静默的错图比缺图更糟）
   if (!localInstallClicked) {
-    throw new Error('截图脚本找不到游戏市场里的安装按钮（本地包清单是空的？）')
+    throw new Error(
+      `预置拥有后 ${needOwnId} 那一行仍然没有安装按钮 —— 门槛和列表不同源（见 GameStore 的 ownedSet 注释）。`,
+    )
   }
-  await page.waitForFunction(() => !!document.querySelector('[data-local-installed]'), {
-    timeout: 25000,
-  })
+  /*
+    ★★ 判据必须钉在**刚点的那一款**上，不能是「页面上有任何一个已安装」。
+
+    这一条踩过：本轮之前先兑换了「细胞守卫」，所以 `[data-local-installed]`
+    一开始就存在 —— 下面这个 wait 立刻返回，图 11c 拍到的是
+    「云边小农场 · 正在装…」，而 11d 拿到的 `installedId` 是**细胞守卫**
+    （`querySelector` 取的是 DOM 里第一个，不是刚装的那个）。
+    两张图各自单看都说得通，摆在一起才发现 11c 没装完、11d 是另一款。
+
+    同一条也适用于「等它加载完」的每一处：**等具体那一个**。
+  */
+  await page.waitForFunction(
+    (id) => !!document.querySelector(`[data-local-installed="${id}"]`),
+    { timeout: 25000 },
+    needOwnId,
+  )
   // ⚠️ 必须在关掉市场**之前**读这一行：弹层一关就整体卸载，
   //    `[data-local-installed]` 会从 DOM 里消失 ⇒ 读成空串 ⇒ 静默不卸载 ⇒
   //    后面每一张图都带着一个装进来的游戏。
-  const installedId = await page.evaluate(
-    () => document.querySelector('[data-local-installed]')?.getAttribute('data-local-installed') ?? '',
-  )
+  const installedId = needOwnId
   // 2026-10-25 起没有市场弹层了（列表就在页面上），这里不用关任何东西。
   // 详情弹层已经在上面用 `[data-store-close]` 关掉了。
   await wait(600)
-  await page.evaluate(() => {
-    document.querySelector('[data-plugin-economy]')?.scrollIntoView({ block: 'center' })
-  })
-  await wait(600)
+  // 2026-10-30：原来这里要滚到「这些游戏的经济参数」那张卡 —— 它在 10-29
+  // 「游戏页改成我的游戏」时被删掉了，选择器永远匹配不到（`?.` 静默吞掉）。
+  // 现在装完之后最该拍的是那一行「已装」的状态，它就在当前视口里。
   await shot('11c-games-installed')
 
   /*
@@ -1260,7 +1435,11 @@ try {
   await wait(500)
   // 底栏「游戏」那一格是当前游戏（锚点 tab-<id>），按排除法找，别写死 tab-farm
   await page.evaluate(() => {
-    const staticTours = ['tab-tasks', 'tab-redeem', 'tab-wish', 'tab-points']
+    /* 底栏的固定格（不含运行时算出来的游戏那格）。
+       2026-11-05：`tab-points` 删掉了 —— 底栏回到四格，它已经不存在。
+       留着的话这一句「找一格不在 staticTours 里的 tab」照样能跑，
+       但注释和常量会对着一个不存在的锚点说话，下一个人会以为是自己数错了。 */
+    const staticTours = ['tab-tasks', 'tab-redeem', 'tab-wish']
     const b = [...document.querySelectorAll('[data-tour^="tab-"]')].find(
       (x) => !staticTours.includes(x.getAttribute('data-tour')),
     )
@@ -1274,6 +1453,9 @@ try {
     window.__kqf__.getState().updateSettings({ gameDailyMinutes: 0, gameClock: undefined }),
   )
   await wait(300)
+  /* 游戏那一格是全屏的（2026-11-09）：底栏不在，得先点「退出游戏」回任务页 */
+  await page.evaluate(() => document.querySelector('[data-tour="exit-game"], nav [data-tour="tab-tasks"]')?.click())
+  await wait(400)
   await page.evaluate(() => document.querySelector('[data-tour="tab-tasks"]')?.click())
   await wait(600)
 

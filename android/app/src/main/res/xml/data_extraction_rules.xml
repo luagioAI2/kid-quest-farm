@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  备份排除规则（Android 12+）。
+
+  这份文件是 allowBackup="false" 的补充，不是重复：部分厂商在「设备间传输」
+  （换机时那条 Smart Switch / 手机搬家）**不看 allowBackup**，只有这里能挡住。
+  不挡的后果是：新手机上先被灌进一份旧数据，家长再手动导入一份 —— 两边都
+  不知道对方存在，最后是一份谁也没预期的混合存档。
+
+  排除所有 domain 的根（path="."），等价于「什么都不备份」。
+  device_* 是直接启动（device protected storage）那一套，一并排掉。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+        <exclude domain="device_root" path="." />
+        <exclude domain="device_file" path="." />
+        <exclude domain="device_database" path="." />
+        <exclude domain="device_sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+        <exclude domain="device_root" path="." />
+        <exclude domain="device_file" path="." />
+        <exclude domain="device_database" path="." />
+        <exclude domain="device_sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>

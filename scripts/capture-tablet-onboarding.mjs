@@ -1,5 +1,5 @@
 /**
- * 新手引导 + 四步导览 在平板上的走查
+ * 新手引导 + 七步导览 在平板上的走查
  * ------------------------------------------------------------
  * 为什么要单独跑：引导只在**全新 profile** 上出现一次，
  * 平时所有 e2e / 截图脚本进来第一件事就是把它关掉（见 lib/onboarding.mjs），
@@ -117,10 +117,7 @@ for (const d of DEVICES) {
       await wait(300)
       await shot('02-name')
       await clickExact(page, '下一步')
-      await waitFor(page, '[data-step="pin"]')
-      await wait(300)
-      await shot('03-pin')
-      await clickExact(page, '以后再说')
+      // 2026-10-30：没有「设家长密码」这一步了（改成第一次用家长区时才要求）
       await waitFor(page, '[data-step="done"]')
       await wait(300)
       await shot('04-done')
@@ -132,7 +129,7 @@ for (const d of DEVICES) {
       })
       console.log(`  向导内容列宽 = ${w}（视口 ${d.w}，占比 ${Math.round((w / d.w) * 100)}%）`)
 
-      /* ---- 导览：**六**步，不是四步 ----
+      /* ---- 导览：**七**步（2026-11-10 重做：加了「心愿」，游戏那步不再进全屏）----
          ⚠️ 2026-10-03：第一版这里写死 `for (i < 4)`，只走了给孩子的 4 个底部
          tab，**漏掉了最后两步给家长的**（`review` / `settings`，锚点在顶栏
          最右侧）。而那两步恰恰是「气泡恒定居中」偏离最严重的 —— 顶栏按钮在

@@ -17,7 +17,7 @@
     {
       "id": "cloudfarm",
       "name": "云边小农场",
-      "version": "1.1.4",
+      "version": "1.1.9",
       "file": "cloudfarm/cloudfarm.plugin.mjs",
       "assetBase": "cloudfarm/"
     },
@@ -122,7 +122,7 @@
     {
       "id": "redbutton",
       "name": "别按红按钮",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "file": "redbutton/redbutton.plugin.mjs",
       "assetBase": "redbutton/"
     },
@@ -146,6 +146,27 @@
       "version": "1.0.0",
       "file": "doodlederby/doodlederby.plugin.mjs",
       "assetBase": "doodlederby/"
+    },
+    {
+      "id": "farmlord",
+      "name": "我是一个农场主",
+      "version": "1.0.1",
+      "file": "farmlord/farmlord.plugin.mjs",
+      "assetBase": "farmlord/"
+    },
+    {
+      "id": "fall2048",
+      "name": "下落的2048",
+      "version": "1.0.3",
+      "file": "fall2048/fall2048.plugin.mjs",
+      "assetBase": "fall2048/"
+    },
+    {
+      "id": "inudoku",
+      "name": "犬独",
+      "version": "1.0.1",
+      "file": "inudoku/inudoku.plugin.mjs",
+      "assetBase": "inudoku/"
     }
   ]
 }

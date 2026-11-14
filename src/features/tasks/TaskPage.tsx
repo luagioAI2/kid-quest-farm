@@ -15,6 +15,7 @@ import {
   selectTodayStats,
   useApp,
 } from '@/store/useApp'
+import { CampaignCard } from '@/features/campaign/CampaignCard'
 import { TaskDetail } from './TaskDetail'
 import { TaskEditor } from './TaskEditor'
 import {
@@ -82,7 +83,10 @@ export default function TaskPage() {
     setEditorOpen(true)
   }
 
-  /** 新增/编辑任务是家长动作，孩子这里要过密码 */
+  /* ⚠️ 这里**故意**比别的闸门窄：只在「已经有密码」时才拦着孩子。
+     没设过密码时让它直接进编辑器 —— 编辑器里会当场要求设一个
+     （`TaskEditor` 的 `needsPin`）。否则新装用户点「加任务」只会看到
+     一句「让爸爸妈妈来」，而家长根本不知道该去哪设密码。 */
   const needsPin = !!settings.parentPin && settings.protectParentActions !== false
 
   return (
@@ -100,6 +104,13 @@ export default function TaskPage() {
         rate={todayStats.rate}
         dateText={`${dateLabel} · ${weekday}`}
       />
+
+      {/* ================= 主线活动 =================
+          摆在今日任务**上面**：它是长期目标，放在下面的话孩子翻两屏才看到，
+          而这一块恰恰是「多做一个任务有什么意义」的答案。
+          ⚠️ 全领完时它自己会 `return null`（见 CampaignCard），
+             不留一张空卡片占位置。 */}
+      <CampaignCard />
 
       {/* ================= 今日任务 ================= */}
       <Section

@@ -30074,7 +30074,7 @@ var YP = 4, XP = 10, ZP = 6e5, QP = "paidAt", $P = {
 	name: "别按红按钮",
 	emoji: "🔴",
 	tabLabel: "别按红按钮",
-	version: "1.0.0",
+	version: "1.0.1",
 	minHostApi: YP,
 	coin: {
 		id: "rb-coin",

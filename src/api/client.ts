@@ -1,4 +1,5 @@
-import { getToken } from './session'
+import { getSession, getToken, sessionFrom, setSession } from './session'
+import type { ApiUser } from './types'
 
 /* ============================================================
    后端连接层（2026-10-29）
@@ -39,10 +40,26 @@ export class ApiError extends Error {
   /** 服务端 `body.code`；网络层失败用 `NETWORK`（负数，不会和服务端撞） */
   readonly code: number
 
-  constructor(code: number, message: string) {
+  /**
+   * 网络类失败的**具体原因**（「请求超时」「网络断了或证书不对」…）。
+   *
+   * ★ 为什么单独一个字段、而不是拼进 `message`：
+   *   `message` 会被别处直接当正文用（业务错误那里就是「服务端的原话」），
+   *   拼进去会污染那些断言。而 `message` 本身对家长要说得温和，
+   *   原因则是**排查用的**，只有提示条需要。
+   *
+   * ★ 为什么需要它：`isNetwork` 一个标志盖了四种完全不同的故障
+   *   （断网 / 超时 / 证书不匹配 / 返回不是 JSON）。只输出一句
+   *   「连不上服务器」的话，用户报过来我们**什么也推不出来** ——
+   *   2026-11-12 就为这一句话翻了半小时服务器日志。
+   */
+  readonly reason?: string
+
+  constructor(code: number, message: string, reason?: string) {
     super(message)
     this.name = 'ApiError'
     this.code = code
+    this.reason = reason
   }
 
   /** 连不上 / 超时 / 返回的不是 JSON —— 都归这一类 */
@@ -66,10 +83,101 @@ export function bindAuthLost(fn: (() => void) | null) {
   onAuthLost = fn
 }
 
+/**
+ * 游客要花兑换券 / 兑实物时服务端给的码（`apperrors.GuestNeedBind`）。
+ *
+ * 单独拎出来当一个常量：这个数字会同时出现在「拦截判断」「提示文案」
+ * 「探针断言」三处，写三遍迟早有一处写错，而写错的表现是
+ * **静默放行**（码对不上 ⇒ 不进那个分支 ⇒ 什么都不发生）。
+ */
+export const GUEST_NEED_BIND = 10010802
+
+/**
+ * 绑手机号时这个号码已经有一个账号了（`apperrors.MobileAlreadyReg`）。
+ *
+ * 这是游客绑定时**最常见**的失败，而且是个死胡同：绑不上 ⇒ 攒的东西存不下来；
+ * 而这个号码上原本那个账号（以前在别的手机上玩的）又进不去 —— 因为界面上
+ * 只甩了一行「该手机号已注册」，没有任何下一步。所以这里把它单拎出来，
+ * 让面板能改口说「用这个号码登录」。
+ */
+export const MOBILE_ALREADY_REG = 10010202
+
+/**
+ * 游客被门槛拦住时调它（由 `useAccount` 注册，弹出「保存进度」）。
+ *
+ * 为什么挂在这里、不挂在每个调用点：花券的地方有五处，以后还会加。
+ * 每个调用点各写一遍「如果 code 是 10010802 就弹窗」，漏一处就是
+ * 「点了兑换，转一圈，什么都没发生」—— 而界面上没有任何线索。
+ */
+let onGuestBlocked: (() => void) | null = null
+export function bindGuestBlocked(fn: (() => void) | null) {
+  onGuestBlocked = fn
+}
+
 interface Resp<T> {
   code: number
   error?: string
   data?: T
+}
+
+/** `/auth/login`、`/auth/register`、`/auth/refresh` 共用的返回形状 */
+interface TokenPair {
+  access_token: string
+  refresh_token: string
+  expires_in: number
+  user: ApiUser
+}
+
+/**
+ * 用 refresh token 换一套新 token。
+ *
+ * ## 为什么必须有这一步
+ *
+ * 服务端 access token 只给 **2 小时**，而 `refresh_token` 给 7 天。
+ * 2026-10-30 之前客户端**只存不用**：两小时一到，所有在线动作都变成
+ * 「登录已过期，请重新登录」，登录态被清掉。对一个家长一周开两次的 App，
+ * 等于每次打开都要重新输手机号 + 密码 + 短信码。
+ *
+ * ## 三条实现约束
+ *
+ * ① **并发的 401 只刷新一次**（`refreshing` 这个 promise 就是锁）。
+ *    一屏同时发三个请求时，三个 401 各刷一次的话，服务端会**轮换**三次
+ *    refresh token（旧 token 立即失效）—— 后两次必然失败，
+ *    登录态被自己清掉。
+ * ② **用裸 fetch，不走 `api()`** —— 走 `api()` 会在 401 时再触发一次刷新，
+ *    无限递归；而且刷新接口本身不该带旧 token。
+ * ③ **失败一律返回 false，不抛**。调用方决定是「重试一次」还是「清登录态」。
+ */
+let refreshing: Promise<boolean> | null = null
+
+async function refreshSession(): Promise<boolean> {
+  if (refreshing) return refreshing
+
+  const s = getSession()
+  if (!s?.refreshToken) return false
+
+  refreshing = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: s.refreshToken }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      })
+      if (!res.ok) return false
+      const payload = (await res.json()) as Resp<TokenPair>
+      if (payload.code !== 200 || !payload.data) return false
+      setSession(sessionFrom(payload.data))
+      return true
+    } catch {
+      // 断网 / 超时 / 返回不是 JSON —— 都算「这次刷不了」，交给调用方处理
+      return false
+    } finally {
+      refreshing = null
+    }
+  })()
+
+  return refreshing
 }
 
 /**
@@ -80,8 +188,15 @@ interface Resp<T> {
 export async function api<T>(
   path: string,
   body: Record<string, unknown> = {},
-  opts: { auth?: boolean } = {},
+  opts: { auth?: boolean; _retried?: boolean } = {},
 ): Promise<T> {
+  /* 已经过期就先换一套，省掉一次必然失败的往返。
+     `auth: false` 的接口（登录 / 发码）不碰这一步 —— 那时候本来就没有会话。 */
+  if (opts.auth !== false && !opts._retried) {
+    const s = getSession()
+    if (s && s.expiresAt * 1000 <= Date.now()) await refreshSession()
+  }
+
   const token = getToken()
   // `auth: false` 用于登录这类「本来就没有 token」的接口 ——
   // 但已经登录时仍然带上，服务端能借它做风控
@@ -98,13 +213,29 @@ export async function api<T>(
     })
   } catch (e) {
     const name = (e as { name?: string })?.name
+    const raw = (e as { message?: string })?.message ?? ''
+    if (name === 'TimeoutError') {
+      throw new ApiError(NETWORK, '服务器没有响应，请稍后再试', `请求超时（${TIMEOUT_MS / 1000} 秒）`)
+    }
+    /* 浏览器的 `fetch` 抛错时**故意不告诉我们为什么**（安全考虑），
+       只会给一句 `Failed to fetch` / `Load failed`。
+       但**不是**这两种的，就一定是别的问题（比如老 WebView 没有
+       `AbortSignal.timeout`），那种原始 message 反而是线索，留着。 */
+    const opaque = /Failed to fetch|Load failed|NetworkError|network error/i.test(raw)
     throw new ApiError(
       NETWORK,
-      name === 'TimeoutError' ? '服务器没有响应，请稍后再试' : '连不上服务器，请检查网络',
+      '连不上服务器，请检查网络',
+      opaque ? '网络断了，或者证书对不上' : raw.slice(0, 60) || '网络错误',
     )
   }
 
   if (res.status === 401) {
+    /* 先试一次「换票再重放」。服务端 401 有两种：token 过期（换票能救）
+       和账号被停用（换票救不了，服务端会继续给 401）。
+       `_retried` 保证只重放一次 —— 不然服务端一直 401 就是死循环。 */
+    if (opts.auth !== false && !opts._retried && (await refreshSession())) {
+      return api<T>(path, body, { ...opts, _retried: true })
+    }
     // token 过期 / 被踢：把本地登录态清掉，让人重新登 ——
     // 否则他会一直点、一直「失败」，而界面上没有任何提示说该重登
     onAuthLost?.()
@@ -116,10 +247,18 @@ export async function api<T>(
     payload = (await res.json()) as Resp<T>
   } catch {
     // 网关/代理返回的 HTML 错误页也会走到这里（本地端口被别的服务占着时最常见）
-    throw new ApiError(NETWORK, '服务器返回的不是 JSON，请检查后端地址')
+    throw new ApiError(
+      NETWORK,
+      '服务器返回的不是 JSON，请检查后端地址',
+      `服务器返回异常（HTTP ${res.status}，不是 JSON）`,
+    )
   }
 
   if (payload.code !== 200) {
+    /* 游客被门槛拦住：先把弹层弹出来，再照常抛错。
+       顺序不能反 —— 调用方 catch 之后多半会 toast 一句「兑换没成功」，
+       弹层要是排在它后面，就会盖住那句 toast 的原因。 */
+    if (payload.code === GUEST_NEED_BIND) onGuestBlocked?.()
     throw new ApiError(payload.code, payload.error || `请求失败（${payload.code}）`)
   }
   return payload.data as T

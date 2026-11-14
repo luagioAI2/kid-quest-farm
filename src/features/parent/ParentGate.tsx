@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useApp } from '../../store/useApp'
+import { Sheet, SheetHead } from '../tasks/ui'
 
 /* ============================================================
    家长密码闸门（可复用）
@@ -10,17 +11,29 @@ import { useApp } from '../../store/useApp'
    3. 新增 / 编辑兑换品
 
    设计要点：
-   * 没设密码 → 视为不设防，直接放行（家长可以用"保护开关"额外加固）
-   * 密码错误 → 轻微震动式抖动反馈 + 清空，不做惩罚性锁定
+   * **没设密码 = 还没设过，不是不设防**（2026-10-30 改）。保护开着时
+     一律过闸门：已有密码就输，没有就当场设一个（输两遍）。
+     用户原话：「新号不要在引导前就要求设置家长密码，需要用的时候才要求
+     第一次设置。」
+   * 密码错误 → 轻微抖动反馈 + 清空，不做惩罚性锁定
    * 组件自持有 unlocked 状态，不往 store 里塞 —— 避免"解锁一次永久解锁"
    ============================================================ */
+
+/**
+ * 闸门当前是哪种状态：
+ * - `open`   保护关着（家长在设置里关掉了「保护家长操作」），直接放行
+ * - `verify` 已有密码，要输对才放行
+ * - `setup`  还没设过密码 —— **第一次用到时才要求设**，设完直接放行
+ */
+export type PinGateMode = 'open' | 'verify' | 'setup'
 
 export function useParentGate() {
   const settings = useApp((s) => s.settings)
   const [unlocked, setUnlocked] = useState(false)
 
-  /** 是否需要密码：设了 PIN 且打开了「保护家长操作」 */
-  const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+  const protectionOn = settings.protectParentActions !== false
+  const hasPin = !!settings.parentPin
+  const mode: PinGateMode = !protectionOn ? 'open' : hasPin ? 'verify' : 'setup'
 
   const verify = useCallback(
     (pin: string) => {
@@ -32,14 +45,18 @@ export function useParentGate() {
   )
 
   const lock = useCallback(() => setUnlocked(false), [])
+  /** 直接放行（用于「第一次设密码」：刚设完，没必要再拿它比一遍） */
+  const unlock = useCallback(() => setUnlocked(true), [])
 
   return {
-    /** 是否需要输密码 */
-    needsPin,
-    /** 是否已经通过（没设密码时恒为 true） */
-    passed: !needsPin || unlocked,
+    mode,
+    /** 要不要过闸门（`open` 之外都要） */
+    needsPin: mode !== 'open',
+    /** 是否已经通过 */
+    passed: mode === 'open' || unlocked,
     verify,
     lock,
+    unlock,
   }
 }
 
@@ -101,68 +118,386 @@ export function PinPad({
   )
 }
 
+/** 一道两位数加法。两位数 × 两位数的心算，孩子要花好一会儿，大人一眼就出。 */
+function randomCheck() {
+  const pick = () => 11 + Math.floor(Math.random() * 39) // 11~49
+  return { a: pick(), b: pick() }
+}
+
 /**
- * 密码输入面板 —— 直接内联在需要的地方。
+ * 键盘本体：自己判断「输密码」还是「第一次设密码」。
  *
- * @param title   标题，如「请家长确认」
+ * 不带头图 / 标题 —— 外面可能是 `ParentPinPanel`（弹层里，有 🔒 和大标题），
+ * 也可能直接塞进设置页的 `Card`（卡片已经有标题了，再来一个就重复）。
+ *
+ * ## 为什么「设密码」要输两遍
+ *
+ * 项目**没有找回入口**。家长手滑输错一位、自己又没记住，就再也进不去
+ * 家长区（打不了分、改不了任务）。多一步确认远比事后救火便宜。
+ *
+ * ## 为什么设密码前还要答一道加法（2026-10-30）
+ *
+ * 「没密码 = 第一次用到才要求设」这条需求放出了一个洞：**孩子先到就先设**。
+ * 顶栏的 👀「家长确认」本来就是给孩子点的（他要看自己交了什么），
+ * 新装时点进去会看到「设一个 4 位数字」的键盘 —— 孩子随手设一个，
+ * 家长就**永远进不去了**（没有找回入口），而且孩子从此拥有家长权限。
+ *
+ * 加一道两位数加法，不指望挡住有心人（真要绕过，去设置里也能设），
+ * 只挡「随手点进去就设了」这种。`adultCheck={false}` 可以关掉 ——
+ * 设置页就是这么用的（那里是家长自己主动导航过去的，不需要再考一次）。
+ */
+export function PinFlow({
+  onPass,
+  onCancel,
+  cancelLabel = '先算了',
+  adultCheck = true,
+}: {
+  onPass: () => void
+  onCancel?: () => void
+  cancelLabel?: string
+  /** 第一次设密码前先答一道加法（见上面那段）。设置页传 false。 */
+  adultCheck?: boolean
+}) {
+  const settings = useApp((s) => s.settings)
+  const updateSettings = useApp((s) => s.updateSettings)
+  const hasPin = !!settings.parentPin
+
+  const [pin, setPin] = useState('')
+  /** 设密码时第一遍输入的值；`null` = 还没输过第一遍 */
+  const [first, setFirst] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  /* 家长验证（只在「第一次设密码」时出现）。
+     ⚠️ 用 `checkPassed` 而不是「`check === null`」判断过没过：
+     `hasPin` 是异步读出来的，拿它做初始化条件会在设置还没加载完时把题跳过。 */
+  const [check, setCheck] = useState(randomCheck)
+  const [checkVal, setCheckVal] = useState('')
+  const [checkErr, setCheckErr] = useState('')
+  const [checkPassed, setCheckPassed] = useState(false)
+  const needCheck = !hasPin && adultCheck && !checkPassed
+
+  const submitCheck = () => {
+    if (Number(checkVal) === check.a + check.b) {
+      setCheckPassed(true)
+      setCheckErr('')
+      setCheckVal('')
+      return
+    }
+    // 答错就换一道，别让人在同一道上反复试
+    setCheck(randomCheck())
+    setCheckVal('')
+    setCheckErr('不对哦，换一道再试试')
+  }
+
+  const submit = useCallback(
+    async (finalValue?: string) => {
+      // finalValue 来自 PinPad 的第 4 次点击：那时 state 还没更新，
+      // 必须用传进来的值，否则永远读到最后一位之前的状态。
+      const v = finalValue ?? pin
+      if (v.length < 4 || busy) return
+
+      if (hasPin) {
+        if (v === settings.parentPin) {
+          onPass()
+        } else {
+          setError('密码不对，再试一次？')
+          setPin('')
+        }
+        return
+      }
+
+      // 还没设过：第一遍 → 第二遍确认 → 落库 → 放行
+      if (first == null) {
+        setFirst(v)
+        setPin('')
+        setError('')
+        return
+      }
+      if (v !== first) {
+        setError('两次不一样，重新设一次吧')
+        setFirst(null)
+        setPin('')
+        return
+      }
+      setBusy(true)
+      await updateSettings({ parentPin: v })
+      setBusy(false)
+      onPass()
+    },
+    [pin, busy, hasPin, settings.parentPin, first, updateSettings, onPass],
+  )
+
+  const stage = hasPin ? '' : first == null ? '设一个 4 位数字' : '再输一次，确认没记错'
+
+  return (
+    <div className="space-y-4">
+      {/* 家长验证：只在「第一次设密码」这一步出现，见文件里那段注释 */}
+      {needCheck ? (
+        <div className="space-y-3">
+          <p className="text-center text-sm font-extrabold text-ink-700">
+            先确认一下是家长：
+            <span
+              data-parent-check
+              data-a={check.a}
+              data-b={check.b}
+              className="ml-1 text-base text-ink-900"
+            >
+              {check.a} + {check.b} = ?
+            </span>
+          </p>
+          <input
+            data-parent-check-input
+            type="tel"
+            inputMode="numeric"
+            value={checkVal}
+            onChange={(e) => setCheckVal(e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submitCheck()
+            }}
+            placeholder="填答案"
+            className="w-full rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-4 py-3 text-center text-xl font-bold outline-none focus:border-sky-400"
+          />
+          {checkErr && (
+            <p className="text-center text-sm font-bold text-berry-500 anim-fade-in">{checkErr}</p>
+          )}
+          <button
+            type="button"
+            data-parent-check-submit
+            disabled={!checkVal}
+            onClick={submitCheck}
+            className="btn w-full rounded-2xl bg-sun-300 py-3 font-extrabold text-ink-900 shadow-flat disabled:opacity-40"
+          >
+            继续
+          </button>
+        </div>
+      ) : (
+        <>
+          {stage && (
+            <p className="text-center text-sm font-extrabold text-ink-700">{stage}</p>
+          )}
+          <PinPad
+            value={pin}
+            onChange={setPin}
+            onSubmit={(v) => void submit(v)}
+            disabled={busy}
+          />
+          {error && (
+            <p className="text-center text-sm font-bold text-berry-500 anim-fade-in">{error}</p>
+          )}
+          {!hasPin && (
+            <p className="text-center text-xs font-bold leading-relaxed text-ink-500">
+              这个密码<span className="text-berry-500">没有找回入口</span>，记牢一点。
+            </p>
+          )}
+        </>
+      )}
+      {onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="w-full rounded-2xl py-3 text-base font-bold text-ink-500"
+        >
+          {cancelLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 带 🔒 头和标题的整块面板（弹层里用）。
+ *
+ * @param title   标题，如「请家长确认」（只在「输密码」时用）
  * @param hint    副标题，说明为什么需要密码
- * @param onPass  验证通过后的回调
+ * @param onPass  验证 / 设置完成后的回调
  * @param onCancel 取消
  */
+/**
+ * 标题 / 副标题 / 图标 —— 内联面板和弹框**共用一份**。
+ *
+ * 第一次用家长区时，标题不能还是「请爸爸妈妈来一下 / 审核需要密码」——
+ * 那会让人以为要输一个**已有的**密码，而键盘其实在让他设新的。
+ *
+ * ⚠️ 两处各写一套的话，改文案时必然走散（这个项目已经栽过好几次）。
+ */
+export function parentPinCopy(hasPin: boolean, title?: string, hint?: string, adultCheck = true) {
+  return {
+    emoji: hasPin ? '🔒' : '🔑',
+    title: hasPin ? (title ?? '请爸爸妈妈来一下') : '先设一个家长密码',
+    hint: hasPin
+      ? hint
+      : adultCheck
+        ? '第一次进家长区：先答一道小题确认是家长，再设一个 4 位数字。'
+        : '第一次进家长区，设一个 4 位数字。以后每次进来都要输它。',
+  }
+}
+
 export function ParentPinPanel({
   title = '请爸爸妈妈来一下',
   hint,
   onPass,
   onCancel,
+  adultCheck = true,
 }: {
   title?: string
   hint?: string
   onPass: () => void
   onCancel?: () => void
+  /** 第一次设密码前先答一道加法（见 `PinFlow` 那段注释） */
+  adultCheck?: boolean
 }) {
   const settings = useApp((s) => s.settings)
-  const [pin, setPin] = useState('')
-  const [error, setError] = useState(false)
-
-  const submit = useCallback(
-    (finalValue?: string) => {
-      // finalValue 来自 PinPad 的第 4 次点击：那时 state 还没更新，
-      // 必须用传进来的值，否则永远读到最后一位之前的状态。
-      const candidate = finalValue ?? pin
-      if (candidate.length < 4) return
-      if (candidate === settings.parentPin) {
-        onPass()
-      } else {
-        setError(true)
-        setPin('')
-        setTimeout(() => setError(false), 900)
-      }
-    },
-    [pin, settings.parentPin, onPass],
-  )
+  const hasPin = !!settings.parentPin
+  const copy = parentPinCopy(hasPin, title, hint, adultCheck)
 
   return (
-    <div className={'space-y-5 ' + (error ? 'anim-wiggle' : '')}>
+    <div className="space-y-5">
       <div className="text-center">
-        <div className="text-5xl">🔒</div>
-        <h3 className="mt-2 font-display text-xl font-extrabold text-ink-900">{title}</h3>
-        {hint && <p className="mt-1 text-sm text-ink-500">{hint}</p>}
-        {error && (
-          <p className="mt-2 text-sm font-bold text-berry-500 anim-fade-in">
-            密码不对，再试一次？
-          </p>
-        )}
+        <div className="text-5xl">{copy.emoji}</div>
+        <h3 className="mt-2 font-display text-xl font-extrabold text-ink-900">{copy.title}</h3>
+        {copy.hint && <p className="mt-1 text-sm text-ink-500">{copy.hint}</p>}
       </div>
-      <PinPad value={pin} onChange={setPin} onSubmit={submit} />
-      {onCancel && (
-        <button
-          onClick={onCancel}
-          className="w-full rounded-2xl py-3 text-base font-bold text-ink-500"
-        >
-          先算了
-        </button>
-      )}
+      <PinFlow onPass={onPass} onCancel={onCancel} adultCheck={adultCheck} />
     </div>
+  )
+}
+
+/* ============================================================
+   家长密码弹框（2026-11-06 统一）
+   ------------------------------------------------------------
+   用户原话：「需要家长密码的，能否统一成弹框的样式，比如点眼睛时候那样。」
+
+   在这之前同一个动作有四种长相：整页只剩键盘（定价页）、键盘顶替按钮
+   （实物单）、键盘铺在页面里（兑换管理、设置页）、弹层里一块（👀 审核）。
+   现在统一成**一颗按钮 + 同一个弹框**：按钮说明「这是爸妈的事」，
+   点下去才出现键盘，输对了弹框自己关掉、页面接着往下走。
+
+   ⚠️ 别把键盘再铺回页面里：
+     · 孩子扫一眼就看见键盘，会以为这一屏坏了（没有可点的东西）；
+     · 键盘占满第一屏，家长看不到「为什么要密码」的上下文（是定价？是收尾？）；
+     · 页面高度被撑开，底部导航被挤走。
+   ============================================================ */
+
+/**
+ * 弹框里那一块：一句副标题 + 键盘。
+ *
+ * **不带标题** —— 标题归外层的 `SheetHead`（👀 审核、`ParentPinSheet` 都是
+ * 这么用的）。原来 👀 那边是 `SheetHead` 出一次标题、`ParentPinPanel` 又出一次，
+ * 屏幕上两个 🔒、两个「请爸爸妈妈来一下」叠着（2026-11-06 截图确认）。
+ */
+export function PinSheetBody({
+  hint,
+  onPass,
+  onClose,
+  adultCheck = true,
+  cancelLabel = '先算了',
+}: {
+  hint?: string
+  onPass: () => void
+  onClose: () => void
+  adultCheck?: boolean
+  cancelLabel?: string
+}) {
+  return (
+    <>
+      {hint && <p className="mb-4 text-center text-sm leading-relaxed text-ink-500">{hint}</p>}
+      <PinFlow
+        onPass={onPass}
+        onCancel={onClose}
+        adultCheck={adultCheck}
+        cancelLabel={cancelLabel}
+      />
+    </>
+  )
+}
+
+/**
+ * 输家长密码的弹框。**全 App 只有这一个输密码界面**（👀 审核那个
+ * `ReviewSheet` 是同一个壳：`Sheet` + `SheetHead` + `PinSheetBody`）。
+ *
+ * @param open    开关
+ * @param onClose 关掉（取消 / 点遮罩 / ✕）—— 不解除锁定
+ * @param onPass  密码正确（或刚设好密码）
+ */
+export function ParentPinSheet({
+  open,
+  onClose,
+  onPass,
+  title,
+  hint,
+  adultCheck = true,
+  cancelLabel = '先算了',
+}: {
+  open: boolean
+  onClose: () => void
+  onPass: () => void
+  title?: string
+  hint?: string
+  /** 第一次设密码前先答一道加法（见 `PinFlow` 那段注释） */
+  adultCheck?: boolean
+  cancelLabel?: string
+}) {
+  const settings = useApp((s) => s.settings)
+  const hasPin = !!settings.parentPin
+  const copy = parentPinCopy(hasPin, title, hint, adultCheck)
+
+  return (
+    <Sheet open={open} onClose={onClose} labelledBy="pin-sheet-title">
+      <SheetHead
+        id="pin-sheet-title"
+        title={copy.title}
+        emoji={copy.emoji}
+        onClose={onClose}
+      />
+      {/* 副标题**不放 `SheetHead` 的 `sub`**：那里是 `truncate` 单行，
+          「第一次进家长区：先答一道小题……」会被截掉一半，而这句恰恰是
+          第一次用的人最需要看全的。 */}
+      <div className="px-5 pb-8 pt-1">
+        <PinSheetBody
+          hint={copy.hint}
+          onPass={onPass}
+          onClose={onClose}
+          adultCheck={adultCheck}
+          cancelLabel={cancelLabel}
+        />
+      </div>
+    </Sheet>
+  )
+}
+
+/**
+ * 「这件事要爸妈来做」的按钮 —— 点开 `ParentPinSheet`。
+ *
+ * 只负责长相和标记，不管状态：`open` 由调用方持有（每个页面自己决定
+ * 过闸之后要显示什么）。
+ *
+ * `data-parent-lock` 是给走查脚本的：**别按文字找**（文案一改就静默失效）。
+ */
+export function ParentLockButton({
+  label,
+  onClick,
+  tone = 'quiet',
+}: {
+  label: string
+  onClick: () => void
+  /** `primary` = 它就是这一屏的主操作（例如「确认兑换 · 去购买」），只是被锁着 */
+  tone?: 'quiet' | 'primary'
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-parent-lock
+      className={
+        'btn w-full active:btn-press ' +
+        (tone === 'primary'
+          ? 'h-12 rounded-2xl bg-grass-500 text-base font-extrabold text-white'
+          : 'h-11 rounded-2xl bg-white text-sm font-extrabold text-ink-600 shadow-flat')
+      }
+    >
+      👤 {label}
+    </button>
   )
 }
 
@@ -181,13 +516,16 @@ export function ParentGate({
   hint,
   children,
   onCancel,
+  adultCheck = true,
 }: {
   title?: string
   hint?: string
   children: React.ReactNode
   onCancel?: () => void
+  /** 第一次设密码前先答一道加法（见 `PinFlow` 那段注释） */
+  adultCheck?: boolean
 }) {
-  const { needsPin, passed, verify } = useParentGate()
+  const { needsPin, passed, unlock } = useParentGate()
 
   if (!needsPin || passed) return <>{children}</>
 
@@ -195,8 +533,12 @@ export function ParentGate({
     <ParentPinPanel
       title={title}
       hint={hint}
-      onPass={() => verify(useApp.getState().settings.parentPin ?? '')}
+      /* 用 `unlock` 而不是「拿刚设的密码再 verify 一遍」：
+         设完那一刻 store 可能还没刷新，`verify(旧值)` 会判失败，
+         表现就是「设了密码却进不去」。 */
+      onPass={unlock}
       onCancel={onCancel}
+      adultCheck={adultCheck}
     />
   )
 }

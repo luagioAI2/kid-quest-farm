@@ -81,6 +81,32 @@ export function paidOf(r: {
 }
 
 /**
+ * 「今天这件东西换了几次」——**谁说了算**。
+ *
+ * 为什么不能本地数一遍了事：两边的「今天」不是同一个意思。
+ * 服务端用**自然日 0 点**（`RedeemService.todayStart`，真正拦人的那一道），
+ * 本地版用**逻辑日**（默认凌晨 4 点，`appDayKey(…, dayStartHour)`）。
+ * 于是 00:00–04:00 这四小时里，本地会把「昨晚换的那次」算进今天 ⇒
+ * 界面上「今天用完了」把按钮禁掉，而服务端明明会放行。
+ *
+ * 反方向（界面放行、服务端拒绝）不会发生：服务端那道闸门不看界面说什么。
+ * 所以这里只是「别让界面说谎」，不承担安全性 —— 但按钮被无故禁掉
+ * 对孩子来说和「坏了」没有区别。
+ *
+ * @param online      在线版才采信服务端（本地版没有这个数）
+ * @param serverCount 服务端给的 `today_count`；没拉到 / 离线时是 `undefined`
+ * @param localCount  本地按逻辑日数出来的（在线版拿不到服务端数时的兜底）
+ */
+export function pickTodayCount(
+  online: boolean,
+  serverCount: number | undefined,
+  localCount: number,
+): number {
+  if (online && typeof serverCount === 'number') return serverCount
+  return localCount
+}
+
+/**
  * 一句话描述这次是怎么付的，给 toast / 记录列表用。
  *
  * 只出一种币时不写「+0」—— 那看着像出错。

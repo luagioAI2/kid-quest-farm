@@ -55,14 +55,36 @@ async function waitForGate(page, timeout = 20000) {
 }
 
 /**
+ * 把家长密码钉成 0000（脚本全都按「输 4 个 0 就进家长区」写的）。
+ *
+ * 2026-10-30 起**新装没有家长密码**：引导只问小名和头像，家长第一次进
+ * 家长区时闸门才要求设一个（输两遍）。要是让每个脚本自己补第二遍输入，
+ * 十几份脚本迟早走散 —— 统一在这里钉一次。
+ *
+ * 想验「第一次用才要求设」那条流程的脚本，用
+ * `dismissOnboarding(page, { seedPin: false })` 跳过这一步。
+ */
+export async function seedParentPin(page, pin = '0000') {
+  const ok = await page.evaluate(async (p) => {
+    const kqf = window.__kqf__
+    if (!kqf) return false
+    const st = kqf.getState()
+    if (st.settings?.parentPin) return true
+    await st.updateSettings({ parentPin: p })
+    return true
+  }, pin)
+  if (!ok) console.warn('[onboarding] 没能钉家长密码（__kqf__ 还没就绪）')
+  return ok
+}
+
+/**
  * 把新手引导整条走完（含给孩子的四步导览）。
  *
- * 走的是「以后再说」而不是真设家长密码 —— 免得把 `parentPin` 改掉，
- * 后面要验家长确认的脚本还得用默认的 0000。
- *
+ * @param {{ seedPin?: boolean }} [opts]
+ *   `seedPin: false` = 不钉默认密码，留给脚本自己走「第一次设密码」那条路
  * @returns {Promise<boolean>} 本来有没有弹引导（false = 没弹，可能是老 profile）
  */
-export async function dismissOnboarding(page) {
+export async function dismissOnboarding(page, { seedPin = true } = {}) {
   await waitForGate(page)
   if (!(await page.evaluate(() => !!document.querySelector('[data-step]')))) {
     return false
@@ -71,10 +93,8 @@ export async function dismissOnboarding(page) {
   await clickExact(page, '开始设置')
   await waitFor(page, 'input[aria-label="孩子的小名"]')
 
+  // 2026-10-30 起没有「设家长密码」这一步了：小名/头像 → 直接到完成
   await clickExact(page, '下一步')
-  await waitFor(page, '[data-step="pin"]')
-
-  await clickExact(page, '以后再说')
   await waitFor(page, '[data-step="done"]')
 
   await clickExact(page, '带宝贝看一遍')
@@ -88,6 +108,8 @@ export async function dismissOnboarding(page) {
 
   // 等 `onboardingDone` 真的落库（finishTour 里是 await updateSettings）
   await new Promise((r) => setTimeout(r, 600))
+
+  if (seedPin) await seedParentPin(page)
 
   return true
 }

@@ -1,0 +1,30 @@
+{
+ "generated": "scripts/make-asset-manifest.mjs",
+ "note": "改过资源就要重跑本脚本，否则宿主校验会报「哈希对不上」",
+ "total": {
+  "files": 4,
+  "bytes": 2434250
+ },
+ "assets": [
+  {
+   "file": "audio/bgm-fever.m4a",
+   "bytes": 490440,
+   "sha256": "ab8daeaf22047446766d5e41c1a511906f5e0b1beda8c76a02681452410f3dc6"
+  },
+  {
+   "file": "audio/bgm-hype.m4a",
+   "bytes": 962496,
+   "sha256": "eb741b1a74a7a1f4d19c3faebeec929c1dafbc429553fe495cc7c94e2dbb7d59"
+  },
+  {
+   "file": "audio/bgm-neon.m4a",
+   "bytes": 978911,
+   "sha256": "9d82b7251d30876989118b85916a181d8e173f818041cd485a4d5aa4f9623e79"
+  },
+  {
+   "file": "ui/icon_coin_selected.svg",
+   "bytes": 2403,
+   "sha256": "4df701b4fe745c8c988121817de61a1d007e05d83a93d4dad3d20d3416de215c"
+  }
+ ]
+}

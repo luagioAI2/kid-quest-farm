@@ -3,12 +3,28 @@ import clsx from 'clsx'
 import { humanizeAgo, addDays } from '@/domain/time'
 import type { LedgerEntry, LedgerSource } from '@/domain/types'
 import { selectStreak, useApp } from '@/store/useApp'
+import { Portal } from '@/components/Portal'
 
 /* ============================================================
    我的积分 · 流水 / 7 日柱状图 / 成就收集
    ------------------------------------------------------------
    图表全部手写 div + CSS（项目没有装图表库，也不新增依赖）。
    成就全部由真实数据推导，孩子能看到自己攒到了什么。
+
+   ## 2026-11-05：从「底部一格」改成「顶栏 🪙 点开的整屏层」
+
+   用户原话：「积分是不是换个地方更好，主要是挤占了下边栏，
+   下边栏 4 个为好。」这一页本来就不提供任何**动作** ——
+   余额常驻在顶栏，这里只有「这分怎么来的 / 攒到哪些成就」，
+   占一格底栏是纯消耗。入口挪到顶栏那颗 🪙（`data-tour="header-points"`），
+   底栏回到四格。
+
+   做成整屏层（而不是像设置那样整棵树替换）的理由：它随时可能从
+   任何一个 tab 点开，关掉要**回到原来那一屏**。做成整页就得自己写
+   「从哪来的、回哪去」，而设置页那条路是「进了设置就没有 tab 概念」。
+
+   ⚠️ 这一层是 `z-50`，**盖不住**新手引导 / 登录闸门（`z-[60]`）——
+   故意的：导览第 4 步的高亮框指在底下的顶栏那颗 🪙 上，它必须能压住这一层。
    ============================================================ */
 
 /** 流水一次渲染多少条，点「再看早一点」再追加一批 */
@@ -16,7 +32,7 @@ const PAGE_SIZE = 30
 /** 首屏渲染条数 */
 const INITIAL_ROWS = 30
 
-export default function PointsPage() {
+export default function PointsSheet({ onClose }: { onClose: () => void }) {
   const ledger = useApp((s) => s.ledger)
   const instances = useApp((s) => s.instances)
   const checkIns = useApp((s) => s.checkIns)
@@ -50,138 +66,157 @@ export default function PointsPage() {
 
   const unlocked = achievements.filter((a) => a.unlocked).length
 
+  /*
+    ⚠️ 整屏层**必须 Portal 到 body**。
+    它挂在 `<main className="anim-fade-in">` 里面 —— 那层 opacity 淡入动画
+    会让浏览器把它当成层叠上下文，底栏（z-30，DOM 里在后面）会压在这层上面。
+    详见 `components/Portal.tsx` 文件头那次事故。
+
+    `z-50` 而不是 `z-[60]`：60 那档留给新手引导/登录闸门，
+    它们要能盖住这一层（导览第 4 步的高亮框就指在底下的顶栏上）。
+  */
   return (
-    <div className="page-col px-4 pb-28">
-      {/*
-        ⚠️ 这里**不再有「🪙 现在一共有 N」那张余额大卡**。
-        全局顶栏（`App.tsx` 的 sticky header）已经常驻显示同一个数，
-        同一屏里同一个数出现两次，孩子反而不知道该看哪个。
-        这一页的职责是「这些分是怎么来的 / 攒到了哪些成就」，
-        余额只在顶栏说一次。
-        （e2e-check 有断言守着；同一条规矩也适用于兑换页和农场卡。）
-      */}
-      <header className="pt-safe pt-4">
-        <h1 className="font-display text-xl font-extrabold text-ink-900">我的积分</h1>
-      </header>
-
-      {/* ================= 7 日柱状图 ================= */}
-      <section className="surface mt-4 border border-sky-300 bg-white p-4">
-        <div className="flex items-baseline justify-between">
-          <h2 className="font-display text-base font-extrabold text-ink-900">最近 7 天赚到的分</h2>
-          <span className="tnum text-xs font-bold text-ink-500">
-            共 +{week.reduce((s, d) => s + d.total, 0)}
-          </span>
-        </div>
-        <div className="mt-4 flex h-[132px] items-end justify-between gap-1.5">
-          {week.map((d) => {
-            const h = week.max > 0 ? (d.total / week.max) * 100 : 0
-            return (
-              <div key={d.key} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-                <span
-                  className={clsx(
-                    'tnum text-[10px] font-extrabold',
-                    d.total > 0 ? 'text-ink-700' : 'text-ink-300',
-                  )}
-                >
-                  {d.total > 0 ? d.total : ''}
-                </span>
-                <div className="flex h-[76px] w-full items-end">
-                  <div
-                    className={clsx(
-                      'w-full rounded-t-lg border border-b-0 transition-all duration-500',
-                      d.isToday ? 'border-sun-500 bg-sun-300' : 'border-sky-400 bg-sky-300',
-                      d.total === 0 && 'border-ink-100 bg-ink-100',
-                    )}
-                    style={{ height: `${Math.max(d.total > 0 ? 10 : 4, h)}%` }}
-                  />
-                </div>
-                <span
-                  className={clsx(
-                    'text-[10px] font-bold',
-                    d.isToday ? 'text-sun-600' : 'text-ink-500',
-                  )}
-                >
-                  {d.label}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* ================= 成就 ================= */}
-      <section className="mt-6">
-        <div className="mb-3 flex items-center gap-2">
-          <span aria-hidden className="text-xl">
-            🏆
-          </span>
-          <h2 className="font-display text-lg font-extrabold text-ink-900">我的成就</h2>
-          <span className="tnum rounded-pill bg-sun-200 px-2 py-0.5 text-xs font-extrabold text-sun-700">
-            {unlocked}/{achievements.length}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-2.5 md:grid-cols-4 xl:grid-cols-6">
-          {achievements.map((a) => (
-            <div
-              key={a.id}
-              title={a.desc}
-              className={clsx(
-                'surface flex min-h-[104px] flex-col items-center justify-center gap-1 border p-2 text-center',
-                a.unlocked
-                  ? clsx(a.border, a.bg)
-                  : 'border-dashed border-ink-300 bg-white/60 opacity-70',
-              )}
+    <Portal>
+      <div
+        data-points-sheet
+        className="fixed inset-0 z-50 flex flex-col bg-paper anim-fade-in"
+      >
+        <header className="shrink-0 border-b border-ink-900/10 bg-paper/95 backdrop-blur">
+          <div className="page-col flex items-center gap-3 px-4 py-3 pt-safe">
+            <button
+              type="button"
+              data-points-close
+              onClick={onClose}
+              aria-label="返回"
+              className="btn flex h-11 w-11 items-center justify-center rounded-full bg-white text-2xl shadow-flat active:btn-press"
             >
-              <span className={clsx('text-3xl', a.unlocked ? 'anim-bounce-in' : 'grayscale')}>
-                {a.unlocked ? a.emoji : '🔒'}
-              </span>
-              <span
-                className={clsx(
-                  'font-display text-[11px] font-extrabold leading-tight',
-                  a.unlocked ? 'text-ink-900' : 'text-ink-500',
-                )}
-              >
-                {a.name}
-              </span>
-              <span className="tnum text-[10px] font-bold text-ink-500">
-                {a.progressText}
+              ←
+            </button>
+            <h1 className="font-display text-xl font-extrabold text-ink-900">我的积分</h1>
+          </div>
+        </header>
+
+        <div className="page-col flex-1 overflow-y-auto px-4 pb-10 pt-4">
+          {/* ================= 7 日柱状图 ================= */}
+          <section className="surface mt-4 border border-sky-300 bg-white p-4">
+            <div className="flex items-baseline justify-between">
+              <h2 className="font-display text-base font-extrabold text-ink-900">最近 7 天赚到的分</h2>
+              <span className="tnum text-xs font-bold text-ink-500">
+                共 +{week.reduce((s, d) => s + d.total, 0)}
               </span>
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="mt-4 flex h-[132px] items-end justify-between gap-1.5">
+              {week.map((d) => {
+                const h = week.max > 0 ? (d.total / week.max) * 100 : 0
+                return (
+                  <div key={d.key} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                    <span
+                      className={clsx(
+                        'tnum text-[10px] font-extrabold',
+                        d.total > 0 ? 'text-ink-700' : 'text-ink-300',
+                      )}
+                    >
+                      {d.total > 0 ? d.total : ''}
+                    </span>
+                    <div className="flex h-[76px] w-full items-end">
+                      <div
+                        className={clsx(
+                          'w-full rounded-t-lg border border-b-0 transition-all duration-500',
+                          d.isToday ? 'border-sun-500 bg-sun-300' : 'border-sky-400 bg-sky-300',
+                          d.total === 0 && 'border-ink-100 bg-ink-100',
+                        )}
+                        style={{ height: `${Math.max(d.total > 0 ? 10 : 4, h)}%` }}
+                      />
+                    </div>
+                    <span
+                      className={clsx(
+                        'text-[10px] font-bold',
+                        d.isToday ? 'text-sun-600' : 'text-ink-500',
+                      )}
+                    >
+                      {d.label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
 
-      {/* ================= 积分流水 ================= */}
-      <section className="mt-6">
-        <div className="mb-3 flex items-center gap-2">
-          <span aria-hidden className="text-xl">
-            📜
-          </span>
-          <h2 className="font-display text-lg font-extrabold text-ink-900">积分流水</h2>
-        </div>
-        {ledger.length === 0 ? (
-          <div className="surface-paper p-4 text-sm font-bold text-ink-500">
-            还没有记录，去完成一个任务吧 ✨
-          </div>
-        ) : (
-          <>
-            <ul className="space-y-2">
-              {ledger.slice(0, visibleCount).map((e) => (
-                <LedgerRow key={e.id} entry={e} />
+          {/* ================= 成就 ================= */}
+          <section className="mt-6">
+            <div className="mb-3 flex items-center gap-2">
+              <span aria-hidden className="text-xl">
+                🏆
+              </span>
+              <h2 className="font-display text-lg font-extrabold text-ink-900">我的成就</h2>
+              <span className="tnum rounded-pill bg-sun-200 px-2 py-0.5 text-xs font-extrabold text-sun-700">
+                {unlocked}/{achievements.length}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2.5 md:grid-cols-4 xl:grid-cols-6">
+              {achievements.map((a) => (
+                <div
+                  key={a.id}
+                  title={a.desc}
+                  className={clsx(
+                    'surface flex min-h-[104px] flex-col items-center justify-center gap-1 border p-2 text-center',
+                    a.unlocked
+                      ? clsx(a.border, a.bg)
+                      : 'border-dashed border-ink-300 bg-white/60 opacity-70',
+                  )}
+                >
+                  <span className={clsx('text-3xl', a.unlocked ? 'anim-bounce-in' : 'grayscale')}>
+                    {a.unlocked ? a.emoji : '🔒'}
+                  </span>
+                  <span
+                    className={clsx(
+                      'font-display text-[11px] font-extrabold leading-tight',
+                      a.unlocked ? 'text-ink-900' : 'text-ink-500',
+                    )}
+                  >
+                    {a.name}
+                  </span>
+                  <span className="tnum text-[10px] font-bold text-ink-500">
+                    {a.progressText}
+                  </span>
+                </div>
               ))}
-            </ul>
-            {ledger.length > visibleCount && (
-              <button
-                onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
-                className="btn active:btn-press mt-3 w-full rounded-btn border border-ink-200 bg-white py-2.5 text-sm font-extrabold text-ink-700"
-              >
-                再看早一点的记录（还有 {ledger.length - visibleCount} 条）
-              </button>
+            </div>
+          </section>
+
+          {/* ================= 积分流水 ================= */}
+          <section className="mt-6">
+            <div className="mb-3 flex items-center gap-2">
+              <span aria-hidden className="text-xl">
+                📜
+              </span>
+              <h2 className="font-display text-lg font-extrabold text-ink-900">积分流水</h2>
+            </div>
+            {ledger.length === 0 ? (
+              <div className="surface-paper p-4 text-sm font-bold text-ink-500">
+                还没有记录，去完成一个任务吧 ✨
+              </div>
+            ) : (
+              <>
+                <ul className="space-y-2">
+                  {ledger.slice(0, visibleCount).map((e) => (
+                    <LedgerRow key={e.id} entry={e} />
+                  ))}
+                </ul>
+                {ledger.length > visibleCount && (
+                  <button
+                    onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                    className="btn active:btn-press mt-3 w-full rounded-btn border border-ink-200 bg-white py-2.5 text-sm font-extrabold text-ink-700"
+                  >
+                    再看早一点的记录（还有 {ledger.length - visibleCount} 条）
+                  </button>
+                )}
+              </>
             )}
-          </>
-        )}
-      </section>
-    </div>
+          </section>
+        </div>
+      </div>
+    </Portal>
   )
 }
 

@@ -40,6 +40,7 @@ import { makeProfileDir, SCRATCH_BASE } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4391/'
 const VIEWPORT = process.argv[3] ?? 'phone'
@@ -203,8 +204,38 @@ async function openGameSettings() {
   await wait(700)
   if (!(await clickText('游戏'))) return '设置页里没有「游戏」那一栏'
   await wait(600)
+  /* 2026-11 起家长密码闸门是「卡片 + 按钮」：先点「爸妈：输密码」才弹数字键盘
+     （`ParentPinSheet`）。不点的话下面那 4 次 0 全打在空气里，页面停在那张卡上，
+     报错却是「游戏列表没渲染」—— 排查方向整个是错的。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+      /爸妈：输密码/.test(x.textContent ?? ''),
+    )
+    b?.click()
+  })
+  /* ★ 必须**等键盘真的出现**再点数字。少了这一句，下面的循环第一轮就会
+     因为「页面上没有『请输入家长密码』」直接 break，而 `check('过了家长密码')`
+     判的是「没有这几个字」⇒ **假绿**，后面全部红成「列表里没这一行」。 */
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
   for (let round = 0; round < 2; round++) {
-    const locked = await page.evaluate(() => document.body.innerText.includes('请输入家长密码'))
+    /* 判「还锁着」用**数字键盘在不在**。旧写法判「页面上有没有『请输入家长密码』」，
+       `ParentPinSheet` 文案一换就永远 false ⇒ 循环第一轮 break、4 位密码一次没输，
+       而下面那句 check 判的又是「没有这几个字」⇒ **假绿**，后面全红成
+       「列表里没这一行」，排查方向整个是错的。 */
+    const locked = await page.evaluate(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+    )
     if (!locked) return null
     for (let i = 0; i < 4; i++) {
       await page.evaluate(() => {
@@ -283,9 +314,14 @@ console.log('【⓪ 基线】')
    ============================================================ */
 console.log('\n【① 安装：设置 → 游戏 → 游戏市场 → 安装】')
 {
+  /* ★★ 顺序不能反：**先预置拥有，再打开设置页**。
+     2026-10-30 起「没拥有不能装」；2026-11-07 起「未拥有的游戏在列表里根本不出现」
+     ⇒ 先开页面的话列表是**空的**，`waitFor('[data-local-row]', 8000)` 必然超时，
+     报出来是「设置页上没有游戏列表（游戏市场那张卡没渲染？）」——
+     而下一句 `grantGame` 之后行立刻就出现了。这条假红骗了整整一轮。 */
+  await grantGame(page, GAME_ID)
   const err = await openGameStore()
   check('打开「设置 → 游戏 → 游戏市场」并过了家长密码', err === null, err ?? '')
-
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
     if (!li) return null
@@ -305,16 +341,6 @@ console.log('\n【① 安装：设置 → 游戏 → 游戏市场 → 安装】'
   const ver = await page.evaluate((id) => window.__kqf__.plugin.installed()[id]?.version, GAME_ID)
   check(`装上的版本是 v${GAME_VERSION}`, ver === GAME_VERSION, ver ?? '(没装上)')
 
-  /*
-   * ★ 装得上 = `checkPluginEconomy` 放行了。这是本作最关键的一关：
-   *   `playCost 10 / expectedPayout 6.5`（0.65 ≤ 0.8）。写反了会在这里红，
-   *   而假宿主里永远是绿的（它不做经济校验）。
-   */
-  const econ = await page.evaluate(() => {
-    const el = document.querySelector('[data-plugin-economy]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
-  })
-  console.log('    家长看到的说明:', econ || '(没有 [data-plugin-economy])')
 
   const after = await snap()
   check('已安装清单里有 cloudfarm', after.installed.includes(GAME_ID), after.installed.join(','))
@@ -355,6 +381,8 @@ await waitForApp(page)
 }
 
 let pointsAfterPlant = 0
+/* ③ 卖出的券数：④ 退出之后要拿它去核顶栏那个数字（全屏时顶栏是收掉的） */
+let vouchersSold = 0
 {
   check('点了底部那一格', await clickSel(`[data-tour="tab-${GAME_ID}"]`))
   check('宿主给插件开出了容器（`data-plugin-host`）', await waitFor(`[data-plugin-host="${GAME_ID}"]`, 20000))
@@ -439,12 +467,34 @@ let pointsAfterPlant = 0
     /none/.test(shape.barBg) && shape.barShadow === 'none',
     `bg=${shape.barBg} shadow=${shape.barShadow}`,
   )
-  // 反过来：宿主顶栏必须**真的**在显示兑换券（否则孩子哪儿都看不到这个数）
-  const hostVoucher = await page.evaluate(() => {
-    const el = document.querySelector('header [aria-label^="兑换券"]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : null
-  })
-  check('★ 宿主顶栏显示兑换券（插件当值时也在）', hostVoucher !== null, hostVoucher ?? '(顶栏没有兑换券)')
+  /*
+   * ★ 2026-11-11 用户改的交互：进游戏页**默认带外壳**（顶栏底栏都在），
+   *   想沉浸要点画面右下角那枚「全屏」。
+   *   所以先验「默认不全屏」，再**主动进全屏**，后面整段都在全屏里跑
+   *   （④ 那一步还是靠右上角胶囊退出，语义没变）。
+   *   兑换券那个数字挪到 ④ 退出之后再验 —— 全屏时顶栏本来就不渲染。
+   */
+  const normal = await page.evaluate(() => ({
+    header: !!document.querySelector('header'),
+    nav: !!document.querySelector('nav'),
+    toggle: !!document.querySelector('[data-tour="game-fullscreen"]'),
+  }))
+  check('★ 默认不全屏：顶栏在（游戏页不再是整屏）', normal.header === true)
+  check('★ 默认不全屏：底栏在', normal.nav === true)
+  check('★ 游戏画面右下角有「全屏」键', normal.toggle === true)
+
+  await page.evaluate(() => document.querySelector('[data-tour="game-fullscreen"]')?.click())
+  await wait(700)
+  const chrome = await page.evaluate(() => ({
+    header: !!document.querySelector('header'),
+    nav: !!document.querySelector('nav'),
+    exit: !!document.querySelector('[data-tour="exit-game"]'),
+    back: !!document.querySelector('[data-tour="exit-immersive"]'),
+  }))
+  check('★ 全屏：App 顶栏收掉了（游戏多出约 56px）', chrome.header === false)
+  check('★ 全屏：底栏也收掉了（不会误点「心愿」）', chrome.nav === false)
+  check('★ 全屏：右上角留了「退出游戏」胶囊', chrome.exit === true)
+  check('★ 全屏：左上角留了「返回」（退出全屏）', chrome.back === true)
   // 留一张图给走查（`screenshots/` 才是要留的，这里进 scratch）
   await page.screenshot({ path: join(OUT, `${VIEWPORT}-host.png`) })
 
@@ -525,18 +575,10 @@ console.log('\n【③ 收成 → 卖出 → 兑换券】')
   )
   /*
    * ★ 光看 store 不够：孩子看到的是**顶栏那个数**。
-   *   `hostApi.mintVoucher` 里有 `deps.refresh()`（got > 0 时），这条断言就是钉住它 ——
-   *   漏了 refresh 的话 store 会变、顶栏不动，而所有 store 断言照样绿。
+   *   但全屏时顶栏是收掉的 ⇒ 这条挪到 ④ 退出之后验（那时读到的仍是刚卖出来的数，
+   *   `hostApi.mintVoucher` 漏了 `deps.refresh()` 一样会被抓到）。
    */
-  const headAfter = await page.evaluate(() => {
-    const el = document.querySelector('header [aria-label^="兑换券"]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : null
-  })
-  check(
-    '★ 卖出后宿主顶栏的兑换券数字跟着变了',
-    headAfter !== null && headAfter.includes(String(afterSell.vouchers)),
-    `${headAfter ?? '(没有)'}（余额 ${afterSell.vouchers}）`,
-  )
+  vouchersSold = afterSell.vouchers
   check(
     '卖出**没有**把积分加回来',
     afterSell.balance === pointsAfterPlant,
@@ -562,9 +604,9 @@ console.log('\n【③ 收成 → 卖出 → 兑换券】')
       底栏里根本没有 `tab-farm` 那一格。要「切走」只能点别的栏（任务 / 兑换 / 积分）。
       第一版就是点了 `tab-farm` ⇒ 三条连带红，看着像 unmount 没跑。
    ============================================================ */
-console.log('\n【④ 切到「任务」栏 → 插件卸载】')
+console.log('\n【④ 点「退出游戏」→ 插件卸载】')
 {
-  check('点底栏「任务」那一格', await clickSel('[data-tour="tab-tasks"]'))
+  check('点「退出游戏」', await clickSel('[data-tour="exit-game"], nav [data-tour="tab-tasks"]'))
   await wait(1200)
   const gone = await page
     .waitForFunction(() => !window.__farm, { timeout: 10000 })
@@ -575,6 +617,37 @@ console.log('\n【④ 切到「任务」栏 → 插件卸载】')
     GAME_ID,
   )
   check('宿主容器也收掉了', box === false)
+
+  /*
+   * 退出之后才看顶栏 —— 全屏那一屏里它是故意不渲染的。
+   * 顺带钉住「退出 = 回任务页」这个语义：底栏那一格必须是选中态。
+   *
+   * ⚠️ 2026-11-11：这里原来判 `exit === false`（全屏胶囊收掉了）。
+   *   现在**回到任务页本来就带外壳**，那颗胶囊当然不在 —— 但「不在」也可能
+   *   只是因为它藏在全屏里，所以真正的判据换成「外壳回来了 + 全屏键也不在
+   *   （我们不在游戏页）」，那才说明确实离开了游戏。
+   */
+  const back = await page.evaluate(() => ({
+    header: !!document.querySelector('header'),
+    nav: !!document.querySelector('nav'),
+    exit: !!document.querySelector('[data-tour="exit-game"]'),
+    toggle: !!document.querySelector('[data-tour="game-fullscreen"]'),
+    voucher: (() => {
+      const el = document.querySelector('header [aria-label^="兑换券"]')
+      return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : null
+    })(),
+    onTasks: document.querySelector('[data-tour="tab-tasks"]')?.getAttribute('aria-current') === 'page',
+  }))
+  check('退出后顶栏回来了', back.header === true)
+  check('退出后底栏回来了', back.nav === true)
+  check('退出后「退出游戏」胶囊跟着收掉', back.exit === false)
+  check('退出后「全屏」键也不在（确实离开了游戏页）', back.toggle === false)
+  check('★ 退出回到「任务」页（那一格是选中态）', back.onTasks === true)
+  check(
+    '★ 顶栏兑换券显示的就是刚卖出来的数',
+    !!back.voucher && back.voucher.includes(String(vouchersSold)),
+    `${back.voucher ?? '(没有)'}（卖出 ${vouchersSold}）`,
+  )
 
   const after = await snap()
   check(

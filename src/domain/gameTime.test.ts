@@ -5,6 +5,7 @@ import {
   clampGameDailyMinutes,
   formatPlayed,
   isGameLocked,
+  mergeGameClock,
   playedSecToday,
   remainingSec,
   rollGameClock,
@@ -113,5 +114,59 @@ describe('formatPlayed', () => {
   it('整分钟向下取整', () => {
     expect(formatPlayed(600)).toBe('10 分钟')
     expect(formatPlayed(659)).toBe('10 分钟')
+  })
+})
+
+describe('mergeGameClock（两台设备的今日用量怎么合）', () => {
+  /* 时间点写死：`appDayKey` 按**本地时区**算，用 `Date.now()` 会让断言在
+     跨午夜 / 跨时区时飘。10 点这个时刻离任何一天的两头都远。 */
+  const NOW = new Date(2026, 10, 3, 10, 0, 0).getTime()
+  const TODAY = appDayKey(NOW, 0)
+
+  it('取大的那个 —— 另一台设备玩得更多时，本机要跟上', () => {
+    expect(mergeGameClock({ day: TODAY, sec: 300 }, { day: TODAY, sec: 900 }, 0, NOW)).toEqual({
+      day: TODAY,
+      sec: 900,
+    })
+    expect(mergeGameClock({ day: TODAY, sec: 900 }, { day: TODAY, sec: 300 }, 0, NOW)).toEqual({
+      day: TODAY,
+      sec: 900,
+    })
+  })
+
+  it('★ 取 max 而不是「云端覆盖」：否则拉一次退回去一点，额度永远用不完', () => {
+    const got = mergeGameClock({ day: TODAY, sec: 25 * 60 }, { day: TODAY, sec: 20 * 60 }, 0, NOW)
+    expect(got.sec).toBe(25 * 60)
+  })
+
+  it('★ 也不是相加：两台设备同时在玩，同一段时间会被算两遍', () => {
+    const got = mergeGameClock({ day: TODAY, sec: 600 }, { day: TODAY, sec: 600 }, 0, NOW)
+    expect(got.sec).toBe(600)
+  })
+
+  it('别的日子一律按 0（今天从头算）', () => {
+    expect(mergeGameClock({ day: '2000-01-01', sec: 9999 }, undefined, 0, NOW)).toEqual({
+      day: TODAY,
+      sec: 0,
+    })
+    expect(mergeGameClock(undefined, { day: '2000-01-01', sec: 9999 }, 0, NOW)).toEqual({
+      day: TODAY,
+      sec: 0,
+    })
+  })
+
+  it('坏数据不炸：字段缺失 / 负数 / NaN 都当 0', () => {
+    const bad = { day: TODAY, sec: Number.NaN } as never
+    expect(mergeGameClock(bad, { day: TODAY, sec: -5 }, 0, NOW)).toEqual({ day: TODAY, sec: 0 })
+    expect(mergeGameClock(undefined, undefined, 0, NOW)).toEqual({ day: TODAY, sec: 0 })
+  })
+
+  it('跨天口径跟 `dayStartHour` 走：设成凌晨 4 点，1 点算昨天', () => {
+    const at1am = new Date(2026, 10, 3, 1, 0, 0).getTime()
+    const yesterday = appDayKey(at1am, 4)
+    expect(mergeGameClock({ day: yesterday, sec: 1200 }, undefined, 4, at1am)).toEqual({
+      day: yesterday,
+      sec: 1200,
+    })
   })
 })

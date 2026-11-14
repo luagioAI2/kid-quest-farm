@@ -21,6 +21,7 @@ import type {
   RedeemRecord,
   Task,
   TaskInstance,
+  WishBuyLink,
   WishOffer,
   WishOrder,
   WishCode,
@@ -273,6 +274,18 @@ export async function listGameKv(gameId: string): Promise<Record<string, unknown
   return out
 }
 
+/**
+ * 删一款游戏的**一个**键（没存过就是空操作）。
+ *
+ * 在线版拉取存档时用它「先清后写」：服务端已经删掉的键，本地也要跟着消失，
+ * 否则插件 `list()` 会看到一个服务端根本没有的键。
+ *
+ * ⚠️ 和 `clearGameKv`（删整款）/ `detachGameKv`（只摘安装）是三件事，别混。
+ */
+export async function deleteGameKv(gameId: string, key: string): Promise<void> {
+  await db.gameKv.delete(gameKvKey(gameId, key))
+}
+
 /** 卸载一款游戏：只删**它自己的**状态，返回删掉的行数。 */
 export async function clearGameKv(gameId: string): Promise<number> {
   return db.gameKv.where('gameId').equals(gameId).delete()
@@ -372,6 +385,39 @@ export async function getMeta<T>(key: string, fallback: T): Promise<T> {
 
 export async function setMeta(key: string, value: unknown): Promise<void> {
   await db.meta.put({ key, value })
+}
+
+/* ---------------- 心愿商城的外链缓存（第七轮） ---------------- */
+
+/**
+ * `itemId → { url, label }`，服务端下发的外链**整份**存这一个键。
+ *
+ * 为什么存 `meta` 而不是新开一张表：`meta` 本来就是 key-value，
+ * 加一个 key **不需要动 Dexie 版本号**，也就不需要写迁移、不需要改老库升级用例。
+ * `wipeAll` 已经会清 `meta`，不用额外处理。
+ *
+ * ⚠️ 它是**后台配置的本地缓存**，不是孩子挣到的东西 ⇒
+ *    `exportBackup` 里要把它剥掉（见那里的注释）：跟着备份跑到另一台设备上，
+ *    运营后来清掉的链接会复活，孩子点进去是 404，而且下次拉取之前没人知道。
+ */
+export const WISH_BUY_LINKS_KEY = 'wish.buyLinks'
+
+export async function loadWishBuyLinks(): Promise<Record<string, WishBuyLink>> {
+  const raw = await getMeta<Record<string, WishBuyLink>>(WISH_BUY_LINKS_KEY, {})
+  // 脏数据（手改过库 / 老版本写过别的形状）不能让整页心愿商城崩 —— 只收有 url 的
+  const out: Record<string, WishBuyLink> = {}
+  for (const [id, v] of Object.entries(raw ?? {})) {
+    if (!v || typeof v.url !== 'string') continue
+    const url = v.url.trim()
+    if (!url) continue
+    const label = typeof v.label === 'string' ? v.label.trim() : ''
+    out[id] = label ? { url, label } : { url }
+  }
+  return out
+}
+
+export async function saveWishBuyLinks(links: Record<string, WishBuyLink>): Promise<void> {
+  await setMeta(WISH_BUY_LINKS_KEY, links)
 }
 
 /* ---------------- 农场状态封装 ---------------- */
@@ -491,7 +537,12 @@ export async function loadFarmEvents(limit = 30): Promise<FarmEvent[]> {
 
 export async function loadRedeemItems(): Promise<RedeemItem[]> {
   const rows = await db.redeemItems.toArray()
-  return rows.filter((r) => !r.archived).sort((a, b) => a.cost - b.cost)
+  /* `visible !== false`：在线版由服务端判定（一次性换过 / 缺货 / 已下架），
+     本地版不写这个字段 ⇒ `undefined !== false` 恒真，行为不变。
+     ⚠️ 写 `!r.visible` 会把本地版的整张表清空 —— 本地版从来没写过它。 */
+  return rows
+    .filter((r) => !r.archived && r.visible !== false)
+    .sort((a, b) => a.cost - b.cost)
 }
 
 export async function loadAllRedeemItems(): Promise<RedeemItem[]> {
@@ -559,6 +610,35 @@ export async function consumeItem(itemId: string, count = 1): Promise<boolean> {
   })
 }
 
+/* ---------------- 账本暂存（在线版农场动作） ---------------- */
+
+/**
+ * 账本暂存的钩子。
+ *
+ * 返回 `true` = 「这笔账我接管了，别写本地」。
+ *
+ * ## 为什么需要它
+ *
+ * 在线版的农场动作要把「状态 + 账本」**一起**提交给服务端（同一个事务，
+ * 见 `online/farm.ts`）。如果这里照常写本地，提交成功后本地会多出一笔，
+ * 服务端那份再拉下来又是一笔 —— **余额凭空翻倍**，而且两边都不报错。
+ *
+ * 所以动作期间这笔账**根本不写本地**，只攒成 claim 等着一并提交；
+ * 服务端那份由下一次拉取补进 `ledger` / `harvestLedger`。
+ *
+ * ★ 默认 `null`（本地版 / 单测 / 任何没开在线版农场的场景），一个字节都不改。
+ */
+export type LedgerSink = (
+  row: { delta: number; source: string; memo: string; refId?: string },
+  currency: 'points' | 'coupon',
+) => boolean
+
+let ledgerSink: LedgerSink | null = null
+
+export function setLedgerSink(fn: LedgerSink | null): void {
+  ledgerSink = fn
+}
+
 /* ---------------- 积分账本 ---------------- */
 
 /**
@@ -609,6 +689,24 @@ export async function postLedger(
   },
 ): Promise<LedgerEntry> {
   const delta = Math.round(entry.delta)
+  /* 在线版农场动作：这笔账交给服务端（见 `online/farm.ts`），本地不落。
+     `balanceAfter` 填 0 —— 农场那边只用它判断「发没发出去」，不读余额。 */
+  if (
+    ledgerSink?.(
+      { delta, source: entry.source, memo: entry.memo, refId: entry.refId },
+      'points',
+    )
+  ) {
+    return {
+      id: entry.id ?? `pending_${Date.now().toString(36)}`,
+      delta,
+      balanceAfter: 0,
+      source: entry.source,
+      refId: entry.refId,
+      memo: entry.memo,
+      createdAt: entry.createdAt ?? Date.now(),
+    }
+  }
   return db.transaction('rw', db.ledger, async () => {
     const tip = await ledgerTip()
     const row: LedgerEntry = {
@@ -707,6 +805,61 @@ export async function readGameCoinLedger(gameId: string): Promise<GameCoinEntry[
 export async function gameCoinBalanceOf(gameId: string): Promise<number> {
   const rows = await readGameCoinLedger(gameId)
   return rows.reduce((sum, r) => sum + r.delta, 0)
+}
+
+/**
+ * **在线版专用**：把服务端的币余额镜像进 `__coin`（写成**单行**账本，
+ * `delta` 就是余额）。
+ *
+ * ## 为什么用「镜像」而不是「在线时直接问服务端」
+ *
+ * `gameCoinBalance()` 是插件**每帧都可能调**的方法（画「还剩几个币」）。
+ * 改成每次发一个 HTTP 请求的话，一个 60fps 的小游戏能把接口打成筛子，
+ * 而且没网时每帧都要等一次超时。
+ *
+ * 所以余额仍然从 Dexie 读（一次 IndexedDB 读，微秒级），
+ * 由三处保证它是**服务端那份**：
+ *   ① 拉取（`sync/pull.ts`）把 `/game/coin/list` 整个镜像过来；
+ *   ② 每次写穿成功，用**服务端返回的 `balance`** 覆盖（不是本地加减）；
+ *   ③ 本地版（`VITE_APP_MODE=local`）永远不调这两个函数，
+ *      账本仍然是逐笔 delta。
+ *
+ * ## 为什么敢写成「单行」
+ *
+ * 本地读币的地方只有 `gameCoinBalanceOf`（求和）和 `gameCoins` 调试桥
+ * （也是求和），**没有任何界面显示币的流水**。所以单行不丢信息：
+ * 求和结果就是余额，而明细在服务端的 `game_coin_ledger` 里
+ * （要看流水就去 `/game/coin/ledger`，别在本地重建一份）。
+ *
+ * ⚠️ 千万别在在线模式下再往这个数组里 push —— 那会让镜像变成
+ * 「服务端余额 + 本地增量」，两边各自演进，且**不报错**。
+ */
+export async function mirrorGameCoinBalance(gameId: string, balance: number): Promise<void> {
+  const n = Math.round(balance)
+  await setGameKv(gameId, GAME_COIN_KEY, [{ delta: n, memo: '服务端余额', at: Date.now() }])
+}
+
+/**
+ * **在线版专用**：清掉所有游戏的币镜像（拉取时「先清后写」）。
+ *
+ * 为什么必须清：`/game/coin/list` **只返回开过钱包的游戏**（服务端不写空行）。
+ * 不清的话，某款游戏在服务端被清零 / 钱包行没了，本地镜像还留着旧数字 ——
+ * 孩子看到的币比服务端多，而**没有任何地方会报错**。
+ *
+ * 为什么是「整表扫 `:__coin`」而不是按 gameId 逐个清：要清的正是那些
+ * 「服务端这次没返回」的游戏，而它们的 id 恰恰是我们不知道的。
+ *
+ * ⚠️ 只在**在线模式**、且 `/game/coin/list` **拉成功**时调。
+ * 拉失败还照清不误 = 把孩子的币清零（本地版更是灾难：那数组是真账本）。
+ */
+export async function clearGameCoinMirrors(): Promise<number> {
+  const suffix = `:${GAME_COIN_KEY}`
+  const keys = await db.gameKv
+    .filter((r) => typeof r.key === 'string' && r.key.endsWith(suffix))
+    .primaryKeys()
+  if (!keys.length) return 0
+  await db.gameKv.bulkDelete(keys as string[])
+  return keys.length
 }
 
 /**
@@ -940,6 +1093,23 @@ export async function postHarvest(
   },
 ): Promise<HarvestEntry> {
   const delta = Math.round(entry.delta)
+  /* 同 `postLedger`：在线版农场动作的券由服务端记，本地不落 */
+  if (
+    ledgerSink?.(
+      { delta, source: entry.source, memo: entry.memo, refId: entry.refId },
+      'coupon',
+    )
+  ) {
+    return {
+      id: entry.id ?? `pending_${Date.now().toString(36)}`,
+      delta,
+      balanceAfter: 0,
+      source: entry.source,
+      refId: entry.refId,
+      memo: entry.memo,
+      createdAt: entry.createdAt ?? Date.now(),
+    }
+  }
   return db.transaction('rw', db.harvestLedger, async () => {
     const tip = await harvestTip()
     const row: HarvestEntry = {
@@ -1099,8 +1269,20 @@ export const DEFAULT_SETTINGS: AppSettings = {
    * 所以默认必须是「不限」，由家长自己去设。
    */
   gameDailyMinutes: 0,
-  /** 默认家长密码：0000。首次打开即有密码保护，家长可在设置里改。 */
-  parentPin: '0000',
+  /**
+   * 家长密码。**默认没有**（`undefined`）。
+   *
+   * 2026-10-30 用户原话：「新号不要在引导前就要求设置家长密码，
+   * 需要用的时候才要求第一次设置。」
+   *
+   * 以前默认是 `0000`：引导里还得专门让家长改掉它（「谁都能进家长区」）。
+   * 现在改成「没密码」—— 引导只问小名和头像，家长第一次进家长区
+   * （审核、改任务、规则/游戏/数据栏）时才当场设一个。
+   *
+   * ⚠️ `undefined` 和 `''` 都表示「没设」；判断一律用 `!!settings.parentPin`，
+   *    别写 `=== undefined`（老存档里可能存过空串）。
+   */
+  parentPin: undefined,
 }
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -1135,6 +1317,9 @@ export async function wipeAll(): Promise<void> {
       db.harvestLedger,
       db.mallLedger,
       db.gameKv,
+      db.wishOffers,
+      db.wishOrders,
+      db.wishCodes,
       db.meta,
     ],
     async () => {
@@ -1154,6 +1339,15 @@ export async function wipeAll(): Promise<void> {
         db.wishOffers.clear(),
         db.wishOrders.clear(),
         db.farmEvents.clear(),
+        /**
+         * ⚠️ **已经用过的兑换码必须一起清掉**（v10 加这张表时漏了登记）。
+         *
+         * 不清的后果：家长点「清空全部数据」之后，游戏、积分、农场全没了，
+         * 唯独码表还记着「这个码用过了」⇒ 拿同一张实体卡再兑一次，
+         * 界面只会说「这个码已经用过了」。**卡废了，而东西也没了。**
+         * 2026-10-30 查备份/清空覆盖面时发现（`exportBackup` 那边也漏）。
+         */
+        db.wishCodes.clear(),
         db.meta.clear(),
       ])
     },

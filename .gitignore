@@ -6,6 +6,11 @@ node_modules.partial/
 # 构建产物
 dist/
 dist-ssr/
+# 在线版产物（`VITE_APP_MODE=online npx vite build --outDir dist-online`）
+dist-online/
+# 局域网自测包（`VITE_API_BASE=http://<内网IP>:8081 ... --outDir dist-lan`）
+# —— 里面的 API 地址是某台机器的内网 IP，入库只会让下一个人困惑
+dist-lan/
 *.local
 
 # 游戏包产物（`npm run build:games` → games-src/ 的独立构建）。
@@ -109,3 +114,32 @@ assets/icon/window-margin.png
 # 或者升级成正式的 e2e 守卫（scripts/e2e-*.mjs）；脚本本身不入库。
 # 例：scripts/__verify-reset.mjs（验证「清空全部数据」真的清干净）。
 scripts/__*.mjs
+
+# 环境变量：只入库模板，其余都是「这台机器 / 这次部署」的。
+# ★ `.env.production` 特别危险：它会被**所有** `vite build` 加载，
+#   把线上地址写进去 = 11 条探针全连线上库（会注册账号、下单、回档）。
+#   APK 的地址走 `.env.apk`（只在 `--mode apk` 时加载）。
+.env
+.env.*
+!.env.example
+dist-probe/
+
+# 提交信息临时文件（用 git commit -F 时生成，别入库）
+_msg.txt
+
+# 提交信息草稿（-F 用，别入库）
+_msg*.txt
+
+# 打包时临时挪出来的游戏包（在线版不打进 APK）。
+# 只留一份、每次构建前清空；不进仓库。
+# APK 打包时临时挪出来的游戏目录（`build-apk.sh` 的 TF_APK_NO_GAMES）。
+# ★ 里面是 public/games 的全量副本（~195MB / 3400 文件）。
+#   2026-11-13 踩过：`git add -A` 把它整个提交进去，一个 commit 涨了 169 万行。
+#   `-stale-` 是删不掉的残留（安全删除闸门拦着），同样不许进库。
+.apk-games-skip/
+.apk-games-skip-stale-*/
+.apk-games-skip-stale-*
+
+# e2e 专用的**本地版**构建产物（`VITE_APP_MODE=local`）。
+# 构建它只为跑 e2e-check，不进仓库 —— 它有 ~280MB（含 public/games 全量复制）。
+dist-e2e/

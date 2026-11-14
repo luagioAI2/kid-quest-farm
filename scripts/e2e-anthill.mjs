@@ -54,6 +54,7 @@ import { join } from 'node:path'
 import puppeteer from 'puppeteer-core'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { countColors } from './lib/png-colors.mjs'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4396/'
 /**
@@ -213,8 +214,38 @@ console.log('\n【② 安装：设置 → 游戏】')
    * ⚠️ 别写 1234：那样会连点 8 位、页面还在锁屏上，
    *    而失败会表现成「游戏列表没渲染」—— 排查方向整个是错的。
    */
+  /* 2026-11 起家长密码闸门是「卡片 + 按钮」：先点「爸妈：输密码」才弹数字键盘
+     （`ParentPinSheet`）。不点的话下面那 4 次 0 全打在空气里，页面停在那张卡上，
+     报错却是「游戏列表没渲染」—— 排查方向整个是错的。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+      /爸妈：输密码/.test(x.textContent ?? ''),
+    )
+    b?.click()
+  })
+  /* ★ 必须**等键盘真的出现**再点数字。少了这一句，下面的循环第一轮就会
+     因为「页面上没有『请输入家长密码』」直接 break，而 `check('过了家长密码')`
+     判的是「没有这几个字」⇒ **假绿**，后面全部红成「列表里没这一行」。 */
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
   for (let round = 0; round < 2; round++) {
-    const locked = await page.evaluate(() => document.body.innerText.includes('请输入家长密码'))
+    /* 判「还锁着」用**数字键盘在不在**。旧写法判「页面上有没有『请输入家长密码』」，
+       `ParentPinSheet` 文案一换就永远 false ⇒ 循环第一轮 break、4 位密码一次没输，
+       而下面那句 check 判的又是「没有这几个字」⇒ **假绿**，后面全红成
+       「列表里没这一行」，排查方向整个是错的。 */
+    const locked = await page.evaluate(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+    )
     if (!locked) break
     for (let i = 0; i < 4; i++) {
       await page.evaluate(() => {
@@ -225,10 +256,16 @@ console.log('\n【② 安装：设置 → 游戏】')
     }
     await wait(600)
   }
-  check('过了家长密码', !(await page.evaluate(() => document.body.innerText.includes('请输入家长密码'))))
+  /* 判据落在**表渲染出来了**：闸门开了才有 `[data-market-builtin]`。 */
+  check('过了家长密码', await page.evaluate(() => !!document.querySelector('[data-market-builtin]')))
 
   // 2026-10-25 起本地游戏列表**直接摊在设置页上**，没有「进入游戏市场」这一步
-  check('游戏列表在页面上', await waitFor(`[data-local-row="${GAME_ID}"]`, 12000))
+  /* 2026-11-07 起「未拥有的游戏不显示」⇒ 顺序必须**先预置拥有、再等那一行**。
+     反过来的话 `waitFor` 会白等 12 秒，然后报「游戏列表不在页面上」——
+     真正的原因是「没拥有所以不渲染」，排查方向整个是错的。
+     2026-10-30 起的「没拥有不能装」也要求先拥有，否则找不到安装按钮。 */
+  await grantGame(page, GAME_ID)
+  check('拥有之后那一行在页面上', await waitFor(`[data-local-row="${GAME_ID}"]`, 12000))
 
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
@@ -242,12 +279,20 @@ console.log('\n【② 安装：设置 → 游戏】')
   check('点了「安装」', await clickSel(`[data-local-install="${GAME_ID}"]`))
   check('★ 界面上那一行变成已装', await waitFor(`[data-local-installed="${GAME_ID}"]`, 25000))
 
+  /*
+    经济参数 —— `docs/game-plugin-spec.md` §4.4 写着「必须对家长可见」。
+    它原来在列表页的「游戏市场」卡里（`PluginStoreCard.tsx`），10-29 那张卡
+    整体删掉时连它一起没了 ⇒ 现在收进**详情**，所以要先进详情才看得到。
+    ⚠️ 别改回在列表页找：列表上现在只有「装 / 卸 / 设为当前」，没有参数。
+  */
+  check('点进这款游戏的详情', await clickSel(`[data-store-detail="${GAME_ID}"]`))
   const econ = await page.evaluate(() => {
     const el = document.querySelector('[data-plugin-economy]')
     return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
   })
   check(`家长能看到「一局 ${PLAY_COST} 积分」`, new RegExp(`一局\\s*${PLAY_COST}\\s*积分`).test(econ), econ)
   check('家长能看到「换不成兑换券」', /不开放|换不成|不能换/.test(econ), econ)
+  check('关掉详情', await clickSel('[data-store-close]'))
 
   check('点了「设为当前」', await clickSel(`[data-plugin-set-current="${GAME_ID}"]`))
   await wait(800)
@@ -390,7 +435,12 @@ console.log('\n【⑤ 切走：卸载要真的跑，存档要落盘】')
    * 要切走只能点别的固定格 —— 这里点「任务」。
    * 判据写错的表现是「卸载没跑」，而其实是**根本没切走**。
    */
-  check('点「任务」那一格（切走游戏）', await clickSel('[data-tour="tab-tasks"]'))
+  /*
+   * ★ 2026-11-09 起游戏那一格**全屏**：底栏根本不渲染，只有一个「退出游戏」。
+   *   这一句原来点的是 `tab-tasks` —— 那一格现在不存在，会报「没点着」，
+   *   而真正的原因不是卸载坏了。
+   */
+  check('点「退出游戏」（切走游戏）', await clickSel('[data-tour="exit-game"], nav [data-tour="tab-tasks"]'))
   await wait(1500)
 
   const gone = await page.evaluate(() => ({

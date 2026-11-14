@@ -213,6 +213,67 @@ try {
   check('JSON-LD 含 FAQPage', ldTypes.includes('FAQPage'))
   check('JSON-LD 含 WebSite', ldTypes.includes('WebSite'))
 
+  /* ---------- 版本号：官网说的版本 vs APK 真正打的版本 ----------
+     2026-10-03 栽过一次：build.gradle 写 "1.0"、JSON-LD 写 "1.0.0" ——
+     同一个版本号写两处，就一定会走散。
+
+     而发版时更常见的方向是**只改了 versionName、忘了改官网**：
+     结构化数据照样被搜索引擎抓走，页面上一句「版本 1.1.0」也没有，
+     所以肉眼也发现不了。这条一红，就是「马上要发版，别忘了改 site/index.html」。 */
+  let ldVersion = null
+  try {
+    for (const raw of meta.ld) {
+      const j = JSON.parse(raw)
+      for (const node of j['@graph'] ?? [j]) {
+        if (node.softwareVersion) ldVersion = String(node.softwareVersion)
+      }
+    }
+  } catch {
+    /* 上面那条「JSON-LD 可解析」已经会红，这里不重复报同一个根因 */
+  }
+  const gradlePath = resolve('android/app/build.gradle')
+  const gradleVersion = existsSync(gradlePath)
+    ? ((readFileSync(gradlePath, 'utf8').match(/versionName\s+"([^"]+)"/) ?? [])[1] ?? null)
+    : null
+  check(
+    `官网写的软件版本和 build.gradle 一致（${gradleVersion ?? '读不到'}）`,
+    !!gradleVersion && ldVersion === gradleVersion,
+    ldVersion === gradleVersion ? '' : `JSON-LD=${ldVersion} build.gradle=${gradleVersion}`,
+  )
+  /* ★ 2026-11-10：下载卡片上那个「v1.1.0」是**第三处**版本号。
+     上一版它停在 v1.0.0，JSON-LD 已经 1.1.0 —— 同一页两个版本号，
+     结构化数据被搜索引擎抓走、卡片上那句给用户看，谁对谁错没人知道。
+     判据只认「v + 版本」，不认整句文案。 */
+  const dlVersion = await page.evaluate(() => {
+    const el = document.querySelector('#download .dl--feature .dl__meta')
+    const m = el ? el.textContent.match(/v(\d+(?:\.\d+)*)/) : null
+    return m ? m[1] : null
+  })
+  /* ★ 2026-11-13：下载按钮的 `download` 属性也带版本号 ——
+     用户存到手机里叫 `kid-quest-farm-v1.2.3.apk`，下错版本能一眼看出来。
+     URL 保持固定（`download/kid-quest-farm.apk`）：已印出去的二维码、
+     旧链接都不会失效，只有保存的文件名带版本。
+     ⇒ 这是**第四处**版本号，照样要跟 build.gradle 对齐。 */
+  const dlAttr = await page.evaluate(() => {
+    const a = Array.from(document.querySelectorAll('a[download]')).find((x) =>
+      /kid-quest-farm\.apk$/.test(x.getAttribute('href') || ''),
+    )
+    const d = a ? a.getAttribute('download') || '' : ''
+    const m = d.match(/v(\d+(?:\.\d+)*)\.apk$/)
+    return m ? m[1] : null
+  })
+  check(
+    `下载按钮存盘文件名带版本号（${dlAttr ?? '读不到'}）`,
+    !!gradleVersion && dlAttr === gradleVersion,
+    dlAttr === gradleVersion ? '' : `download=${dlAttr} build.gradle=${gradleVersion}`,
+  )
+
+  check(
+    `下载卡片上的版本号和 build.gradle 一致（${dlVersion ?? '读不到'}）`,
+    !!gradleVersion && dlVersion === gradleVersion,
+    dlVersion === gradleVersion ? '' : `卡片=v${dlVersion} build.gradle=${gradleVersion}`,
+  )
+
   console.log('\n【B】结构完整性')
 
   // ⚠️「图片真的加载了」这条**不能放在这里**。图廊那几张是 loading="lazy"，
@@ -236,14 +297,28 @@ try {
     Array.from(new Set(Array.from(document.querySelectorAll('a[href]')).map((a) => a.getAttribute('href'))))
       .filter((h) => h && !/^(#|https?:|mailto:|tel:)/.test(h)),
   )
+  /* ★ 2026-11-10：`site/app/` 是 `--no-app` 时**故意不产出**的（线上 /app/ 由
+     nginx 指向 client-web 构建）。这条闸门原来只 `existsSync`，于是「官方做法」
+     反而恒红 —— 会把人逼回去把同一份产物放两处。缺 site/app 时跳过 app/ 这一项，
+     并且**明确打印**跳过了几个，免得被读成「全过了」。 */
+  const hasAppDir = existsSync(resolve(SITE_DIR, 'app/index.html'))
   const missingFiles = []
+  const skippedLinks = []
   for (const href of relLinks) {
     const clean = href.split('#')[0].split('?')[0]
     if (!clean || clean === './') continue
+    const isAppLink = clean === 'app/' || clean === 'app' || clean.startsWith('app/')
+    if (isAppLink && !hasAppDir) {
+      skippedLinks.push(href)
+      continue
+    }
     if (!existsSync(resolve(SITE_DIR, clean))) missingFiles.push(href)
   }
-  check(`站内链接的文件都存在（共 ${relLinks.length} 个）`, missingFiles.length === 0,
+  check(`站内链接的文件都存在（共 ${relLinks.length - skippedLinks.length} 个）`, missingFiles.length === 0,
     missingFiles.join(', '))
+  if (skippedLinks.length) {
+    console.log(`  · 跳过 ${skippedLinks.length} 个 app/ 链接（site/app/ 未构建，线上由 nginx 提供）：${skippedLinks.join(', ')}`)
+  }
 
   /* ---------- 下载的 APK 装的是不是**这一版**代码 ----------
      2026-10-09：官网挂的 APK 还是 10-05 的，而代码已经改了四天 ——
@@ -257,11 +332,42 @@ try {
      ⚠️ 不用解压、不用引 zip 库：ZIP 的中央目录把文件名**原样存**，
        直接在大字节串里搜那个文件名就行（实测：当前包命中、
        09-30 的旧 debug 包不命中）。 */
-  const appHtml = readFileSync(resolve(SITE_DIR, 'app/index.html'), 'utf8')
-  const bundleName = (appHtml.match(/assets\/(index-[\w-]+\.js)/) ?? [])[1] ?? null
-  check('读得到网页版的 bundle 名（staleness 检查的前提）', !!bundleName, bundleName ?? '没匹配到 assets/index-*.js')
+  /* ⚠️ `site/app/` 是 `build-site.mjs` 的产物，没构建过就没有这个文件。
+     这里原来直接 `readFileSync` ⇒ **整个检查脚本 ENOENT 崩掉**，
+     上面刚报出来的「缺 app/、缺 APK」全被这一下打断，
+     后面「法务页 / 备案号 / 截图版次」一条都没跑。
+
+     检查脚本最不能有的行为就是「遇到第一个问题就崩」—— 它存在的意义
+     是**一次把所有问题列全**，否则修一个跑一次。 */
+  const appHtmlPath = resolve(SITE_DIR, 'app/index.html')
+  let bundleName = null
+  if (existsSync(appHtmlPath)) {
+    bundleName =
+      (readFileSync(appHtmlPath, 'utf8').match(/assets\/(index-[\w-]+\.js)/) ?? [])[1] ?? null
+    check('读得到网页版的 bundle 名（staleness 检查的前提）', !!bundleName,
+      bundleName ?? '没匹配到 assets/index-*.js')
+  } else {
+    /* 2026-11-10：官网和在线版同源之后 `site/app/` 不再需要 —— 线上的
+       `https://<host>/app/` 由 nginx 直接指向客户端构建（`build-client-web.sh`），
+       单一来源，避免「同一份产物存在两处一定会走散」。
+       本地 checkout 里没有它是**正常**的，不能算红；但必须打印出来，
+       否则「三条闸门压根没跑」会被读成「三条都过了」。 */
+    console.log('  · site/app/ 未构建 —— /app/ 由线上 nginx 提供，跳过试玩版相关闸门')
+  }
+  /* ★ 2026-11-10：试玩版可以有两种模式，`site/app/.build-mode` 里写着是哪种。
+     `demo-local` = 离线试玩版（`build-site.mjs --demo`，单机模式、不连后端、
+     剔掉了 195MB 的游戏包）；`online` = 连真后端。
+     两种模式的 bundle 名天然不同（VITE_APP_MODE 也是编译期常量），
+     所以**离线试玩版不能拿「APK 里装的是同一份 bundle」这条去卡** ——
+     那不是问题，是两个不同的产物。 */
+  const modePath = resolve(SITE_DIR, 'app/.build-mode')
+  const appMode = existsSync(modePath) ? readFileSync(modePath, 'utf8').trim() : ''
+  const isDemo = appMode === 'demo-local'
+  if (isDemo) {
+    console.log('  · 试玩版是离线版（demo-local）—— 跳过「和 APK 同一份 bundle」那条')
+  }
   const apkPath = resolve(SITE_DIR, 'download/kid-quest-farm.apk')
-  if (bundleName && existsSync(apkPath)) {
+  if (bundleName && !isDemo && existsSync(apkPath)) {
     const apkBytes = readFileSync(apkPath)
     const hit = apkBytes.includes(`assets/public/assets/${bundleName}`)
     check(
@@ -277,7 +383,7 @@ try {
      `build-site.mjs --no-build` 正是会跳过重建的那个开关（改了 App 却没重跑构建）。
      钉住整条链：源码 → dist → site/app → APK。 */
   const distIndex = resolve('dist/index.html')
-  if (existsSync(distIndex)) {
+  if (bundleName && existsSync(distIndex)) {
     const distBundle = (readFileSync(distIndex, 'utf8').match(/assets\/(index-[\w-]+\.js)/) ?? [])[1]
     check(
       '网页版试玩和 dist（当前源码构建产物）是同一版',
@@ -293,13 +399,21 @@ try {
      官网一直挂着旧界面的图，**零报错**，日志里还写着「③ 界面截图」。
      2026-10-09 实测：那批图是 10-03 拍的，挂了六天，页面上日期还写着「10月3日」。
      判据：capture.mjs 写下的 bundle 名 == 当前 bundle 名。 */
+  /* 锚点：有 site/app 就用它，没有就用 dist（截图本来就是对着 dist 拍的）。
+     不这样的话，`--no-app` 之后这条会因为 bundleName 是 null 而永远红。 */
+  const anchorBundle =
+    bundleName ??
+    (existsSync(resolve('dist/index.html'))
+      ? ((readFileSync(resolve('dist/index.html'), 'utf8').match(/assets\/(index-[\w-]+\.js)/) ??
+          [])[1] ?? null)
+      : null)
   const shotsMarker = resolve(SITE_DIR, 'img/shots-source.txt')
   if (existsSync(shotsMarker)) {
     const shotBundle = readFileSync(shotsMarker, 'utf8').trim()
     check(
-      `官网界面截图是从这一版界面截的（${bundleName}）`,
-      !!bundleName && shotBundle === bundleName,
-      shotBundle === bundleName
+      `官网界面截图是从这一版界面截的（${anchorBundle}）`,
+      !!anchorBundle && shotBundle === anchorBundle,
+      shotBundle === anchorBundle
         ? ''
         : `截图来自 ${shotBundle} —— 重跑：node scripts/capture.mjs http://127.0.0.1:4180/ .e2e-scratch/landing-shots && node scripts/build-site.mjs --no-build`,
     )
@@ -517,6 +631,28 @@ try {
     }
   }
 
+  /* ---------- 过期币种名（2026-11-10） ----------
+     `currency.ts` 里有一条 `COUPON_WAS_RENAMED_FROM = '丰收币'` —— 那是**改名前**的名字，
+     专门留给「导入老备份」认的。官网却一直写着它（页面上、FAQ、隐私政策、用户协议共 13 处），
+     而 App 里早就叫「兑换券」了：家长照着官网找「丰收币」，界面上找不到。
+     ➜ 旧名字从源码里读，不在脚本里再抄一份（抄的那份过期不会响，见 lib/currency.mjs 文件头）。 */
+  {
+    const curSrc = readFileSync(resolve('src/domain/currency.ts'), 'utf8')
+    const oldName =
+      (curSrc.match(/COUPON_WAS_RENAMED_FROM\s*=\s*'([^']+)'/) ?? [])[1] ?? null
+    const stale = []
+    for (const f of ['index.html', 'privacy.html', 'terms.html']) {
+      const t = readFileSync(resolve(SITE_DIR, f), 'utf8')
+      const hits = oldName ? t.split(oldName).length - 1 : 0
+      if (hits > 0) stale.push(`${f}×${hits}`)
+    }
+    check(
+      `官网不再用旧币种名（${oldName ?? '读不到'}）`,
+      !!oldName && stale.length === 0,
+      !oldName ? '读不到 COUPON_WAS_RENAMED_FROM，闸门失效' : stale.join(' / ') || '',
+    )
+  }
+
   for (const vp of [
     { name: '桌面 1440', width: 1440, height: 960 },
     { name: '平板 834', width: 834, height: 1112 },
@@ -544,6 +680,69 @@ try {
     check(`${vp.name}：无横向溢出`, over.scrollW <= over.clientW + 1,
       `scrollW=${over.scrollW} clientW=${over.clientW}${over.wide.length ? ' 溢出元素: ' + over.wide.join(', ') : ''}`)
   }
+
+  /* ---------- 同一排卡片的三条线要对齐 ----------
+     2026-11-10 实测：#wish 改成三列之后，三张卡的「虚线分隔线」差 28px、
+     底部留白 30 / 84 / 59 —— 只因为一张卡的说明多一行、另一张的列表少一项。
+     `.pillar` 是 flex column、列表紧跟说明，行数一变就错位；
+     整页截图上看不出来（差得不够显眼），必须**量**。
+     判据三条，任一不成立都说明卡内不是同一套行（修法：subgrid，见 styles.css 22.6）。 */
+  await page.setViewport({ width: 1440, height: 960, deviceScaleFactor: 1 })
+  await wait(300)
+  const wishAlign = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#wish .pillars--three .pillar')]
+    return cards.map((c) => {
+      const r = c.getBoundingClientRect()
+      const l = c.querySelector('.pillar__list')?.getBoundingClientRect()
+      return {
+        h: Math.round(r.height),
+        listTop: l ? Math.round(l.top) : -1,
+        gap: l ? Math.round(r.bottom - l.bottom) : -1,
+      }
+    })
+  })
+  const uniq = (k) => new Set(wishAlign.map((c) => c[k])).size
+  check('心愿三张卡：数量是 3', wishAlign.length === 3, `count=${wishAlign.length}`)
+  check('心愿三张卡：卡片等高', uniq('h') === 1, JSON.stringify(wishAlign.map((c) => c.h)))
+  check('心愿三张卡：虚线分隔线在同一高度', uniq('listTop') === 1,
+    JSON.stringify(wishAlign.map((c) => c.listTop)))
+  check('心愿三张卡：列表底部留白一致', uniq('gap') === 1,
+    JSON.stringify(wishAlign.map((c) => c.gap)))
+
+  /* ---------- 下载区三张卡：按钮要贴在同一条底线上 ----------
+     2026-11-10：APK 卡加了「下载安卓安装包」按钮之后，按钮下面还留着一段说明，
+     于是三张卡的按钮分别落在 y=589 / 630 / 630 —— 截图上看像「第一张卡没做完」。
+     `.dl__desc` 是 flex:1，所以**谁在最后谁贴底**：说明必须放在按钮上面。
+     判据：三个 `.dl` 的按钮 rect.bottom 一致，且按钮下方留白一致。 */
+  const dlAlign = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#download .dl-grid .dl')]
+    return cards.map((c) => {
+      const r = c.getBoundingClientRect()
+      const b = c.querySelector('.btn')?.getBoundingClientRect()
+      const bb = parseFloat(getComputedStyle(c).borderBottomWidth) || 0
+      const gap = b ? Math.round(r.bottom - b.bottom) : -1
+      return {
+        h: Math.round(r.height),
+        btnBottom: b ? Math.round(b.bottom) : -1,
+        gap,
+        // 主推卡有 2px 描边，会吃掉内边距 ⇒ 直接比 gap 会差 2px（是边框，不是排版错）
+        gapNet: gap < 0 ? -1 : Math.round(gap - bb),
+        bb,
+      }
+    })
+  })
+  const uniqDl = (k) => new Set(dlAlign.map((c) => c[k])).size
+  const spanDl = (k) => {
+    const v = dlAlign.map((c) => c[k])
+    return Math.max(...v) - Math.min(...v)
+  }
+  check('下载区三张卡：数量是 3', dlAlign.length === 3, `count=${dlAlign.length}`)
+  check('下载区三张卡：卡片等高', uniqDl('h') === 1, JSON.stringify(dlAlign.map((c) => c.h)))
+  // 主推卡多 2px 描边 ⇒ 允许 2px 误差；差超过描边宽度就是真的没对齐
+  check('下载区三张卡：按钮在同一条底线上', spanDl('btnBottom') <= 2,
+    JSON.stringify(dlAlign.map((c) => c.btnBottom)) + ` 跨度=${spanDl('btnBottom')}px（描边 ${JSON.stringify(dlAlign.map((c) => c.bb))}）`)
+  check('下载区三张卡：按钮下方留白一致（扣掉描边）', uniqDl('gapNet') === 1,
+    JSON.stringify(dlAlign.map((c) => c.gapNet)))
 
   console.log('\n【D】走查出图')
   await page.setViewport({ width: 1440, height: 960, deviceScaleFactor: 1 })
@@ -602,6 +801,74 @@ try {
   const menuClosed = await page.evaluate(() => !document.getElementById('nav').classList.contains('is-open'))
   check('Esc 能收起手机端菜单', menuClosed)
 
+  // ---------- 版本切换（单机版 / 在线版，2026-11-10） ----------
+  // 官网现在有两种用法。判据全部走 computedStyle / dataset，不看文案：
+  // 文案一改就会恒真或恒假，这里要的是「哪一块真的显示了」。
+  // ⚠️ 顺便钉住「默认显示在线版」—— JS 没跑起来时也不能让用户只看到「私聊作者」。
+  {
+    const vis = () =>
+      page.evaluate(() => {
+        const on = document.querySelector('.ver-panel[data-ver="online"]')
+        const lo = document.querySelector('.ver-panel[data-ver="local"]')
+        const btns = Array.from(document.querySelectorAll('[data-ver-btn]'))
+        return {
+          html: document.documentElement.dataset.ver ?? '(未设置)',
+          online: on ? getComputedStyle(on).display !== 'none' : false,
+          local: lo ? getComputedStyle(lo).display !== 'none' : false,
+          sel: btns.filter((b) => b.getAttribute('aria-selected') === 'true').map((b) => b.dataset.verBtn),
+          count: btns.length,
+        }
+      })
+
+    let st = await vis()
+    check('版本切换：两个按钮都在', st.count === 2, `count=${st.count}`)
+    check(
+      '版本切换：默认显示在线版（JS 没跑也显示它）',
+      st.online && !st.local && st.sel.join() === 'online',
+      JSON.stringify(st),
+    )
+
+    await page.click('[data-ver-btn="local"]')
+    await wait(220)
+    st = await vis()
+    check(
+      '版本切换：点「单机版」换成单机版面板',
+      st.html === 'local' && st.local && !st.online && st.sel.join() === 'local',
+      JSON.stringify(st),
+    )
+    await page.screenshot({ path: `${OUT}/ver-local.png` })
+
+    await page.reload({ waitUntil: 'networkidle2', timeout: 60000 })
+    await wait(320)
+    st = await vis()
+    check('版本切换：刷新后还记得选的是单机版', st.html === 'local' && st.local, JSON.stringify(st))
+
+    await page.click('[data-ver-btn="online"]')
+    await wait(220)
+    st = await vis()
+    check(
+      '版本切换：能切回在线版',
+      st.html === 'online' && st.online && !st.local && st.sel.join() === 'online',
+      JSON.stringify(st),
+    )
+    await page.screenshot({ path: `${OUT}/ver-online.png` })
+
+    const ovf = await page.evaluate(() => {
+      const on = document.querySelector('.ver-panel[data-ver="online"]')
+      const r = on.getBoundingClientRect()
+      return {
+        right: Math.round(r.right),
+        vw: document.documentElement.clientWidth,
+        scrollW: document.documentElement.scrollWidth,
+      }
+    })
+    check(
+      '版本切换：390 宽下面板不横向溢出',
+      ovf.right <= ovf.vw && ovf.scrollW <= ovf.vw,
+      JSON.stringify(ovf),
+    )
+  }
+
   // 法务页也扫一眼
   for (const f of ['privacy.html', 'terms.html']) {
     const p = await browser.newPage()
@@ -640,13 +907,25 @@ try {
       //    然后报「渲染不出四个 tab」—— 而截图里四个 tab 明明都在。
       text: document.body.innerText,
       title: document.title,
+      // ★ 2026-11-10：底栏现在是 任务 / 游戏(当前游戏名) / 兑换 / 心愿，积分挪到了顶栏。
+      //   所以判据改成**结构**：nav 里正好 4 个 data-tour。
+      //   靠文案凑（「农场」「积分」）会随游戏改名、改版一起烂掉。
+      navTabs: document.querySelectorAll('nav [data-tour]').length,
     }))
+    const hasRoot = await p.evaluate(() => !!document.querySelector('#root'))
+    if (!hasRoot) {
+      console.log('  · 这个 URL 下没有 /app/（本地 site/ 不打包在线版），跳过「网页版」三条')
+    } else {
     check('网页版能启动（#root 有内容）', app.rootChildren > 0, `#root 子节点 ${app.rootChildren}`)
-    check('网页版渲染出了四个 tab', ['任务', '农场', '兑换', '积分'].every((t) => app.text.includes(t)),
-      app.text.replace(/\s+/g, ' ').slice(-120))
+    check(
+      '网页版底栏是四格',
+      app.navTabs === 4 && ['任务', '兑换', '心愿'].every((t) => app.text.includes(t)),
+      `nav=${app.navTabs} ${app.text.replace(/\s+/g, ' ').slice(-120)}`,
+    )
     check('网页版无 JS 报错', errs.length === 0, errs.slice(0, 3).join(' | '))
     await p.screenshot({ path: `${OUT}/app-web.png` })
     console.log('  网页版首屏 → app-web.png')
+    }
     await p.close()
   }
 

@@ -21,11 +21,14 @@ import type {
   RedeemRecord,
   Task,
   TaskInstance,
+  WishBuyLink,
+  WishCode,
   WishOffer,
   WishOrder,
   WishShipInfo,
   WishShipSnapshot,
 } from '../domain/types'
+import type { ShipDraft } from '../domain/wishShip'
 import {
   addItem,
   ASSET_BASE_KEY,
@@ -49,6 +52,7 @@ import {
   loadQuotaCarry,
   loadRedeemItems,
   loadRedeemRecords,
+  loadWishBuyLinks,
   loadWishOffers,
   loadWishOrders,
   ledgerTip,
@@ -66,20 +70,68 @@ import {
   savePlots,
   saveQuotaCarry,
   saveSettings,
+  getMeta,
   setGameKv,
+  setMeta,
   spendMall,
+  WISH_BUY_LINKS_KEY,
   wipeAll,
   type GameKvRow,
 } from '../db/db'
 import { DEFAULT_GAME_ID } from '../games/ids'
 import { GAMES, gameById, ownedByDefault, purchasedIdsFrom } from '../games/registry'
 import { wishItemById } from '../games/wishCatalog'
-import { pickBlindBox, planWishRedeem, redeemedGameIdsFrom } from '../domain/wish'
+import { redeemWishCode } from '../api/wish'
+import { getToken } from '../api/session'
+import { ApiError } from '../api/client'
+import type { ApiWishCodeResult } from '../api/types'
+import {
+  pickBlindBoxMany,
+  planWishRedeem,
+  redeemedGameIdsFrom,
+  wishOwnedSet,
+} from '../domain/wish'
+import { ownedIdsOnline } from '../domain/ownership'
+import { installFailNote } from '../domain/activationMessage'
+import { SYNC_LAST_OK_KEY, SYNC_OK, type SyncState } from '../domain/syncState'
+
+/**
+ * 「主线活动领过哪几关」在 `meta` 里的 key。
+ *
+ * 为什么用 `meta` 而不新开一张 Dexie 表：`meta` 就是 key-value，
+ * `wipeAll` 已经会清它、备份天然带上，而**加表要动五处登记**（见 MEMORY）。
+ * 这里面只有几个短 id，没有查询需求。
+ */
+const CAMPAIGN_CLAIMS_KEY = 'campaign.claimed'
+import { fetchOwnedGameIds } from '../online/ownership'
 import { makeHostApi } from '../games/hostApi'
+import { deleteGameKvOnServer } from '../online/kv'
+import { onlineDataOpRefusal } from '../online/backup'
 import { importBundle, mountBundle } from '../games/loader'
 import { catalogPublicKeyRaw } from '../games/catalogKey'
+/* `installGameAuto` 靠这两个挑路：没配目录（本地版 / 离线包）就直接用随包的本地游戏。
+   ★ 和 `features/settings/GameStore.tsx` 读的**是同一份** —— 兑换和游戏市场
+     必须认定同一个目录地址，否则会出现「市场里能装、兑换后装不上」。 */
+import { CATALOG_URL, catalogConfigured } from '../games/catalogUrl'
+import {
+  CAMPAIGN_METRIC_META,
+  CAMPAIGN_STEPS,
+  campaignStatsFrom,
+  campaignSummary,
+  campaignViews,
+  pickRandomReward,
+  spotlightStep,
+  type CampaignStepView,
+} from '../domain/campaign'
+import { fetchCampaignState, claimCampaignStep as claimCampaignStepApi } from '../api/campaign'
+import {
+  percentOf,
+  type InstallProgress,
+  type InstallProgressReporter,
+} from '../domain/installProgress'
+import { readBodyWithProgress } from '../games/download'
 import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
-import { localGameById } from '../games/localGames'
+import { LOCAL_GAMES, localGameById } from '../games/localGames'
 import { codeHashOf, gameIdForCode } from '../games/codeLookup'
 import { isGameCode, normalizeGameCode } from '../domain/gameCode'
 import type { Bytes } from '../games/bytes'
@@ -89,6 +141,56 @@ import { HOST_API } from '../games/plugin'
 import type { GameBundle, GameManifestV2, HostApi, MountContext } from '../games/plugin'
 import { hapticLight, playTone, type ToneKind } from '../platform/files'
 import { settleInstance, type SettleParams } from '../domain/settlement'
+import { APP_MODE, isOnlineMode, pullFromServer } from '../sync/pull'
+import { srvId } from '../sync/map'
+import { onlineWrite, writeFailToast } from '../online/write'
+import {
+  isUsageOnly,
+  noteUsagePushed,
+  oSaveSettings,
+  pushUsageBestEffort,
+} from '../online/settings'
+import {
+  oCheckIn,
+  oCreateTask,
+  oDeleteTask,
+  oPauseTimer,
+  oResumeTimer,
+  oReviewTask,
+  oSkipTask,
+  oStartTimer,
+  oSubmitTask,
+  oUpdateTask,
+} from '../online/tasks'
+import {
+  beginFarmTx,
+  endFarmTx,
+  inFarmTx,
+  pullFarm,
+  pushFarmState,
+  readFarmPayload,
+  writeFarmPayload,
+  type FarmPayload,
+} from '../online/farm'
+import {
+  createBody as redeemCreateBody,
+  oCreateRedeemItem,
+  oDeleteRedeemItem,
+  oFulfillRedeem,
+  oRedeemItem,
+  oUpdateRedeemItem,
+  redeemFailToast,
+} from '../online/redeem'
+import {
+  localWishOrderId,
+  oWishCancel,
+  oWishConfirm,
+  oWishDone,
+  oWishExpress,
+  oWishRedeem,
+  oWishSetOffer,
+  wishFailToast,
+} from '../online/wish'
 import {
   appDayKey,
   appDayStart,
@@ -140,7 +242,7 @@ import {
   priceCeilingFor,
   produceUnitOf,
 } from '../domain/catalog'
-import { describeRedeemPayment, planRedeemPayment } from '../domain/redeem'
+import { describeRedeemPayment, pickTodayCount, planRedeemPayment } from '../domain/redeem'
 import { streakCapFor, streakPaysOn, streakPerDayFor } from '../domain/streakBonus'
 import { tierRatioFor } from '../domain/tierRatio'
 import {
@@ -178,6 +280,15 @@ export interface Toast {
 interface AppState {
   ready: boolean
   loading: boolean
+  /**
+   * 启动过程中抛出来的错（`boot()` 里任何一步）。
+   *
+   * 为什么要有：`boot()` 原来没有 try/catch，三个 await 里任何一处抛
+   * （Dexie 写不进去、服务端返回的形状不对导致的 TypeError…）都会让
+   * `set({ ready: true })` 永远执行不到 ⇒ **永远停在开场页转圈**：
+   * 没有报错、没有重试、没有出口，用户只能卸载重装（数据全丢）。
+   */
+  bootError: string | null
 
   settings: AppSettings
   /** 任务：在用的（不含已隐藏） */
@@ -213,6 +324,19 @@ interface AppState {
    * 卖多少券」。没有对应行的商品 = 未开放 = 孩子只能表明意向。
    */
   wishOffers: WishOffer[]
+  /**
+   * 心愿商品的**后台外链**：`itemId → { url, label }`（2026-11-06 第七轮）。
+   *
+   * ★ 界面上「去购买 / 去淘宝」那颗按钮**有没有**，全看这里有没有这一条 ——
+   *   运营在 tf-admin「商城」列表里没配 `buy_url`，就不渲染按钮。
+   *   在目录里现拼一条淘宝搜索页兜底是**错**的：那会让「没配」和「配了」
+   *   在界面上长得一模一样（这一轮修的就是这个）。
+   *
+   * ⚠️ 数据来自 `/wish/list` 的 `buy_url`，缓存在 `meta['wish.buyLinks']`。
+   *   本地版（没有服务端）里它恒为空 ⇒ 本地版**没有**购买按钮，这是对的：
+   *   没有后台就没有「后台配的链接」。
+   */
+  wishBuyLinks: Record<string, WishBuyLink>
   /** 心愿单 / 兑换单。一条记录从 `wished` 走到 `done` */
   wishOrders: WishOrder[]
   /** 农场最近发生的事件（给孩子看的「农场日志」） */
@@ -234,11 +358,33 @@ interface AppState {
   /** 当前正在玩的游戏 id。底部导航的游戏 tab 跟着它走。 */
   activeGameId: string
   /**
-   * 已拥有的游戏 id。**派生值，不是存储值** ——
-   * = `defaultOwned` 的那款 + 账本里有过 `game_purchase` 支出的那些。
-   * 见 `games/registry.ts` 的 `purchasedIdsFrom`。
+   * 已拥有的游戏 id。**派生值，不是存储值** —— 但两种模式的算法不同：
+   *
+   *   · 本地版 = `defaultOwned` 的那款 + 账本里有过 `game_purchase` 的那些
+   *     （`games/registry.ts` 的 `purchasedIdsFrom`）；
+   *   · 在线版 = **服务端 `/game/my-games` 那份名单** + `defaultOwned` 的那款。
+   *
+   * ★★ 在线版为什么不能沿用账本：存档是写穿的，服务端 `checkGameExists`
+   *    要 `user_game` 有行。本地账本里有、服务端没有 ⇒ 界面显示「已拥有」、
+   *    游戏也玩得动，**但存档一个字节都存不上**（`10040401`），而且不报错。
+   *    详见 `domain/ownership.ts` 的文件头。
    */
   ownedGameIds: string[]
+  /**
+   * 最近一次「从服务端拉取」的结果。在线版靠它在界面上说清「现在连不上」
+   * （`components/SyncBanner.tsx`）。
+   *
+   * ⚠️ 拉取失败是**静默**的（没网也要能进 App），不记这件事的话，界面会
+   *    安静地显示旧数据 —— 老设备上是昨天的任务，新设备上是一片空白。
+   */
+  syncState: SyncState
+  /**
+   * 服务端说「我拥有」的游戏 id。`null` = **还没拉到**（不是「一个都没有」）。
+   *
+   * 单独留一份是为了区分「拉到了空名单」和「没拉到」：后者要退回本地口径，
+   * 否则一次网络抖动就会让整页游戏变成未拥有。
+   */
+  serverOwnedGameIds: string[] | null
   /**
    * **已安装的插件游戏**（下载来的那些）：id → manifest（spec §12.5）。
    *
@@ -249,6 +395,48 @@ interface AppState {
    * 「清单说装了、其实包里没有」或反过来 —— 本项目的老毛病。
    */
   installedGames: Record<string, GameManifestV2>
+  /**
+   * 正在装的那一款走到哪一步（2026-11-13，用户要「像应用商城那样显示进度」）。
+   *
+   * 只放**当前这一款**，不做成 map：同时只会装一款（`installingId` 已经限了），
+   * 而 map 会让「谁负责清掉过期行」变成一个新问题 —— 界面上一行残留的
+   * 60% 进度比没有进度更让人困惑。
+   *
+   * `percent` 为 `-1` 表示**总长未知**（服务端没给 `Content-Length`）：
+   * 那时界面显示「已下载 X MB」，不假装有百分比。
+   */
+  installProgress: InstallProgress | null
+  /**
+   * 更新安装进度。**唯一**的写入口（组件不要自己 `set`，否则两处各造一份）。
+   *
+   * 传 `null` = 收尾清掉。**不清的话那一行会长期显示「下载中 87%」**，
+   * 而装包早就结束了 —— 看起来像卡住。
+   */
+  reportInstallProgress: (p: InstallProgress | null) => void
+  /**
+   * 主线活动里**已经领过**的关卡 id（2026-11-12）。
+   *
+   * 两种模式来源不同：
+   *   · 本地版 —— `meta['campaign.claimed']`（本机，备份会带）；
+   *   · 在线版 —— 服务端 `/api/campaign/state`（**以服务端为准**）。
+   *
+   * ⚠️ 进度**不存**：`domain/campaign.ts` 从 `instances` 和 `harvestLedger`
+   *    现算。存一份进度必然和账本走散（数字最容易被写坏，而且不报错）。
+   */
+  campaignClaims: string[]
+  /**
+   * 在线版：**服务端算的**活动进度（`tasks_done` / `coupons_earned`）。
+   * 本地版恒为 `null` —— 那边自己从 `harvestLedger` 算，没有第二份。
+   *
+   * ★ 为什么不能只用本地那份：在线版的流水是 `pullLedger` 拉的，
+   *   上限 200 × 10 = **2000 条**。老账号早期的入账被挤出窗口后，
+   *   客户端算的「累计赚到」会小于服务端 ⇒ 界面停在「还差 N 张」，
+   *   领取按钮不出现，而服务端其实早就判定够了 —— **不报错，只是点不到**。
+   *
+   * ⚠️ 拉取失败时保留上一次的值，不要清成 `null` 退回本地算法：
+   *   那会在断网的一瞬间把进度「往回跳」，孩子会以为白做了。
+   */
+  campaignServerStats: { tasksDone: number; couponsEarned: number } | null
 
   todayKey: string
 
@@ -270,7 +458,24 @@ interface AppState {
 
   /* ---- 生命周期 ---- */
   boot: () => Promise<void>
-  refresh: () => Promise<void>
+  /**
+   * 重算一遍内存快照。
+   *
+   * @param opts.skipPull 在线版里跳过「拉服务端」这一步 ——
+   *   农场动作刚提交完时用：本地已经是新的了，再拉一次纯属浪费一个往返。
+   */
+  refresh: (opts?: { skipPull?: boolean; light?: boolean }) => Promise<void>
+  /**
+   * 把「家长设置」重新读进 store。
+   *
+   * ★ 为什么不并进 `refresh()`：它开头就是 `const { settings } = get()`，
+   *   **不重读**。在线版里它只把云端那份写进 Dexie 的 `meta`
+   *   （见 `sync/pull.ts` 的 `pullSettings`），store 里还是旧的那份 ⇒
+   *   「另一台设备改了 PIN / 每日限时」要等重启才生效，而且不报错。
+   * ★ 没变化就**不 set**：一次 `set` 会触发一整轮订阅，而这条会被
+   *   「切回前台」反复调到。
+   */
+  reloadSettings: () => Promise<void>
   /** 每分钟推进一次：动物产出、跨日检测 */
   tick: () => Promise<void>
 
@@ -285,7 +490,10 @@ interface AppState {
    * ⚠️ 不要因为「本地」就跳过校验：`public/` 里的文件在打包后仍然可以被替换，
    * 跳过校验等于给「换掉 public 里的 js」开了一条执行任意代码的后门。
    */
-  installLocalGame: (gameId: string) => Promise<{ ok: boolean; message: string }>
+  installLocalGame: (
+    gameId: string,
+    onProgress?: InstallProgressReporter,
+  ) => Promise<{ ok: boolean; message: string }>
   /**
    * ★ **生产路径**：从**已签名的游戏目录**装一款游戏（spec §12.4）。
    *
@@ -299,7 +507,37 @@ interface AppState {
   installFromCatalog: (
     catalogUrl: string,
     gameId: string,
+    onProgress?: InstallProgressReporter,
   ) => Promise<{ ok: boolean; message: string }>
+  /**
+   * 装一款游戏，**两条路自己挑**：先远程目录（验签 + SHA-256），拿不到再本地包。
+   *
+   * ## 为什么要有这个（2026-11-12）
+   *
+   * 在线版 APK 是 `TF_APK_NO_GAMES=1` 打的 —— **没有 `public/games`**，
+   * 但 `localGames.ts` 是编译进 JS 的常量，`localGameById()` 照样有值。
+   * 兑换流程原来只调 `installLocalGame` ⇒ 每次都 `读取本地包失败：HTTP 404`，
+   * 而用户其实**已经拥有**这款游戏，只是客户端没去服务器拿包。
+   *
+   * 游戏市场（`GameStore.tsx`）从 2026-11-08 起就是「先目录后本地」，
+   * 只有兑换这条支路漏了 ⇒ 同一个动作在两个入口两种结果。
+   *
+   * ⚠️ 别在调用方各写一份挑路逻辑：写两遍必然有一天走散，症状就是
+   *    「市场里能装、兑换后装不上」——而这正是这条注释的由来。
+   */
+  installGameAuto: (
+    gameId: string,
+    opts?: { onProgress?: InstallProgressReporter },
+  ) => Promise<{ ok: boolean; message: string }>
+  /**
+   * 领一关主线活动的奖励（送一款游戏）。
+   *
+   * ★ 条件**每次调用都重新算**，不信任界面上那份视图 ——
+   *   界面可能是几分钟前渲染的（那时刚够 5 个，家长随后又打回了一个）。
+   * ★ 在线版由**服务端复核并授游戏**，客户端只管提示与装包；
+   *   本地版记一笔 `mallLedger(source='campaign', delta 0)`，拥有关系才成立。
+   */
+  claimCampaignStep: (stepId: string) => Promise<{ ok: boolean; message: string }>
   /**
    * ⚠️ **没有完整性校验**的安装路径，只给本地走查用（`capture-game-bundle.mjs`
    * 起一个静态目录证明装配管道通）。**不是给用户用的**，也**不许**接进设置页。
@@ -316,7 +554,8 @@ interface AppState {
   mountGame: (gameId: string, container: HTMLElement) => Promise<() => void>
 
   /* ---- 任务 ---- */
-  addTask: (input: NewTaskInput) => Promise<Task>
+  /** 在线版失败时返回 `null`（并弹提示）；本地版永远返回新任务 */
+  addTask: (input: NewTaskInput) => Promise<Task | null>
   updateTask: (id: string, patch: Partial<Task>) => Promise<void>
   /** 隐藏 / 恢复一个任务。和 `setRedeemItemArchived` 同名同形 —— 两边别走散 */
   setTaskArchived: (id: string, archived: boolean) => Promise<void>
@@ -449,24 +688,38 @@ interface AppState {
   /**
    * 孩子「确定兑换」：**扣兑换券** + 建单（`committed`）。
    *
-   * 盲盒在这一步开奖（`pickBlindBox`），游戏盒子在下一步装包。
+   * 盲盒在这一步开奖（`pickBlindBoxMany`，一次可能开多款），
+   * 游戏盒子在下一步装包。
    * 返回 `gameId` 让界面能弹开箱结果。
    *
    * ⚠️ 扣券和建单必须在**同一个事务**里：只扣券不建单，孩子的东西就凭空没了。
    */
-  wishRedeem: (itemId: string) => Promise<{ ok: boolean; message: string; gameId?: string }>
+  /**
+   * 孩子「确定兑换」。
+   *
+   * 返回值里的 `gameId` 是**第一款**（老调用方只看这一个），
+   * `gameIds` 是这一单交付的**全部**（「5 连开」一单 5 款）。
+   * ⚠️ 只给 `gameId` 的话，开箱层只能揭晓 1 款，另外 4 款静默进游戏柜 ——
+   * 孩子会以为「我付了 5 份的钱，只开出 1 款」。
+   */
+  wishRedeem: (itemId: string) => Promise<{
+    ok: boolean
+    message: string
+    gameId?: string
+    gameIds?: string[]
+  }>
   /**
    * 家长给商品定价（`voucherPrice > 0`）或关闭（`<= 0`）。
    *
    * 关闭是写 `closedAt` 而不是删行 —— 孩子之前换过的历史还要能解释。
    */
-  wishSetOffer: (itemId: string, voucherPrice: number) => Promise<void>
+  wishSetOffer: (itemId: string, voucherPrice: number, oneTime?: boolean) => Promise<void>
   /** 家长确认：已经去外链买了（`committed` → `confirmed`） */
   wishConfirm: (orderId: string) => Promise<void>
   /** 家长标记完成，可顺手存收货信息和成交单号（`confirmed` → `done`） */
   wishDone: (
     orderId: string,
-    patch?: { ship?: WishShipInfo; buyOrderNo?: string },
+    patch?: { ship?: ShipDraft; buyOrderNo?: string },
   ) => Promise<void>
   /**
    * 取消 / 撤回。
@@ -498,6 +751,20 @@ interface AppState {
   jumpToRedeem: (itemId: string) => void
   /** 取走并清空。返回 null 表示没有待跳转 */
   takePendingRedeemItem: () => string | null
+
+  /**
+   * 跨页通道（2026-11-05 第二轮）：心愿页「激活成功」的弹框里有一颗
+   * 「去设置看看」，要把人送到**设置 → 游戏**那一栏。
+   *
+   * 和 `pendingRedeemItem` 同一套做法 —— `App` 的 `setShowSettings` /
+   * `SettingsPage` 的 `tab` 都是组件内部 state，别的页拿不到。
+   * **取走要清空**，否则关掉设置还会被弹回去一次。
+   */
+  pendingSettingsTab: 'child' | 'rules' | 'game' | 'data' | null
+  /** 设通道并打开设置页（`App` 那边监听） */
+  jumpToSettings: (tab: 'child' | 'rules' | 'game' | 'data') => void
+  /** 取走并清空。返回 null 表示没有待跳转 */
+  takePendingSettingsTab: () => 'child' | 'rules' | 'game' | 'data' | null
 
   /* ---- 游戏（插件骨架，2026-10-14 起） ---- */
   /**
@@ -542,7 +809,17 @@ interface AppState {
    * 事务提交之后才装包（装包是网络 + 执行，不能塞进 Dexie 事务）。装失败就把
    * 刚写的那两行删掉 —— 否则孩子拿到一句「装包失败」而码已经没了，只能找客服。
    */
-  redeemGameCode: (code: string) => Promise<{ ok: boolean; message: string; gameId?: string }>
+  redeemGameCode: (
+    code: string,
+    /**
+     * `silent: true` ⇒ 成功时不发那条全局 toast。
+     *
+     * 心愿商城那两处输码口自己弹一个「激活成功」的框，再飘一条
+     * 「已激活：X」就是同一句话说两遍 —— 2026-10-30「从备份恢复」
+     * 那里踩过同一个坑（标题和副标题各说一遍）。
+     */
+    opts?: { silent?: boolean },
+  ) => Promise<{ ok: boolean; message: string; gameId?: string }>
 
   /**
    * **家长手动发钻石**（2026-10-16 起）。
@@ -566,7 +843,13 @@ interface AppState {
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>
   exportBackup: () => Promise<unknown>
   importBackup: (raw: unknown) => Promise<{ ok: boolean; message: string }>
-  resetAll: () => Promise<void>
+  /**
+   * 清空本机全部数据并重新开始。
+   *
+   * `false` = **没清**（在线版：数据在账号里，清了也会被下一次拉取带回来）。
+   * 调用方要据此不弹「已重新开始」。
+   */
+  resetAll: () => Promise<boolean>
 
   /* ---- UI ---- */
   pushToast: (t: Omit<Toast, 'id'>) => void
@@ -630,6 +913,20 @@ let seedInFlight: Promise<void> | null = null
 
 /** 首次启动时注入的示例任务，让孩子立刻能玩起来 */
 async function seedIfEmpty(): Promise<void> {
+  /* 在线版：**一个字节都不播** —— 数据以账号为准。
+
+     本地播一遍的后果不是「多几条示例任务」，而是：
+       · 每台新设备白送 50 积分 + 500 钻石，服务端并不知道这 50 分；
+       · 孩子把它花掉之后，两台设备的余额再也对不上，
+         而且**没有任何报错** —— 只会在某天发现「妈妈的手机比孩子多 50 分」。
+     新账号该看到什么，由服务端决定：2026-11-05 起是「按模板铺一次」
+     （`POST /api/template/apply`，官方一套 / 商家各一套，见
+     `src/online/template.ts`）。铺的是**服务端的** task / redeem_item，
+     客户端这边照旧只负责把它们 pull 进 Dexie。
+
+     ★ 判据别写「库是空的就播」：在线版的库在拉取之前**本来就是空的**。 */
+  if (isOnlineMode) return
+
   // 串行化：见上面「播种的并发闸门」
   if (seedInFlight) return seedInFlight
   seedInFlight = doSeedIfEmpty().finally(() => {
@@ -664,7 +961,12 @@ async function doSeedIfEmpty(): Promise<void> {
       source: 'manual_adjust',
       memo: '欢迎来到小任务农场！这是给你的启动积分 🎁',
     })
-    // 2026-10-17：全新用户启动时赠送 500 钻石（和上面的 50 启动积分同一逻辑，只给新装机的孩子）。
+    /* 2026-10-17：全新用户启动时赠送 500 钻石（和上面的 50 启动积分同一逻辑，
+       只给新装机的孩子）。
+       ⚠️ 这是**本机**的种子，在线版里服务端的 `diamond` 是 0 —— 别拿它当
+       「账号里有 500 钻石」。本版钻石只进不出（发放入口和购买入口都撤了，
+       见 `buyGame` 的注释），所以现在对不上也不会有后果；真要恢复钻石经济，
+       顺序见 `docs/online-version.md` §7.15.7 最后一条。 */
     await postMall({
       delta: 500,
       source: 'manual_adjust',
@@ -803,6 +1105,8 @@ async function backfillMissingRedeemItems(now: number): Promise<void> {
    出现两条实例 → 同一任务可被结算两次。这里把并发调用折叠成一次。
    ============================================================ */
 let refreshInFlight: Promise<void> | null = null
+/* 有调用在飞的时候又来了一个 ⇒ 记一笔，等它跑完**再补一次**（见 refresh 的注释） */
+let refreshAgain = false
 
 /* ============================================================
    设置的写入串行闸门
@@ -835,8 +1139,25 @@ const BACKUP_ARRAY_FIELDS = [
   'redeemRecords',
   'wishOffers',
   'wishOrders',
+  'wishCodes',
   'events',
 ] as const
+
+/**
+ * `data` 里**不是表**的那几个键。
+ *
+ * 加这个清单是为了让「导出写了哪些键」和「导入认得哪些键」有一处共同的账本 ——
+ * 单测里拿真实导出和它做差，加表时忘了登记会当场红。
+ */
+const BACKUP_SCALAR_FIELDS = ['market', 'settings', 'farm', 'quotaCarry', 'meta'] as const
+
+/**
+ * 一份备份的 `data` 里**允许出现**的全部键。
+ *
+ * 导出给单测用：拿真实导出和它做**双向**比对，加表时忘了登记会当场红
+ * （那时记得同时 bump `BACKUP_VERSION`，否则旧版 App 会静默丢掉新表）。
+ */
+export const KNOWN_BACKUP_KEYS = new Set<string>([...BACKUP_ARRAY_FIELDS, ...BACKUP_SCALAR_FIELDS])
 
 /** 数组字段允许缺失（老版本备份没有新字段），但若存在必须是对象数组且带 id */
 const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
@@ -854,12 +1175,135 @@ const BACKUP_ID_ARRAY_FIELDS = new Set<string>([
 ])
 
 /**
+ * 备份格式的版本号。**只在这里写一次** —— 导出和「空模板」都读它。
+ * 写在两处就会走散：模板停在 1、真实导出早就是 4（2026-10-30 之前就是这样）。
+ */
+const BACKUP_VERSION = 4
+
+/**
+ * 「数据已恢复」后面那半句。
+ *
+ * 抽成纯函数，是因为这句话是**拼出来的** —— 读代码读不出它到底长什么样。
+ * 2026-10-30 一天里栽了三次，每次都是真跑一次才看见：
+ *
+ *   ① 「但」后面多一个空格（`但 「X」`）
+ *   ② 「等」前面多一个空格（`「C」 等 5 款`）
+ *   ③ 整句要 367px，而 toast 那行只有 275px —— 被切掉的正好是
+ *      「要去「游戏」页重新装一次」，家长唯一能照着做的那半句
+ *
+ * 所以现在只有两种形态：
+ *
+ *   有装不回来的 → 「；「蚂蚁搬家」去「游戏」页重装」   ← 先说他要做的事
+ *   都装回来     → 「；游戏装回 2 款」
+ *
+ * ⚠️ 有失败时**不带款数**：塞不下。款数只是安慰，名字 + 去哪装才是动作。
+ * ⚠️ 别写「装回 0 款」：孩子会以为自己弄丢了什么。
+ * ⚠️ 中文里不留空格：`但${…}` 不是 `但 ${…}`，`${…}去` 不是 `${…} 去`。
+ */
+export function restoreTail(putBack: number, pendingNames: string[]): string {
+  const quoted = pendingNames
+    .slice(0, 3)
+    .map((n) => `「${n}」`)
+    .join('、')
+  const more = pendingNames.length > 3 ? `等 ${pendingNames.length} 款` : ''
+  /* 有装不回来的，**先说它、也不带款数**。
+     2026-10-30 量过：toast 的说明那行只有 275px，而
+     「游戏装回 1 款，但「抓奖乐园」要去「游戏」页重新装一次」要 367px ——
+     被切掉的正好是「要去「游戏」页重新装一次」，家长唯一能照着做的那半句。
+     塞不下就别塞：款数只是安慰，名字 + 去哪装才是他要做的事。 */
+  if (pendingNames.length > 0) return `；${quoted}${more}去「游戏」页重装`
+  if (putBack > 0) return `；游戏装回 ${putBack} 款`
+  return ''
+}
+
+/**
+ * 「下载一个空模板看看」那个按钮的内容。
+ *
+ * 它要回答的问题是「备份长什么样」，所以**必须把结构摊开**：一张表一个键，
+ * 值都是空数组。原来的写法是 `data: {}` —— 家长打开只看到一个空对象，
+ * 什么也没回答。
+ *
+ * ⚠️ 键名从 `BACKUP_ARRAY_FIELDS` 派生，**不手写**。手写一份就会在加表时走散。
+ * ⚠️ 值一律留空数组，让 `validateBackup` 里那条「至少要有一样实际内容，
+ *    避免导入一个空壳把数据清空」把它挡住 —— 空模板必须是**导不进去**的，
+ *    否则家长（或孩子）拿它点一次恢复，真实数据就被示例顶掉了。
+ */
+export function makeBackupSample(): unknown {
+  return {
+    app: 'kid-quest-farm',
+    version: BACKUP_VERSION,
+    exportedAt: Date.now(),
+    说明: '这是一份空模板，只展示备份的结构，不含任何真实数据。导入它会被拒绝（没有可恢复的内容）。',
+    data: Object.fromEntries(BACKUP_ARRAY_FIELDS.map((k) => [k, []])),
+  }
+}
+
+/**
  * 备份里的收货信息：**只留省市区 + 手机尾号**（`docs/wish-mall-spec.md` §9.1）。
  *
  * `wishOrders` 现在会进备份，而 `ship` 里是收货人姓名 + 手机号 + 家庭详细地址
  * —— 绑在**儿童**账号上。整表原样导出等于「备份文件里躺着一份小孩住址」，
  * 而这个文件通常被丢进微信 / 网盘里传来传去。所以导出前必须裁。
  */
+/**
+ * 备份里**不许出现「这台设备的东西」**。
+ *
+ * 两个字段，两类理由：
+ *
+ *   · `parentPin` —— **凭据**。它是明文 4 位（`ParentGate` 直接
+ *     `pin === settings.parentPin` 比字符串），而 `settings` 是整份导出的
+ *     ⇒ 每导一次备份，家长锁的密码就跟着那个 JSON 离开这台设备。
+ *     备份文件正是会被发到微信 / 网盘 / 客服的东西。
+ *   · `gameClock` —— **这台设备今天的用量**（「今天已经玩了多久」，
+ *     `GamePlayGate` 拿它和 `gameDailyMinutes` 比）。跟着文件走有两个方向的问题：
+ *     孩子玩满 30 分钟之后导入一份玩之前的备份 ⇒ 额度被刷回去；
+ *     换台设备恢复 ⇒ 把「昨天那台设备今天玩了多少」带过来。
+ *
+ * 导出剥掉，导入端也**不认**文件里的值（见 `importBackup`）—— 两边都不认，
+ * 才算真的「仅本地」。
+ */
+function stripDeviceLocal(s: AppSettings): AppSettings {
+  const out = { ...s }
+  delete out.parentPin
+  delete out.gameClock
+  return out
+}
+
+/**
+ * 这一行 `gameKv` 是不是**宿主保留键**（游戏本体 / 资源根）。
+ *
+ * 键形如 `${gameId}:${shortKey}`，见 `db.ts` 的 `gameKvKey()`。
+ */
+function isHostOnlyGameKvKey(key: string): boolean {
+  return key.endsWith(`:${BUNDLE_KEY}`) || key.endsWith(`:${ASSET_BASE_KEY}`)
+}
+
+/**
+ * 备份里**不带游戏本体，只带存档**。
+ *
+ * 原来 `__bundle`（整段游戏代码，`anthill` 一款就 **4.2 MB**）是原样进备份的。
+ * 两个问题，第二个严重：
+ *
+ * 1. **体积**：装一款 4 MB，装五款 20 MB，而其中 99% 的字节是「这台设备上
+ *    本来就有的游戏代码」。备份是要发给微信 / 网盘的。
+ * 2. **它是一段会被执行的代码**。`mountGame()` 读 `__bundle` → `importBundle()`
+ *    → `Blob` → `import()`，中间**没有哈希、没有签名**（`loader.ts` 头注释写着
+ *    「必须发生在调用本函数之前：先验签，再执行」）。下载层是有签名的，
+ *    备份这条路把那道门整个绕过去了。
+ *
+ *    实测（2026-10-30）：把一份真备份里的 `__bundle` 换成自己的模块，
+ *    `importBackup` 照样报「数据已恢复」，挂载时那段代码就在页面里跑起来，
+ *    能读孩子的积分流水。而备份文件正是家长之间会互相传的东西
+ *    （「这是我配好的任务，你导入吧」）。
+ *
+ * 所以：导出剥掉，导入端也**不认**文件里的这两行（两边都不认才算关死）。
+ * 恢复后按 `meta.installedGameIds` 从**本地包**重装 —— 那条路会比对
+ * 烧进 App 的 sha256。存档不受影响（存档是 `<gameId>:` 开头的其他行）。
+ */
+function saveOnlyGameKv(rows: GameKvRow[]): GameKvRow[] {
+  return rows.filter((r) => !isHostOnlyGameKvKey(r.key))
+}
+
 function shipSnapshotOf(ship: WishShipInfo | undefined): WishShipSnapshot | undefined {
   if (!ship) return undefined
   const digits = typeof ship.phone === 'string' ? ship.phone.replace(/[^0-9]/g, '') : ''
@@ -959,6 +1403,50 @@ function ownedGameIdsFrom(mallLedger: readonly MallEntry[]): string[] {
 }
 
 /**
+ * 这个孩子**现在真的拥有**哪些游戏 —— **直接读库**。
+ *
+ * ## 为什么读库，不读 `get().ownedGameIds`
+ *
+ * 兑换/购买都是「先写账本 → 再装包」。中间那一刻 store 还没 `refresh()`，
+ * 读快照就会把刚兑换到的判成「没拥有」—— 兑换流程自己把自己卡住。
+ * 这类**顺序依赖不会报错**，只会让人以为「码是坏的」。
+ *
+ * ## 为什么用 `wishOwnedSet` 而不是 `ownedGameIds`
+ *
+ * 「拥有」有**三个来源**，`ownedGameIds` 只覆盖第一个：
+ *   ① 账本（`game_purchase` / `redemption_code`）；
+ *   ② 已装的包（`installedBundles`）—— 卸载再重装时靠它；
+ *   ③ 心愿单的 `openedGameId`（`redeemedGameIdsFrom`）。
+ * 只判账本，会把「心愿商城换来的」和「卸了想重装的」一起锁死 ——
+ * 而这两个恰恰是正常用户最常走的路径。
+ */
+async function ownedGameSetNow(): Promise<Set<string>> {
+  /* ★★ 在线版**问服务端**，不看本地账本。
+   *
+   * 这道闸用在「没拥有就不能装」上（`installLocalGame`）。本地账本说拥有、
+   * 服务端没有那行的话，装完能玩、存档存不上 —— 闸门形同虚设。
+   *
+   * 拉不到就退回上一次那份名单：让「网络抖一下」变成「装不上」，
+   * 比让「其实没拥有」蒙过去更糟。 */
+  if (isOnlineMode) {
+    try {
+      return new Set(ownedIdsOnline(await fetchOwnedGameIds()) ?? [])
+    } catch {
+      return new Set(useApp.getState().ownedGameIds)
+    }
+  }
+
+  const [ledger, orders, bundles] = await Promise.all([
+    db.mallLedger.toArray(),
+    db.wishOrders.toArray(),
+    listInstalledBundles(),
+  ])
+  const installed: Record<string, true> = {}
+  for (const b of bundles) installed[b.gameId] = true
+  return wishOwnedSet(ownedGameIdsFrom(ledger), installed, orders)
+}
+
+/**
  * 把 `settings.activeGame` 解析成一个**真的能用**的 id。
  *
  * 存档里那个 id 有四种失效方式：
@@ -999,7 +1487,7 @@ function resolveActiveGame(
 function pluginHostApi(gameId: string): HostApi {
   return makeHostApi({
     getBalance: () => useApp.getState().balance,
-    refresh: () => useApp.getState().refresh(),
+    refresh: (o) => useApp.getState().refresh(o),
     pushToast: (t) => useApp.getState().pushToast(t),
     soundEnabled: () => useApp.getState().settings.soundEnabled,
     hapticsEnabled: () => useApp.getState().settings.hapticsEnabled,
@@ -1122,12 +1610,643 @@ async function loadInstalledGames(): Promise<Record<string, GameManifestV2>> {
   return out
 }
 
+/* ============================================================
+   在线版 · 任务写穿（服务端为准，本地表只是读缓存）
+   ------------------------------------------------------------
+   每个函数的形状都一样：**调接口 → 成功了才 refresh → 从本地表读回**。
+
+   ★ 失败时**一个字都不写本地**。这是写穿和「先存本地再补传」最根本的区别：
+     先存本地的话孩子看到「交上去啦」，家长那边永远收不到，
+     而两边都不报错 —— 只有用户来问才发现。
+
+   ★ 为什么写完之后要 `refresh()` 而不是自己改本地：
+     积分、余额、结算结果都是服务端算的（`task_settlement.go`）。
+     本地再算一遍 = 两份规则、两个真相，迟早对不上。
+   ============================================================ */
+
+/** 建任务 */
+async function onlineAddTask(get: () => AppState, input: NewTaskInput): Promise<Task | null> {
+  const r = await onlineWrite(() => oCreateTask(input))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这条任务'))
+    return null
+  }
+  await get().refresh({ light: true })
+  return (await db.tasks.get(srvId('task', r.data.id))) ?? null
+}
+
+/** 改任务 / 隐藏任务（`archived` 走同一个接口） */
+async function onlineUpdateTask(
+  get: () => AppState,
+  id: string,
+  patch: Partial<Task>,
+): Promise<void> {
+  // `extra` 是整块存的，必须把「当前这条」一起带上，否则只改一个参数会把别的抹掉
+  const full = get().allTasks.find((t) => t.id === id) ?? (await db.tasks.get(id))
+  if (!full) {
+    get().pushToast({
+      kind: 'warn',
+      title: '这条任务在服务端已经没有了',
+      detail: '下拉刷新一下再看',
+      emoji: '🧐',
+    })
+    return
+  }
+  const r = await onlineWrite(() => oUpdateTask(id, patch, full))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次修改'))
+    return
+  }
+  await get().refresh({ light: true })
+}
+
+/** 删任务（服务端是归档，不是真删） */
+async function onlineDeleteTask(get: () => AppState, id: string): Promise<void> {
+  const r = await onlineWrite(() => oDeleteTask(id))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次删除'))
+    return
+  }
+  await get().refresh({ light: true })
+}
+
+/** 计时三兄弟：开始 / 暂停 / 继续，只有一个请求的差别 */
+async function onlineTimer(
+  get: () => AppState,
+  call: (id: string) => Promise<unknown>,
+  instanceId: string,
+): Promise<void> {
+  const r = await onlineWrite(() => call(instanceId))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次计时'))
+    return
+  }
+  await get().refresh({ light: true })
+}
+
+/**
+ * 提交。
+ *
+ * 服务端的 `/task/submit` **一律进 `submitted`（等家长审核）** ——
+ * 它不知道家长关掉了「需要审核」。所以家长关掉审核时，这里紧接着
+ * 自己调一次 `/task/review` 通过，把本地那套语义补回来。
+ * 不补的话：家长明明关了审核，孩子交完却永远卡在「等爸爸妈妈看一眼」。
+ */
+async function onlineSubmitInstance(
+  get: () => AppState,
+  instanceId: string,
+  quality: QualityGrade | undefined,
+  opts?: { skipReview?: boolean; backfilled?: boolean },
+): Promise<number> {
+  const { settings } = get()
+  const sub = await onlineWrite(() => oSubmitTask(instanceId, { backfilled: opts?.backfilled }))
+  if (!sub.ok) {
+    get().pushToast(writeFailToast(sub.error, '这次提交'))
+    return 0
+  }
+
+  const needsReview = settings.parentReviewEnabled && !opts?.skipReview
+  if (needsReview) {
+    get().pushToast({
+      kind: 'success',
+      title: '交上去啦！等爸爸妈妈看一眼',
+      detail: '他们确认后积分就到账咯',
+      emoji: '📮',
+    })
+    await get().refresh({ light: true })
+    return 0
+  }
+
+  const rev = await onlineWrite(() => oReviewTask(instanceId, true, { quality }))
+  if (!rev.ok) {
+    // 已经交上去了，别让家长以为要重交 —— 说清楚「等着审核」这个出口
+    get().pushToast({
+      kind: 'warn',
+      title: '交上去了，但自动确认没成功',
+      detail: '让爸爸妈妈在「待确认」里点一下就好',
+      emoji: '📮',
+    })
+    await get().refresh({ light: true })
+    return 0
+  }
+  await get().refresh({ light: true })
+  return rev.data.earned_points ?? 0
+}
+
+/** 家长确认 / 打回 */
+async function onlineReviewInstance(
+  get: () => AppState,
+  instanceId: string,
+  approve: boolean,
+  opts: { quality?: QualityGrade; note?: string } = {},
+): Promise<number> {
+  const r = await onlineWrite(() => oReviewTask(instanceId, approve, opts))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, approve ? '这次确认' : '这次打回'))
+    return 0
+  }
+  await get().refresh({ light: true })
+  return r.data.earned_points ?? 0
+}
+
+/** 放弃这个任务 */
+async function onlineSkipInstance(get: () => AppState, instanceId: string): Promise<void> {
+  const r = await onlineWrite(() => oSkipTask(instanceId))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次放弃'))
+    return
+  }
+  await get().refresh({ light: true })
+}
+
+/**
+ * 签到。
+ *
+ * 服务端一步做完（发分 + 连签 + 阶梯奖励），没有「待家长确认」这一档。
+ * 所以在线版 `approveCheckIn` / `rejectCheckIn` / `claimCheckInTier` 三个动作
+ * 保持本地实现不动也不会被点到 —— 界面上不会有待审条目。
+ */
+async function onlineDoCheckIn(
+  get: () => AppState,
+  taskId: string,
+): Promise<{ gained: number; bonus: number }> {
+  const r = await onlineWrite(() => oCheckIn(taskId))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次签到'))
+    return { gained: 0, bonus: 0 }
+  }
+  await get().refresh({ light: true })
+  // 服务端给的 `points` 已经把阶梯奖励算进去了，所以 bonus 记 0，避免重复显示
+  return { gained: r.data.points ?? 0, bonus: 0 }
+}
+
+/* ============================================================
+   在线版 · 兑换商城写穿
+   ------------------------------------------------------------
+   和任务那条链路同一个形状：**调接口 → 成功了才 refresh → 从本地表读回**。
+
+   ★ 兑换和别的动作有一个根本区别：**分账由服务端算**。
+     「券优先 + 积分补差」这条规则本地也有一份（`domain/redeem.ts`），
+     但那是给 UI 做预览用的；真正扣钱只有服务端那一份算数。
+     所以这里**不预先扣任何东西**，只把结果读回来。
+   ============================================================ */
+
+/**
+ * 新建兑换品。
+ *
+ * ★ `id` 由**客户端**生成并带上（服务端照用，见 `api/redeem.ts`）。
+ *   好处是：建完不用再查一次「服务端给我分配了什么 id」，
+ *   而且 id 在本地和服务端是**同一个字符串**，两边都对得上。
+ */
+async function onlineAddRedeemItem(
+  get: () => AppState,
+  input: NewRedeemInput,
+): Promise<RedeemItem> {
+  const now = Date.now()
+  const id = uid('rd')
+  /** 建失败时返回它：调用方（编辑器）不读返回值，但类型要求这里必须给一个 */
+  const shell: RedeemItem = { ...input, id, archived: false, createdAt: now, updatedAt: now }
+
+  const r = await onlineWrite(() => oCreateRedeemItem(redeemCreateBody(id, input)))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这个兑换品'))
+    return shell
+  }
+  await get().refresh()
+  return (await db.redeemItems.get(id)) ?? shell
+}
+
+/** 改兑换品 / 上架下架（`archived` 走同一个接口） */
+async function onlineUpdateRedeemItem(
+  get: () => AppState,
+  id: string,
+  patch: Partial<RedeemItem>,
+): Promise<void> {
+  const r = await onlineWrite(() => oUpdateRedeemItem(id, patch))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次修改'))
+    return
+  }
+  await get().refresh()
+}
+
+async function onlineDeleteRedeemItem(get: () => AppState, id: string): Promise<void> {
+  const r = await onlineWrite(() => oDeleteRedeemItem(id))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次删除'))
+    return
+  }
+  await get().refresh()
+}
+
+/**
+ * 兑换。
+ *
+ * 返回 `null` = 没换成；否则给出这次**服务端实际扣的**分账，
+ * 让调用方去点亮积分飘字和成功提示。
+ *
+ * ⚠️ 这里**不复算**「够不够 / 换过没 / 今天几次」。服务端在同一事务里
+ *    全查一遍，本地再判一遍只会多出一个真相 —— 而且那个真相是按
+ *    `settings.dayStartHour`（默认凌晨 4 点）算的，服务端按 0 点算，
+ *    凌晨那几个小时两边必然不一致。
+ */
+async function onlineRedeem(
+  get: () => AppState,
+  itemId: string,
+): Promise<{ name: string; emoji: string; pointsPaid: number; harvestPaid: number; how: string } | null> {
+  const r = await onlineWrite(() => oRedeemItem(itemId))
+  if (!r.ok) {
+    get().pushToast(redeemFailToast(r.error))
+    return null
+  }
+  const d = r.data
+  get().pushToast({
+    kind: 'reward',
+    title: `兑换成功：${d.name}`,
+    detail: `花了 ${d.description} · 记得找爸爸妈妈兑现哦`,
+    emoji: d.emoji || '🎁',
+  })
+  await get().refresh()
+  return {
+    name: d.name,
+    emoji: d.emoji || '🎁',
+    pointsPaid: d.plan?.points_paid ?? 0,
+    harvestPaid: d.plan?.harvest_paid ?? 0,
+    how: d.description,
+  }
+}
+
+/** 家长标记「已兑现」 */
+async function onlineFulfillRedeem(get: () => AppState, recordId: string): Promise<void> {
+  const r = await onlineWrite(() => oFulfillRedeem(recordId))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次确认'))
+    return
+  }
+  await get().refresh()
+}
+
+/* ============================================================
+   在线版 · 心愿商城写穿
+   ------------------------------------------------------------
+   形状和兑换那条一样：**调接口 → 成功了才 refresh → 从本地表读回**。
+
+   ★ 六个动作里只有「装包」是客户端的活。服务端只会授予游戏
+     （写 `user_game`），插件包在本机 `gameKv` 里 —— 它管不到。
+     所以 `onlineWishRedeem` 是唯一一个「服务端成功之后还要再做一步」的动作，
+     而那一步失败必须**回头调服务端的取消**把券退回来（见那里的注释）。
+
+   ★ 这里**不预判**「券够不够 / 爸妈定没定价 / 盲盒还有没有」。
+     服务端在同一个事务里全查一遍，本地再判一遍只会多出一个真相。
+     本地版那几行 `return { ok: false, message: '爸妈还没给它定价' }`
+     在在线模式下走不到 —— 文案改由 `wishFailToast` 按业务码给。
+   ============================================================ */
+
+/** 孩子「想要这个」（不扣钱）。服务端对「已有进行中订单」是幂等的 */
+async function onlineWishExpress(get: () => AppState, itemId: string): Promise<void> {
+  const r = await onlineWrite(() => oWishExpress(itemId))
+  if (!r.ok) {
+    get().pushToast(wishFailToast(r.error))
+    return
+  }
+  /* 服务端幂等返回「已有的那一单」—— 如果它已经不在 `wished`（孩子已经
+     兑换过了），再弹一句「已向爸妈申请」就是假话。本地版是靠「先查有没有
+     进行中的单子，有就直接 return」挡住的，这里用服务端返回的状态挡。 */
+  if (r.data.status !== 'wished') {
+    /* 和本地版一字不差：那一单还在走（一次性商品兑换完、等爸妈买），
+       再点「我想要」不该什么都不发生。 */
+    get().pushToast({
+      kind: 'info',
+      title: '这一单还在等爸妈处理',
+      detail: '处理完了才能再许愿',
+      emoji: '⏳',
+    })
+    await get().refresh()
+    return
+  }
+  const name = r.data.item_name || wishItemById(itemId)?.name || '这件东西'
+  get().pushToast({
+    kind: 'info',
+    title: `已向爸妈申请：想要「${name}」`,
+    detail: '他们审核时会直接定好兑换券价格',
+    emoji: '💌',
+  })
+  await get().refresh()
+}
+
+/**
+ * 孩子「确定兑换」。
+ *
+ * 返回 `null` = 没换成（提示已经弹过）；否则给出这次**服务端实际开出的**游戏。
+ *
+ * ## 装包失败为什么要回头取消
+ *
+ * 服务端那一步已经把券扣了、也把 `user_game` 授了。但游戏类商品的「交付」
+ * 在客户端是**装包** —— 装不上等于没给东西，券留着没有任何理由。
+ * 所以走 `oWishCancel`（服务端的取消）：它会把两种币各退一笔、
+ * 同时 `RevokeGame`。**不要在客户端自己造一笔退款账** ——
+ * 那就成了「本地退一次、服务端那单还挂着」，两边永远对不上。
+ */
+async function onlineWishRedeem(
+  get: () => AppState,
+  itemId: string,
+): Promise<{ ok: boolean; message: string; gameId?: string; gameIds?: string[] }> {
+  const r = await onlineWrite(() => oWishRedeem(itemId))
+  if (!r.ok) {
+    const t = wishFailToast(r.error)
+    return { ok: false, message: t.detail ?? t.title }
+  }
+
+  const view = r.data
+  /* 「5 连开」返回的是清单，老服务端只有 `opened_game_id` —— 两种都认。
+     清单优先：只读单数字段会让 5 连开在界面上显示成「开出 1 款」。 */
+  const gameIds =
+    view.opened_game_ids && view.opened_game_ids.length
+      ? [...view.opened_game_ids]
+      : view.opened_game_id
+        ? [view.opened_game_id]
+        : []
+  const gameId = gameIds[0]
+  const item = wishItemById(itemId)
+
+  /* ★ 5 连开要装 5 个包。只装第一个的话，孩子付了 5 份的钱、
+     拿到 1 款，而界面会说「兑换成功」—— 那是最糟的一种错。 */
+  for (const gid of gameIds) {
+    const res = await get().installLocalGame(gid)
+    if (!res.ok) {
+      const c = await onlineWrite(() =>
+        oWishCancel(localWishOrderId(view.id), '游戏没装好'),
+      )
+      if (!c.ok) {
+        // 退不回来就得说清楚 —— 券扣了、游戏没装上，这是最需要人管的一种
+        get().pushToast(writeFailToast(c.error, '退回兑换券'))
+      }
+      await get().refresh()
+      return { ok: false, message: `游戏没装好，券已经退回来了：${res.message}` }
+    }
+  }
+
+  get().pushToast({
+    kind: 'reward',
+    title: `兑换成功：${view.item_name || item?.name || '心愿'}`,
+    detail:
+      gameIds.length > 1
+        ? `已经放进你的游戏柜啦（${gameIds.length} 款）`
+        : gameId
+          ? '已经放进你的游戏柜啦'
+          : '等爸爸妈妈去买',
+    emoji: view.item_emoji || item?.emoji || '🎁',
+  })
+
+  /* 一次性兑换的「关闭 offer」由**服务端在兑换事务里**做（2026-11-06）——
+     客户端不再补发一次 set-offer：那次请求失败时券已经扣了、商品还挂在
+     兑换列表上，而且不报错。 */
+
+  await get().refresh()
+  return { ok: true, message: '兑换成功', gameId, gameIds }
+}
+
+/** 家长定价 / 关闭（`price <= 0` = 关闭） */
+async function onlineWishSetOffer(
+  get: () => AppState,
+  itemId: string,
+  voucherPrice: number,
+  oneTime?: boolean,
+): Promise<void> {
+  const r = await onlineWrite(() => oWishSetOffer(itemId, voucherPrice, oneTime))
+  if (!r.ok) {
+    get().pushToast(writeFailToast(r.error, '这次定价'))
+    return
+  }
+  await get().refresh()
+}
+
+async function onlineWishConfirm(get: () => AppState, orderId: string): Promise<void> {
+  const r = await onlineWrite(() => oWishConfirm(orderId))
+  if (!r.ok) {
+    get().pushToast(wishFailToast(r.error))
+    return
+  }
+  await get().refresh()
+}
+
+/**
+ * 家长收尾。
+ *
+ * `patch.ship` 会**一起上传**（2026-11-02 晚起）：服务端 `/wish/done` 现在认
+ * `ship`，写库时带上 `purge_after`（90 天）。这是地址的唯一入口 ——
+ * 兑换那一刻客户端没有表单（spec §9 的家长表单还没做）。
+ *
+ * ⚠️ 地址为空时**不发这个字段**（`toServerShip` 返回 undefined）：服务端
+ * 在地址为空时是「一个字都不动」，发空对象反而可能覆盖掉已有的地址。
+ * ⚠️ 校验必须在界面做（`shipFormIssue`）—— 服务端静默不存、不报错。
+ */
+async function onlineWishDone(
+  get: () => AppState,
+  orderId: string,
+  patch?: { ship?: ShipDraft; buyOrderNo?: string },
+): Promise<void> {
+  const r = await onlineWrite(() => oWishDone(orderId, patch?.buyOrderNo ?? '', patch?.ship))
+  if (!r.ok) {
+    get().pushToast(wishFailToast(r.error))
+    return
+  }
+  await get().refresh()
+}
+
+/**
+ * 取消（服务端退两种币 + 收回游戏）。
+ *
+ * 客户端还要做一件服务端做不到的事：**摘掉本机的安装**。
+ * 用 `detachGameKv` 而不是 `clearGameKv` —— 只摘安装（包 + 资源根），
+ * **保留存档**：撤销的是这笔交易，不是孩子玩出来的进度。
+ */
+async function onlineWishCancel(
+  get: () => AppState,
+  orderId: string,
+  reason?: string,
+): Promise<void> {
+  // 交付过哪款游戏要看**取消前**那一行（取消后 `opened_game_id` 仍然在，
+  // 但顺序上先读更稳：本地这份可能还没被 refresh 覆盖）
+  const before = await db.wishOrders.get(orderId)
+
+  const r = await onlineWrite(() => oWishCancel(orderId, reason ?? ''))
+  if (!r.ok) {
+    get().pushToast(wishFailToast(r.error))
+    return
+  }
+
+  const delivered = before?.openedGameId
+  if (delivered) {
+    await detachGameKv(delivered)
+    if (get().activeGameId === delivered) {
+      await get().updateSettings({ activeGame: DEFAULT_GAME_ID })
+    }
+  }
+
+  /* 退了多少从**服务端返回的那一单**读。服务端取消时不清 `vouchers_held` /
+     `points_held`（它们是退款凭据），所以这里拿到的是真实退回的数。
+     读本地那份不行：本地可能还没刷新，读到的是刷新前的值（通常一样，
+     但「通常」在这种地方等于「偶尔会显示 0」）。 */
+  const parts: string[] = []
+  if (r.data.vouchers_held > 0) parts.push(`${r.data.vouchers_held} 张兑换券`)
+  if (r.data.points_held > 0) parts.push(`${r.data.points_held} 积分`)
+  if (parts.length > 0) {
+    get().pushToast({
+      kind: 'info',
+      title: `已退回 ${parts.join(' + ')}`,
+      detail: delivered ? '游戏已收回，进度还在' : undefined,
+      emoji: '🎫',
+    })
+  }
+
+  await get().refresh()
+}
+
+
+/**
+ * 在线版农场动作的外壳。
+ *
+ * ```
+ * 动作体（本地算法，一行没改）
+ *      ↓ 算出新状态，写进 Dexie
+ * 整块 payload + 这次产生的账本变动 → /api/farm/state/save（一个事务）
+ *      ↓ 成功
+ *   refresh()（重拉）→ 界面拿到服务端的真相
+ *      ↓ 失败 / 版本冲突
+ *   把 Dexie 恢复成动作前那份 + 提示 + 重拉
+ * ```
+ *
+ * ★ 三条和任务那条链路一致，但多了一条农场特有的：
+ *
+ * ① **失败绝不落本地。** 恢复快照而不是「留着等下次补传」——
+ *    补传会造出「孩子看到券到账了、家长那边没有」。
+ * ② **不自己算余额。** 服务端在同一个事务里记账，本地读回它的结果。
+ * ③ **整块提交，不做增量。** 服务端不理解玩法，只认「这份 JSON 是最新的」。
+ * ④ 农场特有：**账本行在动作期间根本不写本地**（`beginFarmTx` 会把
+ *    `postLedger` / `postHarvest` 接管掉）。写完再删的话，删的那一下
+ *    出问题（断网 / 崩溃）就会留下服务端没有的一笔 —— 余额虚高，且永不恢复。
+ *
+ * @param action   动作名，只用于日志和排错
+ * @param body     本地实现（就是原来那个函数体，通过 `get().xxx()` 再进来一次）
+ * @param failValue 失败时返回什么（调用方拿它判断「没成」）
+ */
+/** 两份农场是不是同一份（`savedAt` 每次都不同，必须排除） */
+function sameFarm(a: FarmPayload, b: FarmPayload): boolean {
+  return JSON.stringify({ ...a, savedAt: 0 }) === JSON.stringify({ ...b, savedAt: 0 })
+}
+
+async function runFarmCommit<T>(
+  get: () => AppState,
+  action: string,
+  body: () => Promise<T>,
+  failValue: T,
+): Promise<T> {
+  /* 有别的 refresh 在飞就先等它：它会用服务端那份覆盖本地，
+     和这次动作抢同一批表 —— 谁后写谁赢，而我们不希望是它。 */
+  if (refreshInFlight) await refreshInFlight
+
+  const before = await readFarmPayload()
+  beginFarmTx()
+  let result: T
+  try {
+    result = await body()
+  } catch (e) {
+    // 本地算法自己抛了（脏数据 / 除零）：回滚，别留下半截状态
+    endFarmTx()
+    await writeFarmPayload(before)
+    console.warn(`[farm] ${action} 本地执行出错，已回滚：`, e)
+    return failValue
+  }
+  const claims = endFarmTx()
+
+  /* 什么都没变就别提交。
+     ★ 不判这一下的代价是：点一下还没熟的菜（`harvest` 直接 return 0）、
+       没肥料时点施肥，都会白白打一次 `save` —— 孩子的连点会变成一串写请求，
+       而且每次都推进 `rev`，把「另一台设备同时改」的窗口撑大。 */
+  const after = await readFarmPayload()
+  if (claims.length === 0 && sameFarm(before, after)) return result
+
+  const pushed = await pushFarmState(claims)
+  if (!pushed.ok) {
+    await writeFarmPayload(before)
+    if (pushed.reason === 'conflict') {
+      get().pushToast({
+        kind: 'warn',
+        title: '农场在别的设备上改过',
+        detail: '已经按云端那份重新同步了，再试一次就好。',
+        emoji: '🔄',
+      })
+    } else {
+      get().pushToast(writeFailToast(pushed.error, '刚才那一下'))
+    }
+    // 冲突要重拉（拿别人的 rev）；网络失败也重拉一次，尽量回到服务端那份
+    await get().refresh({ light: true })
+    return failValue
+  }
+
+  await get().refresh({ light: true })
+  return result
+}
+
 async function doRefresh(
   set: (partial: Partial<AppState>) => void,
   get: () => AppState,
+  opts: { skipPull?: boolean; light?: boolean } = {},
 ): Promise<void> {
   const { settings } = get()
   const today = currentDayKey(settings.dayStartHour)
+
+  /* 在线版（`VITE_APP_MODE=online`）：先把服务端的真相拉进本地表，再走下面的
+     本地水合 —— UI 一行都不用改，它照旧读 Dexie。
+
+     ★ 失败**不抛**：没网也要能进 App。拉不到就用本地已有的数据，
+       孩子看到的可能不是最新的，但至少不是白屏。
+     ★ 本地版（默认构建）这一句是 no-op，一个请求都不发。 */
+  /* ★ 农场动作期间（`inFarmTx()`）**一律不拉**：
+     动作刚算完的新状态还在本地，拉一次就会用服务端那份把它盖掉，
+     然后提交上去的是「什么都没变」—— 孩子点了收获，菜又回来了。 */
+  /* 这次拉到了没有 —— 末尾和别的字段一起 `set`，界面上就是「现在连不上」。 */
+  let syncNext: SyncState = get().syncState
+  if (isOnlineMode && !inFarmTx() && !opts.skipPull) {
+    /* ★ 跨重启要知道「上次同步是几点的」—— 只在内存里的话，断网重开 App
+       会退化成「这台设备还没有同步过内容」，而 Dexie 里明明有昨天的数据。
+       只在还没拿到过的时候读一次库，之后的刷新都用手上这份。 */
+    if (syncNext.lastOkAt === 0) {
+      const saved = (await db.meta.get(SYNC_LAST_OK_KEY))?.value
+      if (typeof saved === 'number' && saved > 0) {
+        syncNext = { lastOkAt: saved, failure: syncNext.failure }
+      }
+    }
+
+    /* ★ 这两趟并发（2026-11-08）：任务/流水/商城那一组和农场整块 JSON
+       写的是**不同的表**，谁都不读谁的结果 —— 串着等只是白多一趟 RTT。
+       （手机 Wi-Fi 单趟 30~40ms；冷启动时这一趟正好压在最前面。）
+       ★ 各自的失败口径不变：都只 warn，不抛 —— 没网也要能进 App。 */
+    const [pulled] = await Promise.all([
+      pullFromServer({ light: opts.light }).then((r) => {
+        if (!r.ok) console.warn('[sync] 拉取失败，本次用本地数据：', r.reason)
+        return r
+      }),
+      /* 农场是整块 JSON，单独一个接口。失败不抛：没网就用本地这份 */
+      pullFarm().then((r) => {
+        if (r === 'failed') console.warn('[sync] 农场没拉到，本次用本地这份')
+        return r
+      }),
+    ])
+
+    if (pulled.ok) {
+      const at = Date.now()
+      syncNext = { lastOkAt: at, failure: null }
+      await db.meta.put({ key: SYNC_LAST_OK_KEY, value: at })
+    } else {
+      /* 2026-11-03：`no-session` 以前**不算**失败（那时前面有登录闸门，
+         说「连不上」会指错方向）。现在没有闸门了 —— 在线版启动时会自动
+         建一个游客账号，拿不到账号只可能是**连不上服务器**。这时候必须
+         说出来，否则孩子看到的是一整套空界面，而屏幕上什么都不说。 */
+      syncNext = { lastOkAt: syncNext.lastOkAt, failure: pulled.reason ?? 'pull-failed' }
+    }
+  }
 
   const tasks = sortTasks(await db.tasks.filter((t) => !t.archived).toArray())
   const allTasks = sortTasks(await db.tasks.toArray())
@@ -1138,7 +2257,10 @@ async function doRefresh(
     (acc, i) => (acc === null || i.date < acc ? i.date : acc),
     null,
   )
-  const from = earliest ?? today
+  /* 在线版不做本地历史补齐：实例由服务端懒生成（`/api/task/board` 一调就补），
+     本地再补一遍会造出一批「只有本机有」的实例 —— 它们没有对应的服务端积分，
+     换设备就凭空消失，而且会把「今天还剩几个任务」算重。 */
+  const from = isOnlineMode ? today : (earliest ?? today)
   // 补齐失败不能阻断 App 启动：最坏情况是今天少几张每日任务卡，
   // 也比整个界面白屏强。异常交给上层日志，下次刷新会重试。
   try {
@@ -1176,6 +2298,8 @@ async function doRefresh(
 
   // 3a) 动物产出累积 + 自然老去
   let advanced = advanceAnimals(farm.animals, now, timeScale)
+  /** 这一轮推进有没有真的改动农场（决定要不要往服务端推一次） */
+  let farmChanged = false
 
   // 3b) 动物随机事件（生病）—— 按「经过的农场天数」为概率基数
   const newEvents: FarmEvent[] = []
@@ -1202,6 +2326,7 @@ async function doRefresh(
   if (advanced !== farm.animals) {
     const changed = advanced.filter((a, idx) => a !== farm.animals[idx])
     await db.animals.bulkPut(changed)
+    farmChanged = true
   }
 
   // 3c) 农场世界日推进（用于「农场第 N 天」与事件节奏）
@@ -1210,21 +2335,33 @@ async function doRefresh(
   const farmDayAdvance = Math.max(prevFarmDay, farmDayNow)
   if (farmDayAdvance !== prevFarmDay) {
     await saveFarmDay(farmDayAdvance)
+    farmChanged = true
   }
 
   // 3d) 市场行情推进（跨日）
   // ⚠️ 要把家长设的 `r` 传进去 —— 现价硬顶 = `上限回收 ÷ 满产` 是跟着 `r` 变的
   // （见 `priceCeilingFor`）。不传的话家长调档之后，行情还是按默认 0.6 夹的。
   const marketDay = Math.floor(now / (1000 * 60 * 60 * 24))
+  const marketBefore = await loadMarket()
   const market = advanceMarket(
-    await loadMarket(),
+    marketBefore,
     marketDay,
     get().settings.profitRatio ?? DEFAULT_PROFIT_RATIO,
   )
+  // `advanceMarket` 跨日才换对象；同日返回同一个引用 —— 用这个判「变了没」
+  if (market !== marketBefore) farmChanged = true
   await saveMarket(market)
 
   if (newEvents.length > 0) {
     await logFarmEvents(newEvents)
+  }
+
+  /* 3e) 在线版：上面这几步推进（产出 / 生病 / 世界日 / 行情）也要落到服务端。
+     ★ 不推的话，下一次拉取会用服务端那份覆盖本地 ——
+       生病的鸡会「自己好起来」，因为服务端根本不知道它病过。 */
+  if (isOnlineMode && !inFarmTx() && farmChanged) {
+    const pushed = await pushFarmState()
+    if (!pushed.ok) console.warn('[sync] 农场推进没推上去：', pushed.reason)
   }
 
   const [
@@ -1243,6 +2380,7 @@ async function doRefresh(
     allRedeemItems,
     redeemRecords,
     wishOffers,
+    wishBuyLinks,
     wishOrders,
     farmEvents,
     quotaCarry,
@@ -1267,14 +2405,46 @@ async function doRefresh(
     loadAllRedeemItems(),
     loadRedeemRecords(),
     loadWishOffers(),
+    loadWishBuyLinks(),
     loadWishOrders(),
     loadFarmEvents(40),
     loadQuotaCarry(),
   ])
 
-  // 拥有关系从账本派生；「当前游戏」再按拥有关系解析一遍 ——
-  // 顺序不能反，否则会拿旧账本去判「买了没」。
-  const ownedGameIds = ownedGameIdsFrom(mallLedger)
+  /*
+   * 在线版：拥有关系**以服务端为准**（`/game/my-games`）。
+   *
+   * ⚠️ 失败时 `catch(() => null)` 而不是空数组 —— 空数组的意思是
+   *    「服务端说你一个都没有」，那会让整页游戏瞬间变成未拥有，
+   *    而真实原因只是这次没拉到。`null` 会退回上一次那份名单（见下）。
+   */
+  /* 主线活动「领过哪几关」。
+     ★ 在线版以服务端为准（拥有关系也在服务端，两边不一致时只能信它）；
+       本地版读 meta。**失败就沿用上一次那份** —— 这里抛会把整个 refresh
+       带崩，任务列表跟着空掉，而用户看到的只是「活动进度不对」。 */
+  let campaignClaims = await getMeta<string[]>(CAMPAIGN_CLAIMS_KEY, [])
+  let campaignServerStats = get().campaignServerStats
+  if (isOnlineMode) {
+    /* 一次请求同时拿三样：已领的关卡、服务端算的两个指标。
+       ★ 失败就**整份沿用上一次** —— 这里抛会把整个 refresh 带崩，
+         任务列表跟着空掉，而用户看到的只是「活动进度不对」。 */
+    const remote = await fetchCampaignState().catch(() => null)
+    if (remote) {
+      campaignClaims = remote.steps.filter((x) => x.claimed).map((x) => x.id)
+      campaignServerStats = {
+        tasksDone: remote.tasks_done,
+        couponsEarned: remote.coupons_earned,
+      }
+    }
+  }
+
+  const serverOwned = isOnlineMode ? await fetchOwnedGameIds().catch(() => null) : null
+  const serverOwnedIds = serverOwned ?? get().serverOwnedGameIds
+
+  // 拥有关系：本地版从账本派生；在线版 = 服务端名单 + 注册表默认拥有。
+  // 「当前游戏」再按拥有关系解析一遍 —— 顺序不能反，否则会拿旧账本去判「买了没」。
+  const ownedGameIds =
+    (isOnlineMode ? ownedIdsOnline(serverOwnedIds) : null) ?? ownedGameIdsFrom(mallLedger)
   // 已安装的插件游戏：**从 `gameKv` 派生**（扫 `__bundle` 行），不另存清单。
   const installedGames = await loadInstalledGames()
 
@@ -1295,6 +2465,8 @@ async function doRefresh(
     tasks,
     allTasks,
     instances,
+    campaignClaims,
+    campaignServerStats,
     ledger,
     harvestLedger,
     mallLedger,
@@ -1314,6 +2486,7 @@ async function doRefresh(
     allRedeemItems,
     redeemRecords,
     wishOffers,
+    wishBuyLinks,
     wishOrders,
     farmEvents,
     market,
@@ -1321,6 +2494,8 @@ async function doRefresh(
     harvestBalance,
     mallBalance,
     ownedGameIds,
+    syncState: syncNext,
+    serverOwnedGameIds: serverOwnedIds,
     activeGameId: resolveActiveGame(
       settings.activeGame,
       ownedGameIds,
@@ -1707,6 +2882,7 @@ async function syncLiveInstances(task: Task, todayKey: string, now: number): Pro
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
   loading: true,
+  bootError: null,
   settings: DEFAULT_SETTINGS,
   tasks: [],
   allTasks: [],
@@ -1723,8 +2899,10 @@ export const useApp = create<AppState>((set, get) => ({
   allRedeemItems: [],
   redeemRecords: [],
   wishOffers: [],
+  wishBuyLinks: {},
   wishOrders: [],
   pendingRedeemItem: null,
+  pendingSettingsTab: null,
   farmEvents: [],
   market: createInitialMarket(PRODUCE_BASE_PRICE),
   balance: 0,
@@ -1732,7 +2910,12 @@ export const useApp = create<AppState>((set, get) => ({
   mallBalance: 0,
   activeGameId: DEFAULT_GAME_ID,
   ownedGameIds: ownedGameIdsFrom([]),
+  syncState: SYNC_OK,
+  serverOwnedGameIds: null,
   installedGames: {},
+  installProgress: null,
+  campaignClaims: [],
+  campaignServerStats: null,
   todayKey: appDayKey(Date.now(), DEFAULT_SETTINGS.dayStartHour),
   toasts: [],
   settleFlash: null,
@@ -1742,27 +2925,65 @@ export const useApp = create<AppState>((set, get) => ({
   /* ================= 生命周期 ================= */
 
   boot: async () => {
-    set({ loading: true })
-    await seedIfEmpty()
-    const settings = await loadSettings()
-    set({ settings })
-    await get().refresh()
-    set({ ready: true, loading: false })
+    set({ loading: true, bootError: null })
+    try {
+      await seedIfEmpty()
+      /* 先落一份设置再 refresh：`refresh()` 一开头就读 `get().settings`
+         算「今天是哪天」（`dayStartHour`）、时间流速和事件开关。 */
+      set({ settings: await loadSettings() })
+      await get().refresh()
+      /* `refresh()` 会把云端设置写进本地 meta（见 `sync/pull.ts` 的
+         `pullSettings`），但**不碰 store** ⇒ 这里要重读一次，否则启动后
+         内存里还是拉取之前那份，「换台设备登录设置就还在」在界面上不成立。
+         比较后再 `set` 的那套在 `reloadSettings` 里。 */
+      await get().reloadSettings()
+      set({ ready: true })
+    } catch (e) {
+      /* ★★ **绝不能**让 `ready` 留在 false。
+         那等于永远停在开场页转圈：没有报错、没有重试、没有出口，
+         用户只能卸载重装（数据全丢）。这里把错交给界面，
+         由它说清发生了什么 + 给一个重试（`BootRetryPage`）。 */
+      set({ bootError: e instanceof Error ? e.message : String(e) })
+    } finally {
+      set({ loading: false })
+    }
   },
 
-  refresh: async () => {
+  refresh: async (opts) => {
     // 串行化：并发 refresh 会各自基于同一份快照计算"缺失实例"，
     // 然后同时写入，导致同一任务同一天出现两条实例（进而可重复计分）。
     // 这里用一个模块级 in-flight promise 把并发调用折叠成一次。
-    if (refreshInFlight) return refreshInFlight
+    /*
+     * ★★ 折叠成一次之后**必须再补一次**（2026-11-02 深夜修）。
+     *
+     * 那次在跑的刷新读的是**它发起时**的服务端状态 —— 调用方刚写下去的东西
+     * 不在里面。实测：家长点「已经买好了」= `wishConfirm` 紧跟 `wishDone`，
+     * 两次 refresh 被折叠成一次 ⇒ 服务端已经是 `done`，界面还写着「待确认」，
+     * 而且**不报错**，要等下一次刷新才对（探针里 `doneAt=undefined` 抓到的就是这个）。
+     *
+     * `refreshAgain` 就是「等它跑完再来一遍」的记号；所有并发调用等都等
+     * 同一个 promise，所以它们看到的都是补跑之后的结果。
+     */
+    if (refreshInFlight) {
+      refreshAgain = true
+      return refreshInFlight
+    }
     refreshInFlight = (async () => {
-      await doRefresh(set, get)
+      do {
+        refreshAgain = false
+        await doRefresh(set, get, opts)
+      } while (refreshAgain)
     })().finally(() => {
       refreshInFlight = null
     })
     return refreshInFlight
   },
 
+  reloadSettings: async () => {
+    const pulled = await loadSettings()
+    if (JSON.stringify(pulled) === JSON.stringify(get().settings)) return
+    set({ settings: pulled })
+  },
 
   tick: async () => {
     const { settings, todayKey, animals } = get()
@@ -1807,6 +3028,7 @@ export const useApp = create<AppState>((set, get) => ({
   /* ================= 任务 ================= */
 
   addTask: async (input) => {
+    if (isOnlineMode) return onlineAddTask(get, input)
     const now = Date.now()
     const task: Task = {
       ...input,
@@ -1821,11 +3043,12 @@ export const useApp = create<AppState>((set, get) => ({
       const inst = makeInstance(task, currentDayKey(get().settings.dayStartHour), get().settings.dayStartHour)
       if (inst) await db.taskInstances.put(inst)
     }
-    await get().refresh()
+    await get().refresh({ light: true })
     return task
   },
 
   updateTask: async (id, patch) => {
+    if (isOnlineMode) return onlineUpdateTask(get, id, patch)
     const now = Date.now()
     await db.tasks.update(id, { ...patch, updatedAt: now })
 
@@ -1835,33 +3058,36 @@ export const useApp = create<AppState>((set, get) => ({
     const task = await db.tasks.get(id)
     if (task) await syncLiveInstances(task, currentDayKey(get().settings.dayStartHour), now)
 
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   setTaskArchived: async (id, archived) => {
+    if (isOnlineMode) return onlineUpdateTask(get, id, { archived })
     // 软隐藏：只翻一个标志位。任务底下的实例、签到记录、账本**一律不动** ——
     // 硬删会把这些连坐带走，而家长想要的通常只是「别让孩子看见」。
     await db.tasks.update(id, { archived, updatedAt: Date.now() })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   deleteTask: async (id) => {
+    if (isOnlineMode) return onlineDeleteTask(get, id)
     await db.transaction('rw', [db.tasks, db.taskInstances, db.checkIns, db.checkInProgress], async () => {
       await db.tasks.delete(id)
       await db.taskInstances.where('taskId').equals(id).delete()
       await db.checkIns.where('taskId').equals(id).delete()
       await db.checkInProgress.where('taskId').equals(id).delete()
     })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /* ================= 任务实例 ================= */
 
   startTimer: async (instanceId) => {
+    if (isOnlineMode) return onlineTimer(get, oStartTimer, instanceId)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst || inst.status !== 'pending') return
     await db.taskInstances.update(instanceId, { startedAt: Date.now(), updatedAt: Date.now() })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /**
@@ -1874,13 +3100,14 @@ export const useApp = create<AppState>((set, get) => ({
    * `pausedAt` 刷成新的时间戳 —— 那会把第一次暂停的时长**吃掉**。
    */
   pauseTimer: async (instanceId) => {
+    if (isOnlineMode) return onlineTimer(get, oPauseTimer, instanceId)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst || inst.status !== 'pending' || !inst.startedAt) return
     if (inst.pausedAt) return
     const now = Date.now()
     await db.taskInstances.update(instanceId, { pausedAt: now, updatedAt: now })
     get().pushToast({ kind: 'info', title: '计时暂停了', detail: '休息一下，回来点「继续」', emoji: '⏸️' })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /**
@@ -1894,6 +3121,7 @@ export const useApp = create<AppState>((set, get) => ({
    * 任何在这间隙跑的 `runningMs()`（tick / 渲染）都会把暂停时长算成用时。
    */
   resumeTimer: async (instanceId) => {
+    if (isOnlineMode) return onlineTimer(get, oResumeTimer, instanceId)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst || inst.status !== 'pending' || !inst.pausedAt) return
     const now = Date.now()
@@ -1903,7 +3131,7 @@ export const useApp = create<AppState>((set, get) => ({
       updatedAt: now,
     })
     get().pushToast({ kind: 'success', title: '接着计时啦', emoji: '▶️' })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /**
@@ -1918,6 +3146,8 @@ export const useApp = create<AppState>((set, get) => ({
    * 「自己点一下就给自己加分」的问题。
    */
   submitInstance: async (instanceId, actualMinutes, quality, opts) => {
+    // 在线版：用时由服务端按计时器算，孩子端传分钟数等于让它可以改时钟刷分
+    if (isOnlineMode) return onlineSubmitInstance(get, instanceId, quality, opts)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst) return 0
 
@@ -1963,7 +3193,7 @@ export const useApp = create<AppState>((set, get) => ({
         detail: '他们确认后积分就到账咯',
         emoji: '📮',
       })
-      await get().refresh()
+      await get().refresh({ light: true })
       return 0
     }
 
@@ -1979,6 +3209,7 @@ export const useApp = create<AppState>((set, get) => ({
    * 所以评分规则完全一致，家长只是「最后一公里」的确认人。
    */
   reviewInstance: async (instanceId, quality, actualMinutes) => {
+    if (isOnlineMode) return onlineReviewInstance(get, instanceId, true, { quality })
     const inst = await db.taskInstances.get(instanceId)
     if (!inst) return 0
     if (inst.settledAt != null) {
@@ -1992,6 +3223,10 @@ export const useApp = create<AppState>((set, get) => ({
 
   /** 家长打回：不影响积分，孩子可以再做一次 */
   rejectInstance: async (instanceId, note) => {
+    if (isOnlineMode) {
+      await onlineReviewInstance(get, instanceId, false, { note })
+      return
+    }
     const inst = await db.taskInstances.get(instanceId)
     if (!inst) return
     if (inst.settledAt != null) {
@@ -2011,10 +3246,11 @@ export const useApp = create<AppState>((set, get) => ({
       detail: note || undefined,
       emoji: '🔁',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   giveUpInstance: async (instanceId) => {
+    if (isOnlineMode) return onlineSkipInstance(get, instanceId)
     const inst = await db.taskInstances.get(instanceId)
     if (!inst) return
     // 已结算的实例不允许再翻成"放弃"，否则界面显示 0 分而账本里还留着那笔收入
@@ -2028,7 +3264,7 @@ export const useApp = create<AppState>((set, get) => ({
       settledAt: Date.now(),
       updatedAt: Date.now(),
     })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /* ================= 签到 ================= */
@@ -2056,6 +3292,7 @@ export const useApp = create<AppState>((set, get) => ({
    *  * 家长关掉审核 → 直接发放（老行为，方便家长自己试玩）。
    */
   doCheckIn: async (taskId) => {
+    if (isOnlineMode) return onlineDoCheckIn(get, taskId)
     const task = get().tasks.find((t) => t.id === taskId)
     if (!task) return { gained: 0, bonus: 0 }
     const { settings } = get()
@@ -2088,12 +3325,12 @@ export const useApp = create<AppState>((set, get) => ({
         detail: '他们确认后积分就到账咯',
         emoji: '📮',
       })
-      await get().refresh()
+      await get().refresh({ light: true })
       return { gained: 0, bonus: 0 }
     }
 
     const r = await grantCheckIn(get, task, progress, today, pk)
-    await get().refresh()
+    await get().refresh({ light: true })
     return r
   },
 
@@ -2119,7 +3356,7 @@ export const useApp = create<AppState>((set, get) => ({
 
     progress.pendingDays = (progress.pendingDays ?? []).filter((d) => d !== date)
     const r = await grantCheckIn(get, task, progress, date, periodKey)
-    await get().refresh()
+    await get().refresh({ light: true })
     return r.gained + r.bonus
   },
 
@@ -2136,7 +3373,7 @@ export const useApp = create<AppState>((set, get) => ({
     progress.updatedAt = Date.now()
     await db.checkInProgress.put(progress)
     get().pushToast({ kind: 'info', title: '已让孩子重新签到', emoji: '🔁' })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   claimCheckInTier: async (taskId, days) => {
@@ -2169,7 +3406,7 @@ export const useApp = create<AppState>((set, get) => ({
     // 阶梯里的道具也归「设置 → 道具掉落」管（家长 2026-09-30 定：
     // 道具全由开关管，一处例外都不留）。积分照发，只停道具。
     if (tier.itemId && get().settings.itemDropsEnabled) await addItem(tier.itemId, 1)
-    await get().refresh()
+    await get().refresh({ light: true })
     return tier.points
   },
 
@@ -2252,13 +3489,17 @@ export const useApp = create<AppState>((set, get) => ({
       get().pushToast({ kind: 'info', title: '刚刚已经记过一次啦', emoji: '✅' })
       return 0
     }
-    await get().refresh()
+    await get().refresh({ light: true })
     return get().submitInstance(inst.id, actualMinutes, quality)
   },
 
   /* ================= 农场 ================= */
 
   plant: async (plotIndex, cropId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'plant', () => get().plant(plotIndex, cropId), false)
+    }
     const def = CROP_BY_ID.get(cropId)
     if (!def) return false
     const { plots } = get()
@@ -2302,11 +3543,15 @@ export const useApp = create<AppState>((set, get) => ({
       detail: `${def.growMinutes} 分钟后就能收啦`,
       emoji: def.emoji,
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
   harvest: async (plotIndex, mode = 'store') => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'harvest', () => get().harvest(plotIndex, mode), 0)
+    }
     const { plots, settings } = get()
     const plot = plots.find((p) => p.index === plotIndex)
     if (!plot?.crop) return 0
@@ -2489,11 +3734,15 @@ export const useApp = create<AppState>((set, get) => ({
       })
     }
 
-    await get().refresh()
+    await get().refresh({ light: true })
     return earned
   },
 
   unlockPlot: async (plotIndex) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'unlockPlot', () => get().unlockPlot(plotIndex), false)
+    }
     const { plots, balance } = get()
     const plot = plots.find((p) => p.index === plotIndex)
     if (!plot || plot.unlocked) return false
@@ -2509,11 +3758,15 @@ export const useApp = create<AppState>((set, get) => ({
     })
     await savePlots(plots.map((p) => (p.index === plotIndex ? { ...p, unlocked: true } : p)))
     get().pushToast({ kind: 'success', title: '新地块开好啦！', emoji: '🌱' })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
   water: async (plotIndex) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'water', () => get().water(plotIndex), undefined)
+    }
     const { plots, settings } = get()
     const plot = plots.find((p) => p.index === plotIndex)
     if (!plot?.crop || plot.crop.diedAt) return
@@ -2543,10 +3796,14 @@ export const useApp = create<AppState>((set, get) => ({
     )
     await savePlots(nextPlots)
     get().pushToast({ kind: 'success', title: '施肥啦，长得更快了', emoji: '✨' })
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   buyAnimal: async (animalId, name) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'buyAnimal', () => get().buyAnimal(animalId, name), false)
+    }
     const def = ANIMAL_BY_ID.get(animalId)
     if (!def) return false
     if (get().balance < def.cost) {
@@ -2577,11 +3834,15 @@ export const useApp = create<AppState>((set, get) => ({
       detail: `${def.matureMinutes} 分钟后长大`,
       emoji: def.babyEmoji,
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
   feedAnimal: async (animalId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'feedAnimal', () => get().feedAnimal(animalId), false)
+    }
     const { animals } = get()
     const a = animals.find((x) => x.id === animalId)
     if (!a) return false
@@ -2630,11 +3891,15 @@ export const useApp = create<AppState>((set, get) => ({
       detail: def ? `心情变好了，会尽快产出${def.produceItemName}` : undefined,
       emoji: wasSick ? '💚' : '😋',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
   collectAnimal: async (animalId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'collectAnimal', () => get().collectAnimal(animalId), 0)
+    }
     const { animals, settings } = get()
     const a = animals.find((x) => x.id === animalId)
     if (!a || a.pendingProduce <= 0) return 0
@@ -2707,11 +3972,15 @@ export const useApp = create<AppState>((set, get) => ({
       detail: roll.event?.message ?? '去市场卖掉就能换兑换券啦',
       emoji: gained > 0 ? def.produceEmoji : '🪹',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return gained
   },
 
   shearAnimal: async (animalId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'shearAnimal', () => get().shearAnimal(animalId), false)
+    }
     const { animals, settings } = get()
     const a = animals.find((x) => x.id === animalId)
     if (!a) return false
@@ -2737,13 +4006,17 @@ export const useApp = create<AppState>((set, get) => ({
       title: wasSick ? `${a.name} 好起来了！` : `${a.name} 好开心！`,
       emoji: def?.emoji ?? '🐑',
     })
-    await get().refresh()
+    await get().refresh({ light: true })
     return true
   },
 
   removeAnimal: async (animalId) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'removeAnimal', () => get().removeAnimal(animalId), undefined)
+    }
     await db.animals.delete(animalId)
-    await get().refresh()
+    await get().refresh({ light: true })
   },
 
   /* ---------------- 农场市场 ---------------- */
@@ -2770,6 +4043,10 @@ export const useApp = create<AppState>((set, get) => ({
    * 要让「分批更划算」成立，得先改 `sellQuote`，见 `docs/farm-economy-design.md` §6.4。
    */
   sellProduce: async (itemId, count, opts) => {
+    // 在线版：整块状态 + 账本一起提交（见 runFarmCommit）。本地算法一行没改。
+    if (isOnlineMode && !inFarmTx()) {
+      return runFarmCommit(get, 'sellProduce', () => get().sellProduce(itemId, count, opts), 0)
+    }
     if (!MARKET_GOODS.includes(itemId) || count <= 0) return 0
 
     const { market, plots, animals, settings } = get()
@@ -2888,13 +4165,14 @@ export const useApp = create<AppState>((set, get) => ({
         emoji: '🎫',
       })
     }
-    await get().refresh()
+    await get().refresh({ light: true })
     return total
   },
 
   /* ================= 兑换商城 ================= */
 
   addRedeemItem: async (input) => {
+    if (isOnlineMode) return onlineAddRedeemItem(get, input)
     const now = Date.now()
     const item: RedeemItem = {
       ...input,
@@ -2909,16 +4187,19 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   updateRedeemItem: async (id, patch) => {
+    if (isOnlineMode) return onlineUpdateRedeemItem(get, id, patch)
     await db.redeemItems.update(id, { ...patch, updatedAt: Date.now() })
     await get().refresh()
   },
 
   setRedeemItemArchived: async (id, archived) => {
+    if (isOnlineMode) return onlineUpdateRedeemItem(get, id, { archived })
     await db.redeemItems.update(id, { archived, updatedAt: Date.now() })
     await get().refresh()
   },
 
   deleteRedeemItem: async (id) => {
+    if (isOnlineMode) return onlineDeleteRedeemItem(get, id)
     // 只删兑换品本身。兑换记录（redeemRecords）是独立的表，且自带 name/emoji/cost
     // 快照 —— 所以已经换过的历史不会因为删掉商品而变成空白，待兑现的愿望也还在。
     await db.redeemItems.delete(id)
@@ -2926,7 +4207,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   redeemedToday: (itemId) => {
-    const { redeemRecords, todayKey, settings } = get()
+    const { redeemRecords, todayKey, settings, redeemItems } = get()
     /**
      * ⚠️ 用**逻辑日**（`appDayKey`）比，不能用日历日（`toDateKey`）。
      *
@@ -2938,9 +4219,21 @@ export const useApp = create<AppState>((set, get) => ({
      *
      * 2026-10-08 发现：这条断言本来只在白天跑得绿，凌晨跑必红。
      */
-    return redeemRecords.filter(
+    const local = redeemRecords.filter(
       (r) => r.itemId === itemId && appDayKey(r.createdAt, settings.dayStartHour) === todayKey,
     ).length
+    /**
+     * ★ 在线版**采信服务端**的 `today_count`（2026-11-02 晚修）。
+     *
+     * 上面那段「逻辑日」是**本地版**的口径。在线版真正拦人的是服务端，它按
+     * **自然日 0 点**数（`RedeemService.todayStart`）⇒ 00:00–04:00 这四小时里
+     * 本地会多算「昨晚那次」，界面把按钮禁掉而服务端会放行。
+     * 所以在线版用服务端给的数，只有拿不到时才退回本地这份。
+     * 规则本身在 `pickTodayCount`（纯函数，可单测；`isOnlineMode` 是构建期常量，
+     * 测试里改不动它）。
+     */
+    const it = redeemItems.find((i) => i.id === itemId)
+    return pickTodayCount(isOnlineMode, it?.todayCount, local)
   },
 
   /**
@@ -2963,6 +4256,21 @@ export const useApp = create<AppState>((set, get) => ({
    * 用旧余额算出的分账会把已经花掉的兑换券又花一次。
    */
   redeem: async (itemId) => {
+    /* 在线版：分账、扣钱、写记录全在服务端一个事务里（`RedeemService.Redeem`）。
+       本地这段**整条不走** —— 连「够不够」都不预判，理由见 `onlineRedeem`。 */
+    if (isOnlineMode) {
+      const done = await onlineRedeem(get, itemId)
+      if (!done) return false
+      set({
+        settleFlash: {
+          points: -done.pointsPaid,
+          reason: `兑换了「${done.name}」`,
+          emoji: done.emoji,
+        },
+      })
+      return true
+    }
+
     const { balance, harvestBalance, settings, allRedeemItems } = get()
     if (!settings.redeemEnabled) {
       get().pushToast({ kind: 'info', title: '兑换还没开放哦', emoji: '🔒' })
@@ -3131,6 +4439,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   fulfillRedeem: async (recordId) => {
+    if (isOnlineMode) return onlineFulfillRedeem(get, recordId)
     await db.redeemRecords.update(recordId, { fulfilled: true, fulfilledAt: Date.now() })
     await get().refresh()
   },
@@ -3144,6 +4453,9 @@ export const useApp = create<AppState>((set, get) => ({
    * 而且「想要」这件事重复表达一次也没有意义。
    */
   wishExpress: async (itemId) => {
+    // 在线版：意向也是**服务端的一行**（家长那一侧要靠它才看得见）
+    if (isOnlineMode) return onlineWishExpress(get, itemId)
+
     const item = wishItemById(itemId)
     if (!item) return
 
@@ -3152,7 +4464,18 @@ export const useApp = create<AppState>((set, get) => ({
         o.itemId === itemId &&
         (o.status === 'wished' || o.status === 'committed' || o.status === 'confirmed'),
     )
-    if (active) return
+    /* 一次性商品兑换完之后，卡片会回到「我想要」；但那单可能还停在
+       「等爸妈买」。这时再点一下**必须给一句话** —— 早退而不吭声，
+       孩子的感受就是「点了没反应」（2026-11-06）。 */
+    if (active) {
+      get().pushToast({
+        kind: 'info',
+        title: '这一单还在等爸妈处理',
+        detail: '处理完了才能再许愿',
+        emoji: '⏳',
+      })
+      return
+    }
 
     const offer = get().wishOffers.find((o) => o.itemId === itemId && !o.closedAt)
     await db.wishOrders.put({
@@ -3170,8 +4493,8 @@ export const useApp = create<AppState>((set, get) => ({
 
     get().pushToast({
       kind: 'info',
-      title: `已经告诉爸妈：想要「${item.name}」`,
-      detail: '他们看到之后会给它定一个兑换券的价格',
+      title: `已向爸妈申请：想要「${item.name}」`,
+      detail: '他们审核时会直接定好兑换券价格',
       emoji: '💌',
     })
     await get().refresh()
@@ -3195,6 +4518,11 @@ export const useApp = create<AppState>((set, get) => ({
    * 迟早有一处漏了 `status` 判断，然后就会退两次。
    */
   wishRedeem: async (itemId) => {
+    /* 在线版：**整条本地事务不走** —— 扣券、扣积分、开盲盒、授予游戏
+       全在服务端一个事务里（见 `onlineWishRedeem`）。
+       本地这段只在「本地版」那棵树上执行。 */
+    if (isOnlineMode) return onlineWishRedeem(get, itemId)
+
     const item = wishItemById(itemId)
     if (!item) return { ok: false, message: '没有这件商品' }
 
@@ -3220,22 +4548,35 @@ export const useApp = create<AppState>((set, get) => ({
     ])
 
     let gameId: string | undefined
+    let gameIds: string[] = []
     if (item.kind === 'blindbox') {
-      const picked = pickBlindBox(item.pool ?? [], [...owned])
-      // ⚠️ 池子空了必须**在这里**拦住。再往下就扣券了，扣完才发现没得开。
-      if (!picked) return { ok: false, message: '这些游戏你都有啦，等新的再来开' }
-      gameId = picked
+      const need = Math.max(1, item.unlockCount ?? 1)
+      const picked = pickBlindBoxMany(item.pool ?? [], [...owned], need)
+      /* ⚠️ 剩余**不足 need 款**必须在这里拦住，不是「有几款给几款」：
+         卖的是 need 款的价，给少了就是缺斤少两。再往下就扣券了。 */
+      if (picked.length < need) {
+        return {
+          ok: false,
+          message:
+            need === 1
+              ? '这些游戏你都有啦，等新的再来开'
+              : `没解锁的游戏不够 ${need} 款啦，等新的再来开`,
+        }
+      }
+      gameIds = picked
+      gameId = picked[0]
     } else if (item.kind === 'gamebox') {
       if (!item.gameId) return { ok: false, message: '这款游戏没配好' }
       if (owned.has(item.gameId)) return { ok: false, message: '这个游戏你已经有了' }
       gameId = item.gameId
+      gameIds = [item.gameId]
     }
 
     const now = Date.now()
     const freshId = uid('wo')
     const box: { ok: boolean; id: string } = { ok: true, id: freshId }
 
-    await db.transaction('rw', [db.ledger, db.harvestLedger, db.wishOrders], async () => {
+    await db.transaction('rw', [db.ledger, db.harvestLedger, db.wishOrders, db.wishOffers], async () => {
       const hTip = await harvestTip()
       const pTip = await ledgerTip()
       // 事务内**重新算一次**：外面那份只是给 UI 看的预览。
@@ -3296,16 +4637,28 @@ export const useApp = create<AppState>((set, get) => ({
         vouchersHeld: live.voucherPaid,
         pointsHeld: live.pointsPaid,
         openedGameId: gameId,
+        /* 「5 连开」的完整清单。单款时也写 —— 读的地方就不用分两种形状了 */
+        openedGameIds: gameIds.length ? gameIds : undefined,
         createdAt: existed?.createdAt ?? now,
         committedAt: now,
       })
+
+      /* 一次性兑换：成交那一刻就把 offer 关掉（2026-11-06）。
+         **必须在同一个事务里** —— 放在事务外面的话，中间崩一次就是
+         「券扣了、商品还挂在兑换列表上」，孩子能再换一遍，而且不报错。 */
+      if (offer.oneTime) {
+        await db.wishOffers.update(itemId, { closedAt: now })
+      }
     })
 
     if (!box.ok) return { ok: false, message: '兑换券不够啦' }
 
-    // 游戏类：真正交付 = 装包。失败就把券退回去。
-    if (gameId) {
-      const res = await get().installLocalGame(gameId)
+    // 游戏类：真正交付 = 装包。任何一款失败就把整单退回去。
+    //
+    // ★ 「5 连开」要装 5 个包。只装第一个的话，孩子付了 5 份的钱、
+    //   拿到 1 款，而界面会说「兑换成功」。
+    for (const gid of gameIds) {
+      const res = await get().installLocalGame(gid)
       if (!res.ok) {
         await get().wishCancel(box.id, '游戏没装好')
         return { ok: false, message: `游戏没装好，券已经退回来了：${res.message}` }
@@ -3315,19 +4668,37 @@ export const useApp = create<AppState>((set, get) => ({
     get().pushToast({
       kind: 'reward',
       title: `兑换成功：${item.name}`,
-      detail: gameId ? '已经放进你的游戏柜啦' : '等爸爸妈妈去买',
+      detail:
+        gameIds.length > 1
+          ? `已经放进你的游戏柜啦（${gameIds.length} 款）`
+          : gameId
+            ? '已经放进你的游戏柜啦'
+            : '等爸爸妈妈去买',
       emoji: item.emoji,
     })
+
     await get().refresh()
-    return { ok: true, message: '兑换成功', gameId }
+    return { ok: true, message: '兑换成功', gameId, gameIds }
   },
 
-  wishSetOffer: async (itemId, voucherPrice) => {
+  wishSetOffer: async (itemId, voucherPrice, oneTime) => {
+    if (isOnlineMode) return onlineWishSetOffer(get, itemId, voucherPrice, oneTime)
+
     const price = Math.round(voucherPrice)
     const now = Date.now()
     if (price > 0) {
-      // `put` 整行覆盖 —— 重新开放会顺手清掉旧的 `closedAt`，这是想要的
-      await db.wishOffers.put({ itemId, voucherPrice: price, openedAt: now })
+      /* `put` 整行覆盖 —— 重新开放会顺手清掉旧的 `closedAt`，这是想要的。
+         ⚠️ 但 `oneTime` **不传**（`undefined`）时要沿用库里那份：否则
+         「改个价」会顺手把一次性标记冲成「可重复」，一件一次性的玩具
+         从此可以无限兑换，而界面上看不出任何异常。
+         服务端那条 `WishSetOfferReq.OneTime *bool` 是同一个道理。 */
+      const cur = await db.wishOffers.get(itemId)
+      await db.wishOffers.put({
+        itemId,
+        voucherPrice: price,
+        openedAt: now,
+        oneTime: oneTime ?? cur?.oneTime,
+      })
     } else {
       const cur = await db.wishOffers.get(itemId)
       // 关闭写 `closedAt`，**不删行** —— 孩子之前换过的历史还要能解释
@@ -3337,6 +4708,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   wishConfirm: async (orderId) => {
+    if (isOnlineMode) return onlineWishConfirm(get, orderId)
+
     const row = await db.wishOrders.get(orderId)
     // 只有「已兑换」能往前走。已取消的单子不能被一次误点复活。
     if (!row || row.status !== 'committed') return
@@ -3345,6 +4718,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   wishDone: async (orderId, patch) => {
+    if (isOnlineMode) return onlineWishDone(get, orderId, patch)
+
     const row = await db.wishOrders.get(orderId)
     if (!row || (row.status !== 'committed' && row.status !== 'confirmed')) return
 
@@ -3361,11 +4736,17 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   wishCancel: async (orderId, reason) => {
+    /* 在线版：退款由服务端做（两种币各退一笔 + 收回 `user_game`），
+       客户端只负责「摘掉本机的安装」（见 `onlineWishCancel`）。
+       ⚠️ 下面这段本地事务**一个字都不能跑**：两边都退一次 = 钱翻倍。 */
+    if (isOnlineMode) return onlineWishCancel(get, orderId, reason)
+
     const now = Date.now()
     const box = {
       refunded: 0,
       refundedPoints: 0,
-      deliveredGame: undefined as string | undefined,
+      /** 「5 连开」一单交付了多款，取消要**全收回**（见下面的卸载段） */
+      deliveredGames: [] as string[],
     }
 
     await db.transaction('rw', [db.ledger, db.harvestLedger, db.wishOrders], async () => {
@@ -3381,7 +4762,14 @@ export const useApp = create<AppState>((set, get) => ({
 
       // 记下来：这个订单交付过哪款游戏。事务外要把安装摘掉 ——
       // 删 `gameKv` 的行不属于这个事务（另一张表），而且它失败也不该回滚退款。
-      box.deliveredGame = row.openedGameId
+      /* ★ 只取 `openedGameId` 的话，5 连开取消后另外 4 款还装着 ——
+         等于券退回来了、游戏白拿 4 个。去重是为了兼容「清单里含第一个」。 */
+      const delivered = row.openedGameIds?.length
+        ? row.openedGameIds
+        : row.openedGameId
+          ? [row.openedGameId]
+          : []
+      box.deliveredGames = [...new Set(delivered)]
 
       if (row.status !== 'wished') {
         /*
@@ -3444,9 +4832,9 @@ export const useApp = create<AppState>((set, get) => ({
      * 装包失败那条路也会走到这里（`wishRedeem` 装不上就 `wishCancel`），
      * 那时 `gameKv` 里本来就没有包，删 0 行，无副作用。
      */
-    if (box.deliveredGame) {
-      await detachGameKv(box.deliveredGame)
-      if (get().activeGameId === box.deliveredGame) {
+    for (const gid of box.deliveredGames) {
+      await detachGameKv(gid)
+      if (get().activeGameId === gid) {
         // 正在玩的就是它 → 回落，否则底部导航会指向一个已经不存在的游戏
         await get().updateSettings({ activeGame: DEFAULT_GAME_ID })
       }
@@ -3461,7 +4849,7 @@ export const useApp = create<AppState>((set, get) => ({
       get().pushToast({
         kind: 'info',
         title: `已退回 ${parts.join(' + ')}`,
-        detail: box.deliveredGame ? '游戏已收回，进度还在' : undefined,
+        detail: box.deliveredGames.length ? '游戏已收回，进度还在' : undefined,
         emoji: '🎫',
       })
     }
@@ -3476,6 +4864,16 @@ export const useApp = create<AppState>((set, get) => ({
     const id = get().pendingRedeemItem
     if (id) set({ pendingRedeemItem: null })
     return id
+  },
+
+  jumpToSettings: (tab) => {
+    set({ pendingSettingsTab: tab })
+  },
+
+  takePendingSettingsTab: () => {
+    const tab = get().pendingSettingsTab
+    if (tab) set({ pendingSettingsTab: null })
+    return tab
   },
 
   /* ================= 游戏（插件骨架） ================= */
@@ -3506,6 +4904,18 @@ export const useApp = create<AppState>((set, get) => ({
     await get().refresh()
   },
 
+  /**
+   * 用钻石买游戏。
+   *
+   * ⚠️ **界面上没有入口**（游戏商城那个购买按钮已经撤掉，见 `GameStore.tsx`
+   * 的注释），所以这段在线上跑不到。留着的唯一原因：心愿商城的数字商品走的是
+   * 另一条链，别顺手删。
+   *
+   * ★★ 真要把购买接回来，**在线版必须先改走服务端**（`/api/game/purchase`，
+   * 服务端已经会扣钻石 + 发所有权）。照现在这样直接接线的话：本机扣了钻石、
+   * 服务端不知道 ⇒ 刷新之后 `ownedIdsOnline` 一覆盖，游戏还是「没买」，
+   * 而钻石已经没了 —— 孩子会以为钱被吞了。
+   */
   buyGame: async (id) => {
     const g = gameById(id)
     if (!g) return { ok: false, message: '没有这款游戏' }
@@ -3534,7 +4944,7 @@ export const useApp = create<AppState>((set, get) => ({
     return { ok: true, message: `已购买「${g.name}」` }
   },
 
-  redeemGameCode: async (raw) => {
+  redeemGameCode: async (raw, opts) => {
     const code = normalizeGameCode(raw)
     if (!isGameCode(code)) {
       // 分开说：格式不对是「敲错了」，表里没有是「这张卡不对」。
@@ -3542,6 +4952,13 @@ export const useApp = create<AppState>((set, get) => ({
       // 而其中一种重敲多少次都没用。
       return { ok: false, message: '码是 6 位字母或数字，中间那一横不用输' }
     }
+
+    // ★ 登录了就以服务端为准。
+    //
+    // 服务端在**同一个事务**里验码 → 标记已用 → 写 `user_game`，
+    // 「这次调用成功」就等于「游戏已经在他的账号里了」。
+    // 下面那张本机 `codeTable` 只用于没登录的情况（离线 / 单测）。
+    if (getToken()) return redeemCodeOnServer(code, opts)
 
     const gameId = await gameIdForCode(code)
     if (!gameId) return { ok: false, message: '没有这个码，对着卡片再核一遍' }
@@ -3586,8 +5003,11 @@ export const useApp = create<AppState>((set, get) => ({
 
     // 插件游戏要真的装包。装不上就把刚写的两行撤掉 ——
     // 否则孩子拿到一句「装包失败」而码已经没了。
+    //
+    // ★ 用 `installGameAuto`：本地版没配目录时会自己落到本地包（行为不变），
+    //   配了目录就先下载 —— 和登录态那条走同一套挑路，别再各写一份。
     if (local) {
-      const res = await get().installLocalGame(gameId)
+      const res = await get().installGameAuto(gameId)
       if (!res.ok) {
         await db.transaction('rw', [db.wishCodes, db.mallLedger], async () => {
           await db.wishCodes.delete(hash)
@@ -3597,12 +5017,14 @@ export const useApp = create<AppState>((set, get) => ({
       }
     }
 
-    get().pushToast({
-      kind: 'reward',
-      title: `解锁成功：${name}`,
-      detail: local ? '已经放进你的游戏柜啦' : '底部导航就能切过去',
-      emoji: '🎁',
-    })
+    if (!opts?.silent) {
+      get().pushToast({
+        kind: 'reward',
+        title: `解锁成功：${name}`,
+        detail: local ? '已经放进你的游戏柜啦' : '底部导航就能切过去',
+        emoji: '🎁',
+      })
+    }
     await get().refresh()
     return { ok: true, message: `解锁成功：${name}`, gameId }
   },
@@ -3622,19 +5044,46 @@ export const useApp = create<AppState>((set, get) => ({
 
   /* ---- 插件游戏：装配（spec §12.5） ---- */
 
-  installFromCatalog: async (catalogUrl, gameId) => {
+  installFromCatalog: async (catalogUrl, gameId, onProgress) => {
+    /* ★ 和 `installLocalGame` **同一道门槛**（2026-10-30 家长：「加门槛，没拥有不能装」）。
+     *
+     * 这里原来没有 —— 从目录装走的是另一条路，漏了就等于「远端包谁都能装」。
+     * 门槛必须在 store，不在按钮上：按钮只是入口之一（将来的批量装、调试桥都会绕过它）。
+     */
+    if (!(await ownedGameSetNow()).has(gameId)) {
+      return { ok: false, message: '这款还没拥有 —— 去心愿商城兑换，或者用激活码' }
+    }
+
     // ① 先把整条校验链跑完（验签 → 解析 → 取包 → 验哈希）。
     //    它会把**任何没验过的东西**拒掉；公钥没配也会在这里抛。
+    /* 阶段一：核对清单（目录 + 签名只有几 KB，没有百分比可言，
+       所以报 `percent: -1`，界面显示「正在核对清单」）。
+       ★ 这里的 `onProgress` 同时被拿去做**下载**进度 —— 只有取包那一步
+         会真的持续回调，前两步各报一次阶段。 */
+    onProgress?.({ gameId, phase: 'catalog', percent: -1, received: 0, total: 0 })
     let resolved: ResolvedGame
     try {
       resolved = await fetchVerifiedGame({
         catalogUrl,
         gameId,
         publicKeyRaw: catalogPublicKeyRaw(),
+        onProgress: (p) =>
+          onProgress?.({
+            gameId,
+            phase: 'download',
+            percent: percentOf(p.received, p.total),
+            received: p.received,
+            total: p.total,
+          }),
       })
     } catch (e) {
       return { ok: false, message: e instanceof Error ? e.message : String(e) }
     }
+
+    /* 阶段三：安装中（执行代码 + 落库）。
+       ⚠️ 这一步没有百分比 —— 它是一瞬间的事，给个假进度条反而让人等。
+         界面显示「安装中…」。 */
+    onProgress?.({ gameId, phase: 'install', percent: -1, received: 0, total: 0 })
 
     // ② 到这里代码才是「签名认过 + 哈希对过」的，可以执行了。
     let bundle: GameBundle
@@ -3661,9 +5110,147 @@ export const useApp = create<AppState>((set, get) => ({
     })
   },
 
-  installLocalGame: async (gameId) => {
+  installGameAuto: async (gameId, opts) => {
+    /* 先走生产路径。`catalogConfigured()` 为假（本地版 / 没配目录）就直接落到本地包。
+       ⚠️ 远程失败**不能直接报错**：离线 APK、目录里暂时没有这款、
+          自签证书验签失败……这些场景下随包的本地包才是能用的那一个。 */
+    const onProgress = opts?.onProgress
+    if (catalogConfigured()) {
+      const remote = await get().installFromCatalog(CATALOG_URL, gameId, onProgress)
+      if (remote.ok) return remote
+      const local = await get().installLocalGame(gameId, onProgress)
+      if (local.ok) return local
+      /* 两条都失败：**两条的原因都要说**。只说本地那条（HTTP 404）会让人
+         以为「没网」，而真正的原因可能是目录里没这款。 */
+      return {
+        ok: false,
+        message: `服务器下载没成功（${remote.message}），App 自带的包也没有（${local.message}）`,
+      }
+    }
+    return get().installLocalGame(gameId, onProgress)
+  },
+
+  /**
+   * 更新安装进度。**唯一**的写入口 —— 组件不要自己 `set`，否则两个入口
+   * 会各自造一份状态（列表那一行和详情页那颗按钮显示不同的数字）。
+   */
+  reportInstallProgress: (p) => set({ installProgress: p }),
+
+  claimCampaignStep: async (stepId) => {
+    const step = CAMPAIGN_STEPS.find((s) => s.id === stepId)
+    if (!step) return { ok: false, message: '没有这一关' }
+
+    /* 每次都现算，不信任界面上那份可能是几分钟前的视图。
+       ⚠️ 口径必须和 `selectCampaign` 一致（在线版用服务端那份）——
+          两处用不同算法会出现「卡片说还差 3 张，点了却提示条件不足」。 */
+    const stats =
+      get().campaignServerStats ?? campaignStatsFrom(get().instances, get().harvestLedger)
+    const view = campaignViews(stats, get().campaignClaims).find((v) => v.step.id === stepId)
+    if (!view) return { ok: false, message: '没有这一关' }
+    if (view.state === 'claimed') return { ok: false, message: '这一关已经领过啦' }
+    if (view.state !== 'ready') {
+      const meta = CAMPAIGN_METRIC_META[step.goal.metric]
+      return { ok: false, message: `还差 ${view.shortfall} ${meta.unit}，到了再来领` }
+    }
+
+    /* ★ 随机奖励（`reward.random`）：这里先是**兜底**的文案，
+       真送哪一款要等在线版服务端回包 / 本地版自己抽完才知道（见下面 `giftId`）。 */
+    const nameOf = (id: string) =>
+      gameById(id)?.name ?? localGameById(id)?.name ?? step.reward.name
+    let giftId = step.reward.gameId
+    let rewardName = nameOf(giftId)
+
+    /* ★ **领之前**记下「这款是否已经有」。
+       领完再查一定是「有」（服务端 `GrantGameWithTx` 是 ON CONFLICT DO NOTHING，
+       本地是记一笔账），那时判不出来 —— 文案就会对孩子撒谎：
+       说「已经放进游戏柜啦」，而他去游戏柜找，没有新东西。
+       判据只用 `ownedGameIds`（两种模式下都是「真拥有」的口径）。 */
+    /* 先用兜底 id 判；在线版会在拿到回包后重算一次（随机奖励会换 id）。
+       见下面 `if (giftId !== step.reward.gameId)` 那段。 */
+    let alreadyOwned = get().ownedGameIds.includes(giftId)
+
+    if (isOnlineMode) {
+      /* 在线版：服务端复核 + 授游戏。`onlineWrite` 已经把网络失败和业务拒绝
+         分开了 —— 前者可以重试，后者（条件不满足 / 已领过）重试也没用。 */
+      const r = await onlineWrite(() => claimCampaignStepApi(stepId))
+      if (!r.ok) {
+        const t = writeFailToast(r.error, `领取「${rewardName}」`)
+        return { ok: false, message: t.detail ? `${t.title}：${t.detail}` : t.title }
+      }
+      /* ★ 随机奖励：服务端挑完才告诉我们送的是哪一款。
+         用它的 `game_id` 覆盖兜底值 —— 否则会去装错游戏、文案也说错
+         （「领到了 A」而到账是 B）。 */
+      const got = (r.data as { game_id?: string } | undefined)?.game_id
+      if (got) {
+        giftId = got
+        rewardName = nameOf(got)
+        alreadyOwned = get().ownedGameIds.includes(giftId)
+      }
+    } else {
+      /* 本地版：记一笔 delta 0 的账 ⇒ `purchasedIdsFrom` 就认它。
+         ⚠️ 顺序不能反：先记账再把 step 写进「已领」。反过来的话，账本写失败时
+            这一关会被标成已领，孩子再也领不到。 */
+      /* ★ 本地版（单机）没有服务端可问 ⇒ 自己抽一款。
+         只从 `localGames`（随包的那批）里挑 —— 单机版没有目录服务，
+         挑了也没有包可装。 */
+      if (step.reward.random) {
+        const picked = pickRandomReward(get().ownedGameIds, LOCAL_GAMES)
+        if (picked) {
+          giftId = picked.id
+          rewardName = picked.name
+          alreadyOwned = false
+        }
+      }
+      await postMall({
+        delta: 0,
+        source: 'campaign',
+        refId: giftId,
+        memo: `主线活动：${step.title}`,
+      })
+      const next = [...new Set([...get().campaignClaims, stepId])]
+      await setMeta(CAMPAIGN_CLAIMS_KEY, next)
+      set({ campaignClaims: next })
+    }
+
+    /* 本来就有 ⇒ 不用再装一遍（装了也是同一个包），照实说「这一关过了，
+       这款你早就有」。**不能**说成「领到了新游戏」。 */
+    if (alreadyOwned) {
+      await get().refresh()
+      return {
+        ok: true,
+        message: `这一关过了！「${rewardName}」你本来就有，可以直接玩`,
+      }
+    }
+
+    /* 装包（两条路自己挑：先目录、再本地包）。装不上**不算领取失败** ——
+       游戏已经在库里了，「已激活但没装」有出口：设置/游戏里点下载。 */
+    const inst = await get().installGameAuto(giftId, {
+      onProgress: get().reportInstallProgress,
+    })
+    await get().refresh()
+    const tail = inst.ok
+      ? '，已经放进游戏柜啦'
+      : `，但没装成功（${inst.message}），去「我的游戏」点安装`
+    return { ok: true, message: `领到了「${rewardName}」${tail}` }
+  },
+
+  installLocalGame: async (gameId, onProgress) => {
     const entry = localGameById(gameId)
     if (!entry) return { ok: false, message: `这个版本里没有本地游戏「${gameId}」` }
+
+    /* ★ 没拥有就不能装（2026-10-30 家长拍板：「加门槛，没拥有不能装」）。
+     *
+     * 门槛放在 store 里、不放在按钮上 —— 按钮只是入口之一，
+     * 兑换流程 / 调试桥 / 将来的批量装都会绕过它。放在这里才是真的关死。
+     *
+     * 判据是 `ownedGameSetNow()`（读库、三个来源），不是 `get().ownedGameIds`：
+     * 兑换是「先记账本再装包」，读快照会把刚兑换的判成没拥有。 */
+    if (!(await ownedGameSetNow()).has(gameId)) {
+      return {
+        ok: false,
+        message: `「${entry.name}」还没拥有 —— 去心愿商城兑换，或者用激活码`,
+      }
+    }
 
     // ① 取包。本地包走同源 fetch —— 仍然是**网络栈**（dev / Capacitor 都如此），
     //    所以「本地」只省掉了「目录 + 签名」这一步，不省「取字节」。
@@ -3671,7 +5258,17 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const res = await fetch(entry.url)
       if (!res.ok) return { ok: false, message: `读取本地包失败：HTTP ${res.status}` }
-      bytes = new Uint8Array(await res.arrayBuffer())
+      /* 随包游戏也在安装包里，但它同样是**走网络栈**取的（dev / Capacitor 都一样），
+         所以一样能给进度；`Content-Length` 缺失时 percent 会是 -1。 */
+      bytes = await readBodyWithProgress(res, (p) =>
+        onProgress?.({
+          gameId,
+          phase: 'download',
+          percent: percentOf(p.received, p.total),
+          received: p.received,
+          total: p.total,
+        }),
+      )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       return { ok: false, message: `读取本地包失败：${msg}` }
@@ -3747,6 +5344,23 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   uninstallGame: async (gameId) => {
+    /* 在线版：**先删服务端的存档，删掉了才清本地**。
+       ⚠️ 反过来（先清本地、云端删失败）就是「本地说卸载了、云端还在」——
+          重装会捡到旧存档，而界面上什么都看不出来。
+       ⚠️ `no-game` 当作删掉了：服务端不认识 / 没拥有这款游戏，本来就没有云端存档
+          （走查用的合成包、本地预置的拥有都属于这类）。 */
+    if (isOnlineMode) {
+      const r = await deleteGameKvOnServer(gameId)
+      if (r === 'failed') {
+        get().pushToast({
+          kind: 'warn',
+          title: '没卸载成功',
+          detail: '云端存档删不掉，先连上网再试一次',
+          emoji: '📡',
+        })
+        return
+      }
+    }
     // 连包带状态一起删。只删包不删状态的话，重装会**捡到上一次的存档**，
     // 看起来像「卸载没生效」。
     await clearGameKv(gameId)
@@ -3809,10 +5423,40 @@ export const useApp = create<AppState>((set, get) => ({
    * （内存对了、DB 里却是旧值，重启后又变回去）。
    */
   updateSettings: async (patch) => {
-    const next = { ...get().settings, ...patch }
+    const prev = get().settings
+    const next = { ...prev, ...patch }
     // 先同步更新内存：受控输入框、以及同一 tick 里的后续调用，立刻看到新值
     set({ settings: next })
-    settingsWriteChain = settingsWriteChain.catch(() => {}).then(() => saveSettings(next))
+    settingsWriteChain = settingsWriteChain.catch(() => {}).then(async () => {
+      if (isOnlineMode) {
+        /* 只碰用量（`gameClock`）的改动：**本地先落盘，网络尽力而为**。
+           这一条和下面那条是两套语义，别合并：
+             · 它是「限时」的执行依据，每 60 秒动一次；
+             · 走写穿 ⇒ 断网时本地也写不进去 ⇒ 时长不累计 ⇒ 孩子无限玩；
+             · 走失败回退 ⇒ 把时钟拨回去，同样等于放开额度。
+           所以这里不等请求（等的话断网时落库会被超时拖住）、不回退、不弹提示。
+           推送本身有节流，见 `pushUsageBestEffort`。 */
+        if (isUsageOnly(patch)) {
+          await saveSettings(next)
+          void pushUsageBestEffort(next)
+          return
+        }
+
+        /* 其余设置：**服务端成功了才落本地**（写穿的铁律，见 `online/write.ts`） */
+        const r = await onlineWrite(() => oSaveSettings(next))
+        if (!r.ok) {
+          /* 失败要把内存退回去，否则「界面上是新值、重启变回旧值」。
+             ⚠️ 只在内存**还是这次那份**时才退：家长可能已经接着打了下一个字，
+                无条件回退会把新输入吞掉（和上面第 ② 条同一个坑）。 */
+          if (get().settings === next) set({ settings: prev })
+          get().pushToast(writeFailToast(r.error, '这次设置'))
+          return
+        }
+        /* 那一份 payload 里带着当时的用量 —— 记下来，别马上再推一遍 */
+        noteUsagePushed(next.gameClock)
+      }
+      await saveSettings(next)
+    })
     await settingsWriteChain
   },
 
@@ -3838,6 +5482,7 @@ export const useApp = create<AppState>((set, get) => ({
       farm,
       market,
       quotaCarry,
+      wishCodes,
     ] = await Promise.all([
       db.tasks.toArray(),
       db.taskInstances.toArray(),
@@ -3859,17 +5504,30 @@ export const useApp = create<AppState>((set, get) => ({
       loadFarm(),
       loadMarket(),
       loadQuotaCarry(),
+      db.wishCodes.toArray(),
     ])
+    /*
+     * 装过哪些游戏 —— 本体不进备份，恢复时要靠这份名单从本地包重装。
+     * 名单从 `__bundle` 行算（`installedGames` 的唯一事实来源），
+     * 不另存一份，免得两边走散。
+     */
+    const installedGameIds = gameKv
+      .filter((r) => r.key.endsWith(`:${BUNDLE_KEY}`))
+      .map((r) => r.gameId)
     return {
       app: 'kid-quest-farm',
       /**
-       * 备份格式版本。**导入端不看它**（只认 `app` 和 `data`），
-       * 所以老文件照样能读；它只是给「人」和排障用的标记。
+       * 备份格式版本。
+       *
+       * **只往一个方向拦**：导入时「比当前新」的一律拒绝（见 `importBackup`
+       * 里那段注释），「比当前旧」的照样能读 —— 老文件永远读得回来，这条
+       * 不能破。所以加表时必须同步 bump 这个号，否则旧版 App 会把新表静默丢掉。
        *
        * v3（2026-10-28）：`data` 里新增 `wishOrders`，且其中的收货信息
        * 一律是脱敏快照（`shipSnapshot`），不会有 `ship`。见 spec §9.1。
+       * v4（2026-10-30）：`data` 里新增 `wishCodes`（已经用过的兑换码）。
        */
-      version: 3,
+      version: BACKUP_VERSION,
       exportedAt: Date.now(),
       data: {
         tasks,
@@ -3887,8 +5545,12 @@ export const useApp = create<AppState>((set, get) => ({
          * 「导出再导入一次，所有下载来的游戏进度清零」，而且不报错。
          * 宿主内置的农场不在这里（它用 `meta` / 自己的表），所以漏掉的后果
          * **只在装了下载游戏的设备上**才看得见 —— 更容易漏。
+         *
+         * ⚠️ 但**只导存档，不导本体**（`saveOnlyGameKv`）：`__bundle` 是几 MB
+         * 的游戏代码，而且它会被 `import()` 执行 —— 见那个函数的注释。
+         * 装过哪些游戏记在 `meta.installedGameIds`，恢复后从本地包重装。
          */
-        gameKv,
+        gameKv: saveOnlyGameKv(gameKv),
         inventory,
         animals,
         checkIns,
@@ -3918,7 +5580,7 @@ export const useApp = create<AppState>((set, get) => ({
         wishOrders: wishOrders.map(orderToBackup),
         events: farmEvents,
         market,
-        settings,
+        settings: stripDeviceLocal(settings),
         farm,
         /**
          * 从**已经收掉的地块**上结转过来、还没用掉的额度（按产出物 id）。
@@ -3930,21 +5592,86 @@ export const useApp = create<AppState>((set, get) => ({
          * 2026-09-19 排查「背包有一个萝卜却卖不掉」时发现。
          */
         quotaCarry,
-        meta: Object.fromEntries(meta.map((m) => [m.key, m.value])),
+        /**
+         * **已经用过的兑换码**（`wishCodes`，v10 加的表）。
+         *
+         * ⚠️ 必须跟 `mallLedger` **同进同出**。这两张表是一件事的两半：
+         * 账本里那笔 `source: 'redemption_code'` 证明「码换到了什么」，
+         * 这张表证明「这个码在本机用过了」。
+         *
+         * 只清不存（v10 加表时就是这样，两个方向都漏登记）的后果：
+         * 导入一份「兑换之前」的备份、或者点了「清空全部数据」之后，
+         * 游戏回到「没拥有」而码还标着「用过」⇒ **那张实体卡废了**，
+         * 界面只说一句「这个码已经用过了」。2026-10-30 查备份覆盖面时发现。
+         */
+        wishCodes,
+        /**
+         * ⚠️ `meta` 里**还有一份** `settings`（同一个对象，`setMeta('settings')`
+         * 写的就是它）。只剥顶层那个 `settings` 是不够的 —— 这条断言第一次跑
+         * 就是这么红的：PIN 换了个门又出去了。所以这里也要剥。
+         */
+        meta: Object.fromEntries([
+          ...meta
+            /* ⚠️ 设备本地状态：`sync.lastOkAt` 是「这台机器上次连上服务器的时间」。
+               跟着备份跑到另一台设备上，那边会显示一个它从来没发生过的同步时间。 */
+            .filter((m) => m.key !== SYNC_LAST_OK_KEY)
+            /* ⚠️ 后台配置的**本地缓存**，不是孩子挣到的东西：跟着备份跑到
+               另一台设备上，运营后来清掉的链接会复活（孩子点进去 404），
+               而且下次拉取之前没人知道。恢复后第一次拉取会重新写。 */
+            .filter((m) => m.key !== WISH_BUY_LINKS_KEY)
+            .map(
+              (m): [string, unknown] =>
+                m.key === 'settings'
+                  ? [m.key, stripDeviceLocal(m.value as AppSettings)]
+                  : [m.key, m.value],
+            ),
+          /* 装过哪些游戏。不是「孩子挣到的东西」，是「这份备份描述的是
+             哪台设备上装了什么」—— 恢复时拿它把本地游戏装回来。 */
+          ['installedGameIds', installedGameIds],
+        ]),
       },
     }
   },
 
   importBackup: async (raw) => {
+    /*
+     * ★ 在线版直接拒绝（2026-11-02 晚）。
+     *
+     * 备份里的行 id 没有 `srv_` 前缀，而拉取只清 `srv_` 行 ⇒ 导入的那些
+     * **会留下来和服务端那份叠加**：余额显示成两份之和、任务重复出现，
+     * 而服务端根本不认它们（孩子看到大余额，一花就说不够）。
+     * 界面那边也不再画「选择备份文件」，但闸门必须在这儿 ——
+     * 调试桥和以后的脚本都绕得过按钮。
+     */
+    const refusal = onlineDataOpRefusal(isOnlineMode, 'import')
+    if (refusal) return { ok: false, message: refusal }
     try {
       const parsed = raw as {
         app?: string
+        version?: number
         data?: Record<string, unknown>
       }
       if (!parsed || parsed.app !== 'kid-quest-farm' || !parsed.data) {
         return { ok: false, message: '这不是小任务农场的备份文件' }
       }
       const d = parsed.data
+
+      /**
+       * 版本号：**比当前新的，一律不认**。
+       *
+       * 以前这里完全不读 `version`（老注释还写着「导入端不看它」）。那对
+       * 「老文件」是对的 —— 版本比当前小的照样能读，这是必须保住的。
+       * 但反方向会**静默丢数据**：新版加了 `data.wishCodes` 这类表之后，
+       * 旧版 App 拿到新备份会照单全收，不认识的那张表被悄悄丢掉，
+       * 提示还是「数据已恢复」；等它再导出一次，那份数据就永久没了。
+       *
+       * 所以：只拦「比我还新」的。拦下来让他先更新 App —— 更新是免费的，
+       * 丢的数据不是。
+       */
+      const fileVersion = typeof parsed.version === 'number' ? parsed.version : 0
+      if (fileVersion > BACKUP_VERSION) {
+        return { ok: false, message: '备份来自更新的版本，请先更新 App' }
+      }
 
       // ---- 先全量校验，再动数据 ----
       // 否则一个"app 字段正确但内容残缺"的文件会先清空旧数据、再写入失败，
@@ -3980,8 +5707,13 @@ export const useApp = create<AppState>((set, get) => ({
         // 老备份里没有这个字段，`pickArray(undefined)` 返回 null，落到空数组。
         harvestLedger: pickArray<HarvestEntry>(d.harvestLedger) ?? [],
         mallLedger: pickArray<MallEntry>(d.mallLedger) ?? [],
-        // ⚠️ 主键是 `key`（形如 `${gameId}:${k}`），**不是 `id`** —— 和背包一样要显式传键名
-        gameKv: pickArray<GameKvRow>(d.gameKv, 'key') ?? [],
+        /* ⚠️ 主键是 `key`（形如 `${gameId}:${k}`），**不是 `id`** —— 和背包一样要显式传键名
+         *
+         * ⚠️ 而且要**滤掉 `__bundle` / `__assets`**：文件里那两行是游戏代码，
+         * 挂载时会被 `import()` 执行，而这条路没有哈希也没有签名。
+         * 别人发来的备份里放一段代码，导入就等于把它跑起来（见
+         * `saveOnlyGameKv` 的注释）。本体只从**本地包**装（那条路比对 sha256）。 */
+        gameKv: saveOnlyGameKv(pickArray<GameKvRow>(d.gameKv, 'key') ?? []),
         // ⚠️ 背包的主键是 `itemId`，不是 `id` —— 见上面 `pickArray` 的注释
         inventory: pickArray<InventorySlot>(d.inventory, 'itemId') ?? [],
         animals: pickArray<Animal>(d.animals) ?? [],
@@ -3994,8 +5726,26 @@ export const useApp = create<AppState>((set, get) => ({
         wishOffers: pickArray<WishOffer>(d.wishOffers, 'itemId') ?? [],
         // ⚠️ 必须过 `orderFromBackup`：外部文件里可能带着 `ship`
         wishOrders: (pickArray<WishOrder>(d.wishOrders) ?? []).map(orderFromBackup),
+        // ⚠️ 主键是 `codeHash`，**不是 `id`** —— 和背包 / gameKv / wishOffers 同一类坑。
+        // 老备份（v3 及以前）没有这个字段 → 空数组 → 等于「那时候一个码都没用过」，
+        // 和 `mallLedger` 回到同一时刻是**一致**的。
+        wishCodes: pickArray<WishCode>(d.wishCodes, 'codeHash') ?? [],
         events: pickArray<FarmEvent>(d.events) ?? [],
       }
+
+      /**
+       * 本机的家长 PIN。
+       *
+       * ⚠️ **必须在事务前读**：事务里第一件事就是 `db.meta.clear()`，
+       * settings 会跟着没，读出来就永远是 undefined 了。
+       *
+       * PIN 是**凭据**，不是数据：备份里带什么、带不带，都不该改这台设备的锁。
+       * 只清不保的后果是「导入任何一份旧备份 = 家长锁被清空」，孩子拿到文件就能解锁；
+       * 照文件写的后果是「导入一份别人设备的备份 = 锁被改成那个密码」。
+       */
+      const deviceSettings = await loadSettings()
+      const deviceParentPin = deviceSettings.parentPin
+      const deviceGameClock = deviceSettings.gameClock
 
       // 清空 + 写入放在同一个事务里：失败会自动回滚，不会留下半截数据
       await db.transaction(
@@ -4016,6 +5766,7 @@ export const useApp = create<AppState>((set, get) => ({
           db.harvestLedger,
           db.mallLedger,
           db.gameKv,
+          db.wishCodes,
           db.meta,
         ],
         async () => {
@@ -4035,6 +5786,7 @@ export const useApp = create<AppState>((set, get) => ({
             db.wishOffers.clear(),
             db.wishOrders.clear(),
             db.farmEvents.clear(),
+            db.wishCodes.clear(),
             db.meta.clear(),
           ])
           await db.tasks.bulkPut(rows.tasks)
@@ -4052,8 +5804,15 @@ export const useApp = create<AppState>((set, get) => ({
           if (rows.wishOffers.length > 0) await db.wishOffers.bulkPut(rows.wishOffers)
           if (rows.wishOrders.length > 0) await db.wishOrders.bulkPut(rows.wishOrders)
           if (rows.events.length > 0) await db.farmEvents.bulkPut(rows.events)
+          if (rows.wishCodes.length > 0) await db.wishCodes.bulkPut(rows.wishCodes)
           if (d.settings && typeof d.settings === 'object') {
-            await db.meta.put({ key: 'settings', value: d.settings })
+            // 文件里的 `parentPin` 一律不认（可能是别的设备的、也可能是孩子改的）
+            const incoming = { ...(d.settings as AppSettings) }
+            delete incoming.parentPin
+            delete incoming.gameClock
+            if (deviceParentPin) incoming.parentPin = deviceParentPin
+            if (deviceGameClock) incoming.gameClock = deviceGameClock
+            await db.meta.put({ key: 'settings', value: incoming })
           }
           const market = d.market as MarketState | undefined
           if (market && typeof market === 'object' && Array.isArray(market.quotes)) {
@@ -4100,6 +5859,41 @@ export const useApp = create<AppState>((set, get) => ({
               await db.meta.put({ key: QUOTA_CARRY_KEY, value: clean })
             }
           }
+          /**
+           * 剩下那些**没被点名**的 meta key —— 照 `d.meta` 原样写回。
+           *
+           * 为什么需要这一步：`exportBackup` 是把整个 `meta` 表拍平的
+           * （`Object.fromEntries(meta.map(...))`，**全量**），而上面那段是
+           * **手写清单**。一侧自动、一侧手写 ⇒ 以后往 meta 里加个新 key，
+           * 导出会自动带上、导入会静默丢掉。
+           *
+           * 已经丢了的那一个：`farm.lastEventCheck`（事件概率用的时间戳）。
+           * 丢了只是「暂时不掷灾害骰子」，看不出来 —— 正因为看不出来，
+           * 才更该在这里一次修掉，而不是等下一个 key 丢。
+           * 2026-10-30 查「导出 / 导入是否对称」时发现。
+           *
+           * 上面那 6 个 key 由顶层字段负责（老备份里没有 `d.meta`），
+           * 这里跳过，免得两种来源打架。
+           */
+          const META_FROM_TOP_LEVEL = new Set<string>([
+            'settings',
+            'farm.market',
+            'farm.plots',
+            'farm.totals',
+            'farm.day',
+            QUOTA_CARRY_KEY,
+          ])
+          const metaBag = d.meta
+          if (metaBag && typeof metaBag === 'object' && !Array.isArray(metaBag)) {
+            for (const [k, v] of Object.entries(metaBag as Record<string, unknown>)) {
+              if (META_FROM_TOP_LEVEL.has(k)) continue
+              /* 导出侧的元信息，不是应用状态 —— 写进库里只会变成
+                 下一次导出时被覆盖的一行垃圾。 */
+              if (k === 'installedGameIds') continue
+              if (v === undefined) continue
+              await db.meta.put({ key: k, value: v })
+            }
+          }
         },
       )
       // 老备份没有兑换品 —— 恢复完补一份默认清单
@@ -4109,16 +5903,63 @@ export const useApp = create<AppState>((set, get) => ({
           SEED_REDEEM_ITEMS.map((r) => ({ ...r, id: uid('rd'), createdAt: now, updatedAt: now })),
         )
       }
+      /**
+       * 先重读 settings，再 refresh。
+       *
+       * `refresh()` 一开头就是 `const { settings } = get()` —— 它**不重读**。
+       * 只调 refresh 的话，内存里还是导入前那份：设置页显示旧的孩子名字、
+       * 旧的审核开关，而且 refresh 里算「今天是哪天」（`dayStartHour`）、
+       * 时间流速、事件开关用的全是旧值。2026-10-30 查备份时发现。
+       */
+      set({ settings: await loadSettings() })
       await get().refresh()
-      return { ok: true, message: '数据已恢复' }
+
+      /* ---- 游戏本体不在备份里：按名单从本地包重装 ----
+       *
+       * 走 `installLocalGame`，也就是**正常的安装路径**：取包 → 比对烧进 App 的
+       * sha256 → 校验经济参数 → 才落库。备份文件里放什么都进不来。
+       *
+       * 存档不用管：它一直躺在 `gameKv` 里（`<gameId>:` 开头的其他行），
+       * 装回来就能接着玩。
+       *
+       * 装不上有两种：这个版本里没有那款游戏、或者没拥有（账本里没有它）。
+       * 都不该让整次恢复失败 —— 数据已经恢复了，只是游戏要手动装一次。 */
+      const wantGames = (d.meta as Record<string, unknown> | undefined)?.installedGameIds
+      let putBack = 0
+      const pendingNames: string[] = []
+      if (Array.isArray(wantGames)) {
+        for (const gid of wantGames) {
+          if (typeof gid !== 'string') continue
+          const r = await get().installLocalGame(gid)
+          if (r.ok) putBack += 1
+          else {
+            /* 说清是**哪几款**，别只给个数。
+             * 「还有 2 款要去游戏页重新装」等于让家长自己在列表里找哪一行
+             * 显示的是「安装」而不是「已安装」—— 装了五六款时根本找不过来。
+             * 名字优先用本地清单（家长看到的那个名字），退到注册表，最后才用 id。 */
+            pendingNames.push(localGameById(gid)?.name ?? gameById(gid)?.name ?? gid)
+          }
+        }
+      }
+      /* 一句话说清三件事：装回几款、哪几款没装上、去哪装。
+       * 三个分支都要写 —— 「装回 0 款，A 要去重装」这种话读起来别扭，
+       * 而且孩子会以为「0 款」是自己弄丢了什么。 */
+      return { ok: true, message: `数据已恢复${restoreTail(putBack, pendingNames)}` }
     } catch (e) {
       return { ok: false, message: `恢复失败：${(e as Error).message}` }
     }
   },
 
   resetAll: async () => {
+    /*
+     * ★ 在线版拒绝（2026-11-02 晚）。清完 Dexie，下一次 `refresh` 就把服务端
+     * 那份拉回来 —— 提示「已重新开始」，几秒后记录全回来了。
+     * 返回 boolean 而不是静默做完：调用方要能据此**不弹**「已重新开始」。
+     */
+    if (onlineDataOpRefusal(isOnlineMode, 'reset')) return false
     await wipeAll()
     await get().boot()
+    return true
   },
 
   /* ================= UI ================= */
@@ -4262,6 +6103,27 @@ export function selectTodayStats(s: AppState) {
  * 不限今天是有意的：孩子昨晚交上来的，家长今早才审，
  * 如果只查今天，那条就会永远卡在 submitted 里没人管。
  */
+/**
+ * 主线活动的完整视图（进度 + 状态 + 主推那一关）。
+ *
+ * ★ 抽成选择器而不是在组件里 `campaignViews(...)`：卡片、详情弹框、
+ *   将来的首页推荐位都要这份数据，各算一遍就会出现「卡片说能领、
+ *   点进弹框说还差 2 个」这种自相矛盾的界面。
+ *
+ * ⚠️ 返回值每次都是**新对象**，所以组件里必须用
+ *   `const v = useApp(selectCampaign)`（zustand 会按引用比较 ⇒ 每次都重渲染）。
+ *   正确写法是 `const claims = useApp((s) => s.campaignClaims)` 这种原始切片，
+ *   再在本组件里 `useMemo` 调这个函数 —— 和 MEMORY 里那条
+ *   「selector 不能返回新对象（React #185）」是同一件事。
+ */
+export function selectCampaign(s: AppState) {
+  /* ★ 在线版优先用服务端算的：本地流水只拉了 2000 条上限，
+     老账号会算少 ⇒ 界面卡在「还差 N」而服务端点不到按钮的事不会发生。 */
+  const stats = s.campaignServerStats ?? campaignStatsFrom(s.instances, s.harvestLedger)
+  const views: CampaignStepView[] = campaignViews(stats, s.campaignClaims)
+  return { stats, views, ...campaignSummary(views), spotlight: spotlightStep(views) }
+}
+
 export function selectPendingReview(s: AppState): TaskInstance[] {
   return s.instances
     .filter((i) => i.status === 'submitted')
@@ -4368,6 +6230,8 @@ declare global {
       exportBackup: () => Promise<unknown>
       importBackup: (raw: unknown) => Promise<{ ok: boolean; message: string }>
       version: string
+      /** `'local'` / `'online'` —— e2e 用它拦「跑错了产物」 */
+      appMode: 'local' | 'online'
       /**
        * 目录价格快照。给 E2E 脚本读用 —— 经济数值经常调，
        * 脚本里写死价格会变成"假失败"，所以让测试来问真实数值。
@@ -4467,6 +6331,11 @@ declare global {
          * ★ 这是「命名空间隔离」的判据：正常只该有已安装游戏自己的 id。
          * 出现别的 id = 有东西往别人的命名空间里写了（前缀拼错、或者插件
          * 拿到了不该拿的 gameId）—— 而那**不会报错**，只会静默串味。
+         *
+         * ⚠️ 在线版会多出一类**正常**的 id：服务端有币钱包、但本机没装的那些
+         * （拉取会把 `__coin` 镜像写进来，见 `mirrorGameCoinBalance`）。
+         * 所以「这个 id 在列表里」**不等于**「它装着」—— 判「装没装」看
+         * `kv(id)` 里有没有 `__bundle`，别看这个列表。
          */
         kvOwnerIds: () => Promise<string[]>
         /**
@@ -4485,6 +6354,15 @@ declare global {
         priceMall: number
         defaultOwned: boolean
       }[]
+      /**
+       * 预置「已拥有」（走查脚本用）。
+       *
+       * ⚠️ 2026-10-30 加了「没拥有不能装」的门槛之后，**每个游戏 e2e 都要先有它**，
+       * 否则点 `[data-local-install]` 会点空。拥有关系本来就在客户端本地
+       * （账本 / 心愿单 / 已装包），能开 devtools 的人自己也能改 ——
+       * 这个句柄不是安全边界，别当它是。
+       */
+      grantGame: (gameId: string) => Promise<void>
     }
   }
 }
@@ -4498,6 +6376,11 @@ if (typeof window !== 'undefined') {
 
   window.__kqf__ = {
     getState: () => useApp.getState(),
+    /* 这一版是本地版还是在线版（`VITE_APP_MODE`）。
+       ★ 给 e2e / 探针读：`e2e-check.mjs` 是**按本地版写的**，
+         跑在在线版产物上会有二三十条「在线版本来就不该有」的假红
+         （2026-11-13 踩过）。有了这个值，脚本能当场拦住而不是报一堆假失败。 */
+    appMode: APP_MODE,
     exportBackup: () => useApp.getState().exportBackup(),
     importBackup: (raw) => useApp.getState().importBackup(raw),
     version: '1.0.0',
@@ -4535,6 +6418,22 @@ if (typeof window !== 'undefined') {
         delta,
         source: 'manual_adjust',
         memo: `调试加兑换券 +${delta}`,
+      })
+      await useApp.getState().refresh()
+    },
+    /**
+     * 预置「已拥有」。
+     *
+     * 走的是**和真实兑换完全一样的那一笔账**（`redemption_code`，delta 0）——
+     * 不另开一条只有测试能走的路，否则 e2e 验的就不是生产链路了。
+     */
+    grantGame: async (gameId) => {
+      if (useApp.getState().ownedGameIds.includes(gameId)) return
+      await postMall({
+        delta: 0,
+        source: 'redemption_code',
+        refId: gameId,
+        memo: '调试预置拥有',
       })
       await useApp.getState().refresh()
     },
@@ -4790,4 +6689,130 @@ async function maybePayStreakBonus(task: Pick<Task, 'streakPerDay' | 'streakCap'
     memo: `连续 ${streak} 天完成长期任务 🔥`,
   })
   return bonus
+}
+
+/* ============================================================
+   兑换码 · 登录态（服务端是真相）
+   ============================================================ */
+
+/**
+ * 用兑换码解锁游戏 —— **登录状态下走这条路**。
+ *
+ * ## 为什么服务端说了算
+ *
+ * 服务端在一个事务里做完三件事：验码 → CAS 标记已用 → 写 `user_game`。
+ * 所以「调用成功」就等于「游戏已经在他的账号里了」，客户端不需要
+ * （也不应该）再调一次「解锁游戏」—— 那样会出现两套拥有关系，
+ * 换台设备登录就只剩一半。
+ *
+ * ## 本地要补两件事
+ *
+ * ① **账本里记一笔 `redemption_code`（delta 0）**。
+ *    `ownedGameIds` 是从账本推出来的（`purchasedIdsFrom`），
+ *    不记这一笔，「我的游戏」里就不显示已拥有 —— 而服务端明明已经给了。
+ *    delta 必须是 0：码解锁一分钻石都没花，写别的数就是假账。
+ *
+ * ② **插件包要真的装下来**。装完才谈得上「玩」。
+ *
+ * ## ⚠️ 装包失败**不回滚**
+ *
+ * 码已经在服务端用掉了，客户端回滚不掉。硬装成「失败」只会让界面
+ * 说一句失败，而码其实已经没了 —— 那才是最坏的结果。
+ * 「已激活但没装」是有出口的：游戏会出现在「我的游戏」里，点安装就行。
+ * 所以这里照实说「已激活，但没装成功，去点安装」。
+ */
+async function redeemCodeOnServer(
+  code: string,
+  opts?: { silent?: boolean },
+): Promise<{ ok: boolean; message: string; gameId?: string }> {
+  let resp: ApiWishCodeResult
+  try {
+    resp = await redeemWishCode(code)
+  } catch (e) {
+    const err = e instanceof ApiError ? e : null
+    /* 这三种必须分开说 —— 家长接下来要做的事完全不同：
+       重新登录 / 过会儿再试 / 别再试了去找卖家。 */
+    if (err?.isAuth) return { ok: false, message: '登录过期了，重新登录再试（这张码没被用掉）' }
+    if (err?.isNetwork) return { ok: false, message: '连不上服务器，这张码没被用掉，过会儿再试' }
+    // 业务错误：码无效 / 已被使用 / 已过期 / 已拥有 —— 服务端给的就是中文
+    return { ok: false, message: err?.message || '兑换没成功' }
+  }
+
+  /* 一张码可能授多款：盲盒卡（「盲盒 5 连」）就是一张卡换一次 5 连开。
+     ⚠️ 只用 `game_id` 拼清单会**静默漏掉**其余几款：界面上写「已激活：某一款」，
+     而服务端明明授了 5 款 —— 不报错也不崩，只是数字不对。
+     所以优先读 `game_ids`，它缺省时（老服务端）才退回单款。 */
+  const ids =
+    resp.game_ids && resp.game_ids.length > 0
+      ? resp.game_ids
+      : resp.game_id
+        ? [resp.game_id]
+        : []
+  if (ids.length === 0) {
+    // 码是真的，但对应的不是游戏卡（券 / 实物）。这一版只处理游戏卡，
+    // 照实说「兑换成功」，别硬编一个游戏名出来。
+    return { ok: true, message: '兑换成功' }
+  }
+
+  const app = useApp.getState()
+  const nameOf = (id: string) => gameById(id)?.name ?? localGameById(id)?.name ?? id
+  const names = ids.map(nameOf)
+
+  // ① 每款补一笔账，让「已拥有」在界面上成立（delta 0：码解锁没花币）
+  for (let i = 0; i < ids.length; i++) {
+    await postMall({
+      delta: 0,
+      source: 'redemption_code',
+      refId: ids[i],
+      memo: `兑换码解锁「${names[i]}」`,
+    })
+  }
+
+  // ② 本地有包的真的装下来
+  let failed = 0
+  let firstFailMsg = ''
+  let installedAny = false
+  for (const id of ids) {
+    /* ★ 用 `installGameAuto`，不是 `installLocalGame`：
+       在线版没随包发游戏（`TF_APK_NO_GAMES=1`），只读本地包必 404 ——
+       而游戏其实已经在服务端授好了，缺的只是「去服务器把包下载下来」。 */
+    const res = await app.installGameAuto(id)
+    if (res.ok) installedAny = true
+    else {
+      failed++
+      if (!firstFailMsg) firstFailMsg = res.message
+    }
+  }
+  /* ★★ 用 `installFailNote` 拼，别在这里手写这句 ——
+     原来这里是 `，但 ${failed} 款没装成功（…）`，而弹框那边 grep 的是
+     `，但没装成功`（中间没数字）⇒ 永远不命中 ⇒ 判成成功、界面说
+     「游戏已经进你的游戏柜了」而包根本没装上（2026-11-13 用户报的
+     「激活没有提示成功 似乎」就是这个）。两个方向现在共用一个文件。 */
+  const note = failed > 0 ? installFailNote(failed, firstFailMsg) : ''
+
+  if (!opts?.silent) {
+    app.pushToast({
+      kind: 'reward',
+      /* 多款时标题必须是「开出 N 款」—— 逐款念名字会撑爆一行，
+         而且孩子真正关心的是「开了几个」。 */
+      title: ids.length > 1 ? `开出 ${ids.length} 款游戏` : `已激活：${names[0]}`,
+      /* ⚠️ 装包失败时**不能**还说「已经放进你的游戏柜啦」——
+         标题刚写完「但没装成功」，副标题自相矛盾，家长会以为孩子能玩了。
+         2026-11-05 用真码在 http 局域网里走查时一眼看到（非安全上下文没有
+         `crypto.subtle`，验签必然失败）。 */
+      detail:
+        failed > 0
+          ? '去「我的游戏」里点一下安装'
+          : ids.length > 1
+            ? `${names.join('、')} —— 已经放进你的游戏柜啦`
+            : installedAny
+              ? '已经放进你的游戏柜啦'
+              : '底部导航就能切过去',
+      emoji: '🎁',
+    })
+  }
+  await app.refresh()
+
+  const summary = ids.length > 1 ? `开出 ${ids.length} 款：${names.join('、')}` : names[0]
+  return { ok: true, message: `已激活 ${summary}${note}`, gameId: ids[0] }
 }

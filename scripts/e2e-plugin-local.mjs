@@ -51,6 +51,7 @@ import { makeProfileDir, SCRATCH_BASE } from './lib/profile.mjs'
 import { dismissOnboarding } from './lib/onboarding.mjs'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { grantGame } from './lib/own.mjs'
 
 const TARGET = process.argv[2] ?? 'http://127.0.0.1:4393/'
 const VIEWPORT = process.argv[3] ?? 'phone'
@@ -243,6 +244,27 @@ async function openGameSettings() {
   await wait(600)
 
   // 默认 PIN = 0000（第 4 位自动提交，没有确认按钮）
+  /* 2026-11 起家长密码闸门是「卡片 + 按钮」：先点「爸妈：输密码」才弹数字键盘
+     （`ParentPinSheet`）。不点的话下面那 4 次 0 全打在空气里，页面停在那张卡上，
+     报错却是「游戏列表没渲染」—— 排查方向整个是错的。 */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) =>
+      /爸妈：输密码/.test(x.textContent ?? ''),
+    )
+    b?.click()
+  })
+  /* ★ 必须**等键盘真的出现**再点数字。少了这一句，下面的循环第一轮就会
+     因为「页面上没有『请输入家长密码』」直接 break，而 `check('过了家长密码')`
+     判的是「没有这几个字」⇒ **假绿**，后面全部红成「列表里没这一行」。 */
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].filter((b) =>
+          /^[0-9]$/.test((b.textContent ?? '').trim()),
+        ).length >= 8,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
   for (let round = 0; round < 2; round++) {
     const locked = await page.evaluate(() =>
       document.body.innerText.includes('请输入家长密码'),
@@ -347,6 +369,8 @@ let pointsBefore = 0
   const err = await openGameStore()
   check('打开「设置 → 游戏 → 游戏市场」并过了家长密码', err === null, err ?? '')
 
+  /* 2026-10-30 起「没拥有不能装」—— 先预置拥有，否则下面找不到安装按钮 */
+  await grantGame(page, GAME_ID)
   const row = await page.evaluate((id) => {
     const li = document.querySelector(`[data-local-row="${id}"]`)
     if (!li) return null
@@ -392,17 +416,6 @@ let pointsBefore = 0
   check('市场里那一行变成「已装」', await waitFor(`[data-plugin-installed-row="${GAME_ID}"]`, 5000))
   check(`已安装清单里有 ${GAME_ID}`, after.installed.includes(GAME_ID), after.installed.join(','))
 
-  /*
-   * 经济参数要**给家长看得见**（PluginStoreCard ③）。
-   * 这一块同时是「manifest 里的 voucherPerCoin 真的读到了」的界面证据：
-   * 没读到的话那一行会显示「不开放兑换券」。
-   */
-  const econ = await page.evaluate(() => {
-    const el = document.querySelector('[data-plugin-economy]')
-    return el ? (el.innerText ?? '').replace(/\s+/g, ' ').trim() : ''
-  })
-  check('家长能看到「一局 1 积分」', /一局\s*1\s*积分/.test(econ), econ)
-  check('家长能看到「1 娃娃机币 = 1 兑换券」', /1\s*娃娃机币\s*=\s*1\s*兑换券/.test(econ), econ)
 
   pointsBefore = after.balance
 

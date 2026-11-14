@@ -266,10 +266,14 @@ postHarvest({ delta: +gain, source, refId, memo })
 
 ```tsx
 // src/features/parent/ParentGate.tsx
-const needsPin = !!settings.parentPin && settings.protectParentActions !== false
+const protectionOn = settings.protectParentActions !== false
+const mode = !protectionOn ? 'open' : settings.parentPin ? 'verify' : 'setup'
 ```
 
-- 默认密码 `0000`（`src/db/db.ts` 的 `DEFAULT_SETTINGS`）。
+- **默认没有密码**（`DEFAULT_SETTINGS.parentPin` 是 `undefined`，2026-10-30 改）。
+  引导里不问密码；第一次真正用到家长区时，闸门才要求当场设一个（输两遍）。
+- 三种状态：`open`（家长关掉了「保护家长操作」）/ `verify`（输已有的）/
+  `setup`（还没设过，设完直接放行）。**没密码 ≠ 不设防** —— 这点写错过一次。
 - 凡是**会永久改变孩子的钱 / 内容**的操作都要过闸门：
   兑换、家长审核、编辑任务、改兑换品、**你的游戏里的「重置存档 / 改赔率」也要**。
 - 孩子端**不许**出现任何能改经济参数或自评质量的入口
@@ -369,6 +373,13 @@ interface GamePlugin {
 
 放进 manifest，并且**在 UI 里对家长可见**（农场是把「成本 / 上限回收 / 每分钟收益」
 写在种子商店和地块上的）。孩子看到的则是「要花多少、能得到什么」。
+
+插件游戏的落点是 **设置 → 游戏 → 点进这款游戏的详情 → 「花多少积分」那一栏**
+（`[data-plugin-economy]`）。只有装过才显示 —— 没装时 manifest 还没下来。
+
+> ⚠️ 这块 2026-10-29 跟着「游戏市场」那张卡一起被删过一次：界面没了，22 个 e2e
+> 里指着它的断言还在，于是每个脚本都红两条，看着像「断言写错了」。删 UI 的同一轮
+> 就要把断言一起删或搬走 —— 留着只会把下一轮的真红埋掉。
 
 ### 4.5 必须提供的测试钩子
 

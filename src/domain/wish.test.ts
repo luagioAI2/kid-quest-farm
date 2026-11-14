@@ -5,7 +5,7 @@ import {
   compareWishItem,
   daysToSave,
   needsParentAction,
-  pickBlindBox,
+  pickBlindBoxMany,
   planWishRedeem,
   redeemedGameIdsFrom,
   wishShelf,
@@ -20,7 +20,7 @@ import type { WishItem } from './types'
 
    * `planWishRedeem` —— 差一张也算「够」的话，孩子会点到一个换不了的按钮
    * `blindBoxRemaining` —— 漏掉「已拥有」会开出重复的游戏（而且不报错）
-   * `pickBlindBox` —— 池子空了还返回东西，就会「先扣券再发现没得开」
+   * `pickBlindBoxMany` —— 池子空了还返回东西，就会「先扣券再发现没得开」
    ============================================================ */
 
 describe('planWishRedeem：够不够、两种币各付多少', () => {
@@ -108,26 +108,53 @@ describe('blindBoxRemaining：池子减去已拥有', () => {
   })
 })
 
-describe('pickBlindBox：开奖', () => {
-  it('池子空了返回 null —— 调用方必须先判这个再扣券', () => {
-    expect(pickBlindBox(['a', 'b'], ['a', 'b'])).toBeNull()
+describe('pickBlindBoxMany：开奖（含 5 连开）', () => {
+  it('池子空了返回空数组 —— 调用方必须先判这个再扣券', () => {
+    expect(pickBlindBoxMany(['a', 'b'], ['a', 'b'], 1)).toEqual([])
+  })
+
+  it('n = 1 就是老的单开：只开一款', () => {
+    expect(pickBlindBoxMany(['a', 'b', 'c'], [], 1, () => 0.5)).toHaveLength(1)
   })
 
   it('注入 rand 能钉死结果（测试不靠 Math.random）', () => {
-    expect(pickBlindBox(['a', 'b', 'c'], [], () => 0)).toBe('a')
-    expect(pickBlindBox(['a', 'b', 'c'], [], () => 0.99)).toBe('c')
+    const a = pickBlindBoxMany(['a', 'b', 'c', 'd'], [], 2, () => 0.3)
+    const b = pickBlindBoxMany(['a', 'b', 'c', 'd'], [], 2, () => 0.3)
+    expect(a).toEqual(b)
   })
 
-  it('永远不会开出已拥有的', () => {
+  it('★ 已经解锁的不计算 —— 不占名额，也不会被开出来', () => {
+    const owned = ['a', 'b', 'c']
+    const got = pickBlindBoxMany(['a', 'b', 'c', 'd', 'e', 'f', 'g'], owned, 4, () => 0.5)
+    expect(got).toHaveLength(4)
+    for (const id of got) expect(owned).not.toContain(id)
+  })
+
+  it('不重复 —— 同一个池子里的 id 不会开出两次', () => {
+    const got = pickBlindBoxMany(['a', 'b', 'c', 'd', 'e'], [], 5, () => 0.77)
+    expect(new Set(got).size).toBe(5)
+  })
+
+  it('剩余不足时给短的（由调用方决定「整单拒绝」）', () => {
+    // 只剩 e 一款，要 5 款 → 只给 1 条，调用方据此拒绝整单
+    expect(pickBlindBoxMany(['a', 'b', 'c', 'd', 'e'], ['a', 'b', 'c', 'd'], 5)).toEqual(['e'])
+  })
+
+  it('永远不会开出已拥有的（200 次随机）', () => {
     const owned = ['a', 'b', 'c', 'd']
     for (let i = 0; i < 200; i++) {
-      const got = pickBlindBox(['a', 'b', 'c', 'd', 'e'], owned)
-      expect(got).toBe('e')
+      expect(pickBlindBoxMany(['a', 'b', 'c', 'd', 'e'], owned, 1)).toEqual(['e'])
     }
   })
 
   it('rand 返回 1（越界）也不会崩', () => {
-    expect(pickBlindBox(['a', 'b'], [], () => 1)).toBe('b')
+    const got = pickBlindBoxMany(['a', 'b'], [], 2, () => 1)
+    expect(got).toHaveLength(2)
+  })
+
+  it('n <= 0 返回空（卖空盒子是不可接受的）', () => {
+    expect(pickBlindBoxMany(['a'], [], 0)).toEqual([])
+    expect(pickBlindBoxMany(['a'], [], -3)).toEqual([])
   })
 })
 

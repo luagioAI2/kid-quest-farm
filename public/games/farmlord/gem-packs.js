@@ -1,0 +1,1 @@
+export const GEM_PACKS={gems_s:{price:5,gems:60,title:{en:"Pouch of 60 gems",zh:"60 宝石小袋",ja:"ジェム60個（小袋）"}},gems_m:{price:20,gems:300,title:{en:"Chest of 300 gems",zh:"300 宝石宝箱",ja:"ジェム300個（宝箱）"}},gems_l:{price:50,gems:900,title:{en:"Vault of 900 gems",zh:"900 宝石金库",ja:"ジェム900個（金庫）"}}};export function levelGems(e){return e%5===0?10:3}

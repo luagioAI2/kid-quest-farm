@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, BackupFile } from '../../domain/types'
-import { useApp } from '../../store/useApp'
+import { makeBackupSample, useApp } from '../../store/useApp'
 import { DEFAULT_PROFIT_RATIO } from '../../domain/catalog'
 import { QUALITY_META, QUALITY_ORDER, formatMultiplier } from '../../domain/settlement'
 import { clampPointsPerYuan, formatYuan, MAX_POINTS_PER_YUAN, MIN_POINTS_PER_YUAN } from '../../domain/cash'
@@ -12,13 +12,19 @@ import { clampPointsPerYuan, formatYuan, MAX_POINTS_PER_YUAN, MIN_POINTS_PER_YUA
      是 `tsc`（`noUnusedLocals`）唯一能替你抓的一类残留。 */
 import { AVATAR_CHOICES } from '../../domain/avatars'
 import { humanizeAgo } from '../../domain/time'
-import { saveBlob, shareOrDownload } from '../../platform/files'
+import { shareOrDownload } from '../../platform/files'
 // 复用家长端同一个 PinPad，不要在这里再抄一份 —— 之前抄出来的副本
 // 带着"第 4 位自动提交读不到最新值"的 bug，两边各修一次很容易漏。
-import { PinPad, ParentPinPanel } from '../parent/ParentGate'
+import { ParentLockButton, ParentPinSheet } from '../parent/ParentGate'
 import { AccountCard } from '../account/AccountCard'
+import { LoginSheet } from '../account/LoginSheet'
+import { useAccount } from '../../store/useAccount'
 import { GamesSection } from './GamesSection'
 import { Card } from './ui'
+/* 在线版：数据在账号里，「从备份恢复 / 清空数据」做不了什么 ——
+   理由和闸门都在 `online/backup.ts`（消息只有一份，卡片和 toast 共用）。 */
+import { isOnlineMode } from '../../sync/pull'
+import { IMPORT_REFUSAL, RESET_REFUSAL } from '../../online/backup'
 
 /* ============================================================
    家长设置 + 数据导出/导入
@@ -28,13 +34,45 @@ import { Card } from './ui'
 
 type Tab = 'child' | 'rules' | 'game' | 'data'
 
+/**
+ * 「从备份恢复」那条 toast 的**第二行**。
+ *
+ * `importBackup` 返回的是**一整句**（「数据已恢复；游戏装回 2 款」），而 toast
+ * 自己有标题。整句塞进 detail 就成了
+ *
+ *     数据已恢复
+ *     数据已恢复
+ *
+ * —— 同一句话说两遍，真正有用的那半句反而被挤到第二行去读。
+ * 2026-10-30 换机探针里**看图**才发现的：所有断言都是绿的（文字确实在），
+ * 只是读起来像坏了。
+ *
+ * 规则：
+ *   · 成功 → 剥掉开头那句，只留「；」之后的部分；没有后半句就返回空串
+ *     （`App.tsx` 里是 `{t.detail && …}`，空串整行不渲染）
+ *   · 失败 → 原样返回。那时候 message 是**具体原因**，标题才是「恢复失败」，
+ *     剥掉反而把唯一的线索删了
+ */
+export function restoreToastDetail(ok: boolean, message: string): string {
+  if (!ok) return message
+  return message.replace(/^数据已恢复[；;]?\s*/, '').trim()
+}
+
 export default function SettingsPage({
   onBack,
   onReplayGuide,
+  initialTab,
 }: {
   onBack: () => void
   /** 「重看新手引导」。不传就不渲染这个入口（老调用点无需改动） */
   onReplayGuide?: () => void
+  /**
+   * 打开时落在哪一栏。不传 = 「孩子」。
+   *
+   * ⚠️ 只在**首次挂载**生效（喂给 `useState` 初值）。要中途换栏，
+   * 得让调用方先改这个值再挂载 —— `App` 那边就是这么做的。
+   */
+  initialTab?: Tab
 }) {
   const settings = useApp((s) => s.settings)
   const updateSettings = useApp((s) => s.updateSettings)
@@ -43,16 +81,62 @@ export default function SettingsPage({
   const resetAll = useApp((s) => s.resetAll)
   const pushToast = useApp((s) => s.pushToast)
 
-  const [tab, setTab] = useState<Tab>('child')
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'child')
   const [locked, setLocked] = useState(true)
   const [dataLocked, setDataLocked] = useState(true)
-  const [pin, setPin] = useState('')
+  /** 密码弹框开着没有（2026-11-06 起三个 tab 共用这一个弹框） */
+  const [pinOpen, setPinOpen] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  /** 家长锁：默认锁定写入型操作，避免孩子乱改规则 */
-  const needsPin = !!settings.parentPin
-  const gateOpen = !needsPin || !locked
+  /* 账号入口（2026-10-30）。
+   *
+   * 原来只有「规则」页最底下那张 `AccountCard` —— 而「规则」页整页压在家长
+   * 密码后面，卡片又在最底部。用户原话：「没看到登录界面」。
+   * 登录是家长的动作，但不该要求「先知道它在第 4 栏的第 8 张卡」。
+   * 所以在标题栏放一个常驻入口：没登录写「登录」，登录了写昵称。 */
+  const session = useAccount((s) => s.session)
+  const openBind = useAccount((s) => s.openBind)
+  const [loginOpen, setLoginOpen] = useState(false)
+
+  /**
+   * 家长锁：默认锁定写入型操作，避免孩子乱改规则。
+   *
+   * 2026-10-30 起**一律要过闸门**（不再看有没有设过密码）：
+   * 没设过的第一次进来当场设一个（`PinFlow` 自己判断），
+   * 之后每次进来都要输 —— 以前「没密码 = 直接放行」意味着新装 App
+   * 的规则、游戏、数据三栏对谁都敞着。
+   */
+  /* ⚠️ 还要看 `protectParentActions`：家长在别处（或调试桥）把这个开关关掉时，
+     设置页也不该继续拦人 —— 否则「关掉保护」在设置页这一屏等于没生效，
+     而界面上没有任何提示（e2e 里就是卡在这儿：关了保护还是只能看到密码卡）。 */
+  const protectionOn = settings.protectParentActions !== false
+  const gateOpen = !protectionOn || !locked
+  const dataGateOpen = !protectionOn || !dataLocked
+
+  /**
+   * 进入「规则 / 游戏 / 数据」时**直接弹密码键盘**（2026-11-14）。
+   *
+   * 用户原话：「点规则还显示『需要家长输入密码』，需要再点『爸妈：输密码』。
+   *            操作麻烦，直接点规则、点游戏、数据就显示输入密码，不需要多一个步骤。」
+   *
+   * ⚠️ 用 ref 记住「这一轮已经为哪个 tab 自动弹过」：
+   *    不能写成「没解锁就弹」—— 家长点「先算了」会立刻被重新弹出来，出不去。
+   *    解锁成功后清空，下次再进来还会自动弹。
+   */
+  const autoPromptedRef = useRef<Tab | null>(null)
+  useEffect(() => {
+    const needPin =
+      (tab === 'rules' && !gateOpen) || (tab === 'game' && !gateOpen) || (tab === 'data' && !dataGateOpen)
+    if (!needPin) {
+      /* 已经解锁（或切到不需要密码的 tab）⇒ 允许下次再自动弹 */
+      autoPromptedRef.current = null
+      return
+    }
+    if (autoPromptedRef.current === tab) return
+    autoPromptedRef.current = tab
+    setPinOpen(true)
+  }, [tab, gateOpen, dataGateOpen])
 
   /**
    * 现金 : 积分 参考汇率（1 元 = 多少积分）。
@@ -110,19 +194,30 @@ export default function SettingsPage({
       pushToast({
         kind: res.ok ? 'success' : 'warn',
         title: res.ok ? '数据已恢复' : '恢复失败',
-        detail: res.message,
+        detail: restoreToastDetail(res.ok, res.message),
         emoji: res.ok ? '✅' : '⚠️',
       })
     },
     [importBackup, pushToast],
   )
 
-  const downloadSample = useCallback(() => {
-    void saveBlob(
+  /* 空模板的内容由 store 那边拼（`makeBackupSample`）—— 表名从
+     `BACKUP_ARRAY_FIELDS` 派生，不在这里手写一份。见那个函数的注释。
+
+     ⚠️ 必须走 `shareOrDownload`，不能直接 `saveBlob`。
+     `saveBlob` 是「浏览器下载」那条腿：在 APK 的 WebView 里
+     `<a download>` + `blob:` 不落盘（没有 DownloadListener），
+     点了**什么都不发生、也没有任何提示**。
+     同一个函数在导出备份时已经换成 `shareOrDownload` 了，这里漏了一处。 */
+  const downloadSample = useCallback(async () => {
+    const ok = await shareOrDownload(
       '小任务农场-备份示例.json',
-      JSON.stringify({ app: 'kid-quest-farm', version: 1, exportedAt: Date.now(), data: {} }, null, 2),
+      JSON.stringify(makeBackupSample(), null, 2),
     )
-  }, [])
+    if (!ok) {
+      pushToast({ kind: 'warn', title: '模板没能导出', detail: '请重试', emoji: '⚠️' })
+    }
+  }, [pushToast])
 
   return (
     <div className="pb-10">
@@ -138,8 +233,49 @@ export default function SettingsPage({
             ←
           </button>
           <h1 className="font-display text-2xl font-extrabold text-ink-900">⚙️ 设置</h1>
+          <span className="flex-1" />
+          {/* 常驻账号入口。放标题栏而不是页里：它和这一页的任何一栏都无关，
+              是「这台设备上登录的是谁」——家长找它时不会想到去翻「规则」。
+              ⚠️ 登录后这里只显示昵称、**不再挂 `data-account-open`**：
+                 走查脚本用它判「还需要登录吗」，一直挂着就永远判「需要」。 */}
+          {session ? (
+            session.user.is_guest ? (
+              /* 游客：这个胶囊**就是**「保存进度」的入口（横条已经删掉了）。
+                 ⚠️ 别挂 `data-account-open` —— 走查脚本拿它判「还没登录」，
+                    游客是有账号的，挂上去会让脚本一直判「需要登录」。 */
+              <button
+                type="button"
+                data-account-chip
+                data-guest-save
+                onClick={() => openBind('manual')}
+                className="btn flex min-h-[40px] max-w-[132px] items-center gap-1.5 rounded-full bg-grape-50 px-3 text-[12.5px] font-extrabold text-ink-700 shadow-flat active:btn-press"
+              >
+                <span aria-hidden>🔖</span>
+                <span className="truncate">{session.user.nickname || '临时账号'}</span>
+              </button>
+            ) : (
+              <span
+                data-account-chip
+                className="flex min-h-[40px] max-w-[132px] items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] font-extrabold text-ink-700 shadow-flat"
+              >
+                <span aria-hidden>👤</span>
+                <span className="truncate">{session.user.nickname || '已登录'}</span>
+              </span>
+            )
+          ) : (
+            <button
+              type="button"
+              data-account-open
+              onClick={() => setLoginOpen(true)}
+              className="btn flex min-h-[40px] items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] font-extrabold text-ink-700 shadow-flat active:btn-press"
+            >
+              <span aria-hidden>👤</span>
+              登录
+            </button>
+          )}
         </div>
       </header>
+      <LoginSheet open={loginOpen} onClose={() => setLoginOpen(false)} />
 
       <nav>
         {/*
@@ -164,6 +300,10 @@ export default function SettingsPage({
           ).map(([k, label]) => (
             <button
               key={k}
+              /* `data-settings-tab` 给 e2e / 探针定位用。
+                 原来是按文案找（`🎮 游戏`）—— 文案一改，探针就静默点空、
+                 断言恒绿。属性不随文案变。 */
+              data-settings-tab={k}
               onClick={() => setTab(k)}
               className={
                 'btn rounded-full px-5 py-2.5 text-base font-bold ' +
@@ -253,21 +393,20 @@ export default function SettingsPage({
 
         {tab === 'rules' && (
           <>
-            {needsPin && locked ? (
-              <Card title="请输入家长密码" emoji="🔒">
-                <PinPad
-                  value={pin}
-                  onChange={setPin}
-                  onSubmit={(final) => {
-                    const candidate = final ?? pin
-                    if (candidate === settings.parentPin) {
-                      setLocked(false)
-                      setPin('')
-                    } else {
-                      pushToast({ kind: 'warn', title: '密码不对哦', emoji: '🔒' })
-                      setPin('')
-                    }
-                  }}
+            {!gateOpen ? (
+              /* 2026-11-06 统一成弹框：这里原来把整块键盘铺在卡片里。
+                 卡片只留一句「为什么」，键盘交给 `ParentPinSheet`。 */
+              /* 兜底卡：键盘本来是**自动弹**的（见上面那个 effect）。
+                 能走到这里只有一种情况 —— 家长点了「先算了」把它关掉。
+                 所以这里不再解释「为什么」，只给一个「再输一次」的入口。 */
+              <Card title="这一页要家长密码" emoji="🔒">
+                <p className="mb-3 text-sm leading-relaxed text-ink-500">
+                  改规则会直接影响孩子拿多少分。
+                </p>
+                <ParentLockButton
+                  label="爸妈：输密码"
+                  tone="primary"
+                  onClick={() => setPinOpen(true)}
                 />
               </Card>
             ) : (
@@ -513,16 +652,26 @@ export default function SettingsPage({
 
                 <Card title="家长密码" emoji="🔑">
                   <p className="mb-3 text-sm text-ink-500">
-                    设一个 4 位数字，防止孩子自己改规则。留空表示不设密码。
+                    {settings.parentPin
+                      ? '改密码要输两遍 —— 这个密码没有找回入口，输错一位就再也进不去家长区。'
+                      : '设一个 4 位数字，防止孩子自己改规则。没有找回入口，所以输两遍确认。'}
+                    <br />
+                    清空它 <span className="font-extrabold text-ink-700">不等于</span> 不要密码 ——
+                    下次进家长区时会重新要求你设一个；
+                    真想完全不设密码，请关掉上面的「保护家长操作」。
                   </p>
                   <PinSetting
-                    current={settings.parentPin}
+                    hasPin={!!settings.parentPin}
                     disabled={!gateOpen}
                     onSave={(p) => {
-                      void updateSettings({ parentPin: p || undefined })
+                      void updateSettings({ parentPin: p })
+                      pushToast({ kind: 'success', title: '密码已设置', emoji: '🔑' })
+                    }}
+                    onClear={() => {
+                      void updateSettings({ parentPin: undefined })
                       pushToast({
                         kind: 'success',
-                        title: p ? '密码已设置' : '已取消密码',
+                        title: '已清空，下次进家长区会要求重新设置',
                         emoji: '🔑',
                       })
                     }}
@@ -545,21 +694,15 @@ export default function SettingsPage({
         */}
         {tab === 'game' && (
           <>
-            {needsPin && locked ? (
-              <Card title="请输入家长密码" emoji="🔒">
-                <PinPad
-                  value={pin}
-                  onChange={setPin}
-                  onSubmit={(final) => {
-                    const candidate = final ?? pin
-                    if (candidate === settings.parentPin) {
-                      setLocked(false)
-                      setPin('')
-                    } else {
-                      pushToast({ kind: 'warn', title: '密码不对哦', emoji: '🔒' })
-                      setPin('')
-                    }
-                  }}
+            {!gateOpen ? (
+              <Card title="这一页要家长密码" emoji="🔒">
+                <p className="mb-3 text-sm leading-relaxed text-ink-500">
+                  「设为当前」和下载都会改状态或花钱。
+                </p>
+                <ParentLockButton
+                  label="爸妈：输密码"
+                  tone="primary"
+                  onClick={() => setPinOpen(true)}
                 />
               </Card>
             ) : (
@@ -570,22 +713,24 @@ export default function SettingsPage({
 
         {tab === 'data' && (
           <>
-            {needsPin && dataLocked ? (
-              <Card title="数据操作需要密码" emoji="🔒">
-                <p className="mb-3 text-sm text-ink-500">
-                  导出、恢复、清空数据都需要家长密码，防止孩子误操作。
+            {!dataGateOpen ? (
+              <Card title="这一页要家长密码" emoji="🔒">
+                <p className="mb-3 text-sm leading-relaxed text-ink-500">
+                  导出、恢复、清空数据都会动到存档。
                 </p>
-                <ParentPinPanel
-                  title="请爸爸妈妈来一下"
-                  hint="导出、恢复或清空数据，需要先输密码"
-                  onPass={() => setDataLocked(false)}
+                <ParentLockButton
+                  label="爸妈：输密码"
+                  tone="primary"
+                  onClick={() => setPinOpen(true)}
                 />
               </Card>
             ) : (
               <>
                 <Card title="导出备份" emoji="💾">
                   <p className="mb-3 text-sm text-ink-500">
-                    把所有任务、积分、兑换券、农场和心愿单打包成一个 JSON 文件。建议每周导出一次。
+                    {isOnlineMode
+                      ? '记录本来就在账号里，换设备登录就有 —— 导出只是自己留一份纯文本底稿，看看里面存了什么。'
+                      : '把所有任务、积分、兑换券、农场和心愿单打包成一个 JSON 文件。建议每周导出一次。'}
                   </p>
                   <button
                     onClick={() => void handleExport()}
@@ -596,35 +741,59 @@ export default function SettingsPage({
                 </Card>
 
                 <Card title="从备份恢复" emoji="📥">
-                  <p className="mb-3 text-sm text-ink-500">
-                    ⚠️ 恢复会覆盖当前全部数据，请先导出一次现有数据。
-                  </p>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="application/json,.json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) void handleImportFile(f)
-                      e.target.value = ''
-                    }}
-                  />
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    className="btn w-full rounded-2xl bg-white py-4 text-lg font-extrabold text-ink-900 shadow-flat"
-                  >
-                    📂 选择备份文件
-                  </button>
+                  {isOnlineMode ? (
+                    /* ★ 在线版没有这个能力：导入的旧账没有 `srv_` 前缀，
+                       拉取时清不掉 ⇒ 和服务端那份**叠加**（余额显示成两份、
+                       任务重复）。不画按钮 = 家长不会去点；store 里还有一道
+                       闸门挡调试桥。理由见 `online/backup.ts`。 */
+                    <p
+                      data-backup-import-blocked
+                      className="text-sm leading-relaxed text-ink-500"
+                    >
+                      {IMPORT_REFUSAL}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mb-3 text-sm text-ink-500">
+                        ⚠️ 恢复会覆盖当前全部数据，请先导出一次现有数据。
+                        <br />
+                        家长密码和「今天玩了多久」都不在备份里 —— 这两样只属于这台设备。
+                        换机后要重新设一个密码，游戏时长也从零开始算。
+                        <br />
+                        装过的游戏会自动装回来：游戏本体不进备份（所以文件很小），
+                        恢复时从 App 自带的包重新装一次，存档原样还在。
+                      </p>
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (f) void handleImportFile(f)
+                          e.target.value = ''
+                        }}
+                      />
+                      <button
+                        onClick={() => fileRef.current?.click()}
+                        className="btn w-full rounded-2xl bg-white py-4 text-lg font-extrabold text-ink-900 shadow-flat"
+                      >
+                        📂 选择备份文件
+                      </button>
+                    </>
+                  )}
                 </Card>
 
                 <Card title="备份格式说明" emoji="📄">
                   <p className="text-sm text-ink-500">
-                    导出的是纯文本 JSON，包含任务定义、每日实例、积分流水、兑换券流水、背包、农场、设置、
-                    心愿单和兑换单。你可以自己保存到网盘，之后换手机或换浏览器都能导入回来。
+                    导出的是纯文本 JSON，包含任务定义、每日实例、积分流水、兑换券流水、背包、农场、
+                    设置（家长密码和今天的游戏时长除外）、心愿单和兑换单。
+                    {isOnlineMode
+                      ? '你可以自己保存到网盘留个底；换手机或换浏览器，登录同一个账号就都在了。'
+                      : '你可以自己保存到网盘，之后换手机或换浏览器都能导入回来。'}
                   </p>
                   <button
-                    onClick={downloadSample}
+                    onClick={() => void downloadSample()}
                     className="btn mt-3 w-full rounded-2xl bg-paper-2 py-3 font-bold text-ink-500 shadow-flat"
                   >
                     下载一个空模板看看
@@ -632,7 +801,13 @@ export default function SettingsPage({
                 </Card>
 
                 <Card title="危险操作" emoji="☠️">
-                  {!confirmReset ? (
+                  {isOnlineMode ? (
+                    /* ★ 在线版清不掉：清完 Dexie，下一次刷新又把账号里那份拉回来。
+                       「已重新开始」几秒后自己打脸，比没有这个按钮更糟。 */
+                    <p data-reset-blocked className="text-sm leading-relaxed text-ink-500">
+                      {RESET_REFUSAL}
+                    </p>
+                  ) : !confirmReset ? (
                     <>
                       <p className="mb-3 text-sm text-ink-500">
                         清空所有数据并重新开始。这个操作无法撤销。
@@ -658,9 +833,18 @@ export default function SettingsPage({
                         </button>
                         <button
                           onClick={() => {
-                            void resetAll()
-                            setConfirmReset(false)
-                            pushToast({ kind: 'info', title: '已重新开始', emoji: '🌱' })
+                            /* `resetAll` 返回 false = **没清**（在线版）。
+                               现在这个按钮只在本机版画出来，所以这条分支走不到 ——
+                               但提示不能凭「按钮画了」就假定「清成功了」。 */
+                            void (async () => {
+                              const done = await resetAll()
+                              setConfirmReset(false)
+                              pushToast(
+                                done
+                                  ? { kind: 'info', title: '已重新开始', emoji: '🌱' }
+                                  : { kind: 'warn', title: '没有清空', detail: RESET_REFUSAL, emoji: '⚠️' },
+                              )
+                            })()
                           }}
                           className="btn flex-1 rounded-2xl bg-berry-500 py-3 font-bold text-white shadow-flat"
                         >
@@ -674,6 +858,29 @@ export default function SettingsPage({
             )}
           </>
         )}
+
+        {/* 三个 tab 共用这一个弹框：同一时刻只有一个 tab 可见，所以
+            `onPass` 按当前 tab 决定解哪把锁；副标题也跟着换 —— 家长得
+            知道自己在给哪一页解锁。 */}
+        <ParentPinSheet
+          open={pinOpen}
+          onClose={() => setPinOpen(false)}
+          onPass={() => {
+            if (tab === 'data') setDataLocked(false)
+            else setLocked(false)
+            setPinOpen(false)
+          }}
+          hint={
+            tab === 'data'
+              ? '导出、恢复或清空数据，需要先输密码'
+              : tab === 'game'
+                ? '游戏设置（设为当前、购买）需要家长密码'
+                : '改规则会直接影响孩子拿多少分，先输密码'
+          }
+          /* 设置页是家长自己从 ⚙️ 导航过来的，不再考一次加法；
+             其它闸门（审核 / 兑换 / 加任务 / 心愿）才考。 */
+          adultCheck={false}
+        />
       </main>
     </div>
   )
@@ -831,34 +1038,97 @@ function RatioInput({
   )
 }
 
-function PinSetting({
-  current,
+/**
+ * 设置 / 修改家长密码。
+ *
+ * ## 为什么改密码也要输两遍（2026-10-30）
+ *
+ * 原来这里是**一个输入框 + 预填当前密码**：手滑输错一位、按了保存，
+ * 就再也进不去家长区了 —— 这个密码**没有找回入口**，而且「数据」栏
+ * 也在它后面（连导出备份自救都做不到）。
+ *
+ * 而「第一次设密码」那条路（`ParentGate` 的 `PinFlow`）一直是输两遍的。
+ * 同一个凭据、同一个后果，两条路的口径必须一致，所以这里也改成两遍。
+ *
+ * 另外**不再预填当前密码**：那等于把密码明文摆在一个家长随手能截图的
+ * 输入框里，而它本身没有任何用处（没人会「保存」一个没改过的值）。
+ */
+export function PinSetting({
+  hasPin,
   onSave,
+  onClear,
   disabled,
 }: {
-  current?: string
+  hasPin: boolean
   onSave: (pin: string) => void
+  onClear: () => void
   disabled?: boolean
 }) {
-  const [draft, setDraft] = useState(current ?? '')
-  const valid = draft === '' || /^\d{4}$/.test(draft)
+  const [draft, setDraft] = useState('')
+  const [again, setAgain] = useState('')
+  const [err, setErr] = useState('')
+  const ready = draft.length === 4 && again.length === 4
+
+  const submit = () => {
+    if (!ready) return
+    if (draft !== again) {
+      setErr('两次不一样，重新输一次吧')
+      setDraft('')
+      setAgain('')
+      return
+    }
+    setErr('')
+    onSave(draft)
+    setDraft('')
+    setAgain('')
+  }
+
+  const box =
+    'w-full rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] outline-none focus:border-sky-400 placeholder:text-base placeholder:font-bold placeholder:tracking-normal'
+  const onlyDigits = (v: string) => v.replace(/\D/g, '').slice(0, 4)
+
   return (
     <div className="space-y-3">
       <input
+        data-pin-new
         value={draft}
         disabled={disabled}
-        onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 4))}
+        onChange={(e) => setDraft(onlyDigits(e.target.value))}
         inputMode="numeric"
-        placeholder="4 位数字，留空取消"
-        className="w-full rounded-2xl border-3 border-ink-900/10 bg-paper-2 px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] outline-none focus:border-sky-400"
+        placeholder={hasPin ? '新的 4 位数字' : '4 位数字'}
+        className={box}
       />
+      <input
+        data-pin-again
+        value={again}
+        disabled={disabled}
+        onChange={(e) => setAgain(onlyDigits(e.target.value))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') submit()
+        }}
+        inputMode="numeric"
+        placeholder="再输一次"
+        className={box}
+      />
+      {err && <p className="text-center text-sm font-bold text-berry-500 anim-fade-in">{err}</p>}
       <button
-        disabled={!valid || disabled}
-        onClick={() => onSave(draft)}
+        data-pin-save
+        disabled={!ready || disabled}
+        onClick={submit}
         className="btn w-full rounded-2xl bg-sun-300 py-3 font-extrabold text-ink-900 shadow-flat disabled:opacity-50"
       >
-        保存密码
+        {hasPin ? '修改密码' : '设置密码'}
       </button>
+      {hasPin && (
+        <button
+          data-pin-clear
+          disabled={disabled}
+          onClick={onClear}
+          className="w-full rounded-2xl py-2 text-sm font-bold text-ink-500 underline decoration-dotted"
+        >
+          清空密码
+        </button>
+      )}
     </div>
   )
 }

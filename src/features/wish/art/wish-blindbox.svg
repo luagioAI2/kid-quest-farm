@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 72" fill="none">
+  <ellipse cx="48" cy="64" rx="26" ry="3.2" fill="#7A3A10" opacity=".14"/>
+
+  <!-- 掀开的盖：斜靠在左边，说明「已经打开」 -->
+  <g transform="rotate(-74 20 52)">
+    <rect x="6" y="48.4" width="28" height="6.6" rx="2.6" fill="#F0796A"/>
+    <rect x="6" y="48.4" width="28" height="2.4" rx="1.2" fill="#FF9E8E"/>
+  </g>
+
+  <!-- 从盒里跳出来的手柄：这一盒装的是「游戏」 -->
+  <g>
+    <rect x="37.4" y="20.6" width="22.4" height="13.4" rx="6.7" fill="#6B5A7B"/>
+    <rect x="37.4" y="20.6" width="22.4" height="4.4" rx="2.2" fill="#84719A"/>
+    <rect x="41" y="26.6" width="5" height="1.8" rx=".9" fill="#FFFFFF"/>
+    <rect x="42.6" y="25" width="1.8" height="5" rx=".9" fill="#FFFFFF"/>
+    <circle cx="52.4" cy="26" r="1.4" fill="#FFC247"/>
+    <circle cx="55.6" cy="28.4" r="1.4" fill="#8FD3EE"/>
+  </g>
+
+  <!-- 盒子：盒口是深色，手柄才像「从里面出来」 -->
+  <rect x="24" y="36" width="48" height="6" rx="2.4" fill="#B8483A"/>
+  <rect x="24" y="40" width="48" height="22" rx="3" fill="#EF6C5A"/>
+  <rect x="24" y="40" width="48" height="22" rx="3" fill="#FFFFFF" opacity=".14"/>
+  <rect x="24" y="52" width="48" height="10" rx="3" fill="#C9503F" opacity=".4"/>
+  <rect x="45.4" y="40" width="5.2" height="22" fill="#FFD264"/>
+  <rect x="24" y="40" width="48" height="4.6" fill="#F58C7C"/>
+
+  <!-- 礼花：三小点，位置不对称 -->
+  <path d="M73.4 16.4l1.2 3.2 3.2 1.2-3.2 1.2-1.2 3.2-1.2-3.2-3.2-1.2 3.2-1.2Z" fill="#FFD264"/>
+  <circle cx="28.6" cy="22" r="1.8" fill="#C8A2F0"/>
+  <circle cx="78" cy="34" r="1.5" fill="#8FD3EE"/>
+</svg>

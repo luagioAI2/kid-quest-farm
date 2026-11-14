@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:apk": "tsc -b && vite build --mode apk",
+    "check:apk": "node scripts/check-apk-endpoint.mjs",
     "preview": "vite preview --port 4180",
     "lint": "tsc -b --noEmit",
     "check:registry": "node scripts/check-game-registry.mjs",
@@ -30,6 +32,7 @@
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
+    "@capacitor/app-launcher": "^8.0.1",
     "@capacitor/core": "^8.5.2",
     "@capacitor/filesystem": "^8.1.3",
     "@capacitor/haptics": "^8.0.2",
@@ -37,6 +40,8 @@
     "@capacitor/splash-screen": "^8.0.2",
     "@capacitor/status-bar": "^8.0.3",
     "@dimforge/rapier3d-compat": "^0.12.0",
+    "@noble/ed25519": "^3.2.0",
+    "@noble/hashes": "^2.4.0",
     "@types/three": "^0.186.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",

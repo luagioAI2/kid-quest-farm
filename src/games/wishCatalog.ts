@@ -12,14 +12,17 @@
  *   而漏掉的那款在界面上表现为「盒子里没有它」，不报错。
  * * **实物**：手写。这些是商家给的东西，没法推导。
  *
- * ## 外链
+ * ## 外链（2026-11-06 第七轮：只剩服务端那一份）
  *
- * 实物商品的 `buyUrl` 用的是**淘宝搜索页**（`s.taobao.com/search?q=…`），
- * 不是某个具体商品链接。原因：具体链接会失效、会换 SKU、会被下架，
- * 而目录是跟着版本发布的 —— 一个失效的链接比没有链接更糟。
- * 接商家之后换成商家给的短链。
+ * 目录里**不再有** `buyUrl` / `buyLabel`。外链的唯一来源是
+ * `wish_item.buy_url`（运营在 tf-admin「商城」列表里配的那条），
+ * 由服务端随商品列表下发，客户端缓存在 `wishBuyLinks` 里
+ * （`db.ts` 的 `WISH_BUY_LINKS_KEY`）。
  *
- * ⚠️ `buyUrl` **只在家长确认页出现**，孩子端读不到（见 `wish-mall-spec.md` §8）。
+ * ⚠️ 这里原来有一套「没配就现拼一条淘宝搜索页」的兜底（`wishBuyUrl`）。
+ *    删掉是因为它让**「后台没配」和「配了」在界面上长得一模一样** ——
+ *    用户看到的是一颗永远在、但和后台配置毫无关系的按钮。
+ *    现在：没配 = 没有按钮。
  */
 
 import type { WishItem } from '../domain/types'
@@ -32,10 +35,14 @@ export const WISH_BLINDBOX_ID = 'wish-blindbox'
 /** 盲盒池 = 全部随包发布的插件游戏 */
 const GAME_POOL: string[] = LOCAL_GAMES.map((g) => g.id)
 
-/** 淘宝搜索链接。`encodeURIComponent` 是必须的 —— 商品名里有空格和中文 */
-function taobaoSearch(keyword: string): string {
-  return `https://s.taobao.com/search?q=${encodeURIComponent(keyword)}`
-}
+/**
+ * 「一次开 5 款」盲盒的商品 id。
+ *
+ * 与服务端 `seed/wish_catalog.go` 的 `WishBlindBox5ID` 保持一致 ——
+ * 两边不一致的症状是「本地有这个商品，服务端说没有这件商品」，
+ * 孩子点兑换只会收到一句「商品不存在」。
+ */
+export const WISH_BLINDBOX5_ID = 'wish-blindbox-5'
 
 const BLINDBOX: WishItem = {
   id: WISH_BLINDBOX_ID,
@@ -47,6 +54,25 @@ const BLINDBOX: WishItem = {
   note: '随机开出 1 款你还没有的游戏',
   notice: '不会开出你已经有的游戏。全部都有了就不能买啦。',
   sortOrder: 0,
+}
+
+/**
+ * 5 连开。池子**照抄**单开的（全部游戏）—— 拥有关系是每个家庭不同的，
+ * 「已经解锁的不计算」是靠开奖时先减掉已拥有实现的，不能写进池子。
+ *
+ * `sortOrder: 1` ⇒ 排在单开盲盒后面、实物前面（见 `compareWishItem`）。
+ */
+const BLINDBOX5: WishItem = {
+  id: WISH_BLINDBOX5_ID,
+  kind: 'blindbox',
+  name: '游戏盲盒 · 5 连开',
+  emoji: '🎉',
+  tint: 'grape',
+  pool: GAME_POOL,
+  unlockCount: 5,
+  note: '一次开出 5 款你还没有的游戏',
+  notice: '只会开出你还没有的游戏。没解锁的不足 5 款时换不了 —— 等新的游戏再来。',
+  sortOrder: 1,
 }
 
 /**
@@ -71,6 +97,16 @@ const GAME_BOXES: WishItem[] = STOREFRONT.map((s, i) => ({
   gameId: s.id,
   note: s.pitch,
   sortOrder: 100 + i,
+  /**
+   * 游戏在淘宝上是**卖卡**的（卡背印激活码），所以搜的是「名字 + 激活码」。
+   *
+   * 2026-10-30 之前这里**一个外链都没有** —— 家长在心愿商城看上一款游戏，
+   * 想花钱买却点不到任何东西（只有「定券价」那条路），
+   * 而 `wish_item.buy_url` 在库里也是空的。
+   *
+   * 用搜索页而不是具体商品链接，理由和实物商品一样：链接会失效 / 换 SKU /
+   * 被下架，而目录跟着版本发布 —— **一个失效的链接比没有链接更糟**。
+   */
 }))
 
 /**
@@ -91,8 +127,6 @@ const PHYSICAL: WishItem[] = [
     ageRange: [6, 99],
     note: '随机款，不指定款式',
     notice: '盲盒不指定款式。拆开之后不能退换。',
-    buyUrl: taobaoSearch('泡泡玛特 盲盒'),
-    buyLabel: '去淘宝购买',
     sortOrder: 20,
   },
   {
@@ -106,8 +140,6 @@ const PHYSICAL: WishItem[] = [
     ageRange: [6, 12],
     note: '10.1 英寸 · 含学习卡',
     notice: '大件商品，建议先和爸妈一起看看型号再决定。',
-    buyUrl: taobaoSearch('儿童学习机 10.1'),
-    buyLabel: '去淘宝看看',
     sortOrder: 21,
   },
   {
@@ -120,8 +152,6 @@ const PHYSICAL: WishItem[] = [
     priceCents: 8900,
     ageRange: [4, 10],
     note: '12 只装 · 带收纳盒',
-    buyUrl: taobaoSearch('恐龙模型 套装 12只'),
-    buyLabel: '去淘宝购买',
     sortOrder: 22,
   },
   {
@@ -134,8 +164,6 @@ const PHYSICAL: WishItem[] = [
     priceCents: 4500,
     ageRange: [8, 99],
     note: '风景款 · 成品 70×50cm',
-    buyUrl: taobaoSearch('1000片 拼图 风景'),
-    buyLabel: '去淘宝购买',
     sortOrder: 23,
   },
   {
@@ -148,8 +176,6 @@ const PHYSICAL: WishItem[] = [
     priceCents: 1900,
     ageRange: [4, 12],
     note: '含 200 张 · 可反复贴',
-    buyUrl: taobaoSearch('儿童 闪光贴纸 200张'),
-    buyLabel: '去淘宝购买',
     sortOrder: 24,
   },
   /* ---- 2026-10-29 新增两档分类的样例（用户要求「前面再加美食，出行」）----
@@ -166,8 +192,6 @@ const PHYSICAL: WishItem[] = [
     ageRange: [3, 99],
     note: '6 寸 · 可以写名字',
     notice: '要提前一天预订，爸妈下单时记得选日期。',
-    buyUrl: taobaoSearch('生日蛋糕 6寸 儿童'),
-    buyLabel: '去淘宝预订',
     sortOrder: 25,
   },
   {
@@ -181,14 +205,12 @@ const PHYSICAL: WishItem[] = [
     ageRange: [3, 12],
     note: '含 1 大 1 小两张门票',
     notice: '出行类按当天预约情况走，去之前先确认场次。',
-    buyUrl: taobaoSearch('动物园 门票 亲子'),
-    buyLabel: '去淘宝看看',
     sortOrder: 26,
   },
 ]
 
 /** 全部商品。顺序由 `compareWishItem` 在渲染时决定，这里只管内容 */
-export const WISH_ITEMS: WishItem[] = [BLINDBOX, ...GAME_BOXES, ...PHYSICAL]
+export const WISH_ITEMS: WishItem[] = [BLINDBOX, BLINDBOX5, ...GAME_BOXES, ...PHYSICAL]
 
 /** 按 id 找商品。找不到返回 `undefined` —— 老存档里可能有已下架的商品 id */
 export function wishItemById(id: string): WishItem | undefined {

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 72" fill="none">
+  <ellipse cx="48" cy="63" rx="34" ry="3.2" fill="#4B2A6B" opacity=".14"/>
+
+  <!-- 后排两盒：先画，前排压住下半截 ⇒ 一眼是「一摞」，不是并排五个 -->
+  <g>
+    <rect x="22" y="30" width="22" height="13" rx="2.4" fill="#C8A2F0"/>
+    <rect x="20.5" y="26" width="25" height="5.6" rx="2.4" fill="#D6B8F7"/>
+    <rect x="29" y="26" width="4" height="17" fill="#FFD264"/>
+  </g>
+  <g>
+    <rect x="44" y="28" width="22" height="13" rx="2.4" fill="#EF6C5A"/>
+    <rect x="42.5" y="24" width="25" height="5.6" rx="2.4" fill="#F58C7C"/>
+    <rect x="51" y="24" width="4" height="17" fill="#FFD264"/>
+  </g>
+
+  <!-- 前排三盒 -->
+  <g>
+    <rect x="12" y="46" width="22" height="14" rx="2.4" fill="#EF6C5A"/>
+    <rect x="10.5" y="42" width="25" height="5.6" rx="2.4" fill="#F58C7C"/>
+    <rect x="19" y="42" width="4" height="18" fill="#FFD264"/>
+  </g>
+  <g>
+    <rect x="36" y="44" width="22" height="14" rx="2.4" fill="#FFC247"/>
+    <rect x="34.5" y="40" width="25" height="5.6" rx="2.4" fill="#FFD97A"/>
+    <rect x="43" y="40" width="4" height="18" fill="#FFFFFF" opacity=".8"/>
+  </g>
+  <g>
+    <rect x="58" y="46" width="22" height="14" rx="2.4" fill="#8FD3EE"/>
+    <rect x="56.5" y="42" width="25" height="5.6" rx="2.4" fill="#B4E4F7"/>
+    <rect x="65" y="42" width="4" height="18" fill="#FFFFFF" opacity=".8"/>
+  </g>
+
+  <!-- 礼花：五连开才有的热闹，但只放五粒 -->
+  <path d="M48 10.4l1.3 3.4 3.4 1.3-3.4 1.3-1.3 3.4-1.3-3.4-3.4-1.3 3.4-1.3Z" fill="#FFD264"/>
+  <circle cx="26" cy="16.6" r="1.9" fill="#C8A2F0"/>
+  <circle cx="70" cy="15.6" r="1.6" fill="#8FD3EE"/>
+  <rect x="13" y="26" width="4.6" height="2" rx="1" fill="#FFC247" transform="rotate(-22 15.3 27)"/>
+  <rect x="79" y="28" width="4.6" height="2" rx="1" fill="#A8DE86" transform="rotate(18 81.3 29)"/>
+</svg>
