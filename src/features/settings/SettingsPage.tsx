@@ -115,6 +115,30 @@ export default function SettingsPage({
   const dataGateOpen = !protectionOn || !dataLocked
 
   /**
+   * 进入「规则 / 游戏 / 数据」时**直接弹密码键盘**（2026-11-14）。
+   *
+   * 用户原话：「点规则还显示『需要家长输入密码』，需要再点『爸妈：输密码』。
+   *            操作麻烦，直接点规则、点游戏、数据就显示输入密码，不需要多一个步骤。」
+   *
+   * ⚠️ 用 ref 记住「这一轮已经为哪个 tab 自动弹过」：
+   *    不能写成「没解锁就弹」—— 家长点「先算了」会立刻被重新弹出来，出不去。
+   *    解锁成功后清空，下次再进来还会自动弹。
+   */
+  const autoPromptedRef = useRef<Tab | null>(null)
+  useEffect(() => {
+    const needPin =
+      (tab === 'rules' && !gateOpen) || (tab === 'game' && !gateOpen) || (tab === 'data' && !dataGateOpen)
+    if (!needPin) {
+      /* 已经解锁（或切到不需要密码的 tab）⇒ 允许下次再自动弹 */
+      autoPromptedRef.current = null
+      return
+    }
+    if (autoPromptedRef.current === tab) return
+    autoPromptedRef.current = tab
+    setPinOpen(true)
+  }, [tab, gateOpen, dataGateOpen])
+
+  /**
    * 现金 : 积分 参考汇率（1 元 = 多少积分）。
    *
    * 走 `clampPointsPerYuan` 而不是直接用 `settings.pointsPerYuan`：
@@ -372,9 +396,12 @@ export default function SettingsPage({
             {!gateOpen ? (
               /* 2026-11-06 统一成弹框：这里原来把整块键盘铺在卡片里。
                  卡片只留一句「为什么」，键盘交给 `ParentPinSheet`。 */
-              <Card title="规则要家长密码" emoji="🔒">
+              /* 兜底卡：键盘本来是**自动弹**的（见上面那个 effect）。
+                 能走到这里只有一种情况 —— 家长点了「先算了」把它关掉。
+                 所以这里不再解释「为什么」，只给一个「再输一次」的入口。 */
+              <Card title="这一页要家长密码" emoji="🔒">
                 <p className="mb-3 text-sm leading-relaxed text-ink-500">
-                  改规则会直接影响孩子拿多少分，所以这一页要过家长密码。
+                  改规则会直接影响孩子拿多少分。
                 </p>
                 <ParentLockButton
                   label="爸妈：输密码"
@@ -668,10 +695,9 @@ export default function SettingsPage({
         {tab === 'game' && (
           <>
             {!gateOpen ? (
-              <Card title="游戏设置要家长密码" emoji="🔒">
+              <Card title="这一页要家长密码" emoji="🔒">
                 <p className="mb-3 text-sm leading-relaxed text-ink-500">
-                  「设为当前」和（将来的）购买都会改状态或花钱，所以这一页也要过密码。
-                  在「规则」那页解过锁的话，这里不用再输一遍。
+                  「设为当前」和下载都会改状态或花钱。
                 </p>
                 <ParentLockButton
                   label="爸妈：输密码"
@@ -688,9 +714,9 @@ export default function SettingsPage({
         {tab === 'data' && (
           <>
             {!dataGateOpen ? (
-              <Card title="数据操作需要密码" emoji="🔒">
-                <p className="mb-3 text-sm text-ink-500">
-                  导出、恢复、清空数据都需要家长密码，防止孩子误操作。
+              <Card title="这一页要家长密码" emoji="🔒">
+                <p className="mb-3 text-sm leading-relaxed text-ink-500">
+                  导出、恢复、清空数据都会动到存档。
                 </p>
                 <ParentLockButton
                   label="爸妈：输密码"

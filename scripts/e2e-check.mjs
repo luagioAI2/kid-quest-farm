@@ -677,7 +677,8 @@ try {
       state: e.getAttribute('data-campaign-state'),
     })),
   )
-  check('四关都在', steps.length === 4, steps.map((s) => s.id).join(','))
+  // 2026-11-14：4 关 → 8 关（用户要求「再来 3 个关卡」+ 第 5 关随机奖励）
+  check('八关都在', steps.length === 8, steps.map((s) => s.id).join(','))
   check(
     '第 1 关是「进行中」、第 2 关也是「进行中」（还没做任务、也没有券）',
     steps.filter((s) => s.state === 'doing').length === steps.length,

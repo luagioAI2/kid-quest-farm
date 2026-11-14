@@ -193,7 +193,10 @@ describe('主线活动：券那一关按「累计赚到」算', () => {
     const r = await useApp.getState().claimCampaignStep('coupon100')
 
     expect(r.ok).toBe(true)
-    expect(useApp.getState().ownedGameIds).toContain('renttower')
+    /* 2026-11-14 用户要求：这一关送「云边小农场」（原来是收租公寓）。
+       注意 cloudfarm 在**服务端**原本是 default_owned，这里走的是本地版逻辑
+       （ownedGameIds 由本地账本推），所以它在这里能验出「领到」。 */
+    expect(useApp.getState().ownedGameIds).toContain('cloudfarm')
   })
 
   it('家长手工发的券不算「赚到」（否则发一笔就能点亮全部关卡）', async () => {

@@ -197,8 +197,15 @@ export function CampaignCard() {
   )
 }
 
-/** 奖励那款游戏的显示名：目录真名优先，配置里的名字只是兜底 */
+/**
+ * 奖励那款游戏的显示名：目录真名优先，配置里的名字只是兜底。
+ *
+ * ★★ 随机奖励（`reward.random`）**不能**显示兜底那款的真名 ——
+ *    `gameId` 只是「服务端没回包之前」的占位，真送哪款由服务端挑。
+ *    照真名显示会对孩子撒谎：「送你方块填空」，结果到账是抓娃娃。
+ */
 function rewardName(v: CampaignStepView): string {
+  if (v.step.reward.random) return '随机一款你还没有的'
   const id = v.step.reward.gameId
   return gameById(id)?.name ?? localGameById(id)?.name ?? v.step.reward.name
 }
@@ -248,7 +255,12 @@ function StepRow({
 
       <div className="mt-1.5 text-sm font-extrabold text-ink-900">{view.step.title}</div>
       <div className="mt-0.5 text-[11px] font-bold text-ink-500">
-        奖励：{rewardName(view)}（永久拥有）
+        {view.step.reward.random ? (
+          /* 随机关：不能说「永久拥有」某一款 —— 抽到什么是服务端定的 */
+          <>奖励：{rewardName(view)} · 随机抽一款</>
+        ) : (
+          <>奖励：{rewardName(view)}（永久拥有）</>
+        )}
       </div>
 
       <div className="mt-2 h-1.5 overflow-hidden rounded-pill bg-ink-100">

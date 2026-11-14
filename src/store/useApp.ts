@@ -119,6 +119,7 @@ import {
   campaignStatsFrom,
   campaignSummary,
   campaignViews,
+  pickRandomReward,
   spotlightStep,
   type CampaignStepView,
 } from '../domain/campaign'
@@ -130,7 +131,7 @@ import {
 } from '../domain/installProgress'
 import { readBodyWithProgress } from '../games/download'
 import { fetchVerifiedGame, type ResolvedGame } from '../games/install'
-import { localGameById } from '../games/localGames'
+import { LOCAL_GAMES, localGameById } from '../games/localGames'
 import { codeHashOf, gameIdForCode } from '../games/codeLookup'
 import { isGameCode, normalizeGameCode } from '../domain/gameCode'
 import type { Bytes } from '../games/bytes'
@@ -5152,17 +5153,21 @@ export const useApp = create<AppState>((set, get) => ({
       return { ok: false, message: `还差 ${view.shortfall} ${meta.unit}，到了再来领` }
     }
 
-    const rewardName =
-      gameById(step.reward.gameId)?.name ??
-      localGameById(step.reward.gameId)?.name ??
-      step.reward.name
+    /* ★ 随机奖励（`reward.random`）：这里先是**兜底**的文案，
+       真送哪一款要等在线版服务端回包 / 本地版自己抽完才知道（见下面 `giftId`）。 */
+    const nameOf = (id: string) =>
+      gameById(id)?.name ?? localGameById(id)?.name ?? step.reward.name
+    let giftId = step.reward.gameId
+    let rewardName = nameOf(giftId)
 
     /* ★ **领之前**记下「这款是否已经有」。
        领完再查一定是「有」（服务端 `GrantGameWithTx` 是 ON CONFLICT DO NOTHING，
        本地是记一笔账），那时判不出来 —— 文案就会对孩子撒谎：
        说「已经放进游戏柜啦」，而他去游戏柜找，没有新东西。
        判据只用 `ownedGameIds`（两种模式下都是「真拥有」的口径）。 */
-    const alreadyOwned = get().ownedGameIds.includes(step.reward.gameId)
+    /* 先用兜底 id 判；在线版会在拿到回包后重算一次（随机奖励会换 id）。
+       见下面 `if (giftId !== step.reward.gameId)` 那段。 */
+    let alreadyOwned = get().ownedGameIds.includes(giftId)
 
     if (isOnlineMode) {
       /* 在线版：服务端复核 + 授游戏。`onlineWrite` 已经把网络失败和业务拒绝
@@ -5172,14 +5177,34 @@ export const useApp = create<AppState>((set, get) => ({
         const t = writeFailToast(r.error, `领取「${rewardName}」`)
         return { ok: false, message: t.detail ? `${t.title}：${t.detail}` : t.title }
       }
+      /* ★ 随机奖励：服务端挑完才告诉我们送的是哪一款。
+         用它的 `game_id` 覆盖兜底值 —— 否则会去装错游戏、文案也说错
+         （「领到了 A」而到账是 B）。 */
+      const got = (r.data as { game_id?: string } | undefined)?.game_id
+      if (got) {
+        giftId = got
+        rewardName = nameOf(got)
+        alreadyOwned = get().ownedGameIds.includes(giftId)
+      }
     } else {
       /* 本地版：记一笔 delta 0 的账 ⇒ `purchasedIdsFrom` 就认它。
          ⚠️ 顺序不能反：先记账再把 step 写进「已领」。反过来的话，账本写失败时
             这一关会被标成已领，孩子再也领不到。 */
+      /* ★ 本地版（单机）没有服务端可问 ⇒ 自己抽一款。
+         只从 `localGames`（随包的那批）里挑 —— 单机版没有目录服务，
+         挑了也没有包可装。 */
+      if (step.reward.random) {
+        const picked = pickRandomReward(get().ownedGameIds, LOCAL_GAMES)
+        if (picked) {
+          giftId = picked.id
+          rewardName = picked.name
+          alreadyOwned = false
+        }
+      }
       await postMall({
         delta: 0,
         source: 'campaign',
-        refId: step.reward.gameId,
+        refId: giftId,
         memo: `主线活动：${step.title}`,
       })
       const next = [...new Set([...get().campaignClaims, stepId])]
@@ -5199,7 +5224,7 @@ export const useApp = create<AppState>((set, get) => ({
 
     /* 装包（两条路自己挑：先目录、再本地包）。装不上**不算领取失败** ——
        游戏已经在库里了，「已激活但没装」有出口：设置/游戏里点下载。 */
-    const inst = await get().installGameAuto(step.reward.gameId, {
+    const inst = await get().installGameAuto(giftId, {
       onProgress: get().reportInstallProgress,
     })
     await get().refresh()

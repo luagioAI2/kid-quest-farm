@@ -23,10 +23,14 @@
       送的是**拥有关系**（永久），不是「体验券」。所以领取之后孩子
       在「设置 / 游戏」里看到的是「未装 / 下载」，点一下就能玩。
 
-   ⚠️ **奖励不能选「默认免费」的游戏**（现在 `cloudfarm` 云边小农场就是默认拥有）。
-      那样这一关对所有人一开局就是「可领取」，领了也什么都不多出来 —— 白送一次点击。
-      用户举的例子里正好是它，所以第 2 关换成了「收租公寓」。
-      `campaign.test.ts` 有一条断言钉着这件事。
+   ⚠️ **奖励不能选「默认免费」的游戏**——那样这一关一开局就能领，领了什么都不多。
+
+   ★★ 2026-11-14 用户明确要求第 2 关送「云边小农场」（`cloudfarm`），
+      而它在**服务端**是 `default_owned=1`（登录时 `EnsureUserGames` 直接塞进
+      `user_game`）⇒ 这一关对所有人是白送。
+      处理：把服务端 seed 的 `DefaultOwned` 改成 false，并 UPDATE 线上库；
+      **已有的 `user_game` 记录保留** ⇒ 老用户不受影响，新用户才需要靠这一关解锁。
+      `campaign.test.ts` 有一条断言钉着「不能送客户端认为默认拥有的游戏」。
    ============================================================ */
 
 import type { HarvestEntry, TaskInstance } from './types'
@@ -40,8 +44,14 @@ export interface CampaignStep {
   title: string
   emoji: string
   goal: { metric: CampaignMetric; target: number }
-  /** 奖励：送哪款游戏（`name` 只是兜底文案，真名优先取目录里的） */
-  reward: { gameId: string; name: string }
+  /**
+   * 奖励：送哪款游戏（`name` 只是兜底文案，真名优先取目录里的）。
+   *
+   * `random: true` ⇒ **具体哪一款由服务端挑**（见 `entities/campaign.go`）：
+   * 它知道用户已经拥有什么，客户端不知道别人的账号状态。
+   * 这时 `gameId` / `name` 只是没拿到结果前的兜底文案。
+   */
+  reward: { gameId: string; name: string; random?: boolean }
   /** 领完那一句鼓励，给孩子看的 */
   cheer: string
 }
@@ -66,16 +76,16 @@ export const CAMPAIGN_STEPS: readonly CampaignStep[] = [
     title: '攒够 100 张兑换券',
     emoji: '🎫',
     goal: { metric: 'coupon_earned', target: 100 },
-    reward: { gameId: 'renttower', name: '收租公寓' },
-    cheer: '会攒钱也会玩，收租公寓归你啦。',
+    reward: { gameId: 'cloudfarm', name: '云边小农场' },
+    cheer: '会攒钱也会玩，云边小农场归你啦。',
   },
   {
     id: 'first15',
     title: '再做 10 个任务（累计 15 个）',
     emoji: '📚',
     goal: { metric: 'task_done', target: 15 },
-    reward: { gameId: 'blockfit', name: '方块填空' },
-    cheer: '坚持下来的人才有这一关。',
+    reward: { gameId: 'screamchick', name: '尖叫鸡' },
+    cheer: '坚持下来的人才有这一关，尖叫鸡归你了。',
   },
   {
     id: 'coupon300',
@@ -83,7 +93,41 @@ export const CAMPAIGN_STEPS: readonly CampaignStep[] = [
     emoji: '🏦',
     goal: { metric: 'coupon_earned', target: 300 },
     reward: { gameId: 'hoopsneak', name: '偷偷投篮' },
-    cheer: '你是真的会攒钱，最后一关也过了。',
+    cheer: '你是真的会攒钱，偷偷投篮送你。',
+  },
+  {
+    /* 用户 2026-11-14：「第5关 完成 50 个任务，奖励随机一个没拥有的游戏。」
+       随机由服务端挑 —— 只有它知道这个账号已经有哪些。 */
+    id: 'first50',
+    title: '完成 50 个任务',
+    emoji: '🎲',
+    goal: { metric: 'task_done', target: 50 },
+    reward: { gameId: 'blockfit', name: '随机一款你没玩过的', random: true },
+    cheer: '50 个任务！这一关送你一款你还没有的游戏。',
+  },
+  {
+    id: 'coupon600',
+    title: '累计攒到 600 张兑换券',
+    emoji: '💎',
+    goal: { metric: 'coupon_earned', target: 600 },
+    reward: { gameId: 'blockfit', name: '方块填空' },
+    cheer: '600 张券，方块填空归你。',
+  },
+  {
+    id: 'first100',
+    title: '完成 100 个任务',
+    emoji: '🏅',
+    goal: { metric: 'task_done', target: 100 },
+    reward: { gameId: 'prizepark', name: '抓奖乐园' },
+    cheer: '一百个任务，抓奖乐园开张了。',
+  },
+  {
+    id: 'coupon1000',
+    title: '累计攒到 1000 张兑换券',
+    emoji: '👑',
+    goal: { metric: 'coupon_earned', target: 1000 },
+    reward: { gameId: 'claw3d', name: '抓娃娃' },
+    cheer: '四位数！最后一关也过了，抓娃娃送你。',
   },
 ]
 
@@ -206,4 +250,53 @@ export function campaignProgressText(v: CampaignStepView): string {
   if (v.state === 'claimed') return '已领取'
   if (v.state === 'ready') return '可以领取啦'
   return `还差 ${v.shortfall} ${meta.unit === '张' ? '张兑换券' : '个任务'}`
+}
+
+/* ------------------------------------------------------------------ *
+ * 随机奖励（2026-11-14，第 5 关）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 从「随包的游戏」里挑一款**孩子还没有的**，给「随机一款」那一关用。
+ *
+ * 用户原话：「第5关 完成 50 个任务，奖励随机一个没拥有的游戏。」
+ *
+ * ## 为什么是纯函数（传 ownedIds 和随机源进来）
+ *
+ * 直接在 store 里写 `Math.random()` 的话，这条逻辑**没法测** ——
+ * 单测只能反复跑碰运气。这里把「候选集」和「随机源」都做成入参：
+ *
+ *     pickRandomReward(['anthill'], () => 0)   // 必定挑第一个候选
+ *
+ * ## 候选集怎么定
+ *
+ * 只从 `localGames`（随包的那批）里挑：单机版没有目录服务，
+ * 挑了没包的游戏等于给一个装不上的奖励。
+ *
+ * 排除三类：
+ *   ① 已拥有（`ownedIds`）；
+ *   ② 内置农场（`farm`，本来就默认拥有，不在这份表里）；
+ *   ③ 主线关卡已经明码送过的（`CAMPAIGN_STEPS` 里的 gameId）——
+ *      不然「随机」可能抽到第 1 关刚送的那款，孩子看到「又是这个」。
+ */
+export function pickRandomReward(
+  ownedIds: readonly string[],
+  /** 候选池。⚠️ **必传**：`domain/` 不能反向依赖 `games/`（会成环），
+   *  所以由调用方（store）把「随包游戏」传进来；单测传小样本。 */
+  pool: readonly { id: string; name: string }[],
+  rand: () => number = Math.random,
+): { id: string; name: string } | undefined {
+  const owned = new Set(ownedIds)
+  /* 明码送过的那些不算「随机」，否则会撞：孩子刚领完下落的2048，
+     第 5 关又抽到它，界面还会说「送你一款新游戏」。 */
+  const fixedGifts = new Set(CAMPAIGN_STEPS.filter((s) => !s.reward.random).map((s) => s.reward.gameId))
+
+  const candidates = pool.filter((g) => !owned.has(g.id) && !fixedGifts.has(g.id))
+  if (candidates.length === 0) return undefined
+
+  /* 夹一下：`rand()` 可能返回 1（有些实现是 [0,1] 闭区间）或 NaN，
+     直接当索引会拿到 undefined。 */
+  const r = rand()
+  const i = Number.isFinite(r) ? Math.min(candidates.length - 1, Math.max(0, Math.floor(r * candidates.length))) : 0
+  return candidates[i]
 }

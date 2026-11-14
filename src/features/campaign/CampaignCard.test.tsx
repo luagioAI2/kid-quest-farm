@@ -144,13 +144,14 @@ describe('领取（现在要点开小窗口再领）', () => {
     })
   })
 
-  it('展开全部关卡：4 关都在，且标了各自的状态', async () => {
+  it('展开全部关卡：8 关都在，且标了各自的状态', async () => {
     seed({ tasks: 5 })
     render(<CampaignCard />)
 
     await openSheet()
 
-    expect(document.querySelectorAll('[data-campaign-step]')).toHaveLength(4)
+    // 2026-11-14：4 关 → 8 关（用户要求「再来 3 个关卡」+ 第 5 关）
+    expect(document.querySelectorAll('[data-campaign-step]')).toHaveLength(8)
     expect(
       document.querySelector('[data-campaign-step="first5"]')!.getAttribute('data-campaign-state'),
     ).toBe('ready')
@@ -204,7 +205,11 @@ describe('在线版：进度以服务端为准', () => {
 
 describe('全领完之后', () => {
   it('★ 卡片整块消失（不留一张「没有下一步」的卡片占位置）', () => {
-    seed({ tasks: 999, coupons: 9999, claims: ['first5', 'coupon100', 'first15', 'coupon300'] })
+    seed({
+      tasks: 999,
+      coupons: 9999,
+      claims: ['first5', 'coupon100', 'first15', 'coupon300', 'first50', 'coupon600', 'first100', 'coupon1000'],
+    })
     const { container } = render(<CampaignCard />)
     expect(container.querySelector('[data-tour="campaign-card"]')).toBeNull()
   })
