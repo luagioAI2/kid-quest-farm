@@ -249,6 +249,25 @@ try {
     const m = el ? el.textContent.match(/v(\d+(?:\.\d+)*)/) : null
     return m ? m[1] : null
   })
+  /* ★ 2026-11-13：下载按钮的 `download` 属性也带版本号 ——
+     用户存到手机里叫 `kid-quest-farm-v1.2.3.apk`，下错版本能一眼看出来。
+     URL 保持固定（`download/kid-quest-farm.apk`）：已印出去的二维码、
+     旧链接都不会失效，只有保存的文件名带版本。
+     ⇒ 这是**第四处**版本号，照样要跟 build.gradle 对齐。 */
+  const dlAttr = await page.evaluate(() => {
+    const a = Array.from(document.querySelectorAll('a[download]')).find((x) =>
+      /kid-quest-farm\.apk$/.test(x.getAttribute('href') || ''),
+    )
+    const d = a ? a.getAttribute('download') || '' : ''
+    const m = d.match(/v(\d+(?:\.\d+)*)\.apk$/)
+    return m ? m[1] : null
+  })
+  check(
+    `下载按钮存盘文件名带版本号（${dlAttr ?? '读不到'}）`,
+    !!gradleVersion && dlAttr === gradleVersion,
+    dlAttr === gradleVersion ? '' : `download=${dlAttr} build.gradle=${gradleVersion}`,
+  )
+
   check(
     `下载卡片上的版本号和 build.gradle 一致（${dlVersion ?? '读不到'}）`,
     !!gradleVersion && dlVersion === gradleVersion,
