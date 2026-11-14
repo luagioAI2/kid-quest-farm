@@ -167,11 +167,36 @@ kqf_step "把这一版摆进部署包"
 #   判据是「**完全干净**」—— 有疑问一律重编，绝不把旧二进制发上线。
 API_DIR="$ROOT/../tf-platform-api"
 BUILD_FLAGS="--skip-web"
-if [ -d "$API_DIR" ] && [ -z "$(git -C "$API_DIR" status --porcelain 2>/dev/null)" ]; then
-  BUILD_FLAGS="--skip-go --skip-web"
-  kqf_hint "后端代码没改 ⇒ 复用 out-prev 里的二进制（--skip-go）"
+# ★★ 判据是「**上次打包用的是不是同一个 commit**」，不是「工作区干净不干净」，
+#    也不是「源码文件比二进制新」。
+#
+#    2026-11-14 踩了两次：
+#      ① 改了后端 → 提交 → `git status` 干净 ⇒ 判成「没改」⇒ 复用旧二进制
+#         ⇒ 线上 API 还是 4 关（新代码是 8 关），而包看起来完全正常；
+#      ② 换成 `find -newer 二进制` 也不行 —— 二进制刚编出来当然比源码新，
+#         第二次发布就永远判「不用重编」，等于第二次起就不更新了。
+#
+#    真正稳定的判据：把上次打包的 api commit 记在文件里（build.sh 写），
+#    这次和当前 HEAD 比 —— 换了 commit 就重编。
+API_HEAD_FILE="$DEPLOY/out-prev/bin/.api-commit"
+API_HEAD_NOW="$(git -C "$API_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+API_HEAD_BUILT="$(cat "$API_HEAD_FILE" 2>/dev/null || echo none)"
+need_go=0
+if [ ! -f "$DEPLOY/out-prev/bin/tf-api" ]; then
+  need_go=1; why="没有上次的二进制"
+elif [ -n "$(git -C "$API_DIR" status --porcelain 2>/dev/null)" ]; then
+  need_go=1; why="工作区有未提交改动"
+elif [ "$API_HEAD_NOW" != "$API_HEAD_BUILT" ]; then
+  need_go=1; why="后端换过 commit（${API_HEAD_BUILT:0:7} → ${API_HEAD_NOW:0:7}）"
 else
-  kqf_hint "后端有改动 ⇒ 重编 Go"
+  why="后端还是 ${API_HEAD_NOW:0:7}"
+fi
+
+if [ "$need_go" = "1" ]; then
+  kqf_hint "重编 Go（$why）"
+else
+  BUILD_FLAGS="--skip-go --skip-web"
+  kqf_hint "复用上次的二进制（$why）"
 fi
 
 kqf_run "打部署包" bash -c "cd '$DEPLOY' && bash build.sh $BUILD_FLAGS"
