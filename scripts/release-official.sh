@@ -179,12 +179,18 @@ BUILD_FLAGS="--skip-web"
 #    真正稳定的判据：把上次打包的 api commit 记在文件里（build.sh 写），
 #    这次和当前 HEAD 比 —— 换了 commit 就重编。
 API_HEAD_FILE="$DEPLOY/out-prev/bin/.api-commit"
-API_HEAD_NOW="$(git -C "$API_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+# ⚠️ `git -C` 也吃不了 MSYS 的 `/e/...`（报 cannot change to …，退出码 128）
+#    ⇒ 必须先 `pwd -W` 转成 `E:/...`。不转的话这里恒为 `unknown`，
+#    于是**每次发布都判「换过 commit」而重编 Go**（白等两分钟），
+#    日志还会写「ecaab18 → unknown」，看着像后端真变了。
+#    这个坑本仓库记过好几次（python / node / vite / git），这是第五次。
+API_DIR_WIN="$(cd "$API_DIR" 2>/dev/null && pwd -W)" || API_DIR_WIN=""
+API_HEAD_NOW="$(git -C "${API_DIR_WIN:-$API_DIR}" rev-parse HEAD 2>/dev/null || echo unknown)"
 API_HEAD_BUILT="$(cat "$API_HEAD_FILE" 2>/dev/null || echo none)"
 need_go=0
 if [ ! -f "$DEPLOY/out-prev/bin/tf-api" ]; then
   need_go=1; why="没有上次的二进制"
-elif [ -n "$(git -C "$API_DIR" status --porcelain 2>/dev/null)" ]; then
+elif [ -n "$(git -C "${API_DIR_WIN:-$API_DIR}" status --porcelain 2>/dev/null)" ]; then
   need_go=1; why="工作区有未提交改动"
 elif [ "$API_HEAD_NOW" != "$API_HEAD_BUILT" ]; then
   need_go=1; why="后端换过 commit（${API_HEAD_BUILT:0:7} → ${API_HEAD_NOW:0:7}）"
