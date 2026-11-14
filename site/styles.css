@@ -479,6 +479,104 @@ ol {
   height: 21px;
 }
 
+/* ---------- 「谁在管」分工图（2026-11-14） ----------
+   用户要「体现培养孩子自控力、爸妈只审核、一票否决、轻松放手，最好有点图画」。
+
+   ★ 图画和结论的分工：**图负责说清分工，文字只陈述动作**。
+     「培养自控力」这种结论不写在页面上（写了就是口号），
+     让读者从图里自己读出来 —— 孩子那条线是全的，家长只在虚线处出现一次。
+
+   ⚠️ 高度和 viewBox 比例耦合（720×300 = 2.4）。改高度必须同时改 viewBox，
+      否则 `slice` 会把关键节点裁掉（裁掉的总是两侧/上下之一，不会报错）。 */
+.who-figure {
+  margin: clamp(24px, 3.4vw, 40px) 0 0;
+}
+
+.who-svg {
+  display: block;
+  width: 100%;
+  /* ★ 720 : 322 —— viewBox 从 300 加高到 322，因为底部那行「驳回后回去重做」
+     原来正好压在边界上，被 slice 裁掉了一半（截图里只剩上半截字）。
+     改 viewBox 必须同步改这里，否则比例失真。 */
+  height: auto;
+  aspect-ratio: 720 / 322;
+  background: var(--paper);
+  border-radius: 20px;
+  box-shadow: var(--hairline);
+}
+
+.who-cap {
+  margin-top: 12px;
+  font-size: 0.86rem;
+  line-height: 1.85;
+  color: var(--ink-500);
+  text-align: center;
+}
+
+/* 四张说明卡：等宽网格（并列关系，不分主次） */
+.who-grid {
+  margin-top: clamp(20px, 2.8vw, 32px);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(14px, 1.8vw, 22px);
+}
+
+.who-card {
+  padding: 20px 18px 18px;
+  border-radius: 18px;
+  background: var(--paper);
+  box-shadow: var(--hairline);
+}
+
+.who-card h3 {
+  margin: 12px 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.who-card p {
+  margin: 8px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.9;
+  color: var(--ink-500);
+}
+
+/* 平板：两列 */
+@media (max-width: 900px) {
+  .who-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ★ 两份图：宽屏用横版，手机用竖版。
+   一开始只有横版，390px 下 720 的 viewBox 缩到 54% —— 图里 13px 的字只剩 7px，
+   手机上糊成一片（截图里能看到）。改用一份按 360 宽设计的竖版。 */
+.who-svg--tall {
+  display: none;
+}
+
+/* 手机：一列 + 换竖版图 */
+@media (max-width: 560px) {
+  .who-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .who-svg--wide {
+    display: none;
+  }
+  .who-svg--tall {
+    display: block;
+    aspect-ratio: 360 / 470;
+  }
+  .who-svg {
+    border-radius: 14px;
+  }
+  .who-cap {
+    text-align: left;
+    font-size: 0.82rem;
+  }
+}
+
 /* ---------- 6. 顶部导航 ---------- */
 .nav {
   position: sticky;
