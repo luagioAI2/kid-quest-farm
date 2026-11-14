@@ -479,101 +479,134 @@ ol {
   height: 21px;
 }
 
-/* ---------- 「谁在管」分工图（2026-11-14） ----------
-   用户要「体现培养孩子自控力、爸妈只审核、一票否决、轻松放手，最好有点图画」。
+/* ---------- 「让他自己管自己」（2026-11-14） ----------
+   用户两次反馈后的第二版。第一版是「分工流程图 + 四张说明卡」——
+   机制讲清了，但**没有吸引力**。用户要的是钩子：
+     「我需要的是吸引人的噱头，不是让你真的摆出流程……家长一看到就心有灵犀。」
 
-   ★ 图画和结论的分工：**图负责说清分工，文字只陈述动作**。
-     「培养自控力」这种结论不写在页面上（写了就是口号），
-     让读者从图里自己读出来 —— 孩子那条线是全的，家长只在虚线处出现一次。
+   ⇒ 现在这一节的重心是**那句话**，不是图。所以：
+     · 标题做大（clamp 到 3rem 级），关键词用 em 强调
+     · 三个短语横排做视觉锚点，一眼能扫
+     · 图压到 176 高的窄条，只交代「家长只出现一次」
 
-   ⚠️ 高度和 viewBox 比例耦合（720×300 = 2.4）。改高度必须同时改 viewBox，
-      否则 `slice` 会把关键节点裁掉（裁掉的总是两侧/上下之一，不会报错）。 */
-.who-figure {
-  margin: clamp(24px, 3.4vw, 40px) 0 0;
+   ⚠️ 别再往这里加说明卡。流程下面本来就有（使用流程 + 截图）。 */
+.hook {
+  /* 这一节要"亮"出来一点，和上下普通的 paper 段分开 */
+  background: linear-gradient(180deg, var(--paper) 0, #f6fbf7 100%);
 }
 
-.who-svg {
-  display: block;
-  width: 100%;
-  /* ★ 720 : 322 —— viewBox 从 300 加高到 322，因为底部那行「驳回后回去重做」
-     原来正好压在边界上，被 slice 裁掉了一半（截图里只剩上半截字）。
-     改 viewBox 必须同步改这里，否则比例失真。 */
-  height: auto;
-  aspect-ratio: 720 / 322;
-  background: var(--paper);
-  border-radius: 20px;
-  box-shadow: var(--hairline);
-}
-
-.who-cap {
-  margin-top: 12px;
-  font-size: 0.86rem;
-  line-height: 1.85;
-  color: var(--ink-500);
+.hook__inner {
   text-align: center;
 }
 
-/* 四张说明卡：等宽网格（并列关系，不分主次） */
-.who-grid {
-  margin-top: clamp(20px, 2.8vw, 32px);
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(14px, 1.8vw, 22px);
-}
-
-.who-card {
-  padding: 20px 18px 18px;
-  border-radius: 18px;
-  background: var(--paper);
-  box-shadow: var(--hairline);
-}
-
-.who-card h3 {
-  margin: 12px 0 0;
-  font-size: 1rem;
+.hook__title {
+  margin: 14px 0 0;
+  font-family: var(--font-display);
+  /* ★ 这是全页第二个视觉重心（只在 h1 之下）。中文标题不用负字距 ——
+     汉字是满格方块，收字距会让它挤成一堵墙。 */
+  font-size: clamp(2rem, 5.2vw, 3.1rem);
   font-weight: 700;
+  line-height: 1.28;
+  color: var(--ink-900);
+  letter-spacing: 0.005em;
+  text-wrap: balance;
+}
+
+.hook__title em {
+  font-style: normal;
+  color: var(--accent-strong);
+  /* 手写感的下划线，比纯变色更有"被圈出来"的感觉 */
+  background-image: linear-gradient(180deg, transparent 62%, var(--sun-200) 62%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  padding: 0 0.08em;
+}
+
+.hook__lead {
+  margin: 18px auto 0;
+  max-width: 34em;
+  font-size: clamp(0.98rem, 1.5vw, 1.1rem);
+  line-height: 1.95;
+  color: var(--ink-600);
+  text-wrap: pretty;
+}
+
+.hook__lead b {
   color: var(--ink-900);
 }
 
-.who-card p {
-  margin: 8px 0 0;
-  font-size: 0.88rem;
-  line-height: 1.9;
+/* 三个短语：横排，手机折成三行。等宽，不分主次。 */
+.hook__keys {
+  margin: clamp(24px, 3vw, 34px) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(12px, 1.8vw, 20px);
+  text-align: left;
+}
+
+.hook__keys li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 16px 15px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--hairline);
+}
+
+.hook__keys .icon {
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  color: var(--accent-strong);
+}
+
+.hook__keys span {
+  font-size: 0.86rem;
+  line-height: 1.7;
   color: var(--ink-500);
 }
 
-/* 平板：两列 */
+.hook__keys b {
+  display: block;
+  font-size: 0.98rem;
+  color: var(--ink-900);
+  margin-bottom: 2px;
+}
+
+/* 图：窄条，只做佐证 */
+.hook__figure {
+  margin: clamp(26px, 3.2vw, 38px) 0 0;
+}
+
+.hook__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* 720 : 176 —— 比例必须和 viewBox 一致，否则 `slice`/缩放会裁掉内容 */
+  aspect-ratio: 720 / 176;
+}
+
+.hook__cap {
+  margin-top: 10px;
+  font-size: 0.84rem;
+  line-height: 1.8;
+  color: var(--ink-500);
+}
+
 @media (max-width: 900px) {
-  .who-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-/* ★ 两份图：宽屏用横版，手机用竖版。
-   一开始只有横版，390px 下 720 的 viewBox 缩到 54% —— 图里 13px 的字只剩 7px，
-   手机上糊成一片（截图里能看到）。改用一份按 360 宽设计的竖版。 */
-.who-svg--tall {
-  display: none;
-}
-
-/* 手机：一列 + 换竖版图 */
-@media (max-width: 560px) {
-  .who-grid {
+  .hook__keys {
     grid-template-columns: minmax(0, 1fr);
   }
-  .who-svg--wide {
+  .hook__keys li {
+    padding: 14px 15px;
+  }
+  /* 手机上那条 720 宽的图会缩到 54%，图里的字就糊了 ——
+     这一节图只是佐证，手机上**干脆不显示**，靠上面三句已经说清。 */
+  .hook__figure {
     display: none;
-  }
-  .who-svg--tall {
-    display: block;
-    aspect-ratio: 360 / 470;
-  }
-  .who-svg {
-    border-radius: 14px;
-  }
-  .who-cap {
-    text-align: left;
-    font-size: 0.82rem;
   }
 }
 

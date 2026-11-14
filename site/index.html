@@ -770,186 +770,101 @@
         </div>
       </section>
 
-      <!-- ================= 谁在管 ================= -->
-      <!-- 2026-11-14 用户：「官网要体现培养孩子自控力，让孩子自己管理自己，
-           爸妈只需要审核，一票否决，轻松放手。一开始就得有。最好有点图画。」
-           所以紧跟 hero —— 这是这套产品的基本主张，不该藏在第三屏之后。
+      <!-- ================= 让他自己管自己 ================= -->
+      <!-- 2026-11-14 用户两次反馈，第一次我理解错了：
 
-           ⚠️ 写法上刻意只陈述**分工**（谁做什么、界线在哪），
-              不写「培养自控力」「轻松放手」这类总结句 ——
-              那是从机制里读出来的结论，直接写就成了口号。 -->
-      <section class="section section--tight" id="who-runs">
+           原话①「官网要体现培养孩子自控力，让孩子自己管理自己，爸妈只需要审核，
+                 一票否决，轻松放手。一开始就得有。最好有点图画。」
+           原话②（关键）「我需要的是吸引人的噱头，不是让你真的摆出流程，
+                 流程本身就已经有了。比如培养孩子自制力，家长一看到就心有灵犀。」
+
+           ⇒ 第一版我把它做成了**分工流程图 + 说明卡**：机制讲清楚了，但没有吸引力。
+             用户要的是**一句话击中家长**，让他一眼觉得「这就是我想的」。
+             流程页面下面本来就有（使用流程 + 截图），不该挤在这里。
+
+           ⇒ 现在：**大字钩子在前，图退成佐证**。 -->
+      <section class="section hook" id="who-runs">
         <div class="wrap">
-          <div class="section-head section-head--center reveal">
-            <p class="eyebrow">谁在管</p>
-            <h2 class="h2">孩子自己安排，家长只在最后点头</h2>
-            <p class="lead">
-              任务、时间、先做哪个、做完拿积分去换什么，这些都在孩子那边。
-              家长要做的事只有一件：看结果，确认或者驳回。
+          <div class="hook__inner reveal">
+            <p class="eyebrow">不用盯着，也不用吵</p>
+
+            <h2 class="hook__title">
+              让他<em>自己管自己</em>
+            </h2>
+
+            <p class="hook__lead">
+              任务排给谁、几点做、做完的积分换什么，都由孩子自己定。
+              家长只管一件事：<b>看结果</b>。
             </p>
-          </div>
 
-          <!-- 分工图：左孩子（走全程）、右家长（只在一处出手）。
-               纯 SVG，零外部请求。关键物体都放在中央带，窄屏裁两侧也不丢。 -->
-          <figure class="who-figure reveal">
-            <!-- 桌面/平板：横版（孩子左、家长右） -->
-            <svg
-              class="who-svg who-svg--wide"
-              viewBox="0 0 720 322"
-              role="img"
-              aria-label="分工图：孩子自己领任务、计时、提交、收获；家长只在审核这一步出手，可以驳回，驳回后孩子重做"
-            >
-              <!-- 背景：两条泳道 -->
-              <rect x="0" y="34" width="440" height="246" rx="18" fill="#f2fbf4" />
-              <rect x="470" y="34" width="250" height="246" rx="18" fill="#fef8e7" />
+            <!-- 三个短语做视觉锚点。它们是「机制名」，不是形容词 ——
+                 每一个在 App 里都能被点开看到，所以不算空话。 -->
+            <ul class="hook__keys">
+              <li>
+                <svg class="icon" aria-hidden="true"><use href="#i-calendar" /></svg>
+                <span><b>自己安排</b>先做哪个、什么时候做，他说了算</span>
+              </li>
+              <li>
+                <svg class="icon" aria-hidden="true"><use href="#i-check" /></svg>
+                <span><b>你只点头</b>确认或驳回，别的不用管</span>
+              </li>
+              <li>
+                <svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg>
+                <span><b>一票否决</b>驳回就不结算，这条是硬的</span>
+              </li>
+            </ul>
 
-              <!-- 泳道标题 -->
-              <text x="24" y="66" font-size="15" font-weight="700" fill="#15803d">孩子</text>
-              <text x="24" y="86" font-size="11.5" fill="#6b7280">自己排、自己做</text>
-              <text x="494" y="66" font-size="15" font-weight="700" fill="#b45309">家长</text>
-              <text x="494" y="86" font-size="11.5" fill="#6b7280">只看结果</text>
+            <!-- 图退到佐证位置：小而宽，只交代「家长只出现一次」这一件事。
+                 不再用上次那种占满一屏的分工图 —— 那是流程图，不是钩子。 -->
+            <figure class="hook__figure">
+              <svg
+                class="hook__svg"
+                viewBox="0 0 720 176"
+                role="img"
+                aria-label="示意图：孩子自己从领任务走到收获，家长只在审核这一步出现一次"
+              >
+                <!-- 孩子的线：一条贯穿的实线 + 四个点 -->
+                <path d="M40 92h520" stroke="#bbf7d0" stroke-width="3" stroke-linecap="round" />
+                <g fill="#ffffff" stroke="#4ade80" stroke-width="2.4">
+                  <circle cx="80" cy="92" r="11" />
+                  <circle cx="236" cy="92" r="11" />
+                  <circle cx="392" cy="92" r="11" />
+                  <circle cx="548" cy="92" r="11" />
+                </g>
+                <g fill="#22c55e">
+                  <circle cx="80" cy="92" r="4" />
+                  <circle cx="236" cy="92" r="4" />
+                  <circle cx="392" cy="92" r="4" />
+                  <circle cx="548" cy="92" r="4" />
+                </g>
 
-              <!-- 孩子侧的四步：竖排节点 + 连接线 -->
-              <g stroke="#86efac" stroke-width="2" fill="none">
-                <path d="M96 118v200" stroke-dasharray="0" />
-              </g>
-              <g>
-                <circle cx="96" cy="124" r="12" fill="#ffffff" stroke="#4ade80" stroke-width="2" />
-                <circle cx="96" cy="182" r="12" fill="#ffffff" stroke="#4ade80" stroke-width="2" />
-                <circle cx="96" cy="222" r="12" fill="#ffffff" stroke="#4ade80" stroke-width="2" />
-                <circle cx="96" cy="262" r="12" fill="#ffffff" stroke="#4ade80" stroke-width="2" />
-                <circle cx="96" cy="124" r="4" fill="#22c55e" />
-                <circle cx="96" cy="182" r="4" fill="#22c55e" />
-                <circle cx="96" cy="222" r="4" fill="#22c55e" />
-                <circle cx="96" cy="262" r="4" fill="#22c55e" />
-              </g>
-              <g font-size="13" fill="#1f2937">
-                <text x="120" y="129">自己挑任务、自己定顺序</text>
-                <text x="120" y="187">开计时，自己盯着做完</text>
-                <text x="120" y="227">提交，等一个结果</text>
-                <text x="120" y="267">积分到手，自己决定花在哪</text>
-              </g>
+                <g font-size="13" fill="#4b5563" text-anchor="middle">
+                  <text x="80" y="126">自己领任务</text>
+                  <text x="236" y="126">自己计时</text>
+                  <text x="392" y="126">自己提交</text>
+                  <text x="548" y="126">自己决定花在哪</text>
+                </g>
 
-              <!-- 家长侧：只有一处出手 -->
-              <g>
-                <circle cx="530" cy="222" r="14" fill="#ffffff" stroke="#fbbf24" stroke-width="2.4" />
-                <path d="M524 222l4.5 4.5 9-9" stroke="#22c55e" stroke-width="2.4" fill="none"
+                <!-- 家长：只在「提交」和「决定」之间那一处出现，用琥珀色单独标出 -->
+                <circle cx="470" cy="92" r="15" fill="#fef3c7" stroke="#fbbf24" stroke-width="2.6" />
+                <path d="M463 92l5 5 10-10" stroke="#16a34a" stroke-width="2.6" fill="none"
                   stroke-linecap="round" stroke-linejoin="round" />
-                <text x="554" y="219" font-size="13.5" font-weight="700" fill="#1f2937">确认</text>
-                <text x="554" y="236" font-size="11.5" fill="#6b7280">给质量分、微调用时</text>
-                <circle cx="530" cy="270" r="14" fill="#ffffff" stroke="#f87171" stroke-width="2.4" />
-                <path d="M525 265l10 10M535 265l-10 10" stroke="#ef4444" stroke-width="2.4"
-                  stroke-linecap="round" />
-                <text x="554" y="267" font-size="13.5" font-weight="700" fill="#1f2937">驳回</text>
-                <text x="554" y="284" font-size="11.5" fill="#6b7280">这一轮不结算，写清原因</text>
-              </g>
+                <text x="486" y="38" font-size="12.5" font-weight="700" fill="#b45309"
+                  text-anchor="middle">家长在这里出现一次</text>
+                <path d="M470 46v28" stroke="#fbbf24" stroke-width="1.6" stroke-dasharray="3 3" />
 
-              <!-- 提交 → 审核：一条横线把两边连起来（这才是唯一交汇处） -->
-              <path d="M112 222h390" stroke="#fbbf24" stroke-width="2" stroke-dasharray="5 5" fill="none" />
-              <path d="M498 222l-8-4.5v9z" fill="#fbbf24" />
-
-              <!-- 驳回 → 重做：回环箭头（比文字更直观） -->
-              <path d="M516 282c-92 22-238 22-330-4" stroke="#f87171" stroke-width="1.7"
-                stroke-dasharray="4 4" fill="none" opacity="0.75" />
-              <path d="M186 278l10 6-11 5z" fill="#f87171" opacity="0.85" />
-              <text x="300" y="315" font-size="11.5" fill="#9ca3af" text-anchor="middle">驳回后回去重做</text>
-            </svg>
-
-            <!-- ★ 手机：竖版（上=孩子，下=家长）。
-               ⚠️ 为什么不做一份缩放的横版：390px 宽下 720 的 viewBox 会缩到 54%，
-                  图里 13px 的字只剩 7px —— 截图里已经糊成一片。
-                  重画一份、字号按 390 的实际宽度定，才看得清。 -->
-            <svg
-              class="who-svg who-svg--tall"
-              viewBox="0 0 360 470"
-              role="img"
-              aria-label="分工图：孩子自己领任务、计时、提交、收获；家长只在审核这一步出手，可以驳回，驳回后孩子重做"
-            >
-              <rect x="8" y="8" width="344" height="284" rx="16" fill="#f2fbf4" />
-              <text x="26" y="38" font-size="15" font-weight="700" fill="#15803d">孩子</text>
-              <text x="76" y="38" font-size="12" fill="#6b7280">自己排、自己做</text>
-
-              <!-- 竖版四步：更大的字、更大的行距 -->
-              <path d="M44 66v212" stroke="#86efac" stroke-width="2" fill="none" />
-              <g fill="#ffffff" stroke="#4ade80" stroke-width="2">
-                <circle cx="44" cy="72" r="9" /><circle cx="44" cy="140" r="9" />
-                <circle cx="44" cy="208" r="9" /><circle cx="44" cy="266" r="9" />
-              </g>
-              <g fill="#22c55e">
-                <circle cx="44" cy="72" r="3.4" /><circle cx="44" cy="140" r="3.4" />
-                <circle cx="44" cy="208" r="3.4" /><circle cx="44" cy="266" r="3.4" />
-              </g>
-              <g font-size="14" fill="#1f2937">
-                <text x="64" y="77">自己挑任务、自己定顺序</text>
-                <text x="64" y="145">开计时，自己盯着做完</text>
-                <text x="64" y="213">提交，等一个结果</text>
-                <text x="64" y="271">积分到手，自己决定花在哪</text>
-              </g>
-
-              <rect x="8" y="302" width="344" height="160" rx="16" fill="#fef8e7" />
-              <text x="26" y="330" font-size="15" font-weight="700" fill="#b45309">家长</text>
-              <text x="76" y="330" font-size="12" fill="#6b7280">只看结果</text>
-
-              <circle cx="52" cy="366" r="12" fill="#ffffff" stroke="#fbbf24" stroke-width="2.2" />
-              <path d="M46 366l4.5 4.5 9-9" stroke="#22c55e" stroke-width="2.2" fill="none"
-                stroke-linecap="round" stroke-linejoin="round" />
-              <text x="74" y="362" font-size="14" font-weight="700" fill="#1f2937">确认</text>
-              <text x="74" y="379" font-size="12" fill="#6b7280">给质量分、微调用时</text>
-
-              <circle cx="52" cy="414" r="12" fill="#ffffff" stroke="#f87171" stroke-width="2.2" />
-              <path d="M48 410l8 8M56 410l-8 8" stroke="#ef4444" stroke-width="2.2"
-                stroke-linecap="round" />
-              <text x="74" y="410" font-size="14" font-weight="700" fill="#1f2937">驳回</text>
-              <text x="74" y="427" font-size="12" fill="#6b7280">这一轮不结算，写清原因</text>
-
-              <!-- 驳回回去的那条线：竖版从下往上绕回孩子的第一步 -->
-              <path d="M40 424c-18 0-24-10-24-24V96" stroke="#f87171" stroke-width="1.6"
-                stroke-dasharray="4 4" fill="none" opacity="0.7" />
-              <path d="M16 100l-5 10h10z" fill="#f87171" opacity="0.85" />
-            </svg>
-
-            <figcaption class="who-cap">
-              孩子那条线是他自己走完的；家长只在上面的虚线处出现一次。
-              驳回和确认都可以，驳回要写清原因。
-            </figcaption>
-          </figure>
-
-          <div class="who-grid">
-            <article class="who-card reveal">
-              <div class="ico ico--sm"><svg class="icon" aria-hidden="true"><use href="#i-list" /></svg></div>
-              <h3>孩子这边：自己排</h3>
-              <p>
-                每天的任务清单会自己生成，先做哪个、什么时候做，由孩子自己决定。
-                计时器是他自己的，中途去掉一次再回来，进度还在。
-              </p>
-            </article>
-
-            <article class="who-card reveal">
-              <div class="ico ico--sm"><svg class="icon" aria-hidden="true"><use href="#i-eye" /></svg></div>
-              <h3>家长这边：只看结果</h3>
-              <p>
-                家长不用排任务，也不用盯着做。孩子提交后，家长看到的是「用了多久、
-                做了什么」，给一个质量档位，确认或者驳回。
-              </p>
-            </article>
-
-            <article class="who-card reveal">
-              <div class="ico ico--sm"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></div>
-              <h3>一票否决</h3>
-              <p>
-                驳回这一轮就不结算，计入「今天没通过」，孩子可以重做。
-                这条是硬的 —— 家长点驳回，积分不会到账。
-              </p>
-            </article>
-
-            <article class="who-card reveal">
-              <div class="ico ico--sm"><svg class="icon" aria-hidden="true"><use href="#i-sliders" /></svg></div>
-              <h3>也可以不审</h3>
-              <p>
-                觉得没必要每次都看，可以在设置里关掉审核，改成提交即结算。
-                规则什么时候收回自己手里，由家长决定。
-              </p>
-            </article>
+                <!-- 驳回回环：只跨「提交 → 家长」这一小段。
+                 ⚠️ 第一版画到「自己计时」那儿了，看起来像"退回到计时步骤"——
+                    语义是"退回重做"，跨度该只覆盖被退回的那一步。 -->
+                <path d="M454 82c-14-14-44-16-58-2" stroke="#f87171" stroke-width="1.5"
+                  stroke-dasharray="4 4" fill="none" opacity="0.75" />
+                <path d="M398 78l-6 5 7 4z" fill="#f87171" opacity="0.85" />
+                <text x="372" y="56" font-size="10.5" fill="#b0a99f" text-anchor="middle">驳回重做</text>
+              </svg>
+              <figcaption class="hook__cap">
+                整条线是他自己走完的；家长的出场只有中间那一次。
+              </figcaption>
+            </figure>
           </div>
         </div>
       </section>
