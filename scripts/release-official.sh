@@ -258,7 +258,16 @@ kqf_run "push" bash -c "cd '$DEPLOY' && bash push.sh"
 kqf_step "线上复测"
 FAIL=0
 for p in / /app/ /download/kid-quest-farm.apk /healthz /api/game/catalog /admin/; do
-  code=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "https://kidfarm.duckdns.org$p" || echo 000)
+  # ★★ 别写 `code=$(curl … || echo 000)`：
+  #    本机 curl 恒返回 **23**（`curl` 在 Git Bash 下写 stdout 的老问题），
+  #    而它已经把 `200` 打进 stdout 了 ⇒ `|| echo 000` 会把两段**拼成 `200000`**
+  #    ⇒ 六个路径全部"不是 200"、脚本喊「先别通知用户」，而线上其实好好的。
+  #    2026-11-14 实测踩到（手动 curl 六条全 200）。
+  #    改成：只取状态码，忽略 curl 自己的退出码（状态码本身才是判据）。
+  code=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "https://kidfarm.duckdns.org$p" 2>/dev/null)
+  code="${code:-000}"
+  # 兜底：真拿不到状态码时 curl 会给 000，长度一定是 3；长了说明是拼接产物
+  [ ${#code} -eq 3 ] || code=000
   if [ "$code" = "200" ]; then
     kqf_hint "$code  $p"
   else
